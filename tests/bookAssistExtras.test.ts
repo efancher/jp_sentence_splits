@@ -143,3 +143,16 @@ describe('constructionChecked', () => {
     expect(constructionChecked('好きです', [stale])).toBe(false);
   });
 });
+
+describe('describeRejections', () => {
+  it('groups skipped entries by kind and reason, most common first', async () => {
+    const { describeRejections } = await import('../src/lib/quickImportExtras');
+    expect(
+      describeRejections([
+        { kind: 'constructions', reason: '“N” is not in the sentence.' },
+        { kind: 'structure', reason: 'The chunks do not rebuild the sentence exactly (cut off?).' },
+        { kind: 'structure', reason: 'The chunks do not rebuild the sentence exactly (cut off?).' },
+      ]),
+    ).toBe('2 × Structure: The chunks do not rebuild the sentence exactly (cut off?).; 1 × Construction: “N” is not in the sentence.');
+  });
+});

@@ -12,7 +12,7 @@ import { getBookWithExtras } from '../db/sentenceExtras';
 import { mergeChapterWalkthroughs, sentencesNeedingWalkthrough, validWalkthroughFor } from './contextWalkthrough';
 import { chunksMatchSource } from './chunking';
 import { constructionChecked, validLayersFor } from './phraseConstruction';
-import { applyQuickImportExtras } from './quickImportExtras';
+import { applyQuickImportExtras, type Rejection } from './quickImportExtras';
 import { BOOK_EXTRA_KINDS, mergeBookExtraReplies, planBookExtraTasks, type BookExtraKind, type BookExtraSelection } from './bookAssistRun';
 
 export interface BookExtraSentence {
@@ -134,6 +134,8 @@ export interface BookExtrasSaveResult {
   saved: Partial<Record<BookExtraKind, number>>;
   keptExisting: Partial<Record<BookExtraKind, number>>;
   problems: string[];
+  /** Skipped entries across all chapters, for grouping by reason. */
+  rejections: Rejection[];
 }
 
 export async function saveBookAssistExtras(
@@ -142,7 +144,7 @@ export async function saveBookAssistExtras(
 ): Promise<BookExtrasSaveResult> {
   const current = await planBookAssistExtras(snapshot.bookId);
   const currentHandleById = new Map(current.sentences.map((s) => [s.id, s]));
-  const result: BookExtrasSaveResult = { saved: {}, keptExisting: {}, problems: [] };
+  const result: BookExtrasSaveResult = { saved: {}, keptExisting: {}, problems: [], rejections: [] };
 
   for (const kind of BOOK_EXTRA_KINDS) {
     const entry = snapshot.kinds[kind];
@@ -181,7 +183,9 @@ export async function saveBookAssistExtras(
         replaceCheckSentenceIds: replaceIds,
       });
       result.saved[kind] = (result.saved[kind] ?? 0) + applied[kind];
-      result.problems.push(...applied.problems.filter((p) => chapterIds.length === 1 || !p.includes('did not match')));
+      // Each per-chapter call sees the other chapters' sentences as unknown handles: that is noise, not a rejection.
+      result.rejections.push(...applied.rejections.filter((r) => chapterIds.length === 1 || !r.reason.startsWith('Unknown sentence handle')));
+      result.problems.push(...applied.problems.filter((p) => !p.startsWith('Skipped or partly kept')));
     }
     if (kind === 'constructions') await markCheckedWithoutLayers(snapshot, extraReplies, allowed, replace, currentHandleById);
   }

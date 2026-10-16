@@ -530,6 +530,34 @@ describe('Learning Orchestrator repository layer', () => {
     expect(loud.steps.some((step) => step.targetKind === 'shadow')).toBe(true);
   });
 
+  it('shadows a walked-through sentence even when its book membership is still unstarted', async () => {
+    const book = await createBook({ title: 'Walked Through' });
+    const db = getDb();
+    const sentence = makeSentence();
+    await db.sentences.put(sentence);
+    await addSentencesToBook(book.id, [sentence.id]);
+    await db.sentenceAudio.add({
+      id: 'audio-shadow-wt',
+      sentenceId: sentence.id,
+      sourceId: 'source-1',
+      sourceSentenceId: 'src-sent-wt',
+      sourceTitle: 'Test Source',
+      mimeType: 'audio/mp3',
+      durationMs: 1500,
+      startMs: 0,
+      endMs: 1500,
+      blob: new Blob(['fake audio bytes'], { type: 'audio/mp3' }),
+      importedAt: new Date().toISOString(),
+    });
+    await confirmSentenceVocabulary(sentence.id, []);
+    const before = await getSessionPlannerInput(60);
+    expect(before.shadowCandidates).toHaveLength(0);
+
+    await logSentenceLearningEvent({ sentenceId: sentence.id, bookId: book.id, action: 'walkthrough_completed' });
+    const after = await getSessionPlannerInput(60);
+    expect(after.shadowCandidates.map((candidate) => candidate.sentenceId)).toEqual([sentence.id]);
+  });
+
   it('quiet mode also withholds due pitch_accent_production items from the review pool (recording required)', async () => {
     const sentence = makeSentence();
     const db = getDb();

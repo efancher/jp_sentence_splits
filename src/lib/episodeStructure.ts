@@ -85,6 +85,8 @@ export interface StructureParse {
 
 const LINE_SEPARATOR = /\s*[|\u23d0\uff5c\t]\s*/;
 const QUOTE_EDGES = /^[\s"'`\u201c\u201d\u2018\u2019\u300c\u300d]+|[\s"'`\u201c\u201d\u2018\u2019\u300c\u300d]+$/g;
+// Same, but keeps 「」: those are real sentence text, so a chunk like 「健康に must not lose its bracket.
+const WRAPPING_QUOTES = /^[\s"'`\u201c\u201d\u2018\u2019]+|[\s"'`\u201c\u201d\u2018\u2019]+$/g;
 
 /**
  * Line-based structure replies: "S3 | 僕は | topic は | as for me", one chunk per
@@ -95,27 +97,35 @@ const QUOTE_EDGES = /^[\s"'`\u201c\u201d\u2018\u2019\u300c\u300d]+|[\s"'`\u201c\
 export function parseStructureLines(reply: string, context: PreparationContext): StructureParse {
   const sentenceByHandle = new Map(context.sentences.map((sentence, index) => [`S${index + 1}`, sentence]));
   const byHandle = new Map<string, StructureDraftChunk[]>();
+  const keepingBrackets = new Map<string, StructureDraftChunk[]>();
   const rejected: { handle: string; reason: string }[] = [];
   for (const rawLine of reply.split(/\r?\n/)) {
     const line = rawLine.replace(/^[\s>*\-\u2022|]+/, '').replace(/\|\s*$/, '');
     const match = line.match(/^\**\s*[SsＳ]\s*(\d+)\s*[.):\uff1a]?\s*[|\u23d0\uff5c\t]\s*(.*)$/);
     if (!match) continue;
     const handle = `S${Number(match[1])}`;
-    const fields = match[2]!.split(LINE_SEPARATOR).map((field) => field.replace(QUOTE_EDGES, ''));
+    const rawFields = match[2]!.split(LINE_SEPARATOR);
+    const fields = rawFields.map((field) => field.replace(QUOTE_EDGES, ''));
     const [text = '', role = '', ...glossParts] = fields;
+    const bracketText = (rawFields[0] ?? '').replace(WRAPPING_QUOTES, '');
     if (!text || !role || text.length > MAX_CHUNK_TEXT || role.length > MAX_ROLE_LENGTH) {
       if (!rejected.some((item) => item.handle === handle)) rejected.push({ handle, reason: 'A line was missing its text or role.' });
       byHandle.set(handle, [...(byHandle.get(handle) ?? []), { japanese: '\u0000', role: '' }]);
+      keepingBrackets.set(handle, [...(keepingBrackets.get(handle) ?? []), { japanese: '\u0000', role: '' }]);
       continue;
     }
     const gloss = glossParts.join(' | ').slice(0, MAX_GLOSS_LENGTH);
-    byHandle.set(handle, [...(byHandle.get(handle) ?? []), { japanese: text, role, ...(gloss ? { literalEnglish: gloss } : {}) }]);
+    const extra = gloss ? { literalEnglish: gloss } : {};
+    byHandle.set(handle, [...(byHandle.get(handle) ?? []), { japanese: text, role, ...extra }]);
+    keepingBrackets.set(handle, [...(keepingBrackets.get(handle) ?? []), { japanese: bracketText || text, role, ...extra }]);
   }
   const drafts = new Map<string, StructureDraftChunk[]>();
   for (const [handle, chunks] of byHandle) {
     const sentence = sentenceByHandle.get(handle);
     if (!sentence) rejected.push({ handle, reason: 'Unknown sentence handle.' });
-    else if (!chunksMatchSource(chunks.map((chunk) => chunk.japanese), sentence.japanese)) {
+    else if (chunksMatchSource((keepingBrackets.get(handle) ?? []).map((chunk) => chunk.japanese), sentence.japanese)) {
+      drafts.set(sentence.id, keepingBrackets.get(handle)!);
+    } else if (!chunksMatchSource(chunks.map((chunk) => chunk.japanese), sentence.japanese)) {
       if (!rejected.some((item) => item.handle === handle)) rejected.push({ handle, reason: 'The chunks do not rebuild the sentence exactly (cut off?).' });
     } else drafts.set(sentence.id, chunks);
   }

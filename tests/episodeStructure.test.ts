@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { buildEpisodePackPrompts, parseEpisodePackReply, planEpisodePack } from '../src/lib/episodePack';
 import type { PreparationContext } from '../src/lib/episodePreparation';
-import { buildStructureInstructions, STRUCTURE_LINE_EXAMPLE, parseStructure } from '../src/lib/episodeStructure';
+import { buildStructureInstructions, STRUCTURE_LINE_EXAMPLE, parseStructure, parseStructureLines } from '../src/lib/episodeStructure';
 import { walkthroughChunks } from '../src/components/SentenceWalkthrough';
 
 const context: PreparationContext = {
@@ -77,6 +77,26 @@ describe('episode structure', () => {
 });
 
 import { extractJson } from '../src/lib/episodePreparation';
+
+describe('structure lines with 「」 in the sentence', () => {
+  const quoted: PreparationContext = {
+    ...context,
+    sentences: [{ id: 's-q', japanese: '私の今年の抱負は「健康に気をつける」です。', translation: 'x' }],
+  };
+  const reply = ['S1 | 私の | の-car | my', 'S1 | 今年の | の-car | this year', 'S1 | 抱負は | topic は | resolution', 'S1 | 「健康に | に-car | to health', 'S1 | 気をつける」 | engine: verb | pay attention', 'S1 | です。 | engine: copula | is'].join('\n');
+
+  it('keeps the brackets so the chunks rebuild the sentence', () => {
+    const { drafts, rejected } = parseStructureLines(reply, quoted);
+    expect(rejected).toEqual([]);
+    expect(drafts.get('s-q')?.map((c) => c.japanese).join('')).toBe('私の今年の抱負は「健康に気をつける」です。');
+  });
+
+  it('still accepts a chunk the assistant wrapped in 「」 that the sentence lacks', () => {
+    const plain: PreparationContext = { ...context, sentences: [{ id: 's-p', japanese: '健康に気をつける', translation: 'x' }] };
+    const { drafts } = parseStructureLines(['S1 | 「健康に」 | に-car | a', 'S1 | 気をつける | engine | b'].join('\n'), plain);
+    expect(drafts.get('s-p')).toHaveLength(2);
+  });
+});
 
 describe('extractJson with curly quotes', () => {
   it('repairs curly delimiters that also contain curly quotation marks inside a value', () => {
