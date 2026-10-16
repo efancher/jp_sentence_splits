@@ -6,9 +6,15 @@ test counts, code-review findings, production-run logs) see
 reference see `docs/AI_OVERVIEW.md`; for the at-a-glance phase list see
 `docs/ROADMAP.md`.
 
-Last updated: 2026-10-15.
+Last updated: 2026-10-16.
 
 ## Where things stand
+
+- **2026-10-16 — Extras checks in GitHub Actions.** `extras-tests.yml` adds
+  assistant-run API tests and Chromium/WebKit extras browser tests on pull
+  requests, main pushes, and manual dispatch. No secrets or live services;
+  browser failure artifacts retained seven days. Existing `npm run check`
+  already covers extras unit/component tests. Separate from Pages deployment.
 
 - **2026-10-15 — Extras save/recovery verification.** On `fix/extras-save-recovery`
   (not deployed): “Save and clear” retains the server run when a save throws,

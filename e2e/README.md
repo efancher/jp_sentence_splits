@@ -42,3 +42,18 @@ Screenshots are saved under `test-results/`; Playwright records failure context
 there too. The chapter tests check chapter boundaries, answer masking, target
 scrolling, horizontal overflow and a single persisted review after grading.
 Keep the image version in step with Playwright when upgrading dependencies.
+
+## Extras workflow in GitHub Actions
+
+`.github/workflows/extras-tests.yml` runs on pull requests, pushes to `main`,
+and manually from Actions → **Extras workflow tests**. It runs the assistant-run
+Python API tests and `book-extras.spec.ts` in Chromium and WebKit. The existing
+Deploy workflow's `npm run check` also picks up the extras unit/component tests.
+These checks need no repository secrets: API calls are mocked, browser data is
+synthetic, and the Python runner is faked. Browser failures upload `test-results/`
+(including retry traces) for seven days. This workflow is separate from the Pages
+deploy job; it does not itself gate deployment.
+
+The browser step sets `GITHUB_ACTIONS=false` so Vite serves the local test build
+at `/` instead of the Pages subpath. `CI=true` retains Playwright's CI behavior:
+clean preview startup, no focused tests, and one retry with a trace.
