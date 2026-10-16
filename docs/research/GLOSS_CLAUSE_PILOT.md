@@ -330,4 +330,3 @@ Target: **ひなの**. Which noun is directly modified by this possessive phrase
 Options: 口 / えさ / 親鳥. Draft answer: **口**.
 
 ひなの modifies 口: the chick’s mouth. 口に marks the destination, while えさを is what the parent bird put there.
-
