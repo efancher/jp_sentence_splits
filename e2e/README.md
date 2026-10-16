@@ -47,7 +47,7 @@ Keep the image version in step with Playwright when upgrading dependencies.
 
 `.github/workflows/extras-tests.yml` runs on pull requests, pushes to `main`,
 and manually from Actions → **Extras workflow tests**. It runs the assistant-run
-Python API tests and `book-extras.spec.ts` in Chromium and WebKit. The existing
+Python API tests and `book-extras.spec.ts` plus `clause-pilot.spec.ts` in Chromium and WebKit. The existing
 Deploy workflow's `npm run check` also picks up the extras unit/component tests.
 These checks need no repository secrets: API calls are mocked, browser data is
 synthetic, and the Python runner is faked. Browser failures upload `test-results/`
@@ -57,3 +57,8 @@ deploy job; it does not itself gate deployment.
 The browser step sets `GITHUB_ACTIONS=false` so Vite serves the local test build
 at `/` instead of the Pages subpath. `CI=true` retains Playwright's CI behavior:
 clean preview startup, no focused tests, and one retry with a trace.
+
+The clause pilot checks phone and desktop layouts, sub-chunk highlighting,
+choice/reveal/dispute, feedback persistence after reload, and unchanged review,
+gloss-decision, and study-item counts. It uses synthetic local sentences matching
+the curated reference text; no production account or API is required.

@@ -15,6 +15,7 @@ import { roleGuideBlurb } from '../lib/roleGuide';
 import { layersOverlapping, validLayersFor, type LayerWithSentence } from '../lib/phraseConstruction';
 import { locateTargetSpan, selectSentenceTargets, type CompareSentence } from '../lib/sentenceLearning';
 
+import { ClausePilotPreview } from './ClausePilotPreview';
 import { ChunkPuzzleStrip } from './ChunkPuzzleStrip';
 import { ContextStepCard, HighlightedSentence, ParticipantList, WalkthroughCheckView, WalkthroughContentImport, type RoleHelp } from './ContextWalkthroughView';
 import { buildCheckPuzzle } from '../lib/earTiles';
@@ -361,6 +362,7 @@ export function SentenceWalkthrough({
           ));
         })() : null}
       </div>
+      <ClausePilotPreview japanese={sentence.japanese} />
       <label className="row" style={{ gap: '0.4rem', flexWrap: 'wrap' }}>
         <span className="muted">Help level</span>
         <select aria-label="Help level" value={preset} onChange={(event) => setPreset(event.target.value as SupportPreset)}>

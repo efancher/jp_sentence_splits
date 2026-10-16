@@ -10,6 +10,51 @@ Last updated: 2026-10-16.
 
 ## Where things stand
 
+- **2026-10-16 — Ungraded clause preview and fixed-expression chunk safeguards.**
+  Eight curated questions in a
+  collapsed “Try a clause question (preview)” section of the sentence walkthrough.
+  Exact-source matching and unique text spans protect against stale/ambiguous
+  highlights; no dependency on chunk boundaries. Choice → reveal → helpful/disputed
+  feedback, local-only by reference revision; no review, gloss evidence or FSRS writes.
+  The chunker keeps quoted でもね intact, labels connective でも separately from
+  noun + でも, and no longer suppresses a genuine trailing particle just because
+  the chunk starts with a fixed adverb. JSON/line structure imports now reject
+  internal cuts in five fixed expressions and the narrow quoted-connective cases;
+  prompts explain these boundaries without forcing relative-clause splitting.
+  Audited 64 real chunked sentences: generated text preserved in all, no guard
+  failures; saved data had exactly the two expected bad boundaries.
+  **Production repair completed:** `sent_24ed9098` v34 and `sent_b7b4b892` v24,
+  moved only the reviewed pair boundaries/roles/glosses; IDs and other chunks
+  preserved. Originals backed up locally before version-checked writes; a reread
+  exactly matched the proposed repair and rerunning proposes zero changes.
+  Eight local Chromium/WebKit phone/desktop browser checks passed (preview and
+  episode preparation); build passed. A full-suite run passed all 2,656 assertions
+  but exposed an unrelated ear-tile test provider cleanup race; the unit test now
+  stubs its unused audio child rather than starting an unrelated database provider.
+  The rerun reported 240 passing files / 2,656 passing tests, 12 skipped, with
+  no unhandled test errors; the initial PR also passed GitHub CI.
+  Follow-up for reported について splits: compound particles share longest-first
+  handling across generation, role detection and import validation, including
+  については／も and にとっては／も. Imports reject internal cuts in について,
+  にとって, によると and によれば; standalone compound chunks retain their role.
+  Four saved examples were repaired with exact-source matching, backups and
+  version checks: sent_3991efcc v22, sent_5afc37e6 v12, sent_89943494 v19,
+  sent_abf79c54 v45. Noun / compound boundaries preserve all chunk IDs and notes
+  elsewhere. Exact rereads matched all proposals; all 64 saved and generated
+  analyses pass the expanded guard. Follow-up typecheck and 75 focused tests pass.
+
+- **2026-10-16 — Clause/attachment pilot and backend deployment check.**
+  Drafted a 12-sentence purposive sample from 64 chunked analyses: 8 promising
+  structural questions, 2 needing companion chunk repairs, 2 deferred for
+  ambiguity/incomplete discourse. `docs/research/GLOSS_CLAUSE_PILOT.md` and
+  `.json` include source IDs, exact spans, source hashes, answers, explanations,
+  and review caveats. All remain ungraded assistant drafts; no learner data
+  changed. `scripts/sample-gloss-pilot.ts --output <path>` reproduces the
+  read-only candidate export. Main frontend deployment succeeded; restarted
+  the idle mining API and verified health plus a completed run's 1,549-sentence
+  recovery manifest. Next: an opt-in ungraded preview using source spans,
+  followed by independent reference review before considering auto-grading.
+
 - **2026-10-16 — Extras checks in GitHub Actions.** `extras-tests.yml` adds
   assistant-run API tests and Chromium/WebKit extras browser tests on pull
   requests, main pushes, and manual dispatch. No secrets or live services;

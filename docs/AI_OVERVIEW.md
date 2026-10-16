@@ -2913,3 +2913,24 @@ no cloud sync. Scored by `npm run analyze:word-boundary-labels -- <file>`. Code:
 `src/components/BoundaryEdgeEditor.tsx`, `src/lib/wordBoundaryLabels.ts` (estimators, queue selection,
 error stats), `src/lib/boundaryEditor.ts`, `src/lib/rangePlayer.ts`, `src/db/wordBoundaryLabels.ts`,
 `src/lib/wordBoundaryLabelExport.ts`.
+
+
+## Clause-question pilot
+
+Eight curated source sentences offer “Try a clause question (preview)” inside
+`SentenceWalkthrough`. `ClausePilotPreview` uses exact source text and uniquely
+located target/option spans, independent of saved chunk boundaries; an edited
+sentence hides its stale reference. Choices and explanations are ungraded and
+have no callbacks into review, gloss evidence, or FSRS. Helpful/disputed feedback
+is stored only on that device, keyed by reference revision. The pilot is opt-in
+and starts collapsed. References are assistant drafts awaiting independent review.
+The two repaired pilot sentences are not added to the eight-question pilot yet.
+
+The heuristic chunker protects fixed expressions (なんとか, とっても, もちろん,
+とりあえず, どうやって) and utterance-initial quoted でもね/でもよ from internal
+particle cuts. Standalone connective でも is distinct from noun + でも. A shared
+`unsafeChunkBoundaries` check rejects those known internal cuts in JSON and line
+structure imports; this is a narrow quality check, not a dependency parser.
+Relative clauses and head nouns can remain in one natural chunk. Existing saved
+analyses are never regenerated automatically. `repair-pilot-chunks.ts` provides a
+backed-up, version-checked repair for the two reviewed saved boundary errors only.

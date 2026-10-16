@@ -1,0 +1,856 @@
+{
+  "createdAt": "2026-10-16",
+  "sourceCount": 64,
+  "selection": "Purposive sample of 12 from 64 chunked analyses; not a representative accuracy estimate.",
+  "offsetConvention": "Unicode code-point offsets, end exclusive; convert before JavaScript UTF-16 indexing.",
+  "items": [
+    {
+      "sentenceId": "sent_1ddbaa71",
+      "source": "最初に飛び立ったひなは、近くの木の枝に止まっていました。",
+      "storedChunks": [
+        {
+          "id": "chunk_84b5d692-c38f-4baf-aba4-5d7f700210d6",
+          "role": "に-car",
+          "order": 0,
+          "japanese": "最初に",
+          "literalEnglish": "beginning-at"
+        },
+        {
+          "id": "chunk_3e4c7ffb-ac12-4f95-bed8-194f9a7ba03d",
+          "role": "topic は",
+          "order": 1,
+          "japanese": "飛び立ったひなは、",
+          "literalEnglish": "flew out chick as for"
+        },
+        {
+          "id": "chunk_330dffc9-ca41-4e2d-aca0-ce0226fecf97",
+          "role": "の-car",
+          "order": 2,
+          "japanese": "近くの",
+          "literalEnglish": "near-'s"
+        },
+        {
+          "id": "chunk_813ef850-c478-47d2-b2f2-6787fb70a701",
+          "role": "の-car",
+          "order": 3,
+          "japanese": "木の",
+          "literalEnglish": "tree-'s"
+        },
+        {
+          "id": "chunk_2266d098-9fb1-4bca-9cad-9080fd50a342",
+          "role": "に-car",
+          "order": 4,
+          "japanese": "枝に",
+          "literalEnglish": "branch at"
+        },
+        {
+          "id": "chunk_99c667a9-87fa-4922-b5fe-e1ca25b9c169",
+          "role": "engine: verb",
+          "order": 5,
+          "japanese": "止まっていました。",
+          "literalEnglish": "stopped past polite"
+        }
+      ],
+      "status": "promising",
+      "kind": "relative-clause",
+      "target": {
+        "text": "飛び立った",
+        "startCodePoint": 3,
+        "endCodePoint": 8
+      },
+      "question": "Which noun is directly modified by this clause?",
+      "options": [
+        {
+          "text": "ひな",
+          "startCodePoint": 8,
+          "endCodePoint": 10
+        },
+        {
+          "text": "枝",
+          "startCodePoint": 17,
+          "endCodePoint": 18
+        },
+        {
+          "text": "木",
+          "startCodePoint": 15,
+          "endCodePoint": 16
+        }
+      ],
+      "answerText": "ひな",
+      "explanation": "飛び立った identifies the chick that took off. 最初に belongs inside that description; it does not identify which branch the chick landed on.",
+      "reviewNote": "The modifier and head are fused in 飛び立ったひなは、. A chunk-ID answer cannot distinguish them.",
+      "referenceStatus": "draft-not-independent-review",
+      "autoGrade": false,
+      "sourceSha256": "4965cb49376ff55c513ee303b2b4a2ed523b7f7a66d33839de725b3d7a7c48b5"
+    },
+    {
+      "sentenceId": "sent_6a319808",
+      "source": "後から飛び立った２羽のひなたちも、みんながいる所まで飛びました。",
+      "storedChunks": [
+        {
+          "id": "chunk_162bf3f1-db80-45e0-8116-a7aefa6a8a95",
+          "role": "から-car",
+          "order": 0,
+          "japanese": "後から",
+          "literalEnglish": "after from"
+        },
+        {
+          "id": "chunk_f84a0e34-dd8f-4820-994c-1d45867b5a44",
+          "role": "の-car",
+          "order": 1,
+          "japanese": "飛び立った２羽の",
+          "literalEnglish": "fly out 2 birds"
+        },
+        {
+          "id": "chunk_83cc1625-cbd2-44b8-82b2-0b48e41d43a7",
+          "role": "も-car",
+          "order": 2,
+          "japanese": "ひなたちも、",
+          "literalEnglish": "chicks also"
+        },
+        {
+          "id": "chunk_c309feff-6a11-4fae-8a70-27237efc511a",
+          "role": "Aが",
+          "order": 3,
+          "japanese": "みんなが",
+          "literalEnglish": "all"
+        },
+        {
+          "id": "chunk_0c46c1c8-a7f7-4687-9059-516c1a982d2c",
+          "role": "まで-car",
+          "order": 4,
+          "japanese": "いる所まで",
+          "literalEnglish": "go place and"
+        },
+        {
+          "id": "chunk_0b24d788-09c5-40da-b6ee-dcfd8a488959",
+          "role": "engine",
+          "order": 5,
+          "japanese": "飛びました。",
+          "literalEnglish": "fly past polite"
+        }
+      ],
+      "status": "promising",
+      "kind": "relative-clause",
+      "target": {
+        "text": "みんながいる",
+        "startCodePoint": 17,
+        "endCodePoint": 23
+      },
+      "question": "Which place expression does this describe?",
+      "options": [
+        {
+          "text": "所",
+          "startCodePoint": 23,
+          "endCodePoint": 24
+        },
+        {
+          "text": "ひなたち",
+          "startCodePoint": 11,
+          "endCodePoint": 15
+        },
+        {
+          "text": "２羽",
+          "startCodePoint": 8,
+          "endCodePoint": 10
+        }
+      ],
+      "answerText": "所",
+      "explanation": "みんながいる describes 所: the place where everyone is. The whole place phrase with まで supplies the destination/extent of 飛びました.",
+      "reviewNote": "いる所まで fuses the embedded predicate, head noun, and particle. Keep the earlier 後から飛び立った modifier separate.",
+      "referenceStatus": "draft-not-independent-review",
+      "autoGrade": false,
+      "sourceSha256": "6cb417de69be73f72ca7b8c03db36dbb8f3ba2462cddc776643729f3ad0e28e6"
+    },
+    {
+      "sentenceId": "sent_9599a175",
+      "source": "その時、お父さん鳥は、前方に、穴が空いている木を見つけました。",
+      "storedChunks": [
+        {
+          "id": "chunk_66a5f321-3007-4c91-9372-c2626fabc944",
+          "role": "の-car",
+          "order": 0,
+          "japanese": "その",
+          "literalEnglish": "that"
+        },
+        {
+          "id": "chunk_9df31069-4a2b-4ed1-a8f4-8e1b50ce5093",
+          "role": "topic は",
+          "order": 1,
+          "japanese": "時、お父さん鳥は、",
+          "literalEnglish": "time, father bird as for"
+        },
+        {
+          "id": "chunk_ccf7e3cf-a294-4e2b-a5da-c08c3fe5ba3d",
+          "role": "に-car",
+          "order": 2,
+          "japanese": "前方に、",
+          "literalEnglish": "forward-at"
+        },
+        {
+          "id": "chunk_065a422e-5e5e-40a1-a920-f0f137ed4d2f",
+          "role": "Aが",
+          "order": 3,
+          "japanese": "穴が",
+          "literalEnglish": "hole"
+        },
+        {
+          "id": "chunk_b5ee0ace-80c2-4880-94b2-81007d7664dc",
+          "role": "を-car",
+          "order": 4,
+          "japanese": "空いている木を",
+          "literalEnglish": "went"
+        },
+        {
+          "id": "chunk_1d4387be-bce9-4c8d-a57f-e9de4affaa19",
+          "role": "engine",
+          "order": 5,
+          "japanese": "見つけました。",
+          "literalEnglish": "discover-POLITE.PAST"
+        }
+      ],
+      "status": "promising",
+      "kind": "relative-clause",
+      "target": {
+        "text": "穴が空いている",
+        "startCodePoint": 15,
+        "endCodePoint": 22
+      },
+      "question": "Which noun does this describe?",
+      "options": [
+        {
+          "text": "木",
+          "startCodePoint": 22,
+          "endCodePoint": 23
+        },
+        {
+          "text": "お父さん鳥",
+          "startCodePoint": 4,
+          "endCodePoint": 9
+        },
+        {
+          "text": "前方",
+          "startCodePoint": 11,
+          "endCodePoint": 13
+        }
+      ],
+      "answerText": "木",
+      "explanation": "The hole is in the tree. 穴が is the subject inside the modifier; 木を is the object of the main 見つけました.",
+      "reviewNote": "空いている木を crosses the clause boundary. Do not let the embedded が become the main-clause subject.",
+      "referenceStatus": "draft-not-independent-review",
+      "autoGrade": false,
+      "sourceSha256": "9587c5a7925f8511b849cac5e86732f4f6b16ff34159931d043cbc3e8bf4a6eb"
+    },
+    {
+      "sentenceId": "sent_c52ed70c",
+      "source": "もう一つは紙、何かを書いたりするやつですね。",
+      "storedChunks": [
+        {
+          "id": "chunk_15f26582-9df0-400b-974d-06340f5f945e",
+          "role": "topic は",
+          "notes": "もう一つ is marked by は because the sentence is establishing what \"one more thing\" is *about* — the speaker is announcing a new topic of discussion (another item in a list), not reporting a fact about \"one more thing\" with が. The は marks aboutness and discourse flow here: \"As for one more thing, it's paper [that you use for writing stuff].\"",
+          "order": 0,
+          "japanese": "もう一つは",
+          "literalEnglish": "one more as.for"
+        },
+        {
+          "id": "chunk_1fcd1e37-32a0-45fd-b44b-015fc247e4ee",
+          "role": "modifier/content",
+          "order": 1,
+          "japanese": "紙、",
+          "literalEnglish": "paper"
+        },
+        {
+          "id": "chunk_12da269a-01a8-4279-9ca8-68e09d132017",
+          "role": "を-car",
+          "order": 2,
+          "japanese": "何かを",
+          "literalEnglish": "what"
+        },
+        {
+          "id": "chunk_2420a0d9-da53-40eb-b4d9-4639b6d27756",
+          "role": "たり-car",
+          "order": 3,
+          "japanese": "書いたり",
+          "literalEnglish": "to do"
+        },
+        {
+          "id": "chunk_66d7e5d6-6592-4d36-8b69-34f059e3a4fa",
+          "role": "engine",
+          "order": 4,
+          "japanese": "するやつですね。",
+          "literalEnglish": "is for"
+        }
+      ],
+      "status": "promising",
+      "kind": "relative-clause",
+      "target": {
+        "text": "何かを書いたりする",
+        "startCodePoint": 7,
+        "endCodePoint": 16
+      },
+      "question": "Which following noun is directly modified by this clause?",
+      "options": [
+        {
+          "text": "やつ",
+          "startCodePoint": 16,
+          "endCodePoint": 18
+        },
+        {
+          "text": "紙",
+          "startCodePoint": 5,
+          "endCodePoint": 6
+        },
+        {
+          "text": "もう一つ",
+          "startCodePoint": 0,
+          "endCodePoint": 4
+        }
+      ],
+      "answerText": "やつ",
+      "explanation": "The directly modified head is やつ. 紙 and やつ refer to the same thing here, so ask specifically for the grammatical head, not what the description is about.",
+      "reviewNote": "Question wording asks for the directly modified following noun, so coreferent 紙 is not confused with the syntactic head やつ.",
+      "referenceStatus": "draft-not-independent-review",
+      "autoGrade": false,
+      "sourceSha256": "3ebe576399e977b9cb89590636e1054df9d13c4cdd9c9453e1b5bb229ee078f4"
+    },
+    {
+      "sentenceId": "sent_097e750f",
+      "source": "お父さん鳥は、「もうだめだ」と思いました。",
+      "storedChunks": [
+        {
+          "id": "chunk_78c3f17b-da2b-4d5e-a1b7-b2a65d4bf34c",
+          "role": "topic は",
+          "order": 0,
+          "japanese": "お父さん鳥は、",
+          "literalEnglish": "father bird - as for"
+        },
+        {
+          "id": "chunk_e5e5e5e0-be93-4daa-b32b-89f42ce4a677",
+          "role": "modifier/content",
+          "order": 1,
+          "japanese": "「もうだめだ」と",
+          "literalEnglish": "done for"
+        },
+        {
+          "id": "chunk_308e710f-f655-4395-a8a5-f157cd229156",
+          "role": "engine",
+          "order": 2,
+          "japanese": "思いました。",
+          "literalEnglish": "thought - polite"
+        }
+      ],
+      "status": "promising",
+      "kind": "quotation",
+      "target": {
+        "text": "「もうだめだ」と",
+        "startCodePoint": 7,
+        "endCodePoint": 15
+      },
+      "question": "Which predicate takes this thought as its content?",
+      "options": [
+        {
+          "text": "思いました",
+          "startCodePoint": 15,
+          "endCodePoint": 20
+        },
+        {
+          "text": "もうだめだ",
+          "startCodePoint": 8,
+          "endCodePoint": 13
+        }
+      ],
+      "answerText": "思いました",
+      "explanation": "The quoted thought is the content of 思いました. もうだめだ is the predicate inside the thought, not the predicate that introduces it.",
+      "reviewNote": "Ask about the host predicate, not the implied subject or an English translation of だめ.",
+      "referenceStatus": "draft-not-independent-review",
+      "autoGrade": false,
+      "sourceSha256": "6b668c03646b27e2ff9da9d2683d4b720f8e9b1d0eae05f72a300341a45ecebe"
+    },
+    {
+      "sentenceId": "sent_fdaf0b2d",
+      "source": "「そうね。じゃあ、そろそろ巣に帰りましょう」と、お母さん鳥が言いました。",
+      "storedChunks": [
+        {
+          "id": "chunk_e425f16a-9643-450b-bee0-97c2d86b5fc0",
+          "role": "modifier/content",
+          "order": 0,
+          "japanese": "「そうね。",
+          "literalEnglish": "so isn't it?"
+        },
+        {
+          "id": "chunk_3254d016-776e-4cac-8eed-d39bc49cfa44",
+          "role": "に-car",
+          "order": 1,
+          "japanese": "じゃあ、そろそろ巣に",
+          "literalEnglish": "soon-then-at"
+        },
+        {
+          "id": "chunk_515b637f-ed1f-4367-b544-cec4ea91533b",
+          "role": "と-car",
+          "order": 2,
+          "japanese": "帰りましょう」と、",
+          "literalEnglish": "leaving will"
+        },
+        {
+          "id": "chunk_d67b6bcf-ba9b-471e-89d0-893109c34e2c",
+          "role": "Aが",
+          "order": 3,
+          "japanese": "お母さん鳥が",
+          "literalEnglish": "mother as for"
+        },
+        {
+          "id": "chunk_536c3872-c207-409e-b4be-42d320025130",
+          "role": "engine",
+          "order": 4,
+          "japanese": "言いました。",
+          "literalEnglish": "said"
+        }
+      ],
+      "status": "promising",
+      "kind": "quotation",
+      "target": {
+        "text": "「そうね。じゃあ、そろそろ巣に帰りましょう」と",
+        "startCodePoint": 0,
+        "endCodePoint": 23
+      },
+      "question": "Which predicate introduces these spoken words?",
+      "options": [
+        {
+          "text": "言いました",
+          "startCodePoint": 30,
+          "endCodePoint": 35
+        },
+        {
+          "text": "帰りましょう",
+          "startCodePoint": 15,
+          "endCodePoint": 21
+        }
+      ],
+      "answerText": "言いました",
+      "explanation": "The entire quotation attaches to 言いました despite the intervening お母さん鳥が. 帰りましょう belongs inside the quotation.",
+      "reviewNote": "The quote crosses several stored chunks and contains punctuation. Match the full quoted span before interpreting sentence-final roles.",
+      "referenceStatus": "draft-not-independent-review",
+      "autoGrade": false,
+      "sourceSha256": "599cabe8bf9627b72c104aabed1eb3e063bf00074265c99a132133329ae1bb4e"
+    },
+    {
+      "sentenceId": "sent_6be3be8e",
+      "source": "ひなたちが全員集まったら、お母さん鳥は木の枝から飛び立ちました。",
+      "storedChunks": [
+        {
+          "id": "chunk_5cf4b2ae-7745-4152-b1e2-5c1253ead67a",
+          "role": "Aが",
+          "order": 0,
+          "japanese": "ひなたちが",
+          "literalEnglish": "chick group - subject"
+        },
+        {
+          "id": "chunk_b1810020-9833-4ab6-a440-8a3e304db336",
+          "role": "たら-car",
+          "order": 1,
+          "japanese": "全員集まったら、",
+          "literalEnglish": "all member gather - when"
+        },
+        {
+          "id": "chunk_d159561d-5c3a-4c59-a52d-fcf6f9beb3a0",
+          "role": "topic は",
+          "order": 2,
+          "japanese": "お母さん鳥は",
+          "literalEnglish": "mother bird as for"
+        },
+        {
+          "id": "chunk_ede6751c-0f36-45e7-982f-0056e9e0ff05",
+          "role": "の-car",
+          "order": 3,
+          "japanese": "木の",
+          "literalEnglish": "tree-'s"
+        },
+        {
+          "id": "chunk_9f9d1d87-76be-46cc-bd7d-70cab708a8aa",
+          "role": "から-car",
+          "order": 4,
+          "japanese": "枝から",
+          "literalEnglish": "branch - from"
+        },
+        {
+          "id": "chunk_e63a891a-60d8-479f-8319-05ea66292ded",
+          "role": "engine",
+          "order": 5,
+          "japanese": "飛び立ちました。",
+          "literalEnglish": "fly out polite past"
+        }
+      ],
+      "status": "promising",
+      "kind": "clause-link",
+      "target": {
+        "text": "ひなたちが全員集まったら",
+        "startCodePoint": 0,
+        "endCodePoint": 12
+      },
+      "question": "Which following event is linked to this clause?",
+      "options": [
+        {
+          "text": "お母さん鳥は木の枝から飛び立ちました",
+          "startCodePoint": 13,
+          "endCodePoint": 31
+        },
+        {
+          "text": "ひなたちが全員集まったら",
+          "startCodePoint": 0,
+          "endCodePoint": 12
+        }
+      ],
+      "answerText": "お母さん鳥は木の枝から飛び立ちました",
+      "explanation": "The gathering clause supplies the setting/condition for the mother bird taking off. This structural link is clear without forcing a choice between English “when” and “if”.",
+      "reviewNote": "Grade attachment only. Choosing a unique temporal-versus-hypothetical meaning would need discourse context.",
+      "referenceStatus": "draft-not-independent-review",
+      "autoGrade": false,
+      "sourceSha256": "c426e67c79f090b0a1d052aeb3011d147f08dae7731390f663092cc51476d2e0"
+    },
+    {
+      "sentenceId": "sent_a1947e28",
+      "source": "１羽のひなが、「飛ぶのって、すごく楽しいね！」と言いました。",
+      "storedChunks": [
+        {
+          "id": "chunk_175cee71-f028-4e87-81d6-846420937fcb",
+          "role": "の-car",
+          "order": 0,
+          "japanese": "１羽の",
+          "literalEnglish": "one bird counter"
+        },
+        {
+          "id": "chunk_db0428c5-7fcb-4ecf-b755-0f083b149e33",
+          "role": "Aが",
+          "order": 1,
+          "japanese": "ひなが、",
+          "literalEnglish": "little bird"
+        },
+        {
+          "id": "chunk_9e24a146-cdfa-4c21-bb3b-3609e784f587",
+          "role": "って-car",
+          "order": 2,
+          "japanese": "「飛ぶのって、",
+          "literalEnglish": "flying"
+        },
+        {
+          "id": "chunk_4fc114fc-842a-40ad-8c0d-537d16d93a17",
+          "role": "と-car",
+          "order": 3,
+          "japanese": "すごく楽しいね！」と",
+          "literalEnglish": "really enjoyable isn't "
+        },
+        {
+          "id": "chunk_eb4281bc-ee18-424c-8c9e-995051eed5ab",
+          "role": "engine: verb",
+          "order": 4,
+          "japanese": "言いました。",
+          "literalEnglish": "said polite"
+        }
+      ],
+      "status": "promising",
+      "kind": "nominalized-clause",
+      "target": {
+        "text": "飛ぶ",
+        "startCodePoint": 8,
+        "endCodePoint": 10
+      },
+      "question": "Which following expression makes this action the topic inside the quotation?",
+      "options": [
+        {
+          "text": "のって",
+          "startCodePoint": 10,
+          "endCodePoint": 13
+        },
+        {
+          "text": "すごく",
+          "startCodePoint": 14,
+          "endCodePoint": 17
+        },
+        {
+          "text": "と言いました",
+          "startCodePoint": 23,
+          "endCodePoint": 29
+        }
+      ],
+      "answerText": "のって",
+      "explanation": "の nominalizes 飛ぶ; the following って presents that action as the topic. The quoted speaker says flying is enjoyable. の here is not a noun-to-noun possessive link.",
+      "reviewNote": "The answer deliberately includes the nominalizer plus topic marker. Do not describe って itself as the nominalizer.",
+      "referenceStatus": "draft-not-independent-review",
+      "autoGrade": false,
+      "sourceSha256": "94f3c6c1247117524a96338aad9dd173af42eaff24e3d5b277976ac79c65cba6"
+    },
+    {
+      "sentenceId": "sent_24ed9098",
+      "source": "お母さん鳥は、「そうね」と答えた後、「でもね」と続けました。",
+      "storedChunks": [
+        {
+          "id": "chunk_9573750c-5ed7-422c-b41c-dc8af76ab98e",
+          "role": "topic は",
+          "order": 0,
+          "japanese": "お母さん鳥は、",
+          "literalEnglish": "mother bird"
+        },
+        {
+          "id": "chunk_9d941922-5dd3-4e32-8d3b-b72ebbea2cf0",
+          "role": "と-car",
+          "order": 1,
+          "japanese": "「そうね」と",
+          "literalEnglish": "and"
+        },
+        {
+          "id": "chunk_9c8abab3-aaee-4198-afe0-6858bbb51b82",
+          "role": "でも-car",
+          "order": 2,
+          "japanese": "答えた後、「でも",
+          "literalEnglish": "answer back "
+        },
+        {
+          "id": "chunk_6e45f564-e2c3-425d-abc0-5ae22475d534",
+          "role": "と-car",
+          "order": 3,
+          "japanese": "ね」と",
+          "literalEnglish": "isn't it "
+        },
+        {
+          "id": "chunk_813e0009-0a7e-4741-bab7-ec5e5d4c7e22",
+          "role": "engine",
+          "order": 4,
+          "japanese": "続けました。",
+          "literalEnglish": "continued polite"
+        }
+      ],
+      "status": "repair-first",
+      "kind": "temporal-clause",
+      "target": {
+        "text": "「そうね」と答えた",
+        "startCodePoint": 7,
+        "endCodePoint": 16
+      },
+      "question": "Which time noun does this clause modify?",
+      "options": [
+        {
+          "text": "後",
+          "startCodePoint": 16,
+          "endCodePoint": 17
+        },
+        {
+          "text": "お母さん鳥",
+          "startCodePoint": 0,
+          "endCodePoint": 5
+        },
+        {
+          "text": "「でもね」",
+          "startCodePoint": 18,
+          "endCodePoint": 23
+        }
+      ],
+      "answerText": "後",
+      "explanation": "答えた modifies 後: after answering “yes”. The later quoted でもね is content of 続けました, not part of the earlier temporal clause.",
+      "reviewNote": "Stored chunks split 「でもね」 across 答えた後、「でも and ね」と and invent a でも-car. Repair the span representation before presenting the walkthrough beside this question.",
+      "referenceStatus": "draft-not-independent-review",
+      "autoGrade": false,
+      "sourceSha256": "e5e125cad206da391ab4794f3792264d9462cad0248854317f1ef4d8be4bfcdc"
+    },
+    {
+      "sentenceId": "sent_b7b4b892",
+      "source": "ひなは必死に羽ばたいて、なんとか飛ぶことができました。",
+      "storedChunks": [
+        {
+          "id": "chunk_84992980-84b4-4380-8159-fa7226e5ff6c",
+          "role": "topic は",
+          "order": 0,
+          "japanese": "ひなは",
+          "literalEnglish": "chick-as.for"
+        },
+        {
+          "id": "chunk_69d1f17f-f723-4f46-82d4-6274bd07957c",
+          "role": "に-car",
+          "order": 1,
+          "japanese": "必死に",
+          "literalEnglish": "frantic"
+        },
+        {
+          "id": "chunk_91185cb1-3c8a-47ac-9090-49f640902fd6",
+          "role": "て-car",
+          "order": 2,
+          "japanese": "羽ばたいて、",
+          "literalEnglish": "wings flapped and"
+        },
+        {
+          "id": "chunk_50be7804-aabb-488f-bacb-134055221df3",
+          "role": "と-car",
+          "order": 3,
+          "japanese": "なんと",
+          "literalEnglish": "something and"
+        },
+        {
+          "id": "chunk_8dcbbbfe-4a37-4455-9ba8-048c2b3e22ae",
+          "role": "Aが",
+          "order": 4,
+          "japanese": "か飛ぶことが",
+          "literalEnglish": "flying"
+        },
+        {
+          "id": "chunk_f1c3894d-04c9-4cc6-9602-ccb4fdfaf407",
+          "role": "engine: verb",
+          "order": 5,
+          "japanese": "できました。",
+          "literalEnglish": "did past polite"
+        }
+      ],
+      "status": "repair-first",
+      "kind": "nominalized-clause",
+      "target": {
+        "text": "飛ぶことが",
+        "startCodePoint": 16,
+        "endCodePoint": 21
+      },
+      "question": "Which predicate completes this ability expression?",
+      "options": [
+        {
+          "text": "できました",
+          "startCodePoint": 21,
+          "endCodePoint": 26
+        },
+        {
+          "text": "羽ばたいて",
+          "startCodePoint": 6,
+          "endCodePoint": 11
+        }
+      ],
+      "answerText": "できました",
+      "explanation": "飛ぶことができました expresses being able to fly. The target is the nominalized action that combines with できました, not the earlier flapping action.",
+      "reviewNote": "Stored chunks split なんとか into なんと and か飛ぶことが. Do not teach the false と-car. A source-span question is possible after correcting the companion analysis.",
+      "referenceStatus": "draft-not-independent-review",
+      "autoGrade": false,
+      "sourceSha256": "7dfbd5c6542e68d8d1b1e13aa7efd5487212bd812374777e3a19d4f0a445c616"
+    },
+    {
+      "sentenceId": "sent_0dce0d45",
+      "source": "日本で一番人気があるレストランのレビューサイトに、「食べログ」というサイトがあります。",
+      "storedChunks": [
+        {
+          "id": "chunk_17bf6125-cdb6-4681-860b-f3494b7a87fc",
+          "role": "で-car",
+          "order": 0,
+          "japanese": "日本で",
+          "literalEnglish": "japan"
+        },
+        {
+          "id": "chunk_784973b2-38b5-4207-82d1-9db9780c5a5f",
+          "role": "Aが",
+          "order": 1,
+          "japanese": "一番人気が",
+          "literalEnglish": "one popular"
+        },
+        {
+          "id": "chunk_2f549cfb-bddd-4bf9-a9ea-b3f9f119b798",
+          "role": "の-car",
+          "order": 2,
+          "japanese": "あるレストランの",
+          "literalEnglish": "exists restaurant"
+        },
+        {
+          "id": "chunk_43f451ae-aada-4c61-a879-99d586b83a57",
+          "role": "に-car",
+          "order": 3,
+          "japanese": "レビューサイトに、",
+          "literalEnglish": "review site"
+        },
+        {
+          "id": "chunk_76eb3e2e-3835-4046-9f9d-e3f61db4d157",
+          "role": "と-car",
+          "order": 4,
+          "japanese": "「食べログ」と",
+          "literalEnglish": "tabelog "
+        },
+        {
+          "id": "chunk_59665f12-8b2b-44db-9039-cb1142c5739f",
+          "role": "Aが",
+          "order": 5,
+          "japanese": "いうサイトが",
+          "literalEnglish": "speak site"
+        },
+        {
+          "id": "chunk_bc904590-fa36-4ea8-b035-812d0c3ce442",
+          "role": "engine",
+          "order": 6,
+          "japanese": "あります。",
+          "literalEnglish": "is. polite"
+        }
+      ],
+      "status": "defer",
+      "kind": "ambiguous-scope",
+      "target": {
+        "text": "日本で一番人気がある",
+        "startCodePoint": 0,
+        "endCodePoint": 10
+      },
+      "question": null,
+      "options": [],
+      "answerText": null,
+      "explanation": "The popularity description can be read with different attachment/scope around レストランのレビューサイト. A single forced answer could penalize a plausible reading.",
+      "reviewNote": "Retrieve neighbouring context and editorial intent before choosing a head. No draft graded question.",
+      "referenceStatus": "draft-not-independent-review",
+      "autoGrade": false,
+      "sourceSha256": "d03f3136738f2873f633fe1be7aaa6f6f95a3a40fe5183e53807504e515fb93d"
+    },
+    {
+      "sentenceId": "sent_17d1bdde",
+      "source": "生まれた時から、この小さい場所、山の中。",
+      "storedChunks": [
+        {
+          "id": "chunk_563ad712-bf89-40d5-bdd9-3bdb2c950656",
+          "role": "engine: だ/です (copula)",
+          "order": 0,
+          "japanese": "生まれた",
+          "literalEnglish": "born was"
+        },
+        {
+          "id": "chunk_f4f01e9a-70e2-40f3-a4b0-84e16c25a56a",
+          "role": "から-car",
+          "order": 1,
+          "japanese": "時から、",
+          "literalEnglish": "from time "
+        },
+        {
+          "id": "chunk_96ec81ee-2435-4155-92cf-4c3a8f7f03b9",
+          "role": "の-car",
+          "order": 2,
+          "japanese": "この",
+          "literalEnglish": "this"
+        },
+        {
+          "id": "chunk_27417cd3-9c93-484e-a729-be265dc4b46b",
+          "role": "",
+          "order": 3,
+          "japanese": "小さい場所、",
+          "literalEnglish": "small place"
+        },
+        {
+          "id": "chunk_cc337636-b459-4c6f-a114-46c779072338",
+          "role": "engine",
+          "order": 4,
+          "japanese": "山の中。",
+          "literalEnglish": "mountain middle"
+        }
+      ],
+      "status": "defer",
+      "kind": "fragment",
+      "target": {
+        "text": "生まれた時から",
+        "startCodePoint": 0,
+        "endCodePoint": 7
+      },
+      "question": null,
+      "options": [],
+      "answerText": null,
+      "explanation": "The visible sentence is a fragment ending この小さい場所、山の中。 Its main predication and discourse connection are incomplete.",
+      "reviewNote": "Fetch the neighbouring utterances first. 生まれた is also mislabeled as a copula in the stored analysis; do not infer a clause graph from these roles.",
+      "referenceStatus": "draft-not-independent-review",
+      "autoGrade": false,
+      "sourceSha256": "f93f612e22e8b7b41f44e62cec5ef50e2fc21b5a12710b34f4d9eae29bfd8746"
+    }
+  ]
+}
