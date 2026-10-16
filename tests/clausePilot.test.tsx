@@ -9,7 +9,9 @@ import type { AnalysisChunk } from '../src/domain/types';
 beforeEach(() => localStorage.clear());
 describe('clause preview references', () => {
   it('validates every pilot and refuses stale text or ambiguous spans', () => {
-    expect(CLAUSE_PILOT).toHaveLength(8);
+    expect(CLAUSE_PILOT).toHaveLength(20);
+    expect(new Set(CLAUSE_PILOT.map((reference) => reference.id)).size).toBe(CLAUSE_PILOT.length);
+    expect(new Set(CLAUSE_PILOT.map((reference) => reference.source)).size).toBe(CLAUSE_PILOT.length);
     for (const reference of CLAUSE_PILOT) expect(clausePilotFor(reference.source)).toBe(reference);
     expect(clausePilotFor(CLAUSE_PILOT[0].source + '変更')).toBeNull();
     expect(uniqueTextSpan('木と木', '木')).toBeNull();

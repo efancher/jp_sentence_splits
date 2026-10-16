@@ -2917,14 +2917,15 @@ error stats), `src/lib/boundaryEditor.ts`, `src/lib/rangePlayer.ts`, `src/db/wor
 
 ## Clause-question pilot
 
-Eight curated source sentences offer “Try a clause question (preview)” inside
+20 curated source sentences offer “Try a clause question (preview)” inside
 `SentenceWalkthrough`. `ClausePilotPreview` uses exact source text and uniquely
 located target/option spans, independent of saved chunk boundaries; an edited
 sentence hides its stale reference. Choices and explanations are ungraded and
 have no callbacks into review, gloss evidence, or FSRS. Helpful/disputed feedback
 is stored only on that device, keyed by reference revision. The pilot is opt-in
 and starts collapsed. References are assistant drafts awaiting independent review.
-The two repaired pilot sentences are not added to the eight-question pilot yet.
+The expanded set includes both repaired pilot sentences plus compound-particle,
+subject and noun-modifier questions. Existing reference IDs preserve prior feedback.
 
 The heuristic chunker protects fixed expressions (なんとか, とっても, もちろん,
 とりあえず, どうやって) and utterance-initial quoted でもね/でもよ from internal
