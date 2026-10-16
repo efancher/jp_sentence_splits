@@ -62,3 +62,5 @@ The clause pilot checks phone and desktop layouts, sub-chunk highlighting,
 choice/reveal/dispute, feedback persistence after reload, and unchanged review,
 gloss-decision, and study-item counts. It uses synthetic local sentences matching
 the curated reference text; no production account or API is required.
+
+The clause preview suite also checks unprepared/reviewed notices and a long active-book question at both viewport sizes, with unchanged study/review counts.

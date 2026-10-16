@@ -1,9 +1,19 @@
 import { useState } from 'react';
-import { clausePilotFeedbackKey, clausePilotFor, uniqueTextSpan, type ClausePilotFeedback, type ClausePilotReference } from '../lib/clausePilot';
+import { clausePilotFeedbackKey, clauseQuestionAvailability, uniqueTextSpan, type ClausePilotFeedback, type ClausePilotReference } from '../lib/clausePilot';
 
 export function ClausePilotPreview({ japanese }: { japanese: string }) {
-  const reference = clausePilotFor(japanese);
-  return reference ? <ClauseQuestion key={reference.id} reference={reference} /> : null;
+  const availability = clauseQuestionAvailability(japanese);
+  if (availability.status === 'ready') {
+    return <ClauseQuestion key={availability.reference.id} reference={availability.reference} />;
+  }
+  return (
+    <aside className="panel stack" aria-label="Upgraded question availability">
+      <strong>{availability.status === 'reviewed' ? 'Reviewed — no upgraded question yet' : 'Upgraded question not prepared yet'}</strong>
+      <p className="muted" style={{ margin: 0 }}>{availability.status === 'reviewed'
+        ? availability.reason : 'This sentence does not have an upgraded question for its current wording.'}</p>
+      <p className="muted" style={{ margin: 0 }}>You can ask to prepare a question for this sentence later.</p>
+    </aside>
+  );
 }
 
 function ClauseQuestion({ reference }: { reference: ClausePilotReference }) {

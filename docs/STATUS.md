@@ -10,6 +10,20 @@ Last updated: 2026-10-16.
 
 ## Where things stand
 
+- **2026-10-16 — Active-book sentence questions and preparation workflow.**
+  Audited every current non-suspended/non-archived book and non-suspended chapter:
+  449 unique sentences across 493 active placements. 398 have ungraded questions;
+  51 have exact-source review notes (greetings, fragments or no useful contrast
+  selected), with no unaccounted sentences. Added 396 questions, preserving the
+  original 20 and their feedback. Walkthroughs distinguish unprepared questions
+  from reviewed cases and invite a later preparation request. Source changes
+  invalidate questions/notes. No saved analyses or study records were changed.
+  `npm run questions:coverage` provides a read-only, paginated inventory and
+  offline catalog validation; see `workflows/clause-questions.md`. The local
+  `prepare-clause-questions` skill routes future preparation through this workflow.
+  Focused reference/coverage/UI tests and typecheck passed; browser coverage now
+  includes both notices and a long new question at phone/desktop widths.
+
 - **2026-10-16 — Clause preview expanded to 20 sentences.** Added 12 reviewed
   source-matched questions covering quotation attachment, connected clauses,
   nominalization, explicit subjects, noun modifiers and について. Existing

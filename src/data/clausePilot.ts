@@ -1,4 +1,6 @@
 /** Curated, ungraded references. Exact-source matching prevents stale questions. */
+import activeQuestions from './activeClauseQuestions.json';
+
 export const CLAUSE_PILOT = [
   {
     "id": "sent_1ddbaa71-clause-v1",
@@ -248,5 +250,6 @@ export const CLAUSE_PILOT = [
     ],
     "answerText": "口",
     "explanation": "ひなの modifies 口: the chick’s mouth. 口に marks the destination, while えさを is what the parent bird put there."
-  }
+  },
+  ...activeQuestions
 ] as const;
