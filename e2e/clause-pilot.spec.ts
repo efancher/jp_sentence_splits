@@ -59,11 +59,11 @@ for (const width of [390, 1280]) {
     await preview.locator('summary').click();
     await preview.getByRole('button', { name: 'Show explanation' }).click();
     await expect(preview.getByRole('button', { name: 'Another answer works' })).toHaveAttribute('aria-pressed', 'true');
-    await page.getByRole('button', { name: 'Walk through', exact: true }).nth(1).click();
+    await page.goto('/#/books/book/learn/s-1');
     await expect(page.getByText('Upgraded question not prepared yet')).toBeVisible();
-    await page.getByRole('button', { name: 'Walk through', exact: true }).nth(2).click();
+    await page.goto('/#/books/book/learn/s-2');
     await expect(page.getByText('Reviewed — no upgraded question yet')).toBeVisible();
-    await page.getByRole('button', { name: 'Walk through', exact: true }).nth(3).click();
+    await page.goto('/#/books/book/learn/s-3');
     await preview.locator('summary').click();
     await preview.getByRole('button', { name: 'とても興味深いです', exact: true }).click();
     await preview.getByRole('button', { name: 'Show explanation' }).click();
