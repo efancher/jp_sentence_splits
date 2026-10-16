@@ -10,6 +10,13 @@ Last updated: 2026-10-16.
 
 ## Where things stand
 
+- **2026-10-16 — Clause preview expanded to 20 sentences.** Added 12 reviewed
+  source-matched questions covering quotation attachment, connected clauses,
+  nominalization, explicit subjects, noun modifiers and について. Existing
+  reference IDs and feedback are preserved. All questions remain ungraded and
+  local-feedback-only; no new scheduling or evidence writes. The research report
+  includes every new question and its reasoning.
+
 - **2026-10-16 — Ungraded clause preview and fixed-expression chunk safeguards.**
   Eight curated questions in a
   collapsed “Try a clause question (preview)” section of the sentence walkthrough.

@@ -206,3 +206,128 @@ The two saved repairs were applied and verified on 2026-10-16 (analysis versions
 as `pilot-chunks-before-repair.json`. Historical sample data above deliberately
 retains the original findings. Both examples remain outside the eight-question
 preview pending a separate decision to expand it.
+
+## Expanded ungraded set (2026-10-16)
+
+After the initial learner tryout, added 12 exact-source questions (20 total). These are assistant-drafted and self-reviewed, not independently validated. Existing question IDs and feedback keys remain unchanged. The original 12-candidate study above is historical; the two repaired examples now have questions, while ambiguous/context-dependent candidates remain deferred. Questions ask for explicit grammatical attachment rather than an inferred actor or a forced temporal interpretation.
+
+### `sent_24ed9098-clause-v1`
+
+お母さん鳥は、「そうね」と答えた後、「でもね」と続けました。
+
+Target: **「でもね」と**. Which predicate introduces these quoted words?
+
+Options: 続けました / 答えた. Draft answer: **続けました**.
+
+「でもね」と is the content of 続けました. 答えた introduces the earlier reply 「そうね」; the two quotations belong to different predicates.
+
+### `sent_b7b4b892-clause-v1`
+
+ひなは必死に羽ばたいて、なんとか飛ぶことができました。
+
+Target: **飛ぶ**. Which following word turns this action into a noun-like expression?
+
+Options: こと / なんとか / 必死に. Draft answer: **こと**.
+
+こと nominalizes 飛ぶ. 飛ぶことができました means the chick was able to fly; なんとか describes managing it somehow, not nominalization.
+
+### `sent_091b509b-clause-v1`
+
+もう１羽のひなも、「僕も疲れた」と言いました。
+
+Target: **「僕も疲れた」と**. Which predicate introduces these spoken words?
+
+Options: 言いました / 疲れた. Draft answer: **言いました**.
+
+言いました introduces the quotation. 疲れた is the predicate inside it: the chick says that he is tired too.
+
+### `sent_9842387d-clause-v1`
+
+そして、「さあみんな、羽はこうやって使うのよ」と言って、飛び方を見せました。
+
+Target: **「さあみんな、羽はこうやって使うのよ」と**. Which predicate directly introduces this quotation?
+
+Options: 言って / 見せました / 使う. Draft answer: **言って**.
+
+The quotation is the content of 言って. 見せました describes the accompanying demonstration, while 使う belongs inside the quoted explanation.
+
+### `sent_9fdc7208-clause-v1`
+
+３羽のひなたちは、お母さんの真似をして、必死に飛びました。
+
+Target: **お母さんの真似をして**. Which following event is linked to this clause?
+
+Options: 必死に飛びました / お母さんの真似をして. Draft answer: **必死に飛びました**.
+
+The chicks flew desperately while imitating their mother. The て-form clause links the imitation to the main flying event; it does not say that the mother is the subject of 飛びました.
+
+### `sent_e069c9d6-clause-v1`
+
+そして、羽を大きく広げると、思い切って巣から飛び出しました。
+
+Target: **羽を大きく広げると**. Which following event is linked to this clause?
+
+Options: 思い切って巣から飛び出しました / 羽を大きく広げると. Draft answer: **思い切って巣から飛び出しました**.
+
+Spreading the wings leads into the event of launching from the nest. Here と links the clauses; it is not quoting spoken words.
+
+### `sent_0843827e-clause-v1`
+
+ひなたちは大きな声でピーピーと鳴いて、口を大きく開けました。
+
+Target: **大きな声でピーピーと鳴いて**. Which following event is linked to this clause?
+
+Options: 口を大きく開けました / 大きな声でピーピーと鳴いて. Draft answer: **口を大きく開けました**.
+
+鳴いて connects the chirping to the chicks opening their mouths. Both actions share the topic ひなたちは. The て-form alone need not force a precise before/after ordering.
+
+### `sent_c540c63a-clause-v1`
+
+空は青くて、木々の緑がきれいでした。
+
+Target: **青くて**. Which expression is described as blue?
+
+Options: 空 / 木々の緑. Draft answer: **空**.
+
+空は supplies the topic of 青くて. 木々の緑が belongs to the following predicate きれいでした; the two descriptions are connected by the adjective て-form.
+
+### `sent_89943494-clause-v1`
+
+今日は家族について話します。
+
+Target: **について**. Which preceding noun names what is being talked about?
+
+Options: 家族 / 今日. Draft answer: **家族**.
+
+家族について means about family and supplies the subject matter of 話します. 今日は sets the time/topic frame. について is one compound expression, not に plus an independently glossed verb.
+
+### `sent_abf79c54-clause-v1`
+
+このポッドキャストでは、いろいろなトピックについて、ゆっくりな日本語で話します。
+
+Target: **ゆっくりな**. Which noun is directly modified by this expression?
+
+Options: 日本語 / トピック / ポッドキャスト. Draft answer: **日本語**.
+
+ゆっくりな directly modifies 日本語. The whole phrase ゆっくりな日本語で describes how the speaker talks; いろいろな separately modifies トピック.
+
+### `sent_6497d692-clause-v1`
+
+お母さん鳥は喜んで、ひなと一緒に飛びました。
+
+Target: **喜んで**. Which explicitly stated topic supplies the subject of this clause?
+
+Options: お母さん鳥 / ひな. Draft answer: **お母さん鳥**.
+
+お母さん鳥は supplies the subject of 喜んで and 飛びました. ひなと一緒に says whom the mother bird flew with; it does not make ひな the stated subject of 喜んで.
+
+### `sent_586e4aac-clause-v1`
+
+親鳥は、ひなの口にえさを入れました。
+
+Target: **ひなの**. Which noun is directly modified by this possessive phrase?
+
+Options: 口 / えさ / 親鳥. Draft answer: **口**.
+
+ひなの modifies 口: the chick’s mouth. 口に marks the destination, while えさを is what the parent bird put there.
+
