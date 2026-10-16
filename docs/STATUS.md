@@ -10,6 +10,14 @@ Last updated: 2026-10-16.
 
 ## Where things stand
 
+- **Follow-up — Twelve reviewed sentences now have local questions.** Revisited
+  all 51 notes and recovered clear noun modifiers, object links and nominalization
+  inside 12 previously deferred sources. Explanations acknowledge missing
+  continuations instead of inventing them. The active scope now has 410 ready
+  questions and 39 review notes; the full catalog has 428 questions. No existing
+  question revisions or learner data changed. Workflow guidance now explicitly
+  considers local relationships inside transcript fragments.
+
 - **2026-10-16 — Active-book sentence questions and preparation workflow.**
   Audited every current non-suspended/non-archived book and non-suspended chapter:
   449 unique sentences across 493 active placements. 398 have ungraded questions;

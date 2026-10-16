@@ -42,6 +42,9 @@ source text changes. It is a point-in-time report, not a live lock on learner da
   modified from a coreferent noun, quoted content from its introducing predicate,
   topics from subjects, and a following linked clause from an inferred causal or
   temporal interpretation. Review both the answer and why the distractor fails.
+- An unfinished sentence may still contain a complete local noun modifier,
+  object–predicate relation, or nominalization. Prefer such a question when it
+  does not rely on the missing continuation; explain the limited scope.
 - Prefer a useful simpler relationship when no multi-clause question fits. Do not
   fill coverage with arbitrary distractors or invent missing context. Fragmented
   transcripts, greetings and genuinely unsuitable cases can receive an exact-source
@@ -92,3 +95,7 @@ question wording uses shared forms for recurring grammatical relations. The
 references are self-reviewed drafts, not a grammar accuracy benchmark. The 51
 notes include greetings, list fragments, unfinished clauses and short statements
 without a useful contrast selected in this pass. They can be revisited later.
+
+A follow-up review recovered 12 local relationships within previously deferred
+sources: the same active scope now has 410 ready questions and 39 review notes
+(428 questions in the complete catalog). Missing continuations are not inferred.

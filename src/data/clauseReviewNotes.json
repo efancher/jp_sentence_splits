@@ -65,11 +65,6 @@
     "reason": "This is the programme title, not a clause with an attachment contrast."
   },
   {
-    "id": "sent_998ae380-clause-note-v1",
-    "source": "だから私は仕事をするときも。",
-    "reason": "The sentence ends at ときも; its main clause is in the following sentence."
-  },
-  {
     "id": "sent_f66d1cb3-clause-note-v1",
     "source": "クリスマス？",
     "reason": "This one-word prompt has no attachment contrast."
@@ -85,24 +80,9 @@
     "reason": "This short conversational prompt has no useful attachment contrast."
   },
   {
-    "id": "sent_2e6932ea-clause-note-v1",
-    "source": "私はスペインのホラー映画が大好きなので。",
-    "reason": "The reason clause ends at なので; its consequence is supplied in the next sentence."
-  },
-  {
-    "id": "sent_3c81fb02-clause-note-v1",
-    "source": "残念ながら、ワッケンにはまだ行っていませんが。",
-    "reason": "The contrast is left unfinished after が; a standalone question would omit its continuation."
-  },
-  {
     "id": "sent_c5e0da3e-clause-note-v1",
     "source": "またねー！",
     "reason": "This farewell has no useful attachment contrast."
-  },
-  {
-    "id": "sent_9a9f1123-clause-note-v1",
-    "source": "服は最近全然買っていないし。",
-    "reason": "This trailing し clause depends on the continuation for its discourse link."
   },
   {
     "id": "sent_2d5c2df9-clause-note-v1",
@@ -113,11 +93,6 @@
     "id": "sent_09c5b131-clause-note-v1",
     "source": "食べ物、飲み物以外は。",
     "reason": "This topic fragment has no predicate; its continuation is in the next sentence."
-  },
-  {
-    "id": "sent_5689ce5d-clause-note-v1",
-    "source": "例えば、語学の本は時々。",
-    "reason": "The sentence is cut off before its predicate; review it with the following sentence."
   },
   {
     "id": "sent_dee1a6d5-clause-note-v1",
@@ -160,11 +135,6 @@
     "reason": "This short additive statement has only one stated content expression."
   },
   {
-    "id": "sent_f01745aa-clause-note-v1",
-    "source": "北海道は春夏秋冬の四季がある場所なので…。",
-    "reason": "This reason clause is interrupted after なので; read it with the following sentence before preparing a linkage question."
-  },
-  {
     "id": "sent_16b53218-clause-note-v1",
     "source": "緑茶ですか？",
     "reason": "This one-word prompt has no attachment contrast."
@@ -173,11 +143,6 @@
     "id": "sent_a1b22aa9-clause-note-v1",
     "source": "それでは、また次回。",
     "reason": "This farewell has no useful attachment contrast."
-  },
-  {
-    "id": "sent_d3f0411e-clause-note-v1",
-    "source": "二人で遊ぶことができます。",
-    "reason": "This short statement has one stated participant phrase and no useful attachment contrast."
   },
   {
     "id": "sent_9f1554c0-clause-note-v1",
@@ -215,29 +180,9 @@
     "reason": "This New Year greeting has no useful attachment contrast."
   },
   {
-    "id": "sent_5d5b0219-clause-note-v1",
-    "source": "まずは健康に気をつけることです。",
-    "reason": "This short goal has one complement and no useful attachment contrast was selected."
-  },
-  {
-    "id": "sent_fc98e234-clause-note-v1",
-    "source": "例えば、月に1回のモチフィーカレターという、日本の文化などに関する無料の読み物の配信や。",
-    "reason": "This list fragment ends at や; its continuation needs to be included before preparing a full question."
-  },
-  {
     "id": "sent_ea38fa18-clause-note-v1",
     "source": "日本語だけではなくて。",
     "reason": "This contrast fragment lacks its second half and predicate."
-  },
-  {
-    "id": "sent_10ba54fb-clause-note-v1",
-    "source": "去年は、新しい言語。",
-    "reason": "This transcript fragment ends before its predicate."
-  },
-  {
-    "id": "sent_59dba3be-clause-note-v1",
-    "source": "スウェーデン語を学び始めましたが。",
-    "reason": "The contrast after が is incomplete and continues in the next sentence."
   },
   {
     "id": "sent_7680bf4a-clause-note-v1",
@@ -248,10 +193,5 @@
     "id": "sent_9425d754-clause-note-v1",
     "source": "食べ物はどうですか？",
     "reason": "This short conversational prompt has no useful attachment contrast."
-  },
-  {
-    "id": "sent_4034c39e-clause-note-v1",
-    "source": "ゴミを持ち帰るルールや、火を使ってはいけないルールは、環境や安全のためのルールでもあるので。",
-    "reason": "This reason clause ends at ので; its conclusion is in the following sentence."
   }
 ]
