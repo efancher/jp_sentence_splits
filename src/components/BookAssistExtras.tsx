@@ -89,7 +89,7 @@ export function BookAssistExtras({ bookId }: { bookId: string }) {
       savingRef.current = true;
       try {
         const result = await saveBookAssistExtras(snap, fresh);
-        if (result.problems.length > 0) {
+        if (result.problems.length > 0 || result.rejections.length > 0) {
           setMessage(formatSaved(result));
           return false;
         }

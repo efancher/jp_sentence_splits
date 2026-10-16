@@ -12,7 +12,7 @@ vi.mock('../src/lib/bookAssistExtras', async (original) => ({
 vi.mock('../src/lib/miningApi', () => ({ getAssistRun: vi.fn(), deleteAssistRun: vi.fn(), startBookExtrasRun: vi.fn(), cancelAssistRun: vi.fn() }));
 const sentences = [{ id: 's1', handle: 1, japanese: '猫です。', translation: 'A cat.', chapterId: 'c' }];
 const snapshot = { bookId: 'b', sentenceIds: ['s1'], kinds: { constructions: { handles: [1], replaceHandles: [] } } };
-const result = { saved: { constructions: 1 }, keptExisting: {}, problems: [] };
+const result: Awaited<ReturnType<typeof saveBookAssistExtras>> = { saved: { constructions: 1 }, keptExisting: {}, problems: [], rejections: [] };
 beforeEach(() => {
   vi.resetAllMocks(); localStorage.clear();
   vi.mocked(planBookAssistExtras).mockResolvedValue({ sentences, kinds: Object.fromEntries(BOOK_EXTRA_KINDS.map((kind) => [kind, { missing: [1], existing: [] }])) as never });
@@ -45,8 +45,11 @@ it('keeps the server copy after a failed save and clears only after a successful
   fireEvent.click(screen.getByRole('button', { name: 'Save and clear' }));
   await waitFor(() => expect(deleteAssistRun).toHaveBeenCalledTimes(1));
 });
-it('does not acknowledge or clear replies that the importer rejected', async () => {
-  vi.mocked(saveBookAssistExtras).mockResolvedValue({ ...result, problems: ['Entry did not match.'] });
+it.each(['problem', 'rejection'] as const)('does not acknowledge or clear replies with an importer %s', async (kind) => {
+  vi.mocked(saveBookAssistExtras).mockResolvedValue({ ...result,
+    problems: kind === 'problem' ? ['Entry did not match.'] : [],
+    rejections: kind === 'rejection' ? [{ kind: 'structure', reason: 'Entry did not match.' }] : [],
+  });
   open(); await screen.findByText(/Entry did not match/);
   fireEvent.click(screen.getByRole('button', { name: 'Save and clear' }));
   await waitFor(() => expect(saveBookAssistExtras).toHaveBeenCalledTimes(2));
