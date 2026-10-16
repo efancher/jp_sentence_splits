@@ -1,4 +1,5 @@
 import { CLAUSE_PILOT } from '../data/clausePilot';
+import reviewNotes from '../data/clauseReviewNotes.json';
 
 export interface ClausePilotReference {
   id: string;
@@ -27,3 +28,15 @@ export function clausePilotFor(source: string, references: readonly ClausePilotR
 export type ClausePilotFeedback = 'helpful' | 'disputed';
 // Separate from learner evidence, sync and scheduling. A draft revision gets a new key.
 export const clausePilotFeedbackKey = (id: string) => `glossbook.clausePilot.feedback.${id}`;
+
+
+/** Exact-source review notes expire when the sentence changes, just like questions. */
+export function clauseQuestionAvailability(source: string):
+  | { status: 'ready'; reference: ClausePilotReference }
+  | { status: 'reviewed'; reason: string }
+  | { status: 'missing' } {
+  const reference = clausePilotFor(source);
+  if (reference) return { status: 'ready', reference };
+  const note = reviewNotes.find((item) => item.source === source);
+  return note ? { status: 'reviewed', reason: note.reason } : { status: 'missing' };
+}

@@ -17,7 +17,7 @@ for (const width of [390, 1280]) {
       const now = new Date().toISOString();
       tx.objectStore('books').put({ id: 'book', title: '本の物語', archived: false,
         chapters: [{ id: 'chapter', title: '第一章', position: 0 }], collapsedChapterIds: [], createdAt: now, updatedAt: now });
-      ['最初に飛び立ったひなは、近くの木の枝に止まっていました。', '本を買いました。'].forEach((japanese, index) => {
+      ['最初に飛び立ったひなは、近くの木の枝に止まっていました。', '本を買いました。', 'みなさん、こんにちは。', 'カナリア諸島は、木がたくさんある場所や、木があまりなくて岩だけの場所、そして砂漠もあるので、とても興味深いです。'].forEach((japanese, index) => {
         const id = `s-${index}`;
         tx.objectStore('sentences').put({ id, normalizedKey: id, japanese, readingOnly: '', inlineReading: '',
           translation: '', targetVocabulary: [], vocabularySuggestions: [], sourceReferences: [], conflicts: [],
@@ -59,5 +59,16 @@ for (const width of [390, 1280]) {
     await preview.locator('summary').click();
     await preview.getByRole('button', { name: 'Show explanation' }).click();
     await expect(preview.getByRole('button', { name: 'Another answer works' })).toHaveAttribute('aria-pressed', 'true');
+    await page.getByRole('button', { name: 'Walk through', exact: true }).nth(1).click();
+    await expect(page.getByText('Upgraded question not prepared yet')).toBeVisible();
+    await page.getByRole('button', { name: 'Walk through', exact: true }).nth(2).click();
+    await expect(page.getByText('Reviewed — no upgraded question yet')).toBeVisible();
+    await page.getByRole('button', { name: 'Walk through', exact: true }).nth(3).click();
+    await preview.locator('summary').click();
+    await preview.getByRole('button', { name: 'とても興味深いです', exact: true }).click();
+    await preview.getByRole('button', { name: 'Show explanation' }).click();
+    await expect(preview.getByText('Draft answer:', { exact: false })).toContainText('とても興味深いです');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    expect(await counts()).toEqual(before);
   });
 }

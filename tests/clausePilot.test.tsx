@@ -2,14 +2,14 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { CLAUSE_PILOT } from '../src/data/clausePilot';
 import { ClausePilotPreview } from '../src/components/ClausePilotPreview';
-import { clausePilotFor, uniqueTextSpan, clausePilotFeedbackKey } from '../src/lib/clausePilot';
+import { clauseQuestionAvailability, clausePilotFor, uniqueTextSpan, clausePilotFeedbackKey } from '../src/lib/clausePilot';
 import { PILOT_CHUNK_REPAIRS, repairPilotChunks } from '../src/lib/pilotChunkRepairs';
 import type { AnalysisChunk } from '../src/domain/types';
 
 beforeEach(() => localStorage.clear());
 describe('clause preview references', () => {
   it('validates every pilot and refuses stale text or ambiguous spans', () => {
-    expect(CLAUSE_PILOT).toHaveLength(20);
+    expect(CLAUSE_PILOT).toHaveLength(416);
     expect(new Set(CLAUSE_PILOT.map((reference) => reference.id)).size).toBe(CLAUSE_PILOT.length);
     expect(new Set(CLAUSE_PILOT.map((reference) => reference.source)).size).toBe(CLAUSE_PILOT.length);
     for (const reference of CLAUSE_PILOT) expect(clausePilotFor(reference.source)).toBe(reference);
@@ -53,4 +53,19 @@ describe('reviewed saved-chunk repairs', () => {
     expect(repairPilotChunks(repair.sentenceId, repair.source + '変更', original)).toBeNull();
     expect(repairPilotChunks(repair.sentenceId, repair.source, original.map((c, i) => i === 1 ? { ...c, notes: 'manual note' } : c))).toBeNull();
   });
+});
+
+
+it('distinguishes unprepared, reviewed, stale and ready question availability', () => {
+  const { rerender } = render(<ClausePilotPreview japanese="新しい文章です。" />);
+  expect(screen.getByText('Upgraded question not prepared yet')).toBeVisible();
+  rerender(<ClausePilotPreview japanese="みなさん、こんにちは。" />);
+  expect(screen.getByText('Reviewed — no upgraded question yet')).toBeVisible();
+  expect(screen.getByText(/This greeting has no useful/)).toBeVisible();
+  rerender(<ClausePilotPreview japanese="みなさん、こんにちは。変更" />);
+  expect(screen.getByText('Upgraded question not prepared yet')).toBeVisible();
+  rerender(<ClausePilotPreview japanese={CLAUSE_PILOT[0].source} />);
+  expect(screen.queryByLabelText('Upgraded question availability')).not.toBeInTheDocument();
+  expect(clauseQuestionAvailability(CLAUSE_PILOT[0].source).status).toBe('ready');
+  expect(localStorage.length).toBe(0);
 });
