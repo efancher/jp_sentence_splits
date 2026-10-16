@@ -4750,5 +4750,150 @@
     ],
     "answerText": "エピソード",
     "explanation": "「来週の」 describes the noun in 「エピソード」. Read the modifier together with that noun; the question asks for the grammatical head, not another related thing mentioned in the sentence."
+  },
+  {
+    "id": "sent_998ae380-clause-v1",
+    "source": "だから私は仕事をするときも。",
+    "targetText": "仕事をする",
+    "question": "Which following expression is directly modified by this clause?",
+    "options": [
+      "とき",
+      "私"
+    ],
+    "answerText": "とき",
+    "explanation": "仕事をする modifies とき: the time when the speaker works. The main clause is missing from this fragment, but this local modifier–head relationship is stated explicitly."
+  },
+  {
+    "id": "sent_2e6932ea-clause-v1",
+    "source": "私はスペインのホラー映画が大好きなので。",
+    "targetText": "スペインの",
+    "question": "Which noun phrase is directly modified by this expression?",
+    "options": [
+      "ホラー映画",
+      "私"
+    ],
+    "answerText": "ホラー映画",
+    "explanation": "スペインの modifies ホラー映画, giving Spanish horror films. The reason ending なので has no consequence in this fragment, so this question only asks about the noun phrase already present."
+  },
+  {
+    "id": "sent_3c81fb02-clause-v1",
+    "source": "残念ながら、ワッケンにはまだ行っていませんが。",
+    "targetText": "行っていません",
+    "question": "Which phrase gives the destination that has not been visited?",
+    "options": [
+      "ワッケンには",
+      "まだ"
+    ],
+    "answerText": "ワッケンには",
+    "explanation": "ワッケンには names the destination; に marks the destination and は adds a topic/contrast frame. まだ means “yet”. The unfinished が does not prevent us from identifying this local relationship."
+  },
+  {
+    "id": "sent_9a9f1123-clause-v1",
+    "source": "服は最近全然買っていないし。",
+    "targetText": "買っていない",
+    "question": "Which phrase names what the speaker has not been buying?",
+    "options": [
+      "服は",
+      "最近"
+    ],
+    "answerText": "服は",
+    "explanation": "服は presents clothes as the topic and the understood object of 買っていない. 最近 sets the time frame. The trailing し leaves a further connection unfinished, but the object relationship is already clear."
+  },
+  {
+    "id": "sent_5689ce5d-clause-v1",
+    "source": "例えば、語学の本は時々。",
+    "targetText": "語学の",
+    "question": "Which noun is directly modified by this expression?",
+    "options": [
+      "本",
+      "時々"
+    ],
+    "answerText": "本",
+    "explanation": "語学の modifies 本: language-learning books. 時々 is an adverb meaning “sometimes”. The main predicate is missing, so no claim about where or how the books are bought is needed."
+  },
+  {
+    "id": "sent_f01745aa-clause-v1",
+    "source": "北海道は春夏秋冬の四季がある場所なので…。",
+    "targetText": "春夏秋冬の四季がある",
+    "question": "Which following noun is directly modified by this clause?",
+    "options": [
+      "場所",
+      "北海道"
+    ],
+    "answerText": "場所",
+    "explanation": "春夏秋冬の四季がある directly modifies 場所: a place with all four seasons. 北海道 is the topic and refers to that place, but 場所 is the grammatical head of this modifier. The consequence after なので remains outside this fragment."
+  },
+  {
+    "id": "sent_d3f0411e-clause-v1",
+    "source": "二人で遊ぶことができます。",
+    "targetText": "遊ぶ",
+    "question": "Which following word makes the highlighted action into a noun-like expression?",
+    "options": [
+      "こと",
+      "二人"
+    ],
+    "answerText": "こと",
+    "explanation": "こと nominalizes 遊ぶ. 遊ぶことができます expresses being able to play; 二人で specifies playing with two people, rather than nominalizing the action."
+  },
+  {
+    "id": "sent_5d5b0219-clause-v1",
+    "source": "まずは健康に気をつけることです。",
+    "targetText": "健康に",
+    "question": "Which expression takes the highlighted phrase as what attention is directed toward?",
+    "options": [
+      "気をつける",
+      "まずは"
+    ],
+    "answerText": "気をつける",
+    "explanation": "健康に attaches to 気をつける: take care of, or pay attention to, health. まずは introduces the first item. The following こと makes the whole action into the stated goal."
+  },
+  {
+    "id": "sent_fc98e234-clause-v1",
+    "source": "例えば、月に1回のモチフィーカレターという、日本の文化などに関する無料の読み物の配信や。",
+    "targetText": "無料の",
+    "question": "Which noun is directly modified by this expression?",
+    "options": [
+      "読み物",
+      "配信"
+    ],
+    "answerText": "読み物",
+    "explanation": "無料の directly modifies 読み物. The larger phrase 無料の読み物の配信 refers to distribution of that free reading material. This identifies the nearest grammatical head without resolving the unfinished list after や."
+  },
+  {
+    "id": "sent_10ba54fb-clause-v1",
+    "source": "去年は、新しい言語。",
+    "targetText": "新しい",
+    "question": "Which noun is directly modified by this adjective?",
+    "options": [
+      "言語",
+      "去年"
+    ],
+    "answerText": "言語",
+    "explanation": "新しい modifies 言語: a new language. 去年 supplies a time frame. The transcript ends before the predicate, so the question does not infer what happened to that language."
+  },
+  {
+    "id": "sent_59dba3be-clause-v1",
+    "source": "スウェーデン語を学び始めましたが。",
+    "targetText": "スウェーデン語を",
+    "question": "Which predicate takes this を-marked object?",
+    "options": [
+      "学び始めました",
+      "が"
+    ],
+    "answerText": "学び始めました",
+    "explanation": "スウェーデン語を is the object of 学び始めました: began learning Swedish. The final が is a clause connector here, not the predicate; its continuation is not present in this fragment."
+  },
+  {
+    "id": "sent_4034c39e-clause-v1",
+    "source": "ゴミを持ち帰るルールや、火を使ってはいけないルールは、環境や安全のためのルールでもあるので。",
+    "targetText": "火を使ってはいけない",
+    "question": "Which following expression contains the noun directly modified by this clause?",
+    "options": [
+      "ルールは",
+      "環境や安全",
+      "ゴミを持ち帰るルール"
+    ],
+    "answerText": "ルールは",
+    "explanation": "火を使ってはいけない modifies the second ルール, the one followed by は. The first rule is modified by ゴミを持ち帰る. 環境や安全 belongs to the later purpose phrase. This local attachment is clear even though the conclusion after ので is omitted."
   }
 ]

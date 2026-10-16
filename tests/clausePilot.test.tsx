@@ -9,7 +9,7 @@ import type { AnalysisChunk } from '../src/domain/types';
 beforeEach(() => localStorage.clear());
 describe('clause preview references', () => {
   it('validates every pilot and refuses stale text or ambiguous spans', () => {
-    expect(CLAUSE_PILOT).toHaveLength(416);
+    expect(CLAUSE_PILOT).toHaveLength(428);
     expect(new Set(CLAUSE_PILOT.map((reference) => reference.id)).size).toBe(CLAUSE_PILOT.length);
     expect(new Set(CLAUSE_PILOT.map((reference) => reference.source)).size).toBe(CLAUSE_PILOT.length);
     for (const reference of CLAUSE_PILOT) expect(clausePilotFor(reference.source)).toBe(reference);
