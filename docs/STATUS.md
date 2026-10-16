@@ -10,6 +10,18 @@ Last updated: 2026-10-16.
 
 ## Where things stand
 
+- **2026-10-16 — Clause/attachment pilot and backend deployment check.**
+  Drafted a 12-sentence purposive sample from 64 chunked analyses: 8 promising
+  structural questions, 2 needing companion chunk repairs, 2 deferred for
+  ambiguity/incomplete discourse. `docs/research/GLOSS_CLAUSE_PILOT.md` and
+  `.json` include source IDs, exact spans, source hashes, answers, explanations,
+  and review caveats. All remain ungraded assistant drafts; no learner data
+  changed. `scripts/sample-gloss-pilot.ts --output <path>` reproduces the
+  read-only candidate export. Main frontend deployment succeeded; restarted
+  the idle mining API and verified health plus a completed run's 1,549-sentence
+  recovery manifest. Next: an opt-in ungraded preview using source spans,
+  followed by independent reference review before considering auto-grading.
+
 - **2026-10-16 — Extras checks in GitHub Actions.** `extras-tests.yml` adds
   assistant-run API tests and Chromium/WebKit extras browser tests on pull
   requests, main pushes, and manual dispatch. No secrets or live services;
