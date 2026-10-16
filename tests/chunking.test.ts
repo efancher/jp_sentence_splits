@@ -4,6 +4,7 @@ import { previewHeuristicChunks } from '../src/lib/analysisHelpers';
 import {
   chunkJapaneseSentence,
   roleForChunk,
+  unsafeChunkBoundaries,
 } from '../src/lib/chunking';
 
 describe('chunkJapaneseSentence 紙 / 髪 passage', () => {
@@ -159,5 +160,29 @@ describe('chunkJapaneseSentence assistant-reported boundary fixes', () => {
   it('does not peel よく/また from longer words', () => {
     expect(chunkJapaneseSentence('よくないことを言う。')[0]).toBe('よくないことを');
     expect(chunkJapaneseSentence('九時または十時に行く。')).toEqual(['九時または', '十時に', '行く。']);
+  });
+});
+
+
+describe('fixed expressions and quoted connectives', () => {
+  it('keeps quoted でもね intact without changing noun + でも', () => {
+    const source = 'お母さん鳥は、「そうね」と答えた後、「でもね」と続けました。';
+    const chunks = chunkJapaneseSentence(source);
+    expect(chunks).toEqual(['お母さん鳥は、', '「そうね」と', '答えた後、', '「でもね」と', '続けました。']);
+    expect(chunks.join('')).toBe(source);
+    expect(roleForChunk('「でもね」と', false)).toBe('と-car');
+    expect(roleForChunk('でも、', false)).toBe('clause connector');
+    expect(chunkJapaneseSentence('雨でも行きます。')).toEqual(['雨でも', '行きます。']);
+    expect(roleForChunk('雨でも', false)).toBe('でも-car');
+  });
+  it('recognizes a real trailing particle after a fixed adverb', () => {
+    expect(roleForChunk('なんとか飛ぶことが', false)).toBe('Aが');
+    expect(roleForChunk('なんとか', false)).toBe('modifier/content');
+  });
+  it('flags internal cuts, but permits a complete expression and a fused relative clause', () => {
+    expect(unsafeChunkBoundaries(['なんと', 'か飛ぶことが', 'できました。'], 'なんとか飛ぶことができました。')).toHaveLength(1);
+    expect(unsafeChunkBoundaries(['「でも', 'ね」と', '言いました。'], '「でもね」と言いました。')).toHaveLength(1);
+    expect(unsafeChunkBoundaries(['なんとか', '飛ぶことが', 'できました。'], 'なんとか飛ぶことができました。')).toEqual([]);
+    expect(unsafeChunkBoundaries(['穴が', '空いている木を', '見つけた。'], '穴が空いている木を見つけた。')).toEqual([]);
   });
 });

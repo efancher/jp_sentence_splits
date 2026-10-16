@@ -359,15 +359,46 @@ function isSoftBoundary(text: string, index: number): boolean {
   return '、，,。．！？!?'.includes(prev);
 }
 
+/** Expressions whose internal particle-looking characters must not become chunk boundaries. */
+function protectedExpressionRanges(text: string): { text: string; start: number; end: number }[] {
+  const ranges: { text: string; start: number; end: number }[] = [];
+  for (const word of ['なんとか', 'とっても', 'もちろん', 'とりあえず', 'どうやって']) {
+    for (let at = text.indexOf(word); at >= 0; at = text.indexOf(word, at + word.length)) {
+      ranges.push({ text: word, start: at, end: at + word.length });
+    }
+  }
+  // Connective でも at an utterance boundary; noun + でも (雨でも) remains a particle.
+  for (const match of text.matchAll(/(?:^|[「『、。！？!?])(でも[ねよ]?)(?=[、，,」』]|$)/g)) {
+    const word = match[1]!;
+    const start = match.index + match[0].length - word.length;
+    ranges.push({ text: word, start, end: start + word.length });
+  }
+  return ranges;
+}
+
+/** Narrow quality guard shared by AI imports and repair diagnostics; not a full grammar validator. */
+export function unsafeChunkBoundaries(parts: readonly string[], source: string): string[] {
+  const text = stripMarkup(source).replace(/\s+/g, '');
+  const normalized = parts.map((part) => part.replace(/\s+/g, ''));
+  if (normalized.join('') !== text) return [];
+  let offset = 0;
+  const boundaries = normalized.slice(0, -1).map((part) => (offset += part.length));
+  return [...new Set(protectedExpressionRanges(text)
+    .filter((range) => boundaries.some((at) => range.start < at && at < range.end))
+    .map((range) => `A chunk boundary splits the expression “${range.text}”.`))];
+}
+
 export function chunkJapaneseSentence(japanese: string): string[] {
   const text = stripMarkup(japanese).replace(/\s+/g, '');
   if (!text) return [];
 
+  const protectedRanges = protectedExpressionRanges(text);
   const chunks: string[] = [];
   let start = 0;
   let index = 0;
   while (index < text.length) {
-    const particle = index > start ? particleAt(text, index, start) : null;
+    const protectedHere = protectedRanges.some((range) => range.start <= index && index < range.end);
+    const particle = index > start && !protectedHere ? particleAt(text, index, start) : null;
     if (particle) {
       const end = index + particle.length;
       chunks.push(text.slice(start, end));
@@ -413,7 +444,7 @@ export function chunkJapaneseSentence(japanese: string): string[] {
 
 export function splitTrailingParticle(chunk: string): [string, string] {
   for (const lookalike of LEXICAL_PARTICLE_LOOKALIKE) {
-    if (chunk === lookalike || chunk.startsWith(lookalike)) {
+    if (chunk === lookalike) {
       return [chunk, ''];
     }
   }
@@ -437,7 +468,7 @@ export function splitTrailingParticle(chunk: string): [string, string] {
 
 export function splitTrailingEngine(chunk: string): [string, string] {
   for (const lookalike of LEXICAL_PARTICLE_LOOKALIKE) {
-    if (chunk === lookalike || chunk.startsWith(lookalike)) {
+    if (chunk === lookalike) {
       return [chunk, ''];
     }
   }
@@ -483,6 +514,7 @@ function isQuotativeOrTopicTte(
 
 export function roleForChunk(chunk: string, isFinal: boolean): string {
   const bare = chunk.replace(/[。．！？!?、，,」』）)「『（(\s]/g, '');
+  if (/^でも[ねよ]?$/.test(bare)) return 'clause connector';
   let [stem, particle] = splitTrailingParticle(bare);
   [stem, particle] = normalizeTeFormParticle(chunk, bare, stem, particle);
   if (particle) {

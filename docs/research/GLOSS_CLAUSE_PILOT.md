@@ -189,3 +189,20 @@ The latest frontend Pages workflow succeeded on main (run 38838717410). The idle
 ## Reproduce the sample
 
 Run `node --import tsx scripts/sample-gloss-pilot.ts --output /tmp/gloss-candidates.json` from a checkout with the usual script credentials configured. The script reads only the signed-in account’s non-deleted analyses and corresponding sentences. The selected references are in `gloss-clause-pilot.json`; source hashes and exact spans allow stale drafts to be rejected. The full 64-sentence export stays outside git.
+
+## Implementation follow-up
+
+The eight “promising” questions now have an opt-in preview in the sentence
+walkthrough on `feat/gloss-clause-preview`. Source text must match exactly; the
+UI locates unique UTF-16 spans rather than using the report’s code-point offsets.
+Helpful/disputed feedback is local-only, and no review evidence is recorded.
+The two “repair-first” examples remain outside the preview. Their narrow repair
+preserves chunk IDs and untouched fields, refuses unexpected source/boundaries
+or notes on changed chunks, requires a backup before writing, and uses the
+analysis version to avoid overwriting concurrent edits.
+
+The two saved repairs were applied and verified on 2026-10-16 (analysis versions
+34 and 24 respectively). The original records are backed up in the task workspace
+as `pilot-chunks-before-repair.json`. Historical sample data above deliberately
+retains the original findings. Both examples remain outside the eight-question
+preview pending a separate decision to expand it.

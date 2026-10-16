@@ -149,3 +149,17 @@ describe('structure prompt glosses', () => {
     expect(STRUCTURE_LINE_EXAMPLE).toContain('もう一つは | topic は | another one, as for');
   });
 });
+
+
+describe('fixed-expression import guard', () => {
+  const ctx: PreparationContext = { title: 'pilot', sentences: [{ id: 's', japanese: '「でもね」と言いました。' }], vocabulary: [], grammar: [] };
+  it('rejects a text-preserving but misleading split in both reply formats', () => {
+    const chunks = [{ text: '「でも', role: 'でも-car' }, { text: 'ね」と', role: 'と-car' }, { text: '言いました。', role: 'engine' }];
+    const json = parseStructure({ S1: chunks }, ctx);
+    const lines = parseStructureLines(chunks.map((c) => `S1 | ${c.text} | ${c.role}`).join('\n'), ctx);
+    for (const parsed of [json, lines]) {
+      expect(parsed.drafts.size).toBe(0);
+      expect(parsed.rejected[0]?.reason).toContain('でもね');
+    }
+  });
+});

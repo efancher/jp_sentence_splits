@@ -10,6 +10,30 @@ Last updated: 2026-10-16.
 
 ## Where things stand
 
+- **2026-10-16 — Ungraded clause preview and fixed-expression chunk safeguards.**
+  On `feat/gloss-clause-preview` (not deployed): eight curated questions in a
+  collapsed “Try a clause question (preview)” section of the sentence walkthrough.
+  Exact-source matching and unique text spans protect against stale/ambiguous
+  highlights; no dependency on chunk boundaries. Choice → reveal → helpful/disputed
+  feedback, local-only by reference revision; no review, gloss evidence or FSRS writes.
+  The chunker keeps quoted でもね intact, labels connective でも separately from
+  noun + でも, and no longer suppresses a genuine trailing particle just because
+  the chunk starts with a fixed adverb. JSON/line structure imports now reject
+  internal cuts in five fixed expressions and the narrow quoted-connective cases;
+  prompts explain these boundaries without forcing relative-clause splitting.
+  Audited 64 real chunked sentences: generated text preserved in all, no guard
+  failures; saved data had exactly the two expected bad boundaries.
+  **Production repair completed:** `sent_24ed9098` v34 and `sent_b7b4b892` v24,
+  moved only the reviewed pair boundaries/roles/glosses; IDs and other chunks
+  preserved. Originals backed up locally before version-checked writes; a reread
+  exactly matched the proposed repair and rerunning proposes zero changes.
+  Eight local Chromium/WebKit phone/desktop browser checks passed (preview and
+  episode preparation); build passed. A full-suite run passed all 2,656 assertions
+  but exposed an unrelated ear-tile test provider cleanup race; the unit test now
+  stubs its unused audio child rather than starting an unrelated database provider.
+  The rerun reported 240 passing files / 2,656 passing tests, 12 skipped, with
+  no unhandled test errors; GitHub CI will verify the submitted branch.
+
 - **2026-10-16 — Clause/attachment pilot and backend deployment check.**
   Drafted a 12-sentence purposive sample from 64 chunked analyses: 8 promising
   structural questions, 2 needing companion chunk repairs, 2 deferred for
