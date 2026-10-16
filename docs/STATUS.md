@@ -6,9 +6,36 @@ test counts, code-review findings, production-run logs) see
 reference see `docs/AI_OVERVIEW.md`; for the at-a-glance phase list see
 `docs/ROADMAP.md`.
 
-Last updated: 2026-10-11.
+Last updated: 2026-10-16.
 
 ## Where things stand
+
+- **2026-10-16 — Extras checks in GitHub Actions.** `extras-tests.yml` adds
+  assistant-run API tests and Chromium/WebKit extras browser tests on pull
+  requests, main pushes, and manual dispatch. No secrets or live services;
+  browser failure artifacts retained seven days. Existing `npm run check`
+  already covers extras unit/component tests. Separate from Pages deployment.
+
+- **2026-10-15 — Extras save/recovery verification.** On `fix/extras-save-recovery`
+  (not deployed): “Save and clear” retains the server run when a save throws,
+  is already in flight, or reports rejected entries; failed pieces are not
+  acknowledged as saved. “Save” still retries without deleting the server copy.
+  Fresh-device recovery now compares the original sentence text, translation,
+  and order returned from the persisted server spec, rather than just the count.
+  An unverified run cannot be overwritten through Generate. Older servers still
+  work on the initiating device; fresh-device recovery needs the updated backend.
+  Tests: 27 targeted frontend tests, 8 backend API tests, production build, and
+  4 Chromium/WebKit browser cases passed. Browser cases use synthetic IndexedDB
+  and a mocked server; the Safari cursor failure is injected in a unit test,
+  not reproduced on a physical iPhone. Checked empty-construction persistence,
+  repeated saves, reload, recovery mismatch, save errors, and batched read fallback.
+- **2026-10-15 — Progressive glossing feasibility refreshed (read-only).**
+  `diagnose:gloss-reference`: 64 analyses with chunks; 50 (78.1%) have at least
+  one settled decision. Decision counts: predicate 48, particle 46, attachment
+  25 (all attachment decisions are the existing の rule). This measures current
+  heuristic coverage, not the correctness or coverage of AI-verified clause
+  references. Next proposed slice: a small reviewed dependency/clause sample
+  before extending automatic grading.
 
 - **2026-10-11 — Sync: quick repeat edits no longer conflict with themselves.**
   A sync report (a `books` conflict, local v257 vs remote v258, after several

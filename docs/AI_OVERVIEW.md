@@ -900,11 +900,16 @@ Targets are constants; no settings UI.
   `POST /assist-runs` in book mode (`sentences` = whole book as context,
   `selection` = book-wide S-handles per kind; run id `book-extras-<bookId>`),
   runs `runBookExtrasPipeline`, and returns finished pieces as `extraReplies`.
-  Nothing is written until the learner presses "Save results" (or "Save what
-  finished"); saving re-reads the book and keeps any sentence that gained the
-  extra during the run unless it was approved for replacement. The snapshot of
-  what was sent lives in localStorage (`bookextras.snapshot.<bookId>`), so
-  saving works from the device that started the run.
+  Finished pieces are saved automatically while the panel is open. “Save” retries
+  without deleting the server copy; “Save and clear” clears only after successful
+  saving, retaining results on write failures or reported validation problems.
+  Saving re-reads the book and keeps extras gained during the run unless their
+  replacement was approved. The initiating device keeps its sentence-id snapshot
+  in localStorage (`bookextras.snapshot.<bookId>`). A fresh device can recover
+  from the server spec only when sentence text, translation, and order match;
+  recovered runs conservatively keep existing extras. This recovery requires
+  the backend's `bookSentences` response field. Empty construction results count
+  as checked, so sentences with nothing to build are not generated repeatedly.
 - **Re-segment captions** (`ResegmentSourcePage.tsx`, route
   `/books/:bookId/resegment`, button on `BookDetailPage` for
   `sourceKey` starting `shadowing:`) — rebuilds a source's sentences on

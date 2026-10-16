@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GlossDecisionPanel, type GlossDecisionInput } from '../src/components/GlossDecisionPanel';
 import type { GlossDecision } from '../src/domain/types';
@@ -31,6 +31,11 @@ function setup(records: GlossDecision[]) {
 }
 
 describe('GlossDecisionPanel', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-02T00:00:00Z'));
+  });
+  afterEach(() => vi.useRealTimers());
   it('opens a first-time skill with a worked example that is recorded as ungraded', async () => {
     const { onRecord } = setup([]);
     expect(screen.getByText(/Worked example/)).toBeTruthy();

@@ -203,6 +203,7 @@ def _assist_run_response(state: dict) -> AssistRunStatusResponse:
         extraReplies=state.get("extraReplies"),
         selection=state.get("selection"),
         sentenceCount=state.get("sentenceCount"),
+        bookSentences=state.get("bookSentences"),
         live=state.get("live"),
         log=state.get("log") or [],
         updatedAt=int(state.get("updatedAt") or 0),
