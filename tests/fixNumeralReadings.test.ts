@@ -60,3 +60,14 @@ describe('fixNumeralsInInlineReading', () => {
     );
   });
 });
+
+describe('fixNumeralsInReadingOnly — leftover digits', () => {
+  it('spells out calendar months and plain-number leftovers', () => {
+    expect(fixNumeralsInReadingOnly('1がつのきおんはマイナス5どくらいです。')).toBe(
+      'いちがつのきおんはマイナスごどくらいです。',
+    );
+    expect(fixNumeralsInReadingOnly('4がつ7にち')).toBe('しがつなのか');
+    expect(fixNumeralsInReadingOnly('CDやMP3プレイヤー')).toBe('CDやMP3プレイヤー');
+    expect(fixNumeralsInReadingOnly('27かに、2かいめ')).toBe('27かに、にかいめ');
+  });
+});

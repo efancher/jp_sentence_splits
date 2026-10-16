@@ -1,7 +1,6 @@
 import { isHiragana, toHiragana } from 'wanakana';
 
 import { fixNumeralsInReadingOnly } from './fixNumeralReadings';
-import { readNumber, toAsciiDigits } from './japaneseNumberReading';
 import { normalizeSentenceKey } from './normalize';
 
 export interface DictationSegment {
@@ -28,17 +27,6 @@ function comparable(text: string): string {
 /** Per-character key for the diff: same folding as `comparable` (width, kana script, case). */
 function diffKey(char: string): string {
   return toHiragana(char.normalize('NFKC').toLowerCase(), { convertLongVowelMark: false });
-}
-
-/**
- * A stored kana reading can still carry bare digits ("1がつ", "マイナス5ど").
- * Spell them out so a learner who typed the reading (いちがつ, ご) matches.
- */
-function spellOutDigits(reading: string): string {
-  if (!/[0-9０-９]/.test(reading)) return reading;
-  return fixNumeralsInReadingOnly(reading).replace(/[0-9０-９]+/g, (digits) => {
-    return readNumber(Number(toAsciiDigits(digits))) ?? digits;
-  });
 }
 
 /**
@@ -112,7 +100,7 @@ export function gradeDictation(
   const typed = romajiToKana(rawTyped);
   const targets = [
     japanese,
-    ...(readingOnly && readingOnly.trim() ? [spellOutDigits(readingOnly)] : []),
+    ...(readingOnly && readingOnly.trim() ? [fixNumeralsInReadingOnly(readingOnly)] : []),
   ];
   const typedChars = [...typed.trim()];
   const typedKey = comparable(typed);
