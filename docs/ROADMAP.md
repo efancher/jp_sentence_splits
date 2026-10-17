@@ -352,7 +352,7 @@ Original phases match `docs/UNIFIED_APP_ARCHITECTURE.md` §15.
 - [~] **Sentence-membership integrity (class of bug).** Detector, guards, the
   cascade-soft-delete migration and a manual `check-sentence-integrity.yml`
   workflow are in; prod has 0 dangling memberships / orphan clips (2026-10-17).
-  Left: 7 chapters out of recording order
+  Left: 7 Slow Japanese chapters out of recording order (diagnosed 2026-10-17; fix = `npm run repair:chapter-recording-order -- --apply`, dry run is 170 position updates)
   (`npm run check:sentence-integrity`; Teppei #1461 fixed 2026-10-17 by moving its
   shared outro to position 500); decide
   whether a dropped delete-op conflict should auto-retry.
