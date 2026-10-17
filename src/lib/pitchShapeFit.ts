@@ -38,6 +38,8 @@ export interface ShapeFit {
   margin: number;
   /** Morae that had voiced pitch and took part in the fit. */
   voicedMorae: number;
+  /** Share of the voiced morae's pitch variance the shape explains (0..1); near 0 means the shape is a guess fitted to noise. */
+  explainedVariance: number;
 }
 
 export interface ShapeFitOptions {
@@ -77,10 +79,13 @@ export function fitAccentShape(
   if (scored.length === 0) return null;
   scored.sort((a, b) => a.cost - b.cost);
   const [best, runnerUp] = scored;
+  const grandMean = voiced.reduce((a, m) => a + m.value, 0) / voiced.length;
+  const totalVariance = voiced.reduce((a, m) => a + (m.value - grandMean) ** 2, 0);
   return {
     shape: best!.shape,
     contrastSemitones: best!.contrast,
     margin: runnerUp ? runnerUp.cost - best!.cost : Number.POSITIVE_INFINITY,
     voicedMorae: voiced.length,
+    explainedVariance: totalVariance > 1e-9 ? Math.max(0, 1 - best!.cost / totalVariance) : 0,
   };
 }

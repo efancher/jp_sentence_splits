@@ -77,7 +77,11 @@ export function AttemptPitchGrid({
               {grid.columns.map((column, index) => (
                 <th key={index}>
                   <div className="jp">{column.text}</div>
-                  <Shape shape={column.native} />
+                  {column.status === 'weak-native' ? (
+                    <span className="muted" title={STATUS_TITLE['weak-native']}>unclear</span>
+                  ) : (
+                    <Shape shape={column.native} />
+                  )}
                 </th>
               ))}
               <th>Match</th>
@@ -91,7 +95,7 @@ export function AttemptPitchGrid({
                 </th>
                 {row.cells.map((cell, index) => (
                   <td key={index} data-status={cell?.status ?? 'none'} title={cell ? STATUS_TITLE[cell.status] : 'Not comparable'}>
-                    {cell?.learner ? <Shape shape={cell.learner} against={cell.native} /> : <span className="muted">{cell ? '·' : '–'}</span>}
+                    {cell?.learner ? <Shape shape={cell.learner} against={cell.status === 'weak-native' ? undefined : cell.native} /> : <span className="muted">{cell ? '·' : '–'}</span>}
                   </td>
                 ))}
                 <td>{row.judged > 0 ? `${row.matched}/${row.judged}` : '–'}</td>

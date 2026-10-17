@@ -52,6 +52,14 @@ const SET_EXPRESSION_MAX_TOKENS = 6;
 /** A learner contour below this contrast (semitones) is called flat. */
 export const FLAT_CONTRAST_SEMITONES = 1;
 
+/**
+ * A native shape that explains less than this share of the phrase's pitch variance is a guess fitted
+ * to noise (a devoiced mora the tracker drifts on, a particle riding up from the previous fall), so
+ * the phrase is called unclear rather than shown with a confident H/L. Clean native phrases sit at
+ * 0.5–0.85; the について that read HLLL while she said LLLH explained 0.03.
+ */
+export const MIN_NATIVE_EXPLAINED_VARIANCE = 0.15;
+
 export interface PhraseToken {
   text: string;
   start: number;
@@ -276,7 +284,7 @@ export function buildPhrasePitch({
     }
 
     let status: PhraseStatus;
-    if (nativeFit.contrastSemitones < FLAT_CONTRAST_SEMITONES) status = 'weak-native';
+    if (nativeFit.contrastSemitones < FLAT_CONTRAST_SEMITONES || nativeFit.explainedVariance < MIN_NATIVE_EXPLAINED_VARIANCE) status = 'weak-native';
     else if (!learnerFit) status = 'no-learner';
     else if (learnerFit.contrastSemitones < FLAT_CONTRAST_SEMITONES) status = 'flat';
     else status = learnerFit.shape.join('') === nativeFit.shape.join('') ? 'match' : 'different';
