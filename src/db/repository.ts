@@ -10237,6 +10237,42 @@ function pendingFreshTryRequestIds(
     .map(([id]) => id);
 }
 
+/**
+ * Stable reorder of the first `EXPLORE_SENTENCE_PREVIEW_LIMIT` items: sentences
+ * Sentence Growth could use (a chunk plan, native audio ≤10 s, a translation —
+ * `growthRejection`) ahead of the rest, each group keeping its reading order.
+ * Items past the window and the window's membership are untouched, so a
+ * qualifying sentence never delays a non-qualifying one by more than the
+ * window and none can be starved.
+ */
+async function floatGrowthEligibleFirst<T extends { sentenceId: string }>(items: T[]): Promise<T[]> {
+  const head = items.slice(0, EXPLORE_SENTENCE_PREVIEW_LIMIT);
+  if (head.length < 2) return items;
+  const db = getDb();
+  const ids = head.map((item) => item.sentenceId);
+  const [sentences, audioRows] = await Promise.all([
+    db.sentences.bulkGet(ids),
+    db.sentenceAudio.where('sentenceId').anyOf(ids).toArray(),
+  ]);
+  const durationBySentenceId = new Map<string, number>();
+  for (const audio of audioRows) {
+    if (!durationBySentenceId.has(audio.sentenceId)) durationBySentenceId.set(audio.sentenceId, audio.durationMs);
+  }
+  const eligible = new Set(
+    ids.filter((id, index) => {
+      const sentence = sentences[index];
+      const duration = durationBySentenceId.get(id);
+      return !!sentence && duration !== undefined && growthRejection(sentence, duration) === null;
+    }),
+  );
+  if (eligible.size === 0 || eligible.size === head.length) return items;
+  return [
+    ...head.filter((item) => eligible.has(item.sentenceId)),
+    ...head.filter((item) => !eligible.has(item.sentenceId)),
+    ...items.slice(EXPLORE_SENTENCE_PREVIEW_LIMIT),
+  ];
+}
+
 /** Explore candidates: books with sentences not yet started, most-recently-opened first ("continue where you left off" reusing Book.lastOpenedAt, the same signal BookDetailPage's touchBookOpened already maintains). */
 async function findExploreCandidates(
   limit: number,
@@ -10288,7 +10324,7 @@ async function findExploreCandidates(
             .map((status) => status.sentenceId),
         )
       : undefined;
-    const unstarted = memberships
+    const inReadingOrder = memberships
       .filter((item) =>
         (walked
           ? item.status !== 'complete' && !walked.has(item.sentenceId)
@@ -10296,6 +10332,12 @@ async function findExploreCandidates(
       )
       .sort((a, b) => a.position - b.position)
       .filter((item, index, all) => all.findIndex((other) => other.sentenceId === item.sentenceId) === index);
+    // Sentence Growth can only serve sentences the learner has met, so within
+    // the window already previewed, lessons that qualify for it come first.
+    // Order only: nothing is added, gated or skipped, and sequential mode keeps
+    // its strict episode order.
+    const unstarted =
+      sentenceFirst && !sequential ? await floatGrowthEligibleFirst(inReadingOrder) : inReadingOrder;
     const seenRevisit = new Set<string>();
     const revisitMemberships = memberships.filter((item) => {
       if (!revisitIds.includes(item.sentenceId) || seenRevisit.has(item.sentenceId) || !notShelved(item)) return false;
