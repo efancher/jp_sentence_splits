@@ -57,3 +57,21 @@ deploy job; it does not itself gate deployment.
 The browser step sets `GITHUB_ACTIONS=false` so Vite serves the local test build
 at `/` instead of the Pages subpath. `CI=true` retains Playwright's CI behavior:
 clean preview startup, no focused tests, and one retry with a trace.
+
+## Native pitch preparation
+
+Use the same container command above with `e2e/native-pitch-practice.spec.ts`.
+It runs desktop Chromium and iPhone 13-emulated WebKit, with a fresh persistent
+browser profile per case under the test output directory. In this container,
+WebKit's default ephemeral context fails IndexedDB Blob insertion with
+“Error preparing Blob/File data to be stored in object store”; a persistent
+profile supports the real audio storage/playback path. A writable HOME alone
+does not resolve that failure.
+
+The fixture is a synthetic WAV with seeded pitch and MFA-style phone alignment.
+Assertions cover sounded kana, playback highlighting, phone chart following,
+chunk listen–repeat, scroll reset on selection, recording detail, page overflow,
+and stopping audio on close (including the detached practice audio element).
+`native-practice.png` captures the whole-sentence view in each project's output.
+These checks do not validate pitch or alignment against the actual native
+recording, and emulated WebKit is not a physical iPhone playback check.

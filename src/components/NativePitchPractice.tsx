@@ -109,6 +109,9 @@ function Practice({ audio, japanese, disabled, onStart }: {
   const timedX = (t: number) => 14 + (t - start) / Math.max(0.001, end - start) * (width - 28);
   const activeIndex = phase === 'listen' ? morae.findIndex(mora => time >= mora.start && time < mora.end) : -1;
   useEffect(() => {
+    if (pathScroller.current) pathScroller.current.scrollLeft = 0;
+  }, [selected]);
+  useEffect(() => {
     const scroller = pathScroller.current;
     if (!scroller || activeIndex < 0) return;
     const position = 21 + activeIndex * (width - 42) / Math.max(1, morae.length - 1);

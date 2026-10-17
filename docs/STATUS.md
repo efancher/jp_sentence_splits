@@ -6,7 +6,7 @@ test counts, code-review findings, production-run logs) see
 reference see `docs/AI_OVERVIEW.md`; for the at-a-glance phase list see
 `docs/ROADMAP.md`.
 
-Last updated: 2026-10-16.
+Last updated: 2026-10-17.
 
 ## Where things stand
 
@@ -20,10 +20,23 @@ Last updated: 2026-10-16.
   transcript's dictionary H/L row is hidden. Automatic timing/pitch still need
   perceptual review; a median dot summarizes rather than fully describes each
   mora's movement. This does not change attempt scoring or dictionary resources.
-  Validation: 53 targeted model/playback/component/shadow-page tests and production
-  build pass. Chromium/WebKit E2E coverage added, but local execution is blocked
-  at browser launch by missing host libraries (`libnspr4`, GTK/GStreamer, etc.).
-  Native-recording perceptual review and physical iPhone playback remain unverified.
+  Validation (2026-10-17): production build (including TypeScript) and 28 targeted
+  model/rehearsal/component/shadow-page tests pass; the earlier handoff recorded
+  53 targeted passes. Both native-practice browser cases pass in cached Playwright
+  v1.61.1 Docker: desktop Chromium and iPhone 13-emulated WebKit. No host browser
+  libraries installed. Fresh persistent profiles fix WebKit's ephemeral-context
+  IndexedDB Blob insertion failure without mocking audio storage or playback.
+  Synthetic MFA-style phones now assert all 15 sounded kana; checks cover live
+  highlighting, mobile horizontal following, chunk listen–repeat, Stop, recording
+  detail, no page overflow, and pausing the detached audio element on close.
+  Desktop/mobile screenshots inspected in `test-results/native-pitch-practice-*/`:
+  controls wrap, dots and kana remain readable, and long charts scroll internally.
+  Fixed retained chart scroll when switching chunks/returning to Whole sentence.
+  These are synthetic WAV/alignment/pitch tests, not native-recording accuracy
+  evidence. The actual `audio_6598874f` / `sent_519942fa` recording was not audited
+  by ear in this pass; cached 15-mora coverage in the handoff is structural only.
+  Native timing/pitch perceptual review and physical iPhone playback remain
+  unverified. Branch remains local and undeployed.
 
 - **2026-10-16 — Extras checks in GitHub Actions.** `extras-tests.yml` adds
   assistant-run API tests and Chromium/WebKit extras browser tests on pull
