@@ -62,6 +62,7 @@
     "check:sentence-integrity": "tsx scripts/check-sentence-integrity.ts",
     "repair:dangling-sentence-rows": "tsx scripts/repair-dangling-sentence-rows.ts",
     "repair:chapter-recording-order": "tsx scripts/repair-chapter-recording-order.ts",
+    "diagnose:clause-feedback": "tsx scripts/diagnose-clause-feedback.ts",
     "check:migrations-applied": "tsx scripts/check-migrations-applied.ts",
     "replay:pitch-drill-takes": "tsx scripts/replay-pitch-drill-takes.ts",
     "report:new-card-backlog": "tsx scripts/report-new-card-backlog.ts",

@@ -31,6 +31,7 @@ import {
   remoteToSentenceExtras,
   remoteToPitchDrillAttempt,
   remoteToSentenceLearningEvent,
+  remoteToClauseQuestionFeedback,
   remoteToGlossDecision,
   remoteToPlannerSession,
   remoteToReferenceAudio,
@@ -169,6 +170,7 @@ const PUSH_TIER: Partial<Record<SyncEntity, number>> = {
   pitch_drill_attempts: 3,
   sentence_learning_events: 3,
   gloss_decisions: 3,
+  clause_question_feedback: 3,
   card_issue_reports: 3,
 };
 
@@ -1320,6 +1322,8 @@ async function localRecordExists(entity: SyncEntity, recordId: string): Promise<
       return (await db.sentenceLearningEvents.get(recordId)) != null;
     case 'gloss_decisions':
       return (await db.glossDecisions.get(recordId)) != null;
+    case 'clause_question_feedback':
+      return (await db.clauseQuestionFeedback.get(recordId)) != null;
     case 'named_podcast_feeds':
       return (await db.namedPodcastFeeds.get(recordId)) != null;
     case 'sentence_extras':
@@ -1538,6 +1542,9 @@ async function applyRemoteDelete(
     case 'gloss_decisions':
       await db.glossDecisions.delete(recordId);
       break;
+    case 'clause_question_feedback':
+      await db.clauseQuestionFeedback.delete(recordId);
+      break;
     case 'named_podcast_feeds':
       await db.namedPodcastFeeds.delete(recordId);
       break;
@@ -1677,6 +1684,9 @@ export async function applyRemoteUpsert(
     case 'gloss_decisions':
       await db.glossDecisions.put(remoteToGlossDecision(remote));
       break;
+    case 'clause_question_feedback':
+      await db.clauseQuestionFeedback.put(remoteToClauseQuestionFeedback(remote));
+      break;
     case 'named_podcast_feeds':
       await db.namedPodcastFeeds.put(remoteToNamedPodcastFeed(remote));
       break;
@@ -1723,6 +1733,7 @@ export async function uploadAllLocalData(userId: string): Promise<void> {
   const pitchDrillAttempts = await db.pitchDrillAttempts.toArray();
   const sentenceLearningEvents = await db.sentenceLearningEvents.toArray();
   const glossDecisions = await db.glossDecisions.toArray();
+  const clauseQuestionFeedback = await db.clauseQuestionFeedback.toArray();
   const namedPodcastFeeds = await db.namedPodcastFeeds.toArray();
   const sentenceExtras = await db.sentenceExtras.toArray();
 
@@ -1798,6 +1809,9 @@ export async function uploadAllLocalData(userId: string): Promise<void> {
   for (const decision of glossDecisions) {
     await trackAndEnqueue('gloss_decisions', decision.id, decision);
   }
+  for (const feedback of clauseQuestionFeedback) {
+    await trackAndEnqueue('clause_question_feedback', feedback.id, feedback);
+  }
   for (const feed of namedPodcastFeeds) {
     await trackAndEnqueue('named_podcast_feeds', feed.id, feed);
   }
@@ -1863,6 +1877,7 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
       db.pitchDrillAttempts,
       db.sentenceLearningEvents,
       db.glossDecisions,
+      db.clauseQuestionFeedback,
       db.namedPodcastFeeds,
       db.sentenceExtras,
       db.syncQueue,
@@ -1893,6 +1908,7 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
       await db.pitchDrillAttempts.clear();
       await db.sentenceLearningEvents.clear();
       await db.glossDecisions.clear();
+      await db.clauseQuestionFeedback.clear();
       await db.namedPodcastFeeds.clear();
       await db.sentenceExtras.clear();
       await db.syncQueue.clear();
@@ -1978,6 +1994,9 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
   });
   await pullFullTable('gloss_decisions', userId, async (rows) => {
     await db.glossDecisions.bulkPut(rows.map((r) => remoteToGlossDecision(r)));
+  });
+  await pullFullTable('clause_question_feedback', userId, async (rows) => {
+    await db.clauseQuestionFeedback.bulkPut(rows.map((r) => remoteToClauseQuestionFeedback(r)));
   });
   await pullFullTable('named_podcast_feeds', userId, async (rows) => {
     await db.namedPodcastFeeds.bulkPut(rows.map((r) => remoteToNamedPodcastFeed(r)));

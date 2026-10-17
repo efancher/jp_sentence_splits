@@ -1789,3 +1789,22 @@ export interface GlossDecision {
   /** Only on `self_report` rows. */
   felt?: 'too_easy' | 'right' | 'too_hard';
 }
+
+/**
+ * A learner reaction to the ungraded clause-question preview. Append-only and
+ * synced as `clause_question_feedback`; the latest row per `referenceId` is the
+ * current reaction. Never a review, never read by FSRS — it exists so the
+ * dispute rate can inform the independent review of the draft references.
+ */
+export interface ClauseQuestionFeedback {
+  id: string;
+  timestamp: string;
+  sentenceId: string;
+  /** Question id including its revision suffix. */
+  referenceId: string;
+  value: 'helpful' | 'disputed';
+  /** The option picked before the reveal; absent when none was picked or imported from localStorage. */
+  chosenOption?: string;
+  /** The draft answer at the time, for "disputed after picking the draft answer" analysis. */
+  draftAnswer: string;
+}

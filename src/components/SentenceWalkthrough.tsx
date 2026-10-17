@@ -362,7 +362,7 @@ export function SentenceWalkthrough({
           ));
         })() : null}
       </div>
-      <ClausePilotPreview japanese={sentence.japanese} />
+      <ClausePilotPreview japanese={sentence.japanese} sentenceId={sentence.id} />
       <label className="row" style={{ gap: '0.4rem', flexWrap: 'wrap' }}>
         <span className="muted">Help level</span>
         <select aria-label="Help level" value={preset} onChange={(event) => setPreset(event.target.value as SupportPreset)}>

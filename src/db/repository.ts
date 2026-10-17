@@ -35,6 +35,7 @@ import type {
   EffectiveGameSignal,
   GameRound,
   SentenceLearningEvent,
+  ClauseQuestionFeedback,
   GlossDecision,
   GameRoundItem,
   AnalysisChunk,
@@ -9275,6 +9276,29 @@ export async function logGlossDecision(
 
 export async function listGlossDecisions(): Promise<GlossDecision[]> {
   return getDb().glossDecisions.orderBy('timestamp').toArray();
+}
+
+/** Appends one reaction to the ungraded clause-question preview (synced; never a review). */
+export async function logClauseQuestionFeedback(
+  feedback: Omit<ClauseQuestionFeedback, 'id' | 'timestamp'> & { id?: string; timestamp?: string },
+): Promise<ClauseQuestionFeedback> {
+  const db = getDb();
+  const full: ClauseQuestionFeedback = {
+    ...feedback,
+    id: feedback.id ?? createId('clausefb'),
+    timestamp: feedback.timestamp ?? nowIso(),
+  };
+  const existing = await db.clauseQuestionFeedback.get(full.id);
+  if (existing) return existing;
+  await db.clauseQuestionFeedback.put(full);
+  notifySyncMany([{ entity: 'clause_question_feedback', recordId: full.id, payload: full }]);
+  return full;
+}
+
+/** The learner's current reaction to a question: the most recent row, from any device. */
+export async function latestClauseQuestionFeedback(referenceId: string): Promise<ClauseQuestionFeedback | undefined> {
+  const rows = await getDb().clauseQuestionFeedback.where('referenceId').equals(referenceId).toArray();
+  return rows.sort((a, b) => a.timestamp.localeCompare(b.timestamp) || a.id.localeCompare(b.id)).at(-1);
 }
 
 export interface OpenContentReportWithText extends OpenContentReport {

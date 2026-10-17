@@ -11,6 +11,7 @@ import type {
   SentenceExtras,
   PitchDrillAttempt,
   SentenceLearningEvent,
+  ClauseQuestionFeedback,
   GlossDecision,
   PlannerSession,
   Review,
@@ -53,6 +54,7 @@ export type LocalSyncPayload =
   | PitchDrillAttempt
   | SentenceLearningEvent
   | GlossDecision
+  | ClauseQuestionFeedback
   | NamedPodcastFeed
   | SentenceExtras;
 
@@ -1190,6 +1192,35 @@ export function remoteToGlossDecision(row: Record<string, unknown>): GlossDecisi
   };
 }
 
+export function clauseQuestionFeedbackToRemote(f: ClauseQuestionFeedback, ownerId: string, version: number) {
+  return {
+    id: f.id,
+    owner_id: ownerId,
+    timestamp: f.timestamp,
+    sentence_id: f.sentenceId,
+    reference_id: f.referenceId,
+    value: f.value,
+    chosen_option: f.chosenOption ?? null,
+    draft_answer: f.draftAnswer,
+    created_at: f.timestamp,
+    updated_at: f.timestamp,
+    deleted_at: null,
+    version,
+  };
+}
+
+export function remoteToClauseQuestionFeedback(row: Record<string, unknown>): ClauseQuestionFeedback {
+  return {
+    id: String(row.id),
+    timestamp: String(row.timestamp),
+    sentenceId: String(row.sentence_id),
+    referenceId: String(row.reference_id),
+    value: row.value as ClauseQuestionFeedback['value'],
+    chosenOption: (row.chosen_option as string | null) ?? undefined,
+    draftAnswer: String(row.draft_answer),
+  };
+}
+
 export function toRemoteRow(
   entity: SyncEntity,
   payload: unknown,
@@ -1261,6 +1292,8 @@ export function toRemoteRow(
       return sentenceLearningEventToRemote(payload as SentenceLearningEvent, ownerId, version);
     case 'gloss_decisions':
       return glossDecisionToRemote(payload as GlossDecision, ownerId, version);
+    case 'clause_question_feedback':
+      return clauseQuestionFeedbackToRemote(payload as ClauseQuestionFeedback, ownerId, version);
     case 'named_podcast_feeds':
       return namedPodcastFeedToRemote(payload as NamedPodcastFeed, ownerId, version);
     case 'sentence_extras':

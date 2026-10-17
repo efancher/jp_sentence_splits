@@ -101,6 +101,7 @@ const ENTITY_EXTRA_KEYS: Partial<Record<SyncEntity, Set<string>>> = {
   pitch_drill_attempts: NO_LOCAL_CREATED_AT,
   sentence_learning_events: NO_LOCAL_CREATED_AT,
   gloss_decisions: NO_LOCAL_CREATED_AT,
+  clause_question_feedback: NO_LOCAL_CREATED_AT,
 };
 
 const ISO_TIMESTAMP_RE =

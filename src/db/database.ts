@@ -13,6 +13,7 @@ import type {
   GameRound,
   WordBoundaryLabel,
   SentenceLearningEvent,
+  ClauseQuestionFeedback,
   GlossDecision,
   GrammarPattern,
   GrammarRelationship,
@@ -149,6 +150,8 @@ export class GlossbookDatabase extends Dexie {
   sentenceLearningEvents!: EntityTable<SentenceLearningEvent, 'id'>;
   // Progressive-glossing observations: append-only, synced (gloss_decisions), never a Review.
   glossDecisions!: EntityTable<GlossDecision, 'id'>;
+  // Reactions to the ungraded clause-question preview: append-only, synced (clause_question_feedback).
+  clauseQuestionFeedback!: EntityTable<ClauseQuestionFeedback, 'id'>;
   // Learner-named podcast feed URLs (docs/STATUS.md), synced like planner
   // sessions — a small per-user preference list, not learning content.
   namedPodcastFeeds!: EntityTable<NamedPodcastFeed, 'id'>;
@@ -724,6 +727,11 @@ export class GlossbookDatabase extends Dexie {
     // Local-only whole-episode audio cache — purely additive.
     this.version(26).stores({
       sourceEpisodes: 'id, cachedAt',
+    });
+
+    // Clause-question preview reactions — purely additive.
+    this.version(27).stores({
+      clauseQuestionFeedback: 'id, timestamp, sentenceId, referenceId',
     });
   }
 }

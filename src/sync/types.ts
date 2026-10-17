@@ -24,6 +24,7 @@ export type SyncEntity =
   | 'pitch_drill_attempts'
   | 'sentence_learning_events'
   | 'gloss_decisions'
+  | 'clause_question_feedback'
   | 'named_podcast_feeds'
   | 'sentence_extras';
 
