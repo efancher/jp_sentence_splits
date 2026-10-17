@@ -19,7 +19,11 @@
  * progress, wins) and reported so it can be checked by hand.
  *
  * Dry-run by default; --apply required to write.
- * Usage: npm run merge:book-into-chapter -- <sourceBookId> <targetBookId> [--chapter-title "..."] [--apply]
+ * --into-chapter <chapterId> moves the sentences into a chapter the target book
+ * already has (e.g. the empty placeholder a podcast feed listing created for
+ * that episode) instead of appending a new one — no chapter is added.
+ *
+ * Usage: npm run merge:book-into-chapter -- <sourceBookId> <targetBookId> [--chapter-title "..." | --into-chapter <chapterId>] [--apply]
  */
 import { createId } from '../src/lib/ids';
 import { parseApplyFlag, requireAuthedUser } from './lib/scriptHelpers';
@@ -76,44 +80,64 @@ async function loadBookSentences(
   ownerId: string,
   bookId: string,
 ): Promise<BookSentenceRow[]> {
-  const { data, error } = await supabase
-    .from('book_sentences')
-    .select('id, sentence_id, position, status')
-    .eq('owner_id', ownerId)
-    .eq('book_id', bookId)
-    .is('deleted_at', null)
-    .order('position', { ascending: true });
-  if (error) throw new Error(`Failed to fetch book_sentences for ${bookId}: ${error.message}`);
-  return (data ?? []).map((row) => ({
-    id: String(row.id),
-    sentenceId: String(row.sentence_id),
-    position: Number(row.position),
-    status: String(row.status),
-  }));
+  // Paginated: a single response is capped at 1000 rows, which a large series
+  // book (Slow Japanese: 1500+) exceeds — truncating would hide collisions and
+  // underestimate the max position.
+  const rows: BookSentenceRow[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await supabase
+      .from('book_sentences')
+      .select('id, sentence_id, position, status')
+      .eq('owner_id', ownerId)
+      .eq('book_id', bookId)
+      .is('deleted_at', null)
+      .order('position', { ascending: true })
+      .order('id', { ascending: true })
+      .range(from, from + 999);
+    if (error) throw new Error(`Failed to fetch book_sentences for ${bookId}: ${error.message}`);
+    for (const row of data ?? []) {
+      rows.push({
+        id: String(row.id),
+        sentenceId: String(row.sentence_id),
+        position: Number(row.position),
+        status: String(row.status),
+      });
+    }
+    if (!data || data.length < 1000) break;
+  }
+  return rows;
 }
 
-function parseArgs(argv: string[]): { sourceBookId: string; targetBookId: string; chapterTitle?: string } {
+function parseArgs(argv: string[]): {
+  sourceBookId: string;
+  targetBookId: string;
+  chapterTitle?: string;
+  intoChapterId?: string;
+} {
   const chapterTitleIndex = argv.indexOf('--chapter-title');
   const chapterTitle = chapterTitleIndex !== -1 ? argv[chapterTitleIndex + 1] : undefined;
+  const intoChapterIndex = argv.indexOf('--into-chapter');
+  const intoChapterId = intoChapterIndex !== -1 ? argv[intoChapterIndex + 1] : undefined;
   const positional = argv.filter((arg, i) => {
     if (arg === '--apply') return false;
-    if (arg === '--chapter-title') return false;
+    if (arg === '--chapter-title' || arg === '--into-chapter') return false;
     if (chapterTitleIndex !== -1 && i === chapterTitleIndex + 1) return false;
+    if (intoChapterIndex !== -1 && i === intoChapterIndex + 1) return false;
     return true;
   });
   const [sourceBookId, targetBookId] = positional;
   if (!sourceBookId || !targetBookId) {
     throw new Error(
-      'Usage: tsx scripts/merge-book-into-chapter.ts <sourceBookId> <targetBookId> [--chapter-title "..."] [--apply]',
+      'Usage: tsx scripts/merge-book-into-chapter.ts <sourceBookId> <targetBookId> [--chapter-title "..." | --into-chapter <chapterId>] [--apply]',
     );
   }
-  return { sourceBookId, targetBookId, chapterTitle };
+  return { sourceBookId, targetBookId, chapterTitle, intoChapterId };
 }
 
 async function main() {
   const argv = process.argv.slice(2);
   const apply = parseApplyFlag(argv);
-  const { sourceBookId, targetBookId, chapterTitle: chapterTitleOverride } = parseArgs(argv);
+  const { sourceBookId, targetBookId, chapterTitle: chapterTitleOverride, intoChapterId } = parseArgs(argv);
 
   const supabase = await createScriptSupabaseClient();
   const user = await requireAuthedUser(supabase);
@@ -142,19 +166,30 @@ async function main() {
     .map((row) => ({ source: row, target: targetBySentenceId.get(row.sentenceId)! }))
     .filter(({ source, target }) => target.status === 'unstarted' && source.status !== 'unstarted');
 
+  const existingChapter = intoChapterId ? target.chapters.find((c) => c.id === intoChapterId) : undefined;
+  if (intoChapterId && !existingChapter) {
+    throw new Error(`Chapter ${intoChapterId} not found in "${target.title}". Chapters: ${target.chapters.map((c) => `${c.id} (${c.title})`).join(', ')}`);
+  }
   const chapterTitle = (chapterTitleOverride ?? source.title).trim();
-  const chapter: BookChapterRow = {
+  const chapter: BookChapterRow = existingChapter ?? {
     id: createId('chapter'),
     title: chapterTitle,
     position: target.chapters.length,
     ...(source.sourceUrl || source.sourceKey ? { sourceId: source.sourceUrl ?? source.sourceKey! } : {}),
     ...(source.createdAt ? { sourceDate: source.createdAt } : {}),
   };
+  if (!existingChapter) {
+    // Hint: a same-titled chapter may already exist (a feed-listing placeholder).
+    const sameTitled = target.chapters.filter((c) => c.title.trim() === chapterTitle);
+    for (const c of sameTitled) {
+      console.log(`  note: "${target.title}" already has a chapter titled "${c.title}" (${c.id}) — pass --into-chapter ${c.id} to fill it instead of adding a duplicate.`);
+    }
+  }
 
   console.log(
     `Merge "${source.title}" (${source.id}, ${sourceSentences.length} sentences) into "${target.title}" (${target.id})`,
   );
-  console.log(`  new chapter: "${chapter.title}" (${chapter.id})`);
+  console.log(`  ${existingChapter ? 'existing' : 'new'} chapter: "${chapter.title}" (${chapter.id})`);
   console.log(`  ${toMove.length} sentence(s) will move, preserving status/study progress.`);
   if (collisions.length) {
     console.log(`  ${collisions.length} sentence(s) already exist in the target book — their source-book membership will be deleted, target's copy kept:`);
@@ -173,11 +208,13 @@ async function main() {
     return;
   }
 
-  const { error: chapterError } = await supabase
-    .from('books')
-    .update({ chapters: [...target.chapters, chapter] })
-    .eq('id', target.id);
-  if (chapterError) throw new Error(`Failed to add chapter to ${target.id}: ${chapterError.message}`);
+  if (!existingChapter) {
+    const { error: chapterError } = await supabase
+      .from('books')
+      .update({ chapters: [...target.chapters, chapter] })
+      .eq('id', target.id);
+    if (chapterError) throw new Error(`Failed to add chapter to ${target.id}: ${chapterError.message}`);
+  }
 
   for (let i = 0; i < toMove.length; i += 1) {
     const row = toMove[i]!;
