@@ -1761,6 +1761,54 @@ with it.
 
 - Sentence-first: promote a practised target into durable tracking (explicit "Keep reviewing this"; vocabulary first, needs a merge-link operation). Parked with reasoning in `docs/SENTENCE_FIRST_HANDOFF.md`, awaiting the user's go-ahead.
 
+## Possibilities (active sentence-production bridge)
+
+From a 2026-10-17 design brainstorm: the learner likes the passive "hear a
+clip, pick the matching chunks in order" activity but struggles to bridge to
+independent sentence construction. Five interface concepts, each removing one
+support (given chunks, given order, attached particles, visible target,
+template). User wants to try all of them; none built yet. Suggested
+progression: Stage → Elastic → Particle Swap → Sentence Growth → Remix, but
+**Remix Mode is the recommended first build** (closest to the existing chunk
+drill, reuses already-heard native sentences). Cautions from existing
+precedent: `grammar_production` (free composition) was retired, so anchor to
+native sentences where possible; the "Reverse English -> Japanese" note above
+forbids generated Japanese distractors; no auto-derived FSRS rating (objective
+checks are supplementary evidence only); pair grammar labels with plain-English
+hints.
+
+- **Remix Mode (steal, then swap) — recommended first.** Play a known native
+  clip, show its skeleton (`[who] が [where] で [what] を [verb]`), then ramp
+  difficulty: swap one slot → swap two → swap the verb (particles must change
+  to fit) → free remix on the same skeleton about the learner's own life.
+  Saved remixes appear beside native sentences. Reuses material already heard
+  and shadowed, so only the construction is new.
+- **Sentence Growth (seed-and-sprout).** Start from a bare verb (or a clip
+  with everything but the verb muted); branching prompts (who? what? where?
+  when?) grow the sentence outward, each answer a short spoken/typed
+  production; finish by saying the whole sentence against the original clip.
+  Reverse mode, *pruning*, strips a native sentence down to its skeleton to
+  show what is load-bearing.
+- **Particle Swap (one dial, shifting meaning).** One concrete scene with a
+  single slot cycling は/が/も/を/に, showing a tiny picture change, an English
+  "feel" line, and the audio of each variant (intonation, not just text).
+  Production step gives an English situation ("someone asks who ordered the
+  coffee") and the learner picks/says the right variant with no target shown.
+  Targets the confusable pairs (は/が, に/で). Tension: needs variant audio for
+  sentences that may not exist natively.
+- **The Stage (particles as spotlights).** Nouns are actors; dragging a
+  particle onto one lights it by role (は dims everything else, が points,
+  を draws a thread to the verb, に a doorway, で a circle on the floor) and an
+  animation plays the resulting scene, so swapping で for に visibly changes
+  the meaning. Makes particle behaviour consequential rather than a memorised
+  label. Biggest art/animation cost of the five.
+- **The Elastic Sentence (word-order playground).** Verb fixed at the right
+  edge, every other chunk a bubble tethered by its particle, draggable into
+  any order: green = natural, amber = grammatical but marked (the front word
+  glows as the stressed one), red = snaps back (orphaned particle, verb moved
+  off the end). Teaches "verb last, particle-marked chunks float" by feel.
+  Variant: an emphasis-weight slider as a chunk moves left.
+
 ## Not planned (deliberate)
 
 - **Dictionary H/L marks on conjugation (`sentence_transformation`)
