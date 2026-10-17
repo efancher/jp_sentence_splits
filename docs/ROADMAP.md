@@ -1767,7 +1767,7 @@ From a 2026-10-17 design brainstorm: the learner likes the passive "hear a
 clip, pick the matching chunks in order" activity but struggles to bridge to
 independent sentence construction. Five interface concepts, each removing one
 support (given chunks, given order, attached particles, visible target,
-template). User wants to try all of them; none built yet. Suggested
+template). User wants to try all of them; Remix and Sentence Growth (first slice) are built, the rest are not. Suggested
 progression: Stage → Elastic → Particle Swap → Sentence Growth → Remix, but
 **Remix Mode is the recommended first build** (closest to the existing chunk
 drill, reuses already-heard native sentences). Cautions from existing
@@ -1817,6 +1817,14 @@ hints.
   production; finish by saying the whole sentence against the original clip.
   Reverse mode, *pruning*, strips a native sentence down to its skeleton to
   show what is load-bearing.
+  **Status 2026-10-17: first slice built** as a `/play` game (`src/lib/sentenceGrowth.ts`,
+  `SentenceGrowthGame.tsx`): own chunks only (pick each from the sentence's own
+  pieces), asked in the order が/は → を → で → に → から → まで, then say the whole
+  sentence along with the clip, reveal, three-way self-rating. Not built:
+  typed/recorded production per chunk, pruning mode, a recorded take. Chunks come
+  from the Remix skeleton (UniDic), not saved Cure-Dolly analyses (~5% coverage).
+  Pool is small (30 qualifying sentences, 0 yet met) and fills through ordinary
+  walkthroughs, which now prefer these sentences within their existing window.
 - **Particle Swap (one dial, shifting meaning).** One concrete scene with a
   single slot cycling は/が/も/を/に, showing a tiny picture change, an English
   "feel" line, and the audio of each variant (intonation, not just text).

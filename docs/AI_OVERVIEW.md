@@ -1419,6 +1419,26 @@ shortcut ("Play a round") and the `/play` hub. Currently ten activities:
   not built: verb swap (no verb→particle data) and free remix / saved remixes
   (would re-create the retired `grammar_production`); only native material feeds
   the drills. About 65 of ~2,800 sentences have a skeleton (20 with audio ≤10 s and a translation) (`scripts/remix-feasibility.ts` probes a JSON dump).
+- **Sentence Growth** (`SentenceGrowthGame.tsx`, `src/lib/sentenceGrowth.ts`) —
+  the step between hearing a native sentence and producing one, using only that
+  sentence's own pieces. 3 sentences per round: hear the clip, see only the core
+  (the predicate) with `＿＿` blanks for the rest, then answer one plain-English
+  question at a time — "Who or what does it?" (が), "What are we talking about?"
+  (は), "What is the action done to?" (を), "Where does it happen, or by what
+  means?" (で), "Where to, when, or to whom?" (に), "Where does it start from?"
+  (から), "Where does it go up to?" (まで) — by picking the matching chunk from the
+  sentence's own remaining chunks (a wrong pick is flagged and counted). Then say
+  the whole sentence along with the clip (nothing recorded), reveal the native
+  text + translation, and the learner self-rates Hard/Okay/Easy
+  (`GameRoundItem.selfRating`; no auto rating, no FSRS write, no points). Chunks
+  = the Remix UniDic skeleton's noun + case-particle slots, with の-modifiers and
+  adverbs folded into the next chunk; a sentence is refused (never offered) if it
+  has a leading connective/clause break, a repeated particle, or a verb/adjective/
+  linking clause inside a chunk. Gate: met sentence + native audio ≤10 s +
+  translation; no vocabulary gate. The pool is small (30 on 2026-10-17), so
+  sentence-first planning floats qualifying sentences to the front of each book's
+  20-sentence walkthrough preview window (order only). Not built: typed or
+  recorded per-chunk production, pruning mode.
 - **Keystone** (`KeystoneGame.tsx`, `src/lib/keystone.ts`) — the confirmed-
   vocabulary no-card backlog's front door: each puzzle shows a few backlog
   words (confirmed, no study item yet) that appear in the active book's next
