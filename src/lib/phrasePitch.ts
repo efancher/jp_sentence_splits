@@ -2,24 +2,20 @@ import type { WordAlignment } from '../domain/types';
 
 import { phonesToMoraIntervals, phonesToSoundedMorae } from './moraTiming';
 import type { PitchAnalysisPayload } from './pitch';
-import type { MoraPitchClass } from './pitchAccentShape';
-import { fitAccentShape } from './pitchShapeFit';
 import { SET_EXPRESSIONS } from './setExpressions';
 
 /**
- * Phrase-level pitch: the native contour of each *phrase* (a content word plus
- * the particles and endings that ride on it) next to the learner's, mora by
- * mora. Japanese accent is realised over the phrase, not the bare word — flat
- * versus falling-at-the-end is only audible on the particle — so this is the
- * unit a learner actually hears and has to produce.
+ * Phrase-level pitch: the measured contour of each *phrase* (a content word plus
+ * the particles and endings that ride on it) for the native and the learner, mora
+ * by mora. Japanese accent is realised over the phrase, not the bare word, so this
+ * is the unit a learner actually hears and has to produce.
  *
- * No rule-predicted target: the native *recording* is the answer key. Its H/L
- * shape per phrase is fitted to the accent shapes Japanese allows
- * (`fitAccentShape`, ~56% dictionary agreement on native clips vs 40% for the
- * old per-mora rule). The learner's is fitted the same way for display, but with
- * an honest "flat" state — a learner contour that is not valid Japanese is the
- * mistake worth showing, and `levels` (each mora's height within the phrase) is
- * returned so the view can draw the raw contour beside the fitted H/L.
+ * Deliberately no H/L labels and no accent-type (heiban, atamadaka, …) fitting: the
+ * native *recording* is the answer key and its measured pitch is shown as it is.
+ * `levels` is each mora's mean height within the phrase (0..1), drawn as a line, so a
+ * contour that is not a textbook pattern — or a native that does not follow the
+ * dictionary — reads honestly instead of being snapped to a shape (a fit once forced
+ * について onto HLLL while she said LLLH).
  *
  * Morae and their kana come from the native token's own phones
  * (`phonesToSoundedMorae`), not from the written reading, so what is shown is what
@@ -51,14 +47,6 @@ const SET_EXPRESSION_MAX_TOKENS = 6;
 
 /** A learner contour below this contrast (semitones) is called flat. */
 export const FLAT_CONTRAST_SEMITONES = 1;
-
-/**
- * A native shape that explains less than this share of the phrase's pitch variance is a guess fitted
- * to noise (a devoiced mora the tracker drifts on, a particle riding up from the previous fall), so
- * the phrase is called unclear rather than shown with a confident H/L. Clean native phrases sit at
- * 0.5–0.85; the について that read HLLL while she said LLLH explained 0.03.
- */
-export const MIN_NATIVE_EXPLAINED_VARIANCE = 0.15;
 
 export interface PhraseToken {
   text: string;
@@ -108,27 +96,12 @@ export interface SpeakerInput {
   pitchOffsetSeconds?: number;
 }
 
-export type PhraseStatus =
-  | 'match' // your fitted shape equals the native one
-  | 'different' // a valid shape, but not the native one
-  | 'flat' // your contour has no clear high/low contrast
-  | 'weak-native' // the native contour itself has no clear contrast — nothing to judge against
-  | 'no-learner'; // your recording could not be lined up mora by mora, or had no voiced pitch here
-
 export interface PhraseRow {
   text: string;
   kana: string[];
-  native: MoraPitchClass[];
-  nativeContrast: number;
   /** Each mora's mean pitch as a 0..1 height within this phrase for that speaker (null = unvoiced). */
   nativeLevels: (number | null)[];
-  learner: MoraPitchClass[] | null;
-  learnerContrast: number | null;
   learnerLevels: (number | null)[] | null;
-  status: PhraseStatus;
-  /** One plain sentence about how the native phrase moves, e.g. "starts low, rises, then falls after ま". */
-  nativeSummary: string;
-  learnerSummary: string | null;
   /** How many of this phrase's morae had voiced pitch in your recording (null = not lined up). */
   learnerVoicedMorae: number | null;
 }
@@ -216,19 +189,6 @@ function toLevels(means: readonly (number | null)[]): (number | null)[] {
   return means.map((m) => (m === null ? null : hi - lo < 1e-9 ? 0.5 : (m - lo) / (hi - lo)));
 }
 
-/** Words like "rises, then falls after ま" — from a fitted shape and its kana. */
-export function describeShape(shape: readonly MoraPitchClass[], kana: readonly string[]): string {
-  if (shape.length === 0) return '';
-  const lastHigh = shape.lastIndexOf('h');
-  const startsHigh = shape[0] === 'h';
-  const falls = lastHigh >= 0 && lastHigh < shape.length - 1;
-  const at = (i: number) => kana[i] ?? '';
-  if (startsHigh && falls) return `starts high, then falls after ${at(0)}`;
-  if (startsHigh) return 'stays high';
-  if (falls) return `starts low, rises, then falls after ${at(lastHigh)}`;
-  return 'starts low, rises, and stays high';
-}
-
 /**
  * The phrase rows for one sentence. `moraUnits` is the sentence's mora list (from
  * its reading); `reference` is the native recording, `learner` optional.
@@ -270,37 +230,21 @@ export function buildPhrasePitch({
     if (kana.length < 2) continue; // one mora carries no shape
 
     const nativeMeans = timings.flatMap((timing) => timing!.intervals).map((iv) => meanSemitones(reference.pitch, iv.start - refOffset, iv.end - refOffset));
-    const nativeFit = fitAccentShape(nativeMeans);
-    if (!nativeFit) continue; // not enough voiced native pitch to say anything
+    if (nativeMeans.filter((m) => m !== null).length < 2) continue; // not enough voiced native pitch to draw a contour
 
-    let learnerFit: ReturnType<typeof fitAccentShape> = null;
     let learnerMeans: (number | null)[] | null = null;
     if (learner && learnerTimings) {
       const intervals = group.flatMap((t) => learnerTimings[t]?.intervals ?? []);
       if (intervals.length === kana.length) {
         learnerMeans = intervals.map((iv) => meanSemitones(learner.pitch, iv.start - learnerOffset, iv.end - learnerOffset));
-        learnerFit = fitAccentShape(learnerMeans);
       }
     }
-
-    let status: PhraseStatus;
-    if (nativeFit.contrastSemitones < FLAT_CONTRAST_SEMITONES || nativeFit.explainedVariance < MIN_NATIVE_EXPLAINED_VARIANCE) status = 'weak-native';
-    else if (!learnerFit) status = 'no-learner';
-    else if (learnerFit.contrastSemitones < FLAT_CONTRAST_SEMITONES) status = 'flat';
-    else status = learnerFit.shape.join('') === nativeFit.shape.join('') ? 'match' : 'different';
 
     rows.push({
       text: group.map((t) => refTokens[t]!.text).join(''),
       kana,
-      native: nativeFit.shape,
-      nativeContrast: nativeFit.contrastSemitones,
       nativeLevels: toLevels(nativeMeans),
-      learner: learnerFit ? learnerFit.shape : null,
-      learnerContrast: learnerFit ? learnerFit.contrastSemitones : null,
       learnerLevels: learnerMeans ? toLevels(learnerMeans) : null,
-      status,
-      nativeSummary: describeShape(nativeFit.shape, kana),
-      learnerSummary: learnerFit ? describeShape(learnerFit.shape, kana) : null,
       learnerVoicedMorae: learnerMeans ? learnerMeans.filter((m) => m !== null).length : null,
     });
   }
@@ -312,22 +256,4 @@ export function buildPhrasePitch({
     learnerApproximateTokens: learnerLayout?.approximate ?? 0,
     learnerUnavailableReason: !learner || learnerTimings ? undefined : learnerTokens.length !== refTokens.length ? 'token-count' : 'no-span',
   };
-}
-
-/** Plain-language line for a row: what to change (or that it matches). */
-export function phraseFeedback(row: PhraseRow): string {
-  switch (row.status) {
-    case 'match':
-      return `Matches the native phrase (${row.nativeSummary}).`;
-    case 'flat':
-      return `Your pitch is flat here. The native phrase ${row.nativeSummary}.`;
-    case 'different':
-      return `Native: ${row.nativeSummary}. You: ${row.learnerSummary}.`;
-    case 'weak-native':
-      return 'The native pitch is not clearly high/low here, so there is nothing firm to match.';
-    case 'no-learner':
-      return row.learnerVoicedMorae === null
-        ? 'Could not line your recording up with this phrase.'
-        : `Could not measure your pitch on this phrase — only ${row.learnerVoicedMorae} of ${row.kana.length} sounds had a clear pitch.`;
-  }
 }

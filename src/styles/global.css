@@ -454,42 +454,13 @@ strong.jp {
   border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
 }
 
-.pp-block[data-status='different'],
-.pp-block[data-status='flat'] {
-  border-color: color-mix(in srgb, var(--danger) 55%, transparent);
-}
-
-.pp-block[data-status='match'] {
-  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
-}
-
-.pp-status {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-}
-
 .pp-feedback {
   font-size: 0.85rem;
 }
 
-.pp-bar-slot {
-  display: inline-flex;
-  align-items: flex-end;
-  justify-content: center;
-  height: 22px;
-  width: 0.9rem;
-}
-
-.pp-bar {
+.pp-block svg {
   display: block;
-  width: 0.35rem;
-  border-radius: 2px;
-  background: color-mix(in srgb, var(--accent) 70%, transparent);
-}
-
-.pp-bar-none {
-  height: 2px;
-  background: var(--border);
+  margin-top: 0.2rem;
 }
 
 .pa-particle .pa-kana {
@@ -1544,17 +1515,6 @@ button.sync-retry {
 .stage-graduated { background: #3f9b6a; }
 
 /* AttemptPitchGrid — attempts × phrases native-referenced H/L (ShadowPage). */
-.apg-scroll { overflow-x: auto; }
-.apg-table { border-collapse: collapse; font-size: 0.85rem; }
-.apg-table th, .apg-table td { padding: 0.25rem 0.4rem; text-align: center; white-space: nowrap; font-weight: 400; }
-.apg-table thead th { vertical-align: bottom; }
-.apg-table tbody th { text-align: left; }
-.apg-table td[data-status='match'] { background: color-mix(in srgb, var(--accent) 14%, transparent); }
-.apg-table td[data-status='different'], .apg-table td[data-status='flat'] { background: color-mix(in srgb, var(--danger) 14%, transparent); }
-.apg-shape { display: inline-flex; gap: 1px; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.02em; }
-.apg-mora[data-c='h'] { color: var(--accent); }
-.apg-mora[data-c='l'] { color: var(--text-muted); }
-.apg-mora[data-diff] { color: var(--danger); font-weight: 800; }
 /* SegmentTimingChart — paired reference/you duration bars per word (AnalysisPanel). */
 .stc { display: grid; gap: 0.35rem; }
 .stc-legend { display: flex; flex-wrap: wrap; gap: 0.2rem 0.8rem; font-size: 0.75rem; }

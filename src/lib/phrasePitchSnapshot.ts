@@ -67,12 +67,7 @@ export function buildPhrasePitchSnapshot({
       rows: result.rows.map((r) => ({
         text: r.text,
         kana: r.kana.join(''),
-        status: r.status,
-        native: r.native.join(''),
-        nativeContrast: round(r.nativeContrast),
         nativeLevels: r.nativeLevels.map((l) => (l === null ? null : round(l))),
-        learner: r.learner ? r.learner.join('') : null,
-        learnerContrast: r.learnerContrast === null ? null : round(r.learnerContrast),
         learnerLevels: r.learnerLevels ? r.learnerLevels.map((l) => (l === null ? null : round(l))) : null,
         learnerVoicedMorae: r.learnerVoicedMorae,
       })),

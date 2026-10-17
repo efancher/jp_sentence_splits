@@ -43,7 +43,8 @@ describe('buildPhrasePitchSnapshot', () => {
       }),
     );
     expect(snapshot).toMatchObject({ kind: 'phrase-pitch', sentenceId: 's1', attemptId: 'a1', moraKana: 'は し' });
-    expect(snapshot.result.rows[0]).toMatchObject({ text: 'はし', kana: 'はし', status: 'match', native: 'lh' });
+    expect(snapshot.result.rows[0]).toMatchObject({ text: 'はし', kana: 'はし', learnerVoicedMorae: 2 });
+    expect(snapshot.result.rows[0]).not.toHaveProperty('native');
     expect(snapshot.reference.words[0].phones[0]).toBe('h:0-0.05');
     expect(snapshot.learner.voicedFramesPerToken).toEqual(['2/3']);
   });

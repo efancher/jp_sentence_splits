@@ -2086,26 +2086,26 @@ a self-hosted pronunciation-analysis backend. Capabilities:
   manual `better`/`same` A/B rating on `ShadowPage` is the fallback for when
   the alignment service is off the tailnet. A muted line confirms when it
   fired.
-- **Phrase pitch (2026-09-20)** — after Analyze, `AnalysisPanel` shows
-  `PhrasePitchView`: per phrase (content word + its particles/endings), the
-  kana with the native recording's H/L and yours beneath, mismatches flagged,
-  a mini bar per mora for the raw contour, and a one-line "what to change".
-  Both speakers' shapes are fitted to valid Japanese accent shapes
-  (`pitchShapeFit.ts`) from per-mora pitch over exact phone-derived mora
-  intervals; the native audio is the answer key (natives don't always match
-  the dictionary). Withheld (with a message) when the alignment doesn't give
-  exact mora timing (~1 sentence in 4). Logic: `lib/phrasePitch.ts`.
-  A "Report a problem with this" button saves a sync-issue report
-  (`conflictEntity: 'phrase_pitch'`) carrying a diagnostics snapshot
+- **Phrase pitch (contours only, 2026-10-17)** — after Analyze, `AnalysisPanel`
+  shows `PhrasePitchView`: per phrase (content word + its particles/endings), the
+  native recording's measured pitch contour drawn as a thick line with yours as a
+  thin line over it, the kana under each point. No H/L labels, no accent-type
+  (heiban/atamadaka…) fitting, no match score — the line is each mora's mean
+  pitch scaled within the phrase, over exact phone-derived mora intervals; the
+  native audio is the answer key. (A valid-shape fit used to label these and once
+  forced について to HLLL when it was said LLLH.) Withheld (with a message) when
+  the alignment doesn't give exact mora timing (~1 sentence in 4). Logic:
+  `lib/phrasePitch.ts`. A "Report a problem with this" button saves a sync-issue
+  report (`conflictEntity: 'phrase_pitch'`) carrying a diagnostics snapshot
   (`lib/phrasePitchSnapshot.ts`) so a bad phrase can be triaged later.
-- **Pitch across attempts (2026-10-10)** — each analysed attempt stores a
-  compact `phraseSnapshot` on its `AttemptAnalysisSummary`; `ShadowPage`'s
-  `AttemptPitchGrid` shows attempts × phrases with the native H/L as header and
-  mismatches in red, plus a per-phrase overlay of chosen attempts' contour
-  shapes on the native's (`lib/attemptPitchGrid.ts`). Older attempts appear
-  once re-analysed. The attempt list shows a pitch line from the same snapshot
-  (phrases matching, change vs the previous attempt, mean accent-drop error in
-  morae) in place of the severity trend label.
+- **Pitch across attempts (2026-10-10, contours only 2026-10-17)** — each analysed
+  attempt stores a compact `phraseSnapshot` (per-phrase native and learner
+  levels) on its `AttemptAnalysisSummary`; `ShadowPage`'s `AttemptPitchGrid`
+  overlays chosen attempts' contours on the native's per phrase, with
+  back-to-back playback of two attempts (`lib/attemptPitchGrid.ts`). Older
+  attempts appear once re-analysed; snapshots saved before 2026-10-17 carry
+  unused `native`/`status` fields that are ignored. The attempt list shows the
+  severity-trend pitch label.
 - Playback-speed control, Alternate (A/B) and Dual-ear (binaural)
   reference-vs-attempt comparison.
 - **Practice-target isolation**: manual "mark start"/"mark end" loop-point

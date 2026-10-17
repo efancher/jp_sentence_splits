@@ -1,14 +1,7 @@
 import { useState } from 'react';
 
-import { phraseFeedback, type PhrasePitchResult, type PhraseRow, type PhraseStatus } from '../lib/phrasePitch';
-
-const STATUS_LABEL: Record<PhraseStatus, string> = {
-  match: 'matches',
-  different: 'differs',
-  flat: 'flat',
-  'weak-native': 'unclear',
-  'no-learner': 'not measured',
-};
+import { levelsToRuns } from '../lib/attemptPitchGrid';
+import type { PhrasePitchResult, PhraseRow } from '../lib/phrasePitch';
 
 const UNAVAILABLE_TEXT: Record<NonNullable<PhrasePitchResult['unavailable']>, string> = {
   'no-reference-timing':
@@ -16,63 +9,50 @@ const UNAVAILABLE_TEXT: Record<NonNullable<PhrasePitchResult['unavailable']>, st
   'no-pitch': 'Not enough voiced native pitch here to show phrases.',
 };
 
-/** A tiny bar for one mora's height within its phrase — the raw contour, so an invalid shape is visible beside the fitted H/L. */
-function LevelBar({ level, label }: { level: number | null; label: string }) {
-  return (
-    <span className="pp-bar-slot" title={label}>
-      {level === null ? (
-        <span className="pp-bar pp-bar-none" />
-      ) : (
-        <span className="pp-bar" style={{ height: `${Math.round(6 + level * 14)}px` }} />
-      )}
-    </span>
-  );
-}
+const SLOT_W = 26;
+const CHART_H = 56;
 
+/**
+ * One phrase as a drawn contour: the native's measured pitch (thick) with yours over it (thin), each
+ * scaled from its own lowest to highest sound, and the kana under each point. An unvoiced mora breaks
+ * the line rather than being bridged.
+ */
 function PhraseBlock({ row, showLearner }: { row: PhraseRow; showLearner: boolean }) {
+  const width = Math.max(row.kana.length, 2) * SLOT_W;
+  const learnerLevels = showLearner && row.learnerLevels?.length === row.kana.length ? row.learnerLevels : null;
   return (
-    <div className="pp-block" data-status={row.status}>
-      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline', gap: '0.5rem' }}>
-        <strong className="jp">{row.text}</strong>
-        {showLearner ? <span className="pp-status">{STATUS_LABEL[row.status]}</span> : null}
+    <div className="pp-block">
+      <strong className="jp">{row.text}</strong>
+      <svg
+        width={width}
+        height={CHART_H}
+        viewBox={`0 0 ${width} ${CHART_H}`}
+        role="img"
+        aria-label={`Pitch of ${row.text}${learnerLevels ? ', native and yours' : ', native'}`}
+      >
+        {levelsToRuns(row.nativeLevels, width, CHART_H, SLOT_W / 2).map((points, i) => (
+          <polyline key={`n${i}`} points={points} className="apg-line apg-line-native" />
+        ))}
+        {learnerLevels
+          ? levelsToRuns(learnerLevels, width, CHART_H, SLOT_W / 2).map((points, i) => (
+              <polyline key={`l${i}`} points={points} className="apg-line apg-line-attempt" data-rank="1" />
+            ))
+          : null}
+      </svg>
+      <div className="row pp-kana" style={{ gap: 0 }}>
+        {row.kana.map((kana, index) => (
+          <span key={index} className="pa-kana jp" style={{ width: SLOT_W, textAlign: 'center' }}>
+            {kana}
+          </span>
+        ))}
       </div>
-      <div className="pa-row" role="group" aria-label={`Pitch of ${row.text}`}>
-        {row.kana.map((kana, index) => {
-          const nativeClass = row.native[index]!;
-          const learnerClass = row.learner?.[index];
-          return (
-            <span key={index} className="pa-mora">
-              <span className="pa-kana jp">{kana}</span>
-              <span className="pa-hl" data-c={nativeClass} title="Native">
-                {nativeClass === 'h' ? 'H' : 'L'}
-              </span>
-              <LevelBar level={row.nativeLevels[index] ?? null} label="Native pitch height" />
-              {showLearner ? (
-                <>
-                  <span
-                    className="pa-hl pa-hl-learner"
-                    data-c={learnerClass}
-                    data-mismatch={learnerClass && learnerClass !== nativeClass ? '' : undefined}
-                    title={
-                      learnerClass
-                        ? learnerClass === nativeClass
-                          ? 'Your recording matches here'
-                          : 'Your recording differs here'
-                        : 'Your pitch could not be measured on this mora'
-                    }
-                  >
-                    {learnerClass ? (learnerClass === 'h' ? 'H' : 'L') : '·'}
-                  </span>
-                  <LevelBar level={row.learnerLevels?.[index] ?? null} label="Your pitch height" />
-                </>
-              ) : null}
-            </span>
-          );
-        })}
-      </div>
-      {showLearner ? <div className="muted pp-feedback">{phraseFeedback(row)}</div> : (
-        <div className="muted pp-feedback">Native: {row.nativeSummary}.</div>
-      )}
+      {showLearner && learnerLevels === null ? (
+        <div className="muted pp-feedback">
+          {row.learnerVoicedMorae === null
+            ? 'Could not line your recording up with this phrase.'
+            : `Could not measure your pitch here — only ${row.learnerVoicedMorae} of ${row.kana.length} sounds had a clear pitch.`}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -131,11 +111,9 @@ function ReportProblem({ onReport }: { onReport: (note: string) => Promise<void>
 }
 
 /**
- * Phrase-level pitch, native vs you (`buildPhrasePitch`). Each phrase — a content
- * word plus its particles/endings — shows the kana with the native H/L, and under
- * it yours with mismatches flagged, plus a small bar per mora for the raw contour
- * (the fitted H/L snaps to a valid Japanese shape; the bars show what you actually
- * did). One plain line says how each phrase moves and what to change.
+ * Phrase-level pitch, native vs you (`buildPhrasePitch`). Each phrase — a content word plus its
+ * particles/endings — is drawn as the native's measured contour with yours over it. No H/L labels or
+ * accent types: you compare the lines.
  */
 export function PhrasePitchView({
   result,
@@ -156,18 +134,9 @@ export function PhrasePitchView({
     );
   }
   const showLearner = hasLearner && !result.learnerUnavailable;
-  const judged = result.rows.filter((r) => r.status === 'match' || r.status === 'different' || r.status === 'flat');
-  const matches = judged.filter((r) => r.status === 'match').length;
   return (
     <div className="stack pp-view" style={{ gap: '0.4rem' }}>
-      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap' }}>
-        <strong>Phrase pitch — native{showLearner ? ' vs you' : ''}</strong>
-        {showLearner && judged.length > 0 ? (
-          <span className="muted">
-            {matches} of {judged.length} phrases match
-          </span>
-        ) : null}
-      </div>
+      <strong>Phrase pitch — native{showLearner ? ' vs you' : ''}</strong>
       {hasLearner && result.learnerUnavailable ? (
         <p className="muted" style={{ margin: 0 }}>
           Your recording couldn’t be lined up with the native words
@@ -182,7 +151,7 @@ export function PhrasePitchView({
       {showLearner && result.learnerApproximateTokens > 0 ? (
         <p className="muted" style={{ margin: 0, fontSize: '0.85em' }}>
           {result.learnerApproximateTokens} word{result.learnerApproximateTokens === 1 ? '' : 's'} of your recording could
-          only be timed roughly, so those H/L marks are less certain.
+          only be timed roughly, so those parts of your line are less certain.
         </p>
       ) : null}
       {result.rows.map((row, index) => (
@@ -190,8 +159,8 @@ export function PhrasePitchView({
       ))}
       {onReport ? <ReportProblem onReport={onReport} /> : null}
       <p className="muted" style={{ fontSize: '0.8em', margin: 0 }}>
-        H/L is fitted from each recording’s measured pitch, per phrase (a word plus its particles); the bars show the raw
-        height of each sound. The native recording is the answer key — natives don’t always use the dictionary accent.
+        Each line is the measured pitch of that phrase’s sounds, scaled from its lowest to its highest — compare the
+        shapes, not absolute pitch. The native recording is the answer key.
       </p>
     </div>
   );

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { PhoneAlignment, WordAlignment } from '../src/domain/types';
 import type { PitchAnalysisPayload, PitchFrame } from '../src/lib/pitch';
-import { buildPhrasePitch, describeShape, groupIntoPhrases, phraseFeedback } from '../src/lib/phrasePitch';
+import { buildPhrasePitch, groupIntoPhrases } from '../src/lib/phrasePitch';
 
 /** A token whose morae are consecutive CV pairs of `moraMs` each, starting at `startMs`. */
 function token(text: string, startMs: number, cvs: [string, string][], moraMs = 100): WordAlignment {
@@ -73,17 +73,9 @@ describe('groupIntoPhrases', () => {
   });
 });
 
-describe('describeShape', () => {
-  it('says how a phrase moves, naming the mora it falls after', () => {
-    expect(describeShape(['l', 'h', 'h'], ['は', 'し', 'が'])).toBe('starts low, rises, and stays high');
-    expect(describeShape(['h', 'l', 'l'], ['あ', 'め', 'が'])).toBe('starts high, then falls after あ');
-    expect(describeShape(['l', 'h', 'h', 'l', 'l'], ['た', 'か', 'い', 'で', 'す'])).toBe('starts low, rises, then falls after い');
-  });
-});
-
 describe('buildPhrasePitch', () => {
-  it('fits each native phrase and compares yours: match, flat, different', () => {
-    const learnerPitch = pitchFor([0, 4, 4, 2, 2.1, 1.9, 2, 2]); // phrase 1 matches; phrase 2 is flat
+  it('returns the measured contour for each native phrase and yours, with no shape labels', () => {
+    const learnerPitch = pitchFor([0, 4, 4, 2, 2.1, 1.9, 2, 2]); // phrase 1 follows the native; phrase 2 is flat
     const result = buildPhrasePitch({
       reference: { words: words(), pitch: NATIVE },
       learner: { words: words(), pitch: learnerPitch },
@@ -94,34 +86,19 @@ describe('buildPhrasePitch', () => {
 
     const [first, second] = result.rows;
     expect(first!.kana).toEqual(['は', 'し', 'が']);
-    expect(first!.native.join('')).toBe('lhh');
-    expect(first!.learner!.join('')).toBe('lhh');
-    expect(first!.status).toBe('match');
-    expect(phraseFeedback(first!)).toMatch(/Matches the native phrase/);
-
-    expect(second!.native.join('')).toBe('lhhll');
-    expect(second!.status).toBe('flat');
-    expect(phraseFeedback(second!)).toBe('Your pitch is flat here. The native phrase starts low, rises, then falls after き.');
+    expect(first!.nativeLevels).toEqual([0, 1, 1]);
+    expect(first!.learnerLevels).toEqual([0, 1, 1]);
+    expect(second!.nativeLevels).toEqual([0, 1, 1, 0, 0]);
+    expect(second!.learnerLevels!.every((l) => l !== null)).toBe(true);
+    expect(first).not.toHaveProperty('native');
+    expect(first).not.toHaveProperty('status');
   });
 
-  it('flags a different valid shape with plain words for both', () => {
-    const learnerPitch = pitchFor([0, 4, 4, 0, 4, 4, 4, 4]); // phrase 2 stays high instead of dropping
-    const result = buildPhrasePitch({
-      reference: { words: words(), pitch: NATIVE },
-      learner: { words: words(), pitch: learnerPitch },
-    });
-    const second = result.rows[1]!;
-    expect(second.status).toBe('different');
-    expect(second.learner!.join('')).toBe('lhhhh');
-    expect(phraseFeedback(second)).toBe('Native: starts low, rises, then falls after き. You: starts low, rises, and stays high.');
-  });
-
-  it('returns each mora’s height within the phrase so the raw contour can be drawn beside the fitted H/L', () => {
+  it('returns each mora’s height within the phrase so the contour can be drawn', () => {
     const result = buildPhrasePitch({ reference: { words: words(), pitch: NATIVE } });
     expect(result.rows[0]!.nativeLevels).toEqual([0, 1, 1]);
     expect(result.rows[1]!.nativeLevels).toEqual([0, 1, 1, 0, 0]);
-    expect(result.rows[0]!.learner).toBeNull();
-    expect(result.rows[0]!.status).toBe('no-learner');
+    expect(result.rows[0]!.learnerLevels).toBeNull();
   });
 
   it('reads reference pitch on the pitch clock when it was sliced to a practice range', () => {
@@ -133,15 +110,15 @@ describe('buildPhrasePitch', () => {
     });
     // Without the offset the frames would be read a second late and nothing would be voiced there.
     expect(buildPhrasePitch({ reference: { words: fullClipWords, pitch: NATIVE } }).rows).toEqual([]);
-    expect(result.rows.map((r) => r.native.join(''))).toEqual(['lhh', 'lhhll']);
+    expect(result.rows.map((r) => r.text)).toEqual(['はしが', 'たかいです']);
   });
 
-  it('says there is nothing to judge against when the native phrase itself is flat', () => {
+  it('draws a flat native phrase as it is rather than forcing it into a shape', () => {
     const result = buildPhrasePitch({
       reference: { words: words(), pitch: pitchFor([2, 2.1, 1.9, 2, 2, 2.1, 1.9, 2]) },
-      learner: { words: words(), pitch: NATIVE },
     });
-    expect(result.rows.every((r) => r.status === 'weak-native')).toBe(true);
+    expect(result.rows).toHaveLength(2);
+    expect(result.rows[0]!.nativeLevels.every((l) => l !== null)).toBe(true);
   });
 
   it('times a learner token whose phones do not add up by an even split across its span, and says so', () => {
@@ -153,7 +130,7 @@ describe('buildPhrasePitch', () => {
     });
     expect(result.learnerUnavailable).toBe(false);
     expect(result.learnerApproximateTokens).toBe(1);
-    expect(result.rows[1]!.learner).not.toBeNull();
+    expect(result.rows[1]!.learnerLevels).not.toBeNull();
   });
 
   it('reports the learner side unavailable when their tokens do not match the reference', () => {
@@ -162,8 +139,8 @@ describe('buildPhrasePitch', () => {
       learner: { words: words().slice(0, 3), pitch: NATIVE },
     });
     expect(result.learnerUnavailable).toBe(true);
-    expect(result.rows.every((r) => r.status === 'no-learner')).toBe(true);
-    expect(result.rows[0]!.native.join('')).toBe('lhh'); // the native side still shows
+    expect(result.rows.every((r) => r.learnerLevels === null)).toBe(true);
+    expect(result.rows[0]!.nativeLevels).toEqual([0, 1, 1]); // the native side still shows
   });
 
   it('ignores an <unk> token and takes the kana from the sounds, so it cannot shift them', () => {

@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -8,15 +8,8 @@ import type { PhrasePitchResult, PhraseRow } from '../src/lib/phrasePitch';
 const row = (overrides: Partial<PhraseRow> = {}): PhraseRow => ({
   text: 'はしが',
   kana: ['は', 'し', 'が'],
-  native: ['l', 'h', 'l'],
-  nativeContrast: 4,
   nativeLevels: [0, 1, 0],
-  learner: ['h', 'h', 'l'],
-  learnerContrast: 4,
   learnerLevels: [1, 1, 0],
-  status: 'different',
-  nativeSummary: 'starts low, rises, then falls after し',
-  learnerSummary: 'starts high, then falls after し',
   learnerVoicedMorae: 3,
   ...overrides,
 });
@@ -29,39 +22,26 @@ const result = (rows: PhraseRow[], extra: Partial<PhrasePitchResult> = {}): Phra
 });
 
 describe('PhrasePitchView', () => {
-  it('shows native and learner H/L per mora and flags the mismatch', () => {
-    render(<PhrasePitchView result={result([row()])} hasLearner />);
-    const group = screen.getByRole('group', { name: 'Pitch of はしが' });
-    const native = within(group).getAllByTitle('Native').map((el) => el.textContent);
-    expect(native).toEqual(['L', 'H', 'L']);
-    const differs = within(group).getAllByTitle('Your recording differs here');
-    expect(differs).toHaveLength(1);
-    expect(differs[0]).toHaveAttribute('data-mismatch');
-    expect(within(group).getAllByTitle('Your recording matches here')).toHaveLength(2);
-    expect(screen.getByText(/Native: starts low, rises, then falls after し\. You: starts high/)).toBeInTheDocument();
+  it('draws the native and your contour for a phrase, with the kana under it and no H/L labels', () => {
+    const { container } = render(<PhrasePitchView result={result([row()])} hasLearner />);
+    expect(screen.getByRole('img', { name: 'Pitch of はしが, native and yours' })).toBeInTheDocument();
+    expect(container.querySelectorAll('polyline.apg-line-native')).toHaveLength(1);
+    expect(container.querySelectorAll('polyline.apg-line-attempt')).toHaveLength(1);
+    expect(['は', 'し', 'が'].every((k) => screen.getAllByText(k).length > 0)).toBe(true);
+    expect(screen.queryByText('H')).toBeNull();
+    expect(screen.queryByText(/phrases match/)).toBeNull();
   });
 
-  it('counts matching phrases in the header', () => {
-    render(
-      <PhrasePitchView
-        result={result([row({ status: 'match' }), row({ text: 'たかい', status: 'different' }), row({ text: 'x', status: 'weak-native' })])}
-        hasLearner
-      />,
-    );
-    expect(screen.getByText('1 of 2 phrases match')).toBeInTheDocument();
-  });
-
-  it('shows only the native side without a learner recording', () => {
-    render(<PhrasePitchView result={result([row({ learner: null, learnerLevels: null, status: 'no-learner' })])} hasLearner={false} />);
+  it('shows only the native contour without a learner recording', () => {
+    const { container } = render(<PhrasePitchView result={result([row({ learnerLevels: null, learnerVoicedMorae: null })])} hasLearner={false} />);
     expect(screen.getByText('Phrase pitch — native')).toBeInTheDocument();
-    expect(screen.queryByTitle('Your recording differs here')).toBeNull();
-    expect(screen.getByText('Native: starts low, rises, then falls after し.')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Pitch of はしが, native' })).toBeInTheDocument();
+    expect(container.querySelectorAll('polyline.apg-line-attempt')).toHaveLength(0);
   });
 
   it('explains when the learner recording could not be lined up', () => {
-    render(<PhrasePitchView result={result([row({ learner: null, learnerLevels: null, status: 'no-learner' })], { learnerUnavailable: true })} hasLearner />);
+    render(<PhrasePitchView result={result([row({ learnerLevels: null, learnerVoicedMorae: null })], { learnerUnavailable: true })} hasLearner />);
     expect(screen.getByText(/couldn’t be lined up with the native words/)).toBeInTheDocument();
-    expect(screen.queryByTitle('Your recording differs here')).toBeNull();
   });
 
   it('notes when some of your words were only timed roughly', () => {
@@ -70,18 +50,13 @@ describe('PhrasePitchView', () => {
   });
 
   it('says how many sounds had a clear pitch when yours could not be measured', () => {
-    render(<PhrasePitchView result={result([row({ learner: null, learnerLevels: null, status: 'no-learner', learnerVoicedMorae: 1 })])} hasLearner />);
+    render(<PhrasePitchView result={result([row({ learnerLevels: null, learnerVoicedMorae: 1 })])} hasLearner />);
     expect(screen.getByText(/only 1 of 3 sounds had a clear pitch/)).toBeInTheDocument();
   });
 
   it('says why nothing is shown when the native timing is unavailable', () => {
     render(<PhrasePitchView result={result([], { unavailable: 'no-reference-timing' })} hasLearner />);
     expect(screen.getByText(/none of this sentence’s words could be/)).toBeInTheDocument();
-  });
-
-  it('gives a plain line for a flat learner phrase', () => {
-    render(<PhrasePitchView result={result([row({ status: 'flat' })])} hasLearner />);
-    expect(screen.getByText(/Your pitch is flat here\. The native phrase starts low/)).toBeInTheDocument();
   });
 
   it('sends a report with the note and confirms', async () => {
