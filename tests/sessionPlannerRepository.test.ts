@@ -901,9 +901,15 @@ describe('Learning Orchestrator repository layer', () => {
     await recordReview({ studyItemId: clozeItem.id, rating: 'again', contextSentenceId: missedSentence.id });
     await recordReview({ studyItemId: clozeItem.id, rating: 'hard', contextSentenceId: missedSentence.id });
 
+    // Sentence-led flow (default) pauses cards, so a stale miss must not pin a sentence to the front.
+    await updateSettings({ sentenceLedFlow: true });
+    const pausedMiss = await getSessionPlannerInput(60);
+    expect(pausedMiss.shadowCandidates.every((candidate) => !candidate.reason.startsWith('Missed in review'))).toBe(true);
+
+    await updateSettings({ sentenceLedFlow: false });
     const afterMiss = await getSessionPlannerInput(60);
     expect(afterMiss.shadowCandidates[0]?.sentenceId).toBe(missedSentence.id);
-    expect(afterMiss.shadowCandidates[0]?.reason).toBe('Missed in review — reinforce with shadowing');
+    expect(afterMiss.shadowCandidates[0]?.reason).toBe('Missed in review — not shadowed yet');
   });
 
   it('flags a grammar_completion item with crossActivityMissBoost once its sentence\'s sentence_transformation card is missed twice (cross-activity error routing)', async () => {

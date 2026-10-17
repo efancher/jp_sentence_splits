@@ -10595,8 +10595,15 @@ async function getRecentlyMissedClozeSentenceIds(): Promise<Set<string>> {
  * imitating pronunciation. A sentence with a just-
  * missed `cloze` card floats to the front of this otherwise fewest-attempts
  * order (`getRecentlyMissedClozeSentenceIds`, cross-activity error routing).
+ * The boost is skipped when `routeClozeMisses` is false (cards paused): no new
+ * cloze reviews can clear a stale "missed twice" state, so it would pin the
+ * same sentences to the front of every session.
  */
-async function findShadowCandidates(limit: number, activeSentenceIds: Set<string>): Promise<ShadowCandidate[]> {
+async function findShadowCandidates(
+  limit: number,
+  activeSentenceIds: Set<string>,
+  routeClozeMisses = true,
+): Promise<ShadowCandidate[]> {
   if (activeSentenceIds.size === 0) return [];
   const db = getDb();
   const activeIds = [...activeSentenceIds];
@@ -10611,7 +10618,7 @@ async function findShadowCandidates(limit: number, activeSentenceIds: Set<string
     db.attempts.where('sentenceId').anyOf(sentenceIdsWithAudio).toArray(),
     db.sentences.bulkGet(sentenceIdsWithAudio),
     db.bookSentences.where('sentenceId').anyOf(sentenceIdsWithAudio).toArray(),
-    getRecentlyMissedClozeSentenceIds(),
+    routeClozeMisses ? getRecentlyMissedClozeSentenceIds() : Promise.resolve(new Set<string>()),
   ]);
   const attemptCountBySentenceId = new Map<string, number>();
   for (const attempt of attempts) {
@@ -10637,7 +10644,7 @@ async function findShadowCandidates(limit: number, activeSentenceIds: Set<string
       bookId: bookIdBySentenceId.get(candidate.sentenceId),
       label: candidate.sentence.japanese.slice(0, 24),
       reason: candidate.recentlyMissedCloze
-        ? 'Missed in review — reinforce with shadowing'
+        ? `Missed in review — ${shadowAttemptSummary(candidate.attemptCount).toLowerCase()}`
         : shadowAttemptSummary(candidate.attemptCount),
     }));
 }
@@ -10894,6 +10901,7 @@ export async function getSessionPlannerInput(
     : await findShadowCandidates(
         SHADOW_CANDIDATE_LIMIT + exclude.sentenceIds.size,
         await activeSentenceIdsForShadowing(5),
+        !legacyPaused,
       );
 
   const exploreCandidates = exploreCandidatesRaw
