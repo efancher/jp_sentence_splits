@@ -8,7 +8,7 @@
  */
 import type { StructureDraftChunk } from '../domain/types';
 
-import { chunksMatchSource } from './chunking';
+import { chunksMatchSource, unsafeChunkBoundaries } from './chunking';
 import type { PreparationContext } from './episodePreparation';
 import { ROLE_GUIDE_GROUPS } from './roleGuide';
 
@@ -29,6 +29,10 @@ export function buildStructureInstructions(): string[] {
     'EVERY chunk, including ones that are not vocabulary words: connectives, fixed expressions, counters and particles ("もう一つは" =',
     '"another one, as for"; "何かを" = "something (object)"). Keep the Japanese word order of the idea (e.g. "writing-or-so thing, right"),',
     'show what a particle contributes, and prefer a short fragment over a full sentence.',
+    'Keep compound particles intact, including について, については, についても, にとって, にとっては, にとっても, によると and によれば.',
+    'Keep fixed expressions intact: なんとか, とっても, もちろん, とりあえず, どうやって. Their internal kana are not separate particles.',
+    'Keep quoted connectives such as 「でもね」と together; do not attach their beginning to the preceding clause or invent a でも-car.',
+    'A relative clause and its head noun may stay in one natural chunk; do not split merely to make a question answer selectable.',
     'Do not use quotation marks inside a gloss.',
   ];
 }
@@ -74,6 +78,14 @@ export function parseStructure(
     else if (!chunksMatchSource(chunks.map((chunk) => chunk.japanese), sentence.japanese)) {
       rejected.push({ handle, reason: 'The chunks do not rebuild the sentence exactly.' });
     } else drafts.set(sentence.id, chunks);
+  }
+  for (const [id, chunks] of drafts) {
+    const sentence = context.sentences.find((item) => item.id === id)!;
+    const issues = unsafeChunkBoundaries(chunks.map((chunk) => chunk.japanese), sentence.japanese);
+    if (issues.length) {
+      drafts.delete(id);
+      rejected.push({ handle: `S${context.sentences.indexOf(sentence) + 1}`, reason: issues.join(' ') });
+    }
   }
   return { drafts, rejected };
 }
@@ -128,6 +140,14 @@ export function parseStructureLines(reply: string, context: PreparationContext):
     } else if (!chunksMatchSource(chunks.map((chunk) => chunk.japanese), sentence.japanese)) {
       if (!rejected.some((item) => item.handle === handle)) rejected.push({ handle, reason: 'The chunks do not rebuild the sentence exactly (cut off?).' });
     } else drafts.set(sentence.id, chunks);
+  }
+  for (const [id, chunks] of drafts) {
+    const sentence = context.sentences.find((item) => item.id === id)!;
+    const issues = unsafeChunkBoundaries(chunks.map((chunk) => chunk.japanese), sentence.japanese);
+    if (issues.length) {
+      drafts.delete(id);
+      rejected.push({ handle: `S${context.sentences.indexOf(sentence) + 1}`, reason: issues.join(' ') });
+    }
   }
   return { drafts, rejected };
 }

@@ -4,6 +4,8 @@ import { previewHeuristicChunks } from '../src/lib/analysisHelpers';
 import {
   chunkJapaneseSentence,
   roleForChunk,
+  splitTrailingParticle,
+  unsafeChunkBoundaries,
 } from '../src/lib/chunking';
 
 describe('chunkJapaneseSentence 紙 / 髪 passage', () => {
@@ -159,5 +161,61 @@ describe('chunkJapaneseSentence assistant-reported boundary fixes', () => {
   it('does not peel よく/また from longer words', () => {
     expect(chunkJapaneseSentence('よくないことを言う。')[0]).toBe('よくないことを');
     expect(chunkJapaneseSentence('九時または十時に行く。')).toEqual(['九時または', '十時に', '行く。']);
+  });
+});
+
+
+describe('fixed expressions and quoted connectives', () => {
+  it('keeps quoted でもね intact without changing noun + でも', () => {
+    const source = 'お母さん鳥は、「そうね」と答えた後、「でもね」と続けました。';
+    const chunks = chunkJapaneseSentence(source);
+    expect(chunks).toEqual(['お母さん鳥は、', '「そうね」と', '答えた後、', '「でもね」と', '続けました。']);
+    expect(chunks.join('')).toBe(source);
+    expect(roleForChunk('「でもね」と', false)).toBe('と-car');
+    expect(roleForChunk('でも、', false)).toBe('clause connector');
+    expect(chunkJapaneseSentence('雨でも行きます。')).toEqual(['雨でも', '行きます。']);
+    expect(roleForChunk('雨でも', false)).toBe('でも-car');
+  });
+  it('recognizes a real trailing particle after a fixed adverb', () => {
+    expect(roleForChunk('なんとか飛ぶことが', false)).toBe('Aが');
+    expect(roleForChunk('なんとか', false)).toBe('modifier/content');
+  });
+  it('flags internal cuts, but permits a complete expression and a fused relative clause', () => {
+    expect(unsafeChunkBoundaries(['なんと', 'か飛ぶことが', 'できました。'], 'なんとか飛ぶことができました。')).toHaveLength(1);
+    expect(unsafeChunkBoundaries(['「でも', 'ね」と', '言いました。'], '「でもね」と言いました。')).toHaveLength(1);
+    expect(unsafeChunkBoundaries(['なんとか', '飛ぶことが', 'できました。'], 'なんとか飛ぶことができました。')).toEqual([]);
+    expect(unsafeChunkBoundaries(['穴が', '空いている木を', '見つけた。'], '穴が空いている木を見つけた。')).toEqual([]);
+  });
+});
+
+
+describe('compound particle boundaries', () => {
+  it.each([
+    ['日本語については', 'については'],
+    ['日本語についても', 'についても'],
+    ['私にとっては', 'にとっては'],
+    ['私にとっても', 'にとっても'],
+    ['予報によると', 'によると'],
+    ['予報によれば', 'によれば'],
+  ])('keeps %s together and assigns its full particle role', (prefix, particle) => {
+    const source = `${prefix}大事です。`;
+    expect(chunkJapaneseSentence(source)).toEqual([prefix, '大事です。']);
+    expect(splitTrailingParticle(prefix)).toEqual([prefix.slice(0, -particle.length), particle]);
+    expect(roleForChunk(prefix, false)).toBe(`${particle}-car`);
+    expect(unsafeChunkBoundaries([prefix, '大事です。'], source)).toEqual([]);
+  });
+
+  it.each(['について', 'については', 'についても', 'にとって', 'にとっては', 'にとっても', 'によると', 'によれば'])
+    ('rejects every internal cut in %s', (particle) => {
+      for (let at = 1; at < particle.length; at++) {
+        expect(unsafeChunkBoundaries(['家族' + particle.slice(0, at), particle.slice(at), '話します。'], `家族${particle}話します。`)).toHaveLength(1);
+      }
+      expect(roleForChunk(particle + '。', true)).toBe(`${particle}-car`);
+      expect(unsafeChunkBoundaries(['家族', particle, '話します。'], `家族${particle}話します。`)).toEqual([]);
+    });
+
+  it('keeps ordinary case particles and verb constructions available', () => {
+    expect(chunkJapaneseSentence('学校に行きます。')).toEqual(['学校に', '行きます。']);
+    expect(chunkJapaneseSentence('駅に着いて、話します。')).toEqual(['駅に', '着いて、', '話します。']);
   });
 });

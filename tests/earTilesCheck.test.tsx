@@ -4,7 +4,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { EarTilesCheck } from '../src/components/EarTilesCheck';
 import type { SentenceAudio, VocabularySuggestion } from '../src/domain/types';
 import { buildCheckPuzzle } from '../src/lib/earTiles';
-import { withAppProviders } from '../src/test/providers';
+// These tests cover tile evidence, not audio/provider initialization. Avoid starting
+// unrelated IndexedDB work that can outlive synchronous tile assertions.
+vi.mock('../src/components/NativeAudioButton', () => ({
+  NativeAudioButton: ({ displayLabel }: { displayLabel: string }) => <button type="button">{displayLabel}</button>,
+}));
 
 const PIECES: [string, string][] = [
   ['私', '代名詞'],
@@ -37,7 +41,7 @@ function setup() {
   const puzzle = buildCheckPuzzle(makeSentence(), 'seed')!;
   const onRecord = vi.fn();
   const onFinish = vi.fn();
-  render(withAppProviders(<EarTilesCheck sentenceId="s1" visitId="v1" puzzle={puzzle} audio={audio} onRecord={onRecord} onFinish={onFinish} />));
+  render(<EarTilesCheck sentenceId="s1" visitId="v1" puzzle={puzzle} audio={audio} onRecord={onRecord} onFinish={onFinish} />);
   return { puzzle, onRecord, onFinish };
 }
 

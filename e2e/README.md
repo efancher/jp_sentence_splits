@@ -47,7 +47,7 @@ Keep the image version in step with Playwright when upgrading dependencies.
 
 `.github/workflows/extras-tests.yml` runs on pull requests, pushes to `main`,
 and manually from Actions → **Extras workflow tests**. It runs the assistant-run
-Python API tests and `book-extras.spec.ts` in Chromium and WebKit. The existing
+Python API tests and `book-extras.spec.ts` plus `clause-pilot.spec.ts` in Chromium and WebKit. The existing
 Deploy workflow's `npm run check` also picks up the extras unit/component tests.
 These checks need no repository secrets: API calls are mocked, browser data is
 synthetic, and the Python runner is faked. Browser failures upload `test-results/`
@@ -75,3 +75,10 @@ and stopping audio on close (including the detached practice audio element).
 `native-practice.png` captures the whole-sentence view in each project's output.
 These checks do not validate pitch or alignment against the actual native
 recording, and emulated WebKit is not a physical iPhone playback check.
+
+The clause pilot checks phone and desktop layouts, sub-chunk highlighting,
+choice/reveal/dispute, feedback persistence after reload, and unchanged review,
+gloss-decision, and study-item counts. It uses synthetic local sentences matching
+the curated reference text; no production account or API is required.
+
+The clause preview suite also checks unprepared/reviewed notices and a long active-book question at both viewport sizes, with unchanged study/review counts.

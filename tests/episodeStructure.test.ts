@@ -149,3 +149,37 @@ describe('structure prompt glosses', () => {
     expect(STRUCTURE_LINE_EXAMPLE).toContain('もう一つは | topic は | another one, as for');
   });
 });
+
+
+describe('fixed-expression import guard', () => {
+  const ctx: PreparationContext = { title: 'pilot', sentences: [{ id: 's', japanese: '「でもね」と言いました。' }], vocabulary: [], grammar: [] };
+  it('rejects a text-preserving but misleading split in both reply formats', () => {
+    const chunks = [{ text: '「でも', role: 'でも-car' }, { text: 'ね」と', role: 'と-car' }, { text: '言いました。', role: 'engine' }];
+    const json = parseStructure({ S1: chunks }, ctx);
+    const lines = parseStructureLines(chunks.map((c) => `S1 | ${c.text} | ${c.role}`).join('\n'), ctx);
+    for (const parsed of [json, lines]) {
+      expect(parsed.drafts.size).toBe(0);
+      expect(parsed.rejected[0]?.reason).toContain('でもね');
+    }
+  });
+});
+
+
+it('rejects split について in both formats while accepting an intact expression', () => {
+  const ctx: PreparationContext = { title: 'compound', sentences: [{ id: 's', japanese: '家族について話します。' }], vocabulary: [], grammar: [] };
+  for (const parts of [['家族に', 'ついて', '話します。'], ['家族', 'について', '話します。']]) {
+    const parsed = [
+      parseStructure({ S1: parts.map((text) => ({ text, role: 'chunk' })) }, ctx),
+      parseStructureLines(parts.map((text) => `S1 | ${text} | chunk`).join('\n'), ctx),
+    ];
+    for (const result of parsed) {
+      if (parts[0] === '家族に') {
+        expect(result.drafts.size).toBe(0);
+        expect(result.rejected[0]?.reason).toContain('について');
+      } else {
+        expect(result.drafts.get('s')).toHaveLength(3);
+        expect(result.rejected).toEqual([]);
+      }
+    }
+  }
+});

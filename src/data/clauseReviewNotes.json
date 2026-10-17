@@ -1,0 +1,197 @@
+[
+  {
+    "id": "sent_4a62a0dc-clause-note-v1",
+    "source": "みなさん、こんにちは。",
+    "reason": "This greeting has no useful clause-attachment contrast on its own."
+  },
+  {
+    "id": "sent_c47113ab-clause-note-v1",
+    "source": "またねー。",
+    "reason": "This farewell is too short for a useful attachment question."
+  },
+  {
+    "id": "sent_0dce47c2-clause-note-v1",
+    "source": "あかりです。",
+    "reason": "This self-introduction has only one stated content expression and no useful attachment contrast."
+  },
+  {
+    "id": "sent_bedee06a-clause-note-v1",
+    "source": "例えば、犬、ネズミ、ニワトリ、アヒルなどです。",
+    "reason": "This list depends on the previous sentence for its unstated category; no standalone attachment question was selected."
+  },
+  {
+    "id": "sent_0ae57675-clause-note-v1",
+    "source": "またね。",
+    "reason": "This farewell has no useful clause-attachment contrast."
+  },
+  {
+    "id": "sent_f584f744-clause-note-v1",
+    "source": "例えば、お餅、どら焼き、お団子、羊羹などのことです。",
+    "reason": "This example list relies on the previous sentence for its category; no useful standalone contrast was selected."
+  },
+  {
+    "id": "sent_794486c0-clause-note-v1",
+    "source": "じゃーねー！",
+    "reason": "This farewell has no useful attachment contrast."
+  },
+  {
+    "id": "sent_270fdab6-clause-note-v1",
+    "source": "話してみましょう。",
+    "reason": "This short invitation contains only one action and no useful attachment contrast."
+  },
+  {
+    "id": "sent_6a266f45-clause-note-v1",
+    "source": "じゃあね。",
+    "reason": "This farewell has no useful attachment contrast."
+  },
+  {
+    "id": "sent_d51e885f-clause-note-v1",
+    "source": "ご視聴ありがとうございました。",
+    "reason": "This conventional thanks has no useful clause-attachment contrast."
+  },
+  {
+    "id": "sent_4fe57737-clause-note-v1",
+    "source": "そして、コーヒーも飲みます。",
+    "reason": "This short additive statement has only one stated argument; no useful attachment contrast was selected."
+  },
+  {
+    "id": "sent_c2afbd27-clause-note-v1",
+    "source": "時々、カプチーノも作ります。",
+    "reason": "This short additive statement has only one stated argument; no useful attachment contrast was selected."
+  },
+  {
+    "id": "sent_eb8bb4bc-clause-note-v1",
+    "source": "スロージャパニーズ。",
+    "reason": "This is the programme title, not a clause with an attachment contrast."
+  },
+  {
+    "id": "sent_f66d1cb3-clause-note-v1",
+    "source": "クリスマス？",
+    "reason": "This one-word prompt has no attachment contrast."
+  },
+  {
+    "id": "sent_9e2eda23-clause-note-v1",
+    "source": "お祭り？",
+    "reason": "This one-word prompt has no attachment contrast."
+  },
+  {
+    "id": "sent_efd868a2-clause-note-v1",
+    "source": "私ですか？",
+    "reason": "This short conversational prompt has no useful attachment contrast."
+  },
+  {
+    "id": "sent_c5e0da3e-clause-note-v1",
+    "source": "またねー！",
+    "reason": "This farewell has no useful attachment contrast."
+  },
+  {
+    "id": "sent_2d5c2df9-clause-note-v1",
+    "source": "お米、パン、パスタ、トマト、にんじん、にんにく、レモン、水などです。",
+    "reason": "This list has no stated predicate or attachment contrast beyond naming the items."
+  },
+  {
+    "id": "sent_09c5b131-clause-note-v1",
+    "source": "食べ物、飲み物以外は。",
+    "reason": "This topic fragment has no predicate; its continuation is in the next sentence."
+  },
+  {
+    "id": "sent_dee1a6d5-clause-note-v1",
+    "source": "例えば、イタリア、スペイン、ノルウェー、スウェーデン、フィンランド、モロッコ、カナリア諸島などです。",
+    "reason": "This example list needs the previous sentence to supply its category; no standalone attachment contrast was selected."
+  },
+  {
+    "id": "sent_03ebab66-clause-note-v1",
+    "source": "大好きです。",
+    "reason": "The thing being liked is omitted; the context supplies it."
+  },
+  {
+    "id": "sent_80569682-clause-note-v1",
+    "source": "次に、ノルウェー、スウェーデン、フィンランドです。",
+    "reason": "This short list introduces the next topic without a useful attachment contrast."
+  },
+  {
+    "id": "sent_dfe3a2c8-clause-note-v1",
+    "source": "さて、モロッコですが。",
+    "reason": "This introductory fragment stops before the statement about Morocco."
+  },
+  {
+    "id": "sent_10040ca4-clause-note-v1",
+    "source": "最後に、カナリア諸島です。",
+    "reason": "This list introduction has only one stated content phrase."
+  },
+  {
+    "id": "sent_abb29190-clause-note-v1",
+    "source": "それではまた次回。",
+    "reason": "This farewell has no useful attachment contrast."
+  },
+  {
+    "id": "sent_486cd03b-clause-note-v1",
+    "source": "じゃあねー。",
+    "reason": "This farewell has no useful attachment contrast."
+  },
+  {
+    "id": "sent_1897a0ce-clause-note-v1",
+    "source": "雪もあります。",
+    "reason": "This short additive statement has only one stated content expression."
+  },
+  {
+    "id": "sent_16b53218-clause-note-v1",
+    "source": "緑茶ですか？",
+    "reason": "This one-word prompt has no attachment contrast."
+  },
+  {
+    "id": "sent_a1b22aa9-clause-note-v1",
+    "source": "それでは、また次回。",
+    "reason": "This farewell has no useful attachment contrast."
+  },
+  {
+    "id": "sent_9f1554c0-clause-note-v1",
+    "source": "ルールは少し難しいですが。",
+    "reason": "The contrast after が is unfinished; read it with the following sentence."
+  },
+  {
+    "id": "sent_3a60c4de-clause-note-v1",
+    "source": "それでは、また来週。",
+    "reason": "This farewell has no useful attachment contrast."
+  },
+  {
+    "id": "sent_b9cdf6e9-clause-note-v1",
+    "source": "またお会いしましょう。",
+    "reason": "This brief invitation to meet again has no useful attachment contrast."
+  },
+  {
+    "id": "sent_dd80f6db-clause-note-v1",
+    "source": "それではみなさん、メリークリスマス！",
+    "reason": "This seasonal greeting has no useful attachment contrast."
+  },
+  {
+    "id": "sent_8f483cf7-clause-note-v1",
+    "source": "それではまた来週。",
+    "reason": "This farewell has no useful attachment contrast."
+  },
+  {
+    "id": "sent_3a8eee4f-clause-note-v1",
+    "source": "また来週！",
+    "reason": "This farewell has no useful attachment contrast."
+  },
+  {
+    "id": "sent_2d72ad94-clause-note-v1",
+    "source": "みなさん、あけましておめでとうございます。",
+    "reason": "This New Year greeting has no useful attachment contrast."
+  },
+  {
+    "id": "sent_ea38fa18-clause-note-v1",
+    "source": "日本語だけではなくて。",
+    "reason": "This contrast fragment lacks its second half and predicate."
+  },
+  {
+    "id": "sent_7680bf4a-clause-note-v1",
+    "source": "今年こそ少なくとも1曲はリリースしたいです。",
+    "reason": "This emphatic goal contains one stated item count; no useful attachment contrast was selected."
+  },
+  {
+    "id": "sent_9425d754-clause-note-v1",
+    "source": "食べ物はどうですか？",
+    "reason": "This short conversational prompt has no useful attachment contrast."
+  }
+]

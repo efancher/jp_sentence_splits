@@ -34,7 +34,7 @@ jobs:
         run: python -m pytest tests/test_assist_run_api.py -q
 
   browsers:
-    name: Extras in Chromium and WebKit
+    name: Extras and clause preview in Chromium and WebKit
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -52,7 +52,7 @@ jobs:
           # These tests build a local-only app served from /, without sync secrets.
           GITHUB_ACTIONS: 'false'
           CI: 'true'
-        run: npx playwright test e2e/book-extras.spec.ts --project=chromium --project=webkit --workers=1
+        run: npx playwright test e2e/book-extras.spec.ts e2e/clause-pilot.spec.ts --project=chromium --project=webkit --workers=1
       - name: Upload browser failure artifacts
         if: failure()
         uses: actions/upload-artifact@v4
