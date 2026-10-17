@@ -2284,7 +2284,9 @@ export async function mergeBookIntoChapter(options: {
   sourceBookId: string;
   targetBookId: string;
   chapterTitle?: string;
-}): Promise<{ chapterId: string; movedCount: number; collisionCount: number }> {
+  /** Fill this existing chapter of the target instead of adding a new one. */
+  intoChapterId?: string;
+}): Promise<{ chapterId: string; movedCount: number; collisionCount: number; reusedChapter: boolean }> {
   const db = getDb();
   const { sourceBookId, targetBookId } = options;
   if (sourceBookId === targetBookId) {
@@ -2297,6 +2299,7 @@ export async function mergeBookIntoChapter(options: {
   let movedMemberships: BookSentence[] = [];
   let promotedTargets: BookSentence[] = [];
   let collisions: BookSentence[] = [];
+  let reusedChapter = false;
 
   await db.transaction('rw', db.books, db.bookSentences, async () => {
     const [source, target] = await Promise.all([
@@ -2326,15 +2329,22 @@ export async function mergeBookIntoChapter(options: {
     );
 
     const targetChapters = target.chapters ?? [];
-    chapter = {
+    const title =
+      (options.chapterTitle ?? source.title).trim() ||
+      `Chapter ${targetChapters.length + 1}`;
+    const sourceId = source.sourceUrl ?? source.sourceKey ?? undefined;
+    const reusable = options.intoChapterId
+      ? targetChapters.find((item) => item.id === options.intoChapterId)
+      : findReusableChapter(targetChapters, targetMemberships, { title, sourceId });
+    if (options.intoChapterId && !reusable) {
+      throw new Error('Chapter not found in the target book');
+    }
+    reusedChapter = Boolean(reusable);
+    chapter = reusable ?? {
       id: createId('chapter'),
-      title:
-        (options.chapterTitle ?? source.title).trim() ||
-        `Chapter ${targetChapters.length + 1}`,
+      title,
       position: targetChapters.length,
-      ...(source.sourceUrl || source.sourceKey
-        ? { sourceId: source.sourceUrl ?? source.sourceKey! }
-        : {}),
+      ...(sourceId ? { sourceId } : {}),
       ...(source.createdAt ? { sourceDate: source.createdAt } : {}),
     };
 
@@ -2374,7 +2384,7 @@ export async function mergeBookIntoChapter(options: {
 
     updatedTarget = {
       ...target,
-      chapters: [...targetChapters, chapter],
+      chapters: reusedChapter ? targetChapters : [...targetChapters, chapter],
       updatedAt: timestamp,
     };
     await db.books.put(updatedTarget);
@@ -2406,7 +2416,27 @@ export async function mergeBookIntoChapter(options: {
     chapterId: chapter!.id,
     movedCount: movedMemberships.length,
     collisionCount: collisions.length,
+    reusedChapter,
   };
+}
+
+/**
+ * An empty chapter of the target that the incoming book was meant to fill —
+ * typically the placeholder a feed listing created for an episode that was then
+ * imported as a standalone book. Matches by source id first, then by exact
+ * title, and only when exactly one candidate matches (never guesses).
+ */
+export function findReusableChapter(
+  chapters: readonly BookChapter[],
+  memberships: readonly Pick<BookSentence, 'chapterId'>[],
+  incoming: { title: string; sourceId?: string },
+): BookChapter | undefined {
+  const used = new Set(memberships.map((item) => item.chapterId));
+  const empty = chapters.filter((chapter) => !used.has(chapter.id));
+  const bySource = incoming.sourceId ? empty.filter((chapter) => chapter.sourceId === incoming.sourceId) : [];
+  if (bySource.length) return bySource.length === 1 ? bySource[0] : undefined;
+  const byTitle = empty.filter((chapter) => chapter.title.trim() === incoming.title);
+  return byTitle.length === 1 ? byTitle[0] : undefined;
 }
 
 export async function reorderBookSentences(

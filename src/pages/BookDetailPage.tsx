@@ -892,7 +892,7 @@ export function BookDetailPage() {
                     (book) => book.id === mergeTargetBookId,
                   )?.title;
                   const ok = window.confirm(
-                    `Move all ${data.rows.length} sentence(s) from "${data.book.title}" into "${targetTitle}" as a new chapter? This book will be deleted afterwards.`,
+                    `Move all ${data.rows.length} sentence(s) from "${data.book.title}" into "${targetTitle}" (filling its matching empty chapter if it has one, otherwise as a new chapter)? This book will be deleted afterwards.`,
                   );
                   if (!ok) return;
                   setMerging(true);
@@ -904,7 +904,7 @@ export function BookDetailPage() {
                     });
                     navigate(`/books/${mergeTargetBookId}`);
                     setSnack({
-                      message: `Moved ${result.movedCount} sentence(s) into "${targetTitle}" as a new chapter${
+                      message: `Moved ${result.movedCount} sentence(s) into "${targetTitle}" ${result.reusedChapter ? 'filling its existing chapter' : 'as a new chapter'}${
                         result.collisionCount
                           ? ` (${result.collisionCount} already present there, kept the existing copy)`
                           : ''
