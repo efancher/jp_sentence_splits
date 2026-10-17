@@ -10,6 +10,18 @@ Last updated: 2026-10-17.
 
 ## Where things stand
 
+- **2026-10-17 — Remix game (scope A of the sentence-production bridge).** New
+  `/play` game: hear a native clip, see its skeleton with plain-English slot
+  hints, swap one noun slot then two using the English of a confirmed noun the
+  learner types in Japanese. Slots come from UniDic tokens (`findRemixSkeleton`),
+  not Cure-Dolly chunks; swap nouns from `buildRemixNounPool` (unique first gloss).
+  Read-only vs FSRS, local-only game rounds, no schema/sync changes; refactored
+  `getEarTilesCandidates` into a shared `loadConfirmedAudioSentences` loader.
+  Probe on a prod dump: ~65 of 2,837 sentences have a skeleton (strict:
+  single-clause), 344 usable nouns — a small but real pool; widening the clause
+  filter is the lever if rounds run dry. Verb swap and free remix/saved remixes
+  remain deferred (ROADMAP). Tests: `src/lib/remix.test.ts`.
+
 - **2026-10-17 — Native pitch preparation (branch, not deployed).** ShadowPage
   offers “Prepare with the native recording” before mic/attempt controls:
   recording-derived mora pitch dots, playback highlighting, pause-based chunks,

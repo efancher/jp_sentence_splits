@@ -1783,7 +1783,7 @@ hints.
   to fit) → free remix on the same skeleton about the learner's own life.
   Saved remixes appear beside native sentences. Reuses material already heard
   and shadowed, so only the construction is new.
-  **Status 2026-10-17: scoped, not built. Scope A chosen** (rungs 1–2 only:
+  **Status 2026-10-17: scope A built** (the `/play` Remix game, `src/lib/remix.ts`; translation handling = slot hints during play, full translation after). Scope A = (rungs 1–2 only:
   swap one / two slots, as a `/play` game; read-only vs FSRS, local-only
   rounds; no schema/sync changes). Findings from the design pass:
   - The drill the learner likes is Ear Tiles (`earTiles.ts`), whose tiles
