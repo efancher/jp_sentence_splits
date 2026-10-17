@@ -349,17 +349,17 @@ Original phases match `docs/UNIFIED_APP_ARCHITECTURE.md` §15.
 
 ## In progress
 
-- [~] **Sentence-membership integrity (class of bug).** Detector, guards and
-  a dry-run repair landed on `feat/chapter-review` (STATUS 2026-09-30). Left:
-  user OK to run `repair:dangling-sentence-rows --apply` and fix Teppei #1461's
-  order; merge applies the cascade-soft-delete migration; decide whether a
-  dropped delete-op conflict should auto-retry; consider running
-  `check:sentence-integrity` in CI or a scheduled workflow like
-  `check:duplicate-books`.
+- [~] **Sentence-membership integrity (class of bug).** Detector, guards, the
+  cascade-soft-delete migration and a manual `check-sentence-integrity.yml`
+  workflow are in; prod has 0 dangling memberships / orphan clips (2026-10-17).
+  Left: 8 chapters out of recording order (`npm run check:sentence-integrity`),
+  incl. Teppei #1461 (outro 「それでは、またね。」 sits at position 420 with a
+  clip at 276000 ms; needs a user call on the right clip/position); decide
+  whether a dropped delete-op conflict should auto-retry.
 
 - [~] **Passage-first learning and reviews.** Plan in
   `docs/SENTENCE_FIRST_LEARNING_PLAN.md`. First slice implemented on
-  `feat/chapter-review` (not deployed): full-chapter vocabulary reading/cloze
+  `feat/chapter-review` (merged to main): full-chapter vocabulary reading/cloze
   and grammar-recognition display, verified by unit/integration and container
   browser tests. Other activities and the learning/preparation model remain.
   Browser test instructions: `e2e/README.md`.
