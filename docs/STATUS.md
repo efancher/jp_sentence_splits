@@ -10,6 +10,22 @@ Last updated: 2026-10-17.
 
 ## Where things stand
 
+- **2026-10-17 — Remix: sentence-led gating (no confirmed vocabulary, no card history).**
+  Remix showed 0 candidates because it inherited two gates that cannot be met for
+  new material under the sentence-led flow (2026-10-02: vocabulary cards neither
+  shown nor seeded): confirmed vocabulary (rare — ~15 analyses confirmed in the last
+  week vs 1,400 sentences imported in October) and `filterToIntroducedSentenceIds`
+  (every word reviewed on a vocab card). Remix now uses `filterToMetSentenceIds`
+  (walked through / started in a book / has a sentence card; flow off falls back to
+  the old rule), skips the confirmed requirement
+  (`loadNativeAudioSentences(..., { requireConfirmed: false, sentenceLedIntroduced: true })`)
+  and draws swap nouns from vocabulary linked to met sentences. **Known, not fixed:**
+  the other `/play` games still call `filterToIntroducedSentenceIds`, so they are
+  starved of post-10-02 sentences too (changing the shared filter breaks 17 existing
+  tests that pin the old rule — needs a deliberate decision). Test:
+  `tests/gamesIntroducedSentences.test.ts`. Prod probe: skeleton sentences with audio
+  ≤10 s and a translation: 3 confirmed → 20 before the met-sentence filter.
+
 - **2026-10-17 — Remix game (scope A of the sentence-production bridge).** New
   `/play` game: hear a native clip, see its skeleton with plain-English slot
   hints, swap one noun slot then two using the English of a confirmed noun the

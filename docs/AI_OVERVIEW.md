@@ -1382,7 +1382,7 @@ shortcut ("Play a round") and the `/play` hub. Currently ten activities:
   plain-English role hint — "what the action is done to" — plus the noun's
   stored English, the verb marked "stays the same"), then **swap one slot**, then
   **swap two**. The learner is shown the *English* of a replacement noun from
-  their own confirmed vocabulary and types the Japanese (kanji or kana); one
+  their own sentences' vocabulary and types the Japanese (kanji or kana); one
   Check judges the stage, "Show the answer" gives up (0 points). 2 points per
   swap, −1 per miss. The swapped sentence is shown with a TTS "Hear it, then say
   it" button and a note that the meaning may be silly (checked structurally, not
@@ -1392,14 +1392,15 @@ shortcut ("Play a round") and the `/play` hub. Currently ten activities:
   auto-rating. A sentence qualifies when it is single-clause and verb-final with
   2–4 plain noun + case-particle slots (が/を/に/で/から/まで/は, distinct
   particles, no quotes, no formal/time nouns), has audio ≤10 s, a translation
-  and confirmed vocabulary; it is a candidate only if a puzzle can really be
+  and has been *met* (`filterToMetSentenceIds`: walked through / started in a book /
+  has a card — vocabulary confirmation and vocabulary-card history are not
+  required, since cards are paused under the sentence-led flow); it is a candidate only if a puzzle can really be
   built from the current noun pool (so the hub gate is satisfiable). The pool is
-  plain nouns from vocabulary linked to confirmed sentences whose first English
+  plain nouns from vocabulary linked to introduced sentences whose first English
   gloss is unique (the reverse English→Japanese ambiguity rule). Deliberately
   not built: verb swap (no verb→particle data) and free remix / saved remixes
   (would re-create the retired `grammar_production`); only native material feeds
-  the drills. About 65 of ~2,800 sentences qualify before audio/confirmation
-  gating (`scripts/remix-feasibility.ts` probes a JSON dump).
+  the drills. About 65 of ~2,800 sentences have a skeleton (20 with audio ≤10 s and a translation) (`scripts/remix-feasibility.ts` probes a JSON dump).
 - **Keystone** (`KeystoneGame.tsx`, `src/lib/keystone.ts`) — the confirmed-
   vocabulary no-card backlog's front door: each puzzle shows a few backlog
   words (confirmed, no study item yet) that appear in the active book's next
