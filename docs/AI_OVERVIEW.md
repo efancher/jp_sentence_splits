@@ -12,6 +12,15 @@ an edit, the same way any memory of this codebase should be checked.*
 
 ## Elevator pitch
 
+Shadowing includes native-only preparation before recording: open “Prepare with
+the native recording” for a kana pitch path, pause-based rehearsal chunks, and
+listen–repeat playback with adjustable speed and response time. Dots summarize
+measured pitch per phone-aligned mora; unreadable/unvoiced portions have no pitch
+target. A detail view shows the raw curve and mora boundaries on the audio time
+axis. No H/L is used in this preparation view or the shadow transcript; dictionary
+resources and attempt analysis retain their existing notation. Closing preparation,
+starting recording, or leaving the sentence cancels its playback and response gap.
+
 Satori Glossbook (repo `jp_sentence_splits`, package `satori-glossbook`) is
 a personal, single-user (with optional light multi-user sharing) Japanese-
 study progressive web app. It centers on **sentences**, not decks of

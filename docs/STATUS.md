@@ -10,6 +10,21 @@ Last updated: 2026-10-16.
 
 ## Where things stand
 
+- **2026-10-17 — Native pitch preparation (branch, not deployed).** ShadowPage
+  offers “Prepare with the native recording” before mic/attempt controls:
+  recording-derived mora pitch dots, playback highlighting, pause-based chunks,
+  pitch-preserving speed, and listen–repeat with an adjustable response gap.
+  Recording detail keeps real durations and breaks across unvoiced frames.
+  Phone-derived kana avoids character-proportion mapping; unreadable tokens stay
+  visible without invented subdivisions. No H/L in preparation; the shadow
+  transcript's dictionary H/L row is hidden. Automatic timing/pitch still need
+  perceptual review; a median dot summarizes rather than fully describes each
+  mora's movement. This does not change attempt scoring or dictionary resources.
+  Validation: 53 targeted model/playback/component/shadow-page tests and production
+  build pass. Chromium/WebKit E2E coverage added, but local execution is blocked
+  at browser launch by missing host libraries (`libnspr4`, GTK/GStreamer, etc.).
+  Native-recording perceptual review and physical iPhone playback remain unverified.
+
 - **2026-10-16 — Extras checks in GitHub Actions.** `extras-tests.yml` adds
   assistant-run API tests and Chromium/WebKit extras browser tests on pull
   requests, main pushes, and manual dispatch. No secrets or live services;

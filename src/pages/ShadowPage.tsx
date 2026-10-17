@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { AnalysisPanel } from '../components/AnalysisPanel';
+import { NativePitchPractice } from '../components/NativePitchPractice';
 import { AttemptPitchGrid } from '../components/AttemptPitchGrid';
 import { attemptsNeedingPhraseSnapshot, backfillPhraseSnapshots } from '../lib/backfillPhraseSnapshots';
 import { attemptPitchMetrics, describePitchMetrics, type AttemptPitchMetrics } from '../lib/attemptPitchGrid';
@@ -538,6 +539,7 @@ export function ShadowPage() {
                   japanese={sentence.japanese}
                   moraUnits={moraUnits}
                   sentenceId={sentence.id}
+                  showDictionaryPitch={false}
                   recordingElapsedMs={
                     isRecording && !isLoopingReps ? shadowing.recordingElapsedMs : undefined
                   }
@@ -631,6 +633,17 @@ export function ShadowPage() {
             </label>
           </div>
         </div>
+        {referenceAudio && !hideTranscript ? <NativePitchPractice
+          audio={referenceAudio}
+          japanese={sentence.japanese}
+          disabled={isRecording || loopBusy}
+          onStart={() => {
+            referenceAudioRef.current?.pause();
+            targetLoopCoordinator.current.cancel();
+            setIsLoopingTarget(false);
+            stopComparison();
+          }}
+        /> : null}
         {practiceBar}
         {chapterMode ? (
           <>
