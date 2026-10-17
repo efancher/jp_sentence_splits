@@ -18,6 +18,7 @@ import {
   getWordDetectiveCandidates,
   logGameRound,
   recordReview,
+  updateSettings,
 } from '../src/db/repository';
 import type { GrammarPattern, Sentence, SentenceGrammar, SentenceVocabulary } from '../src/domain/types';
 import { createId } from '../src/lib/ids';
@@ -69,8 +70,10 @@ async function addWord(id: string, expression: string, reading: string) {
 }
 
 describe('game repository', () => {
-  beforeEach(() => {
-    resetDbForTests(`game-repo-${createId('db')}`);
+  beforeEach(async () => {
+    await resetDbForTests(`game-repo-${createId('db')}`);
+    // These tests seed vocabulary-card history, the pre-sentence-led notion of \"introduced\".
+    await updateSettings({ sentenceLedFlow: false });
   });
 
   it('returns only words met in 2+ confirmed sentences, with card stats', async () => {
@@ -234,8 +237,10 @@ async function addGrammarLink(sentenceId: string, grammarPatternId: string, surf
 }
 
 describe('grammar detective repository', () => {
-  beforeEach(() => {
-    resetDbForTests(`game-repo-${createId('db')}`);
+  beforeEach(async () => {
+    await resetDbForTests(`game-repo-${createId('db')}`);
+    // These tests seed vocabulary-card history, the pre-sentence-led notion of \"introduced\".
+    await updateSettings({ sentenceLedFlow: false });
   });
 
   it('plays a pattern from a single tracked, translated sentence', async () => {
@@ -302,8 +307,10 @@ describe('grammar detective repository', () => {
 });
 
 describe('particle puzzle repository', () => {
-  beforeEach(() => {
-    resetDbForTests(`game-repo-${createId('db')}`);
+  beforeEach(async () => {
+    await resetDbForTests(`game-repo-${createId('db')}`);
+    // These tests seed vocabulary-card history, the pre-sentence-led notion of \"introduced\".
+    await updateSettings({ sentenceLedFlow: false });
   });
 
   async function addParticleSentence(id: string, status: 'confirmed' | 'unreviewed') {
@@ -376,8 +383,10 @@ describe('particle puzzle repository', () => {
 });
 
 describe('odd ear out repository', () => {
-  beforeEach(() => {
-    resetDbForTests(`game-repo-${createId('db')}`);
+  beforeEach(async () => {
+    await resetDbForTests(`game-repo-${createId('db')}`);
+    // These tests seed vocabulary-card history, the pre-sentence-led notion of \"introduced\".
+    await updateSettings({ sentenceLedFlow: false });
   });
 
   /**
@@ -558,8 +567,10 @@ describe('odd ear out repository', () => {
 });
 
 describe('speaker match repository', () => {
-  beforeEach(() => {
-    resetDbForTests(`game-repo-${createId('db')}`);
+  beforeEach(async () => {
+    await resetDbForTests(`game-repo-${createId('db')}`);
+    // These tests seed vocabulary-card history, the pre-sentence-led notion of \"introduced\".
+    await updateSettings({ sentenceLedFlow: false });
   });
 
   /** One playable citation-form clip of `itemId` mined into `bookId`. */
@@ -664,8 +675,10 @@ describe('speaker match repository', () => {
 });
 
 describe('then and now repository', () => {
-  beforeEach(() => {
-    resetDbForTests(`game-repo-${createId('db')}`);
+  beforeEach(async () => {
+    await resetDbForTests(`game-repo-${createId('db')}`);
+    // These tests seed vocabulary-card history, the pre-sentence-led notion of \"introduced\".
+    await updateSettings({ sentenceLedFlow: false });
   });
 
   const NOW = new Date('2026-09-27T00:00:00Z');
@@ -758,8 +771,10 @@ describe('then and now repository', () => {
 });
 
 describe('verb lego repository', () => {
-  beforeEach(() => {
-    resetDbForTests(`game-repo-${createId('db')}`);
+  beforeEach(async () => {
+    await resetDbForTests(`game-repo-${createId('db')}`);
+    // These tests seed vocabulary-card history, the pre-sentence-led notion of \"introduced\".
+    await updateSettings({ sentenceLedFlow: false });
   });
 
   /** 「事実の後、聞かれた。」 with real-style UniDic tokens (聞か[聞く] + れ[れる] + た[た]). */
@@ -829,8 +844,10 @@ describe('verb lego repository', () => {
 });
 
 describe('ear tiles repository', () => {
-  beforeEach(() => {
-    resetDbForTests(`game-repo-${createId('db')}`);
+  beforeEach(async () => {
+    await resetDbForTests(`game-repo-${createId('db')}`);
+    // These tests seed vocabulary-card history, the pre-sentence-led notion of \"introduced\".
+    await updateSettings({ sentenceLedFlow: false });
   });
 
   const pieces: [string, string][] = [
@@ -951,8 +968,10 @@ describe('ear tiles repository', () => {
 });
 
 describe('keystone repository', () => {
-  beforeEach(() => {
-    resetDbForTests(`game-repo-${createId('db')}`);
+  beforeEach(async () => {
+    await resetDbForTests(`game-repo-${createId('db')}`);
+    // These tests seed vocabulary-card history, the pre-sentence-led notion of \"introduced\".
+    await updateSettings({ sentenceLedFlow: false });
   });
 
   async function addBook(id: string, overrides: Record<string, unknown> = {}) {

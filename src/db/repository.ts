@@ -4739,32 +4739,23 @@ export async function getSentenceReadingIntroducedReadiness(
 }
 
 /**
- * The subset of `sentenceIds` the learner has actually met: every reviewable
- * word has been reviewed at least once (`getSentenceReadingIntroducedReadiness`
- * at ratio 1 — Particle Puzzle's bar). The `/play` games share it so a round
- * never serves a sentence whose words were only triaged, never seen.
+ * The subset of `sentenceIds` the learner has actually met. The `/play` games
+ * share it so a round never serves a sentence that was only triaged, never seen.
  *
- * NB: under the sentence-led flow (vocabulary cards neither shown nor seeded)
- * this can never hold for sentences imported after 2026-10-02, which starves
- * the games using it of new material — see `filterToMetSentenceIds`, which
- * Remix uses instead.
+ * **Sentence-led flow (default, since 2026-10-02):** vocabulary cards are
+ * neither shown nor seeded, so "every word reviewed on a card" can never hold
+ * for a newer sentence. A sentence counts once it was walked through, started
+ * in a book, or already has a card (`getIntroducedSentenceIds`, the same rule
+ * as `ReviewPage` and the shadowing gate).
+ *
+ * **Flow off:** every reviewable word has been reviewed at least once
+ * (`getSentenceReadingIntroducedReadiness` at ratio 1 — Particle Puzzle's bar).
  */
 export async function filterToIntroducedSentenceIds(sentenceIds: string[]): Promise<Set<string>> {
-  const readiness = await getSentenceReadingIntroducedReadiness([...new Set(sentenceIds)], 1);
+  const unique = [...new Set(sentenceIds)];
+  if (isSentenceLedFlow(await readSettings())) return getIntroducedSentenceIds(unique);
+  const readiness = await getSentenceReadingIntroducedReadiness(unique, 1);
   return new Set([...readiness].filter(([, ready]) => ready).map(([id]) => id));
-}
-
-/**
- * Like `filterToIntroducedSentenceIds`, but sentence-led: with the flow on (the
- * default) a sentence counts once it was walked through, started in a book, or
- * already has a card — no vocabulary-card history needed. With the flow off it
- * is exactly `filterToIntroducedSentenceIds`.
- */
-export async function filterToMetSentenceIds(sentenceIds: string[]): Promise<Set<string>> {
-  if (isSentenceLedFlow(await readSettings())) {
-    return getIntroducedSentenceIds([...new Set(sentenceIds)]);
-  }
-  return filterToIntroducedSentenceIds(sentenceIds);
 }
 
 /**
@@ -6856,7 +6847,7 @@ export async function getPitchAccentMinimalPairOccurrences(): Promise<
       !(suspendedIndex && sentenceIsSuspendedOnly(link.sentenceId, suspendedIndex)),
   );
   if (links.length > 0) {
-    const introduced = await filterToMetSentenceIds(links.map((link) => link.sentenceId));
+    const introduced = await filterToIntroducedSentenceIds(links.map((link) => link.sentenceId));
     links = links.filter((link) => introduced.has(link.sentenceId));
   }
   if (links.length === 0) return [];
@@ -7414,7 +7405,7 @@ export async function getEarTilesCandidates(
 async function loadNativeAudioSentences(
   rejection: (sentence: Sentence, audioDurationMs: number) => string | null,
   now: Date,
-  { requireConfirmed = true, sentenceLedIntroduced = false }: { requireConfirmed?: boolean; sentenceLedIntroduced?: boolean } = {},
+  { requireConfirmed = true }: { requireConfirmed?: boolean } = {},
 ): Promise<EarTilesCandidate[]> {
   const db = getDb();
   const [sentences, analyses, audioRows, links, suspendedIndex] = await Promise.all([
@@ -7444,9 +7435,7 @@ async function loadNativeAudioSentences(
     );
   });
   const preFilteredIds = preFiltered.map((sentence) => sentence.id);
-  const seenIds = sentenceLedIntroduced
-    ? await filterToMetSentenceIds(preFilteredIds)
-    : await filterToIntroducedSentenceIds(preFilteredIds);
+  const seenIds = await filterToIntroducedSentenceIds(preFilteredIds);
   const playable = preFiltered.filter((sentence) => seenIds.has(sentence.id));
   if (playable.length === 0) return [];
 
@@ -7520,7 +7509,6 @@ export async function getRemixData(options: { now?: Date } = {}): Promise<{
 
   const loaded = await loadNativeAudioSentences(remixRejection, options.now ?? new Date(), {
     requireConfirmed: false,
-    sentenceLedIntroduced: true,
   });
   const candidates = loaded.filter((candidate) => buildRemixPuzzle(candidate.sentence, pool, 'probe') !== null);
   return { candidates, pool };
