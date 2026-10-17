@@ -804,6 +804,35 @@ export class PlaybackCoordinator {
     this.controller = undefined;
   }
 
+  /** Native-only rehearsal: hear a span, then leave time to hum or say it. */
+  async rehearse(
+    audio: HTMLAudioElement,
+    range: TimeRangeMs,
+    options: { playbackRate: number; repeat: boolean; gapMs: number; onPhase: (phase: 'listen' | 'repeat') => void },
+  ): Promise<void> {
+    this.cancel();
+    this.controller = new AbortController();
+    const { signal } = this.controller;
+    audio.playbackRate = options.playbackRate;
+    audio.preservesPitch = true;
+    do {
+      if (signal.aborted) return;
+      options.onPhase('listen');
+      await playUntilEnded(audio, signal, range);
+      if (signal.aborted || !options.repeat) return;
+      options.onPhase('repeat');
+      await new Promise<void>((resolve) => {
+        const finish = () => {
+          window.clearTimeout(timer);
+          signal.removeEventListener('abort', finish);
+          resolve();
+        };
+        const timer = window.setTimeout(finish, options.gapMs);
+        signal.addEventListener('abort', finish, { once: true });
+      });
+    } while (!signal.aborted);
+  }
+
   async alternate(
     reference: HTMLAudioElement,
     learner: HTMLAudioElement,

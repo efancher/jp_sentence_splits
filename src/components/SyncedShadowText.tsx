@@ -63,6 +63,7 @@ export function SyncedShadowText({
   japanese,
   moraUnits,
   sentenceId,
+  showDictionaryPitch = true,
   recordingElapsedMs,
   recordingSpeed = 1,
 }: {
@@ -71,6 +72,7 @@ export function SyncedShadowText({
   japanese: string;
   moraUnits: MoraUnit[];
   sentenceId?: string;
+  showDictionaryPitch?: boolean;
   /**
    * Elapsed time (ms) of an in-progress mic recording with no reference
    * audio sounding — the Record button lets the learner recite from memory,
@@ -233,7 +235,7 @@ export function SyncedShadowText({
         <div className="jp jp-lg">{japanese}</div>
         <MeasuredPitchContour payload={pitchTrack} progress={contourProgress} pacing={isPacing} height={64} />
         <MoraBreakdown units={moraUnits} />
-        <SentencePitchAccentRow japanese={japanese} sentenceId={sentenceId} />
+        {showDictionaryPitch ? <SentencePitchAccentRow japanese={japanese} sentenceId={sentenceId} /> : null}
       </div>
     );
   }
@@ -280,7 +282,7 @@ export function SyncedShadowText({
           ))}
         </div>
       )}
-      <SentencePitchAccentRow japanese={japanese} sentenceId={sentenceId} />
+      {showDictionaryPitch ? <SentencePitchAccentRow japanese={japanese} sentenceId={sentenceId} /> : null}
     </div>
   );
 }

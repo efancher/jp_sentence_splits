@@ -31,6 +31,12 @@ need forces the issue.
 
 ## Data flow
 
+Native-only shadow preparation (`NativePitchPractice`) reuses the reference
+alignment and pitch caches. `nativePitchPractice.ts` derives phone-based morae,
+median pitch targets and pause groups without dictionary accent fitting. Its
+local audio player uses cancellable `PlaybackCoordinator.rehearse`; no attempt,
+review or proficiency record is created. This view needs no learner recording.
+
 ```
 UI (pages/, components/)
   → src/db/repository.ts (all CRUD/business logic funnels through here)
