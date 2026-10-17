@@ -1405,9 +1405,11 @@ shortcut ("Play a round") and the `/play` hub. Currently ten activities:
   for sense); the original translation appears only at the end. Anchored: fixed
   text/particles are copied from the native sentence, replacements are only the
   learner's own nouns, no generated Japanese distractors, no FSRS write and no
-  auto-rating. A sentence qualifies when it is single-clause and verb-final with
-  2–4 plain noun + case-particle slots (が/を/に/で/から/まで/は, distinct
-  particles, no quotes, no formal/time nouns), has audio ≤10 s, a translation
+  auto-rating. A sentence qualifies when it is predicate-final (one verb, or an
+  adjective / 形状詞+です, optionally with ONE earlier clause linked by て/から/の) with
+  2–4 plain noun + case-particle slots (が/を/に/で/から/まで/は; a particle may repeat,
+  and the prompt then names the original noun — 声が (1st); no quotes, no formal/time
+  nouns, no slot noun that follows an unabsorbed proper noun), has audio ≤10 s, a translation
   and has been *introduced* (`filterToIntroducedSentenceIds`: walked through / started in a book /
   has a card — vocabulary confirmation and vocabulary-card history are not
   required, since cards are paused under the sentence-led flow); it is a candidate only if a puzzle can really be

@@ -10,6 +10,20 @@ Last updated: 2026-10-17.
 
 ## Where things stand
 
+- **2026-10-17 — Remix skeleton loosened (measured).** `findRemixSkeleton` now takes `RemixRules`
+  (shipped `REMIX_RULES`; the old rule is `STRICT_REMIX_RULES`). Counts on 2,896 production
+  sentences — total skeletons / with native audio ≤10 s + translation / also met:
+  strict 64 / 20 / 0 → +adjective predicates 78 / 27 / 0 → +one linking particle (て/から/の)
+  197 / 69 / 1 → +repeated particles **270 / 96 / 1** (shipped) → +length cap 60–120
+  301–302 / 97 / 1 (not shipped: +1 audio-backed). Each step keeps noun-only swap slots and a
+  predicate-final sentence; a swap changes one noun and copies the rest, linked clauses
+  included. Also fixed a latent bug: a slot noun that follows an unabsorbed proper noun
+  (スウェーデン+語 → slot 語) is skipped, and repeated-particle slots are labelled
+  ("声が (1st)"). **Still unresolved:** only 1 of 133 *met* sentences has a skeleton + audio, so
+  the game stays at 0–1 candidates until more skeleton sentences with audio are walked through
+  — the met × audio intersection, not the skeleton, is the binding gate. Tests:
+  `src/lib/remix.test.ts`.
+
 - **2026-10-17 — `/play` games' "introduced" gate follows the sentence-led flow; Remix gating.**
   `filterToIntroducedSentenceIds` (shared by every `/play` game and their data loaders)
   required every word of a sentence to have been reviewed on a vocabulary card — impossible
