@@ -4743,10 +4743,28 @@ export async function getSentenceReadingIntroducedReadiness(
  * word has been reviewed at least once (`getSentenceReadingIntroducedReadiness`
  * at ratio 1 — Particle Puzzle's bar). The `/play` games share it so a round
  * never serves a sentence whose words were only triaged, never seen.
+ *
+ * NB: under the sentence-led flow (vocabulary cards neither shown nor seeded)
+ * this can never hold for sentences imported after 2026-10-02, which starves
+ * the games using it of new material — see `filterToMetSentenceIds`, which
+ * Remix uses instead.
  */
 export async function filterToIntroducedSentenceIds(sentenceIds: string[]): Promise<Set<string>> {
   const readiness = await getSentenceReadingIntroducedReadiness([...new Set(sentenceIds)], 1);
   return new Set([...readiness].filter(([, ready]) => ready).map(([id]) => id));
+}
+
+/**
+ * Like `filterToIntroducedSentenceIds`, but sentence-led: with the flow on (the
+ * default) a sentence counts once it was walked through, started in a book, or
+ * already has a card — no vocabulary-card history needed. With the flow off it
+ * is exactly `filterToIntroducedSentenceIds`.
+ */
+export async function filterToMetSentenceIds(sentenceIds: string[]): Promise<Set<string>> {
+  if (isSentenceLedFlow(await readSettings())) {
+    return getIntroducedSentenceIds([...new Set(sentenceIds)]);
+  }
+  return filterToIntroducedSentenceIds(sentenceIds);
 }
 
 /**
@@ -6838,7 +6856,7 @@ export async function getPitchAccentMinimalPairOccurrences(): Promise<
       !(suspendedIndex && sentenceIsSuspendedOnly(link.sentenceId, suspendedIndex)),
   );
   if (links.length > 0) {
-    const introduced = await filterToIntroducedSentenceIds(links.map((link) => link.sentenceId));
+    const introduced = await filterToMetSentenceIds(links.map((link) => link.sentenceId));
     links = links.filter((link) => introduced.has(link.sentenceId));
   }
   if (links.length === 0) return [];
@@ -7384,18 +7402,19 @@ export interface EarTilesCandidate extends PickerCandidate {
 export async function getEarTilesCandidates(
   options: { now?: Date } = {},
 ): Promise<EarTilesCandidate[]> {
-  return loadConfirmedAudioSentences(earTilesRejection, options.now ?? new Date());
+  return loadNativeAudioSentences(earTilesRejection, options.now ?? new Date());
 }
 
 /**
  * Shared loader for the sentence-with-native-audio games (Ear Tiles, Remix):
- * confirmed vocabulary, native audio, introduced and not suspended-only, kept
- * when `rejection` returns null. Picker stats come from the FSRS state of the
- * sentence's own words. Read-only.
+ * native audio, introduced and not suspended-only, kept when `rejection`
+ * returns null, and (unless `requireConfirmed` is off) vocabulary confirmed.
+ * Picker stats come from the FSRS state of the sentence's own words. Read-only.
  */
-async function loadConfirmedAudioSentences(
+async function loadNativeAudioSentences(
   rejection: (sentence: Sentence, audioDurationMs: number) => string | null,
   now: Date,
+  { requireConfirmed = true, sentenceLedIntroduced = false }: { requireConfirmed?: boolean; sentenceLedIntroduced?: boolean } = {},
 ): Promise<EarTilesCandidate[]> {
   const db = getDb();
   const [sentences, analyses, audioRows, links, suspendedIndex] = await Promise.all([
@@ -7418,13 +7437,16 @@ async function loadConfirmedAudioSentences(
   const preFiltered = sentences.filter((sentence) => {
     const audio = audioBySentenceId.get(sentence.id);
     return (
-      confirmed.has(sentence.id) &&
+      (!requireConfirmed || confirmed.has(sentence.id)) &&
       !!audio &&
       rejection(sentence, audio.durationMs) === null &&
       !(suspendedIndex && sentenceIsSuspendedOnly(sentence.id, suspendedIndex))
     );
   });
-  const seenIds = await filterToIntroducedSentenceIds(preFiltered.map((sentence) => sentence.id));
+  const preFilteredIds = preFiltered.map((sentence) => sentence.id);
+  const seenIds = sentenceLedIntroduced
+    ? await filterToMetSentenceIds(preFilteredIds)
+    : await filterToIntroducedSentenceIds(preFilteredIds);
   const playable = preFiltered.filter((sentence) => seenIds.has(sentence.id));
   if (playable.length === 0) return [];
 
@@ -7472,9 +7494,9 @@ async function loadConfirmedAudioSentences(
 export type RemixCandidate = EarTilesCandidate;
 
 /**
- * Remix (`src/lib/remix.ts`): native-audio sentences with confirmed
- * vocabulary and a clean noun+particle skeleton, plus the learner's swap-noun
- * pool (plain nouns from vocabulary linked to a confirmed sentence). A sentence
+ * Remix (`src/lib/remix.ts`): introduced sentences with native audio and a
+ * clean noun+particle skeleton (vocabulary confirmation is not required), plus
+ * the learner's swap-noun pool (plain nouns linked to an introduced sentence). A sentence
  * counts as a candidate only if a puzzle can actually be built from that pool
  * right now, so the hub's eligibility can always be satisfied. Read-only.
  */
@@ -7483,12 +7505,12 @@ export async function getRemixData(options: { now?: Date } = {}): Promise<{
   pool: RemixNoun[];
 }> {
   const db = getDb();
-  const [analyses, links] = await Promise.all([db.analyses.toArray(), db.sentenceVocabulary.toArray()]);
-  const confirmed = new Set(
-    analyses.filter((a) => a.vocabularyReviewStatus === 'confirmed').map((a) => a.sentenceId),
-  );
+  const links = await db.sentenceVocabulary.toArray();
+  // The swap nouns are words from sentences the learner has met (vocabulary
+  // cards are paused under the sentence-led flow, so a card is not the signal).
+  const introduced = await filterToIntroducedSentenceIds(links.map((link) => link.sentenceId));
   const itemIds = [
-    ...new Set(links.filter((link) => confirmed.has(link.sentenceId)).map((link) => link.vocabularyItemId)),
+    ...new Set(links.filter((link) => introduced.has(link.sentenceId)).map((link) => link.vocabularyItemId)),
   ];
   const items = (await db.vocabularyItems.bulkGet(itemIds)).filter(
     (item): item is VocabularyItem => Boolean(item),
@@ -7496,9 +7518,11 @@ export async function getRemixData(options: { now?: Date } = {}): Promise<{
   const pool = buildRemixNounPool(items);
   if (pool.length < MIN_POOL_NOUNS) return { candidates: [], pool };
 
-  const loaded = await loadConfirmedAudioSentences(remixRejection, options.now ?? new Date());
-  const candidates = loaded
-    .filter((candidate) => buildRemixPuzzle(candidate.sentence, pool, 'probe') !== null);
+  const loaded = await loadNativeAudioSentences(remixRejection, options.now ?? new Date(), {
+    requireConfirmed: false,
+    sentenceLedIntroduced: true,
+  });
+  const candidates = loaded.filter((candidate) => buildRemixPuzzle(candidate.sentence, pool, 'probe') !== null);
   return { candidates, pool };
 }
 

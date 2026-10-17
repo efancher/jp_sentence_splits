@@ -14,10 +14,10 @@ import { seededShuffle } from './seededShuffle';
  * this meaning", not "did you pick from a list".
  *
  * Anchored and conservative, like Particle Puzzle / Ear Tiles:
- *  - only native sentences (confirmed vocabulary, native audio); nothing is
- *    generated and there are no made-up Japanese distractors. Fixed text and
+ *  - only native sentences the learner has met (introduced, with native audio);
+ *    nothing is generated and there are no made-up Japanese distractors. Fixed text and
  *    particles are copied from the sentence; replacements are the learner's own
- *    confirmed nouns;
+ *    own nouns;
  *  - only single-clause, verb-final sentences with 2–4 plain "noun + case
  *    particle" slots, so a swap cannot break the clause around it;
  *  - the replacement's English is its first gloss, and a noun is offered only
@@ -201,10 +201,10 @@ const isPlainNounPos = (pos: string | undefined) =>
   !!pos && (pos.startsWith('名詞/普通名詞') || pos === 'n');
 
 /**
- * The learner's usable swap nouns from their confirmed vocabulary: plain
- * nouns, short and written in kanji/kana, with a reading and an English gloss
+ * The learner's usable swap nouns, from vocabulary linked to sentences they
+ * have met (cards are paused under the sentence-led flow): plain nouns, short and written in kanji/kana, with a reading and an English gloss
  * that no other candidate shares (so the English prompt has one intended
- * answer). Callers pass only *confirmed* items.
+ * answer).
  */
 export function buildRemixNounPool(items: readonly VocabularyItem[]): RemixNoun[] {
   const nouns: RemixNoun[] = [];
@@ -335,11 +335,11 @@ export function describeRemixPick(signal: EffectiveGameSignal, weakWords: readon
   }
   if (signal === 'strong') return 'Words you know solidly — a relaxed remix.';
   if (signal === 'stale') return 'Has words whose recall has faded.';
-  return 'From your confirmed sentences.';
+  return 'From sentences you have met.';
 }
 
 export const REMIX_COPY = {
-  anyPool: 'your confirmed sentences with native audio',
+  anyPool: 'your sentences with native audio',
   blurbs: {
     weak: "Sentences containing words you've forgotten before — reused in new combinations.",
     stale: 'Sentences containing words whose recall has faded.',

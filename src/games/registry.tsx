@@ -303,9 +303,9 @@ export const GAMES: readonly GameDef[] = [
     id: REMIX_GAME_ID,
     title: 'Remix',
     blurb:
-      "Hear a real sentence from your books and see its skeleton, then make it yours: swap one slot for a noun you know — given in English, typed in Japanese — then swap two. The particles and verb stay as spoken.",
+      "Hear a real sentence from your books and see its skeleton, then make it yours: swap one slot for a noun from your sentences — given in English, typed in Japanese — then swap two. The particles and verb stay as spoken.",
     needs:
-      'Needs confirmed sentences with native audio, a single clause and two or more noun + particle slots, plus several confirmed plain nouns to swap in.',
+      'Needs sentences you have met, with native audio, a single clause and two or more noun + particle slots, plus several plain nouns from sentences you have met to swap in.',
     skill: 'building sentences on a known frame',
     roundSize: REMIX_ROUND_SIZE,
     // All three signals: they come from the FSRS state of the sentence's own words.

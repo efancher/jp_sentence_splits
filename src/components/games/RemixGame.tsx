@@ -226,7 +226,7 @@ function RemixCard({
                   </span>
                 ) : state.wrong > 0 ? (
                   <span style={{ fontSize: '0.8rem', color: 'var(--danger)' }}>
-                    ✗ Not “{state.input.trim()}” — it’s a word you’ve confirmed. Kanji or kana both work.
+                    ✗ Not “{state.input.trim()}” — kanji or kana both work.
                   </span>
                 ) : null}
               </label>
@@ -341,8 +341,8 @@ export function RemixGame({ signal }: { signal: GameSignal }) {
       <section className="panel stack">
         <h2 style={{ margin: 0 }}>Remix</h2>
         <p className="muted" style={{ margin: 0 }}>
-          Needs at least {REMIX_ROUND_SIZE} confirmed sentences with native audio, a single clause and two or
-          more noun + particle slots, plus enough confirmed nouns to swap in — you have{' '}
+          Needs at least {REMIX_ROUND_SIZE} sentences you&apos;ve met, with native audio, a single clause and two or
+          more noun + particle slots, plus enough nouns from your sentences to swap in — you have{' '}
           {data.candidates.length} sentence{data.candidates.length === 1 ? '' : 's'} and {data.pool.length}{' '}
           usable nouns so far.
         </p>
