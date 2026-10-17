@@ -149,14 +149,23 @@ async function main() {
     .sort((a, b) => a.position - b.position);
   console.log(`Book: ${book.title} (${book.id}), ${chapters.length} chapter(s)`);
 
-  const { data: membershipsRaw, error: memErr } = await supabase
-    .from('book_sentences')
-    .select('id, sentence_id, chapter_id, position')
-    .eq('owner_id', user.id)
-    .eq('book_id', book.id)
-    .is('deleted_at', null);
-  if (memErr) throw new Error(`Failed to fetch book_sentences: ${memErr.message}`);
-  const memberships = (membershipsRaw ?? []) as MembershipRow[];
+  // Paginated: PostgREST caps a single response at 1000 rows, and a book past
+  // that (Slow Japanese has 1500+) would otherwise look like it was missing
+  // every membership beyond the cap and get them all "backfilled".
+  const memberships: MembershipRow[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error: memErr } = await supabase
+      .from('book_sentences')
+      .select('id, sentence_id, chapter_id, position')
+      .eq('owner_id', user.id)
+      .eq('book_id', book.id)
+      .is('deleted_at', null)
+      .order('id')
+      .range(from, from + 999);
+    if (memErr) throw new Error(`Failed to fetch book_sentences: ${memErr.message}`);
+    memberships.push(...((data ?? []) as MembershipRow[]));
+    if (!data || data.length < 1000) break;
+  }
 
   // A live clip can outlive its sentence (see check:sentence-integrity), so
   // never backfill a membership for a sentence that has been deleted.
