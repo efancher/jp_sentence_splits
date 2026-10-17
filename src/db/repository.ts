@@ -236,6 +236,13 @@ import {
 } from '../lib/homophoneHunt';
 import { earTilesRejection } from '../lib/earTiles';
 import {
+  buildRemixNounPool,
+  buildRemixPuzzle,
+  MIN_POOL_NOUNS,
+  remixRejection,
+  type RemixNoun,
+} from '../lib/remix';
+import {
   buildParticleHistory,
   findBlankableParticles,
   isParticlePuzzleEligible,
@@ -7377,7 +7384,19 @@ export interface EarTilesCandidate extends PickerCandidate {
 export async function getEarTilesCandidates(
   options: { now?: Date } = {},
 ): Promise<EarTilesCandidate[]> {
-  const now = options.now ?? new Date();
+  return loadConfirmedAudioSentences(earTilesRejection, options.now ?? new Date());
+}
+
+/**
+ * Shared loader for the sentence-with-native-audio games (Ear Tiles, Remix):
+ * confirmed vocabulary, native audio, introduced and not suspended-only, kept
+ * when `rejection` returns null. Picker stats come from the FSRS state of the
+ * sentence's own words. Read-only.
+ */
+async function loadConfirmedAudioSentences(
+  rejection: (sentence: Sentence, audioDurationMs: number) => string | null,
+  now: Date,
+): Promise<EarTilesCandidate[]> {
   const db = getDb();
   const [sentences, analyses, audioRows, links, suspendedIndex] = await Promise.all([
     db.sentences.toArray(),
@@ -7401,7 +7420,7 @@ export async function getEarTilesCandidates(
     return (
       confirmed.has(sentence.id) &&
       !!audio &&
-      earTilesRejection(sentence, audio.durationMs) === null &&
+      rejection(sentence, audio.durationMs) === null &&
       !(suspendedIndex && sentenceIsSuspendedOnly(sentence.id, suspendedIndex))
     );
   });
@@ -7448,6 +7467,39 @@ export async function getEarTilesCandidates(
       ),
     };
   });
+}
+
+export type RemixCandidate = EarTilesCandidate;
+
+/**
+ * Remix (`src/lib/remix.ts`): native-audio sentences with confirmed
+ * vocabulary and a clean noun+particle skeleton, plus the learner's swap-noun
+ * pool (plain nouns from vocabulary linked to a confirmed sentence). A sentence
+ * counts as a candidate only if a puzzle can actually be built from that pool
+ * right now, so the hub's eligibility can always be satisfied. Read-only.
+ */
+export async function getRemixData(options: { now?: Date } = {}): Promise<{
+  candidates: RemixCandidate[];
+  pool: RemixNoun[];
+}> {
+  const db = getDb();
+  const [analyses, links] = await Promise.all([db.analyses.toArray(), db.sentenceVocabulary.toArray()]);
+  const confirmed = new Set(
+    analyses.filter((a) => a.vocabularyReviewStatus === 'confirmed').map((a) => a.sentenceId),
+  );
+  const itemIds = [
+    ...new Set(links.filter((link) => confirmed.has(link.sentenceId)).map((link) => link.vocabularyItemId)),
+  ];
+  const items = (await db.vocabularyItems.bulkGet(itemIds)).filter(
+    (item): item is VocabularyItem => Boolean(item),
+  );
+  const pool = buildRemixNounPool(items);
+  if (pool.length < MIN_POOL_NOUNS) return { candidates: [], pool };
+
+  const loaded = await loadConfirmedAudioSentences(remixRejection, options.now ?? new Date());
+  const candidates = loaded
+    .filter((candidate) => buildRemixPuzzle(candidate.sentence, pool, 'probe') !== null);
+  return { candidates, pool };
 }
 
 /**

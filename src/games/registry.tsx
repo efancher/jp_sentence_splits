@@ -5,6 +5,7 @@ import { GrammarDetectiveGame, GRAMMAR_DETECTIVE_GAME_ID } from '../components/g
 import { HomophoneHuntGame } from '../components/games/HomophoneHuntGame';
 import { KeystoneGame } from '../components/games/KeystoneGame';
 import { OddEarOutGame } from '../components/games/OddEarOutGame';
+import { RemixGame, REMIX_COPY } from '../components/games/RemixGame';
 import { SpeakerMatchGame } from '../components/games/SpeakerMatchGame';
 import { ThenAndNowGame } from '../components/games/ThenAndNowGame';
 import { VerbLegoGame } from '../components/games/VerbLegoGame';
@@ -21,6 +22,7 @@ import {
   getKeystoneCandidates,
   getOddEarOutData,
   getParticlePuzzleData,
+  getRemixData,
   getSpeakerMatchData,
   getThenAndNowData,
   getVerbLegoData,
@@ -57,6 +59,7 @@ import {
 } from '../lib/oddEarOut';
 import { findMinimalPairContrasts } from '../lib/pitchAccentMinimalPairs';
 import { PARTICLE_PUZZLE_ROUND_SIZE } from '../lib/particlePuzzle';
+import { REMIX_GAME_ID, REMIX_ROUND_SIZE } from '../lib/remix';
 import {
   buildSpeakerMatchCandidates,
   buildSpeakerMatchRound,
@@ -295,6 +298,24 @@ export const GAMES: readonly GameDef[] = [
       return { eligible: candidates.length, bySignal: signalPoolSizes(candidates) };
     },
     Component: EarTilesGame,
+  },
+  {
+    id: REMIX_GAME_ID,
+    title: 'Remix',
+    blurb:
+      "Hear a real sentence from your books and see its skeleton, then make it yours: swap one slot for a noun you know — given in English, typed in Japanese — then swap two. The particles and verb stay as spoken.",
+    needs:
+      'Needs confirmed sentences with native audio, a single clause and two or more noun + particle slots, plus several confirmed plain nouns to swap in.',
+    skill: 'building sentences on a known frame',
+    roundSize: REMIX_ROUND_SIZE,
+    // All three signals: they come from the FSRS state of the sentence's own words.
+    signals: GAME_SIGNALS,
+    signalCopy: REMIX_COPY,
+    loadPools: async () => {
+      const { candidates } = await getRemixData();
+      return { eligible: candidates.length, bySignal: signalPoolSizes(candidates) };
+    },
+    Component: RemixGame,
   },
   {
     id: THEN_AND_NOW_GAME_ID,
