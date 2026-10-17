@@ -352,9 +352,9 @@ Original phases match `docs/UNIFIED_APP_ARCHITECTURE.md` §15.
 - [~] **Sentence-membership integrity (class of bug).** Detector, guards, the
   cascade-soft-delete migration and a manual `check-sentence-integrity.yml`
   workflow are in; prod has 0 dangling memberships / orphan clips (2026-10-17).
-  Left: 8 chapters out of recording order (`npm run check:sentence-integrity`),
-  incl. Teppei #1461 (outro 「それでは、またね。」 sits at position 420 with a
-  clip at 276000 ms; needs a user call on the right clip/position); decide
+  Left: 7 chapters out of recording order
+  (`npm run check:sentence-integrity`; Teppei #1461 fixed 2026-10-17 by moving its
+  shared outro to position 500); decide
   whether a dropped delete-op conflict should auto-retry.
 
 - [~] **Passage-first learning and reviews.** Plan in
