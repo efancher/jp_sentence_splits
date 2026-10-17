@@ -1783,6 +1783,34 @@ hints.
   to fit) → free remix on the same skeleton about the learner's own life.
   Saved remixes appear beside native sentences. Reuses material already heard
   and shadowed, so only the construction is new.
+  **Status 2026-10-17: scoped, not built. Scope A chosen** (rungs 1–2 only:
+  swap one / two slots, as a `/play` game; read-only vs FSRS, local-only
+  rounds; no schema/sync changes). Findings from the design pass:
+  - The drill the learner likes is Ear Tiles (`earTiles.ts`), whose tiles
+    come from UniDic tokens (`Sentence.vocabularySuggestions`) — NOT the
+    Cure-Dolly chunks (only 64 of 2,268 analyses have any), so BuildPage /
+    `ChunkPuzzleStrip` roles can't seed skeletons.
+  - Slots = noun + case particle (が/を/に/で/から/と…), verb slot = final
+    verb phrase. Of 2,479 sentences ≤45 chars with tokens: 1,450 verb-final,
+    930 with ≥2 slots, 376 with 1. Raw heuristic is noisy (formal/adverbial
+    nouns こと/なん/一緒に, UniDic-split compounds like 親鳥→鳥, multi-clause
+    sentences) → needs a single-clause filter and head-noun quality filters;
+    reuse `findBlankableParticles` conservatism (no の/へ, no adjacent
+    particles, は/が/も swaps flagged "often grammatical").
+  - Substitutes come from confirmed vocabulary nouns (~400+ of ~1,080 items;
+    POS formats mixed, UniDic `名詞/…` vs JMdict `n`). Gate: offer a slot
+    only if enough other confirmed nouns exist — check the gate is satisfiable
+    before shipping. Semantic fit ("eat the house") is not machine-checkable;
+    tell the learner. Checks are structural (particle kept, fixed text
+    unchanged, reading correct); no generated Japanese distractors; learner
+    self-rates, no auto rating. Slot hints reuse the plain-English relations
+    in `glossSkill.ts`.
+  - Deferred: **rung 3** (verb swap) has no verb→particle data; only the
+    curated transitive/intransitive pairs in `scripts/lib/verbPairs.ts`
+    (e.g. ドアを開ける→ドアが開く) force a checkable particle change.
+    **Rung 4** + saved remixes need a new synced table (migration, soft
+    delete) and risk re-creating retired `grammar_production`; decide only
+    after trying rungs 1–2.
 - **Sentence Growth (seed-and-sprout).** Start from a bare verb (or a clip
   with everything but the verb muted); branching prompts (who? what? where?
   when?) grow the sentence outward, each answer a short spoken/typed
