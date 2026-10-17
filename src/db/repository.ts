@@ -242,6 +242,7 @@ import {
   remixRejection,
   type RemixNoun,
 } from '../lib/remix';
+import { growthRejection } from '../lib/sentenceGrowth';
 import {
   buildParticleHistory,
   findBlankableParticles,
@@ -7512,6 +7513,20 @@ export async function getRemixData(options: { now?: Date } = {}): Promise<{
   });
   const candidates = loaded.filter((candidate) => buildRemixPuzzle(candidate.sentence, pool, 'probe') !== null);
   return { candidates, pool };
+}
+
+/**
+ * Sentence Growth (`src/lib/sentenceGrowth.ts`): introduced sentences with
+ * native audio, a translation and a chunk layout that leaves nothing unasked
+ * (`growthRejection`). Needs no swap-noun pool, confirmed vocabulary or word
+ * proficiency, so the only gate is the sentence-level "met it" signal. Read-only.
+ */
+export async function getSentenceGrowthCandidates(
+  options: { now?: Date } = {},
+): Promise<EarTilesCandidate[]> {
+  return loadNativeAudioSentences(growthRejection, options.now ?? new Date(), {
+    requireConfirmed: false,
+  });
 }
 
 /**

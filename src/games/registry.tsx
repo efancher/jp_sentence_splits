@@ -6,6 +6,7 @@ import { HomophoneHuntGame } from '../components/games/HomophoneHuntGame';
 import { KeystoneGame } from '../components/games/KeystoneGame';
 import { OddEarOutGame } from '../components/games/OddEarOutGame';
 import { RemixGame, REMIX_COPY } from '../components/games/RemixGame';
+import { SentenceGrowthGame } from '../components/games/SentenceGrowthGame';
 import { SpeakerMatchGame } from '../components/games/SpeakerMatchGame';
 import { ThenAndNowGame } from '../components/games/ThenAndNowGame';
 import { VerbLegoGame } from '../components/games/VerbLegoGame';
@@ -17,6 +18,7 @@ import {
 import { WordDetectiveGame, WORD_DETECTIVE_GAME_ID } from '../components/games/WordDetectiveGame';
 import {
   getEarTilesCandidates,
+  getSentenceGrowthCandidates,
   getGrammarDetectiveCandidates,
   getHomophoneHuntData,
   getKeystoneCandidates,
@@ -60,6 +62,7 @@ import {
 import { findMinimalPairContrasts } from '../lib/pitchAccentMinimalPairs';
 import { PARTICLE_PUZZLE_ROUND_SIZE } from '../lib/particlePuzzle';
 import { REMIX_GAME_ID, REMIX_ROUND_SIZE } from '../lib/remix';
+import { SENTENCE_GROWTH_GAME_ID, SENTENCE_GROWTH_ROUND_SIZE } from '../lib/sentenceGrowth';
 import {
   buildSpeakerMatchCandidates,
   buildSpeakerMatchRound,
@@ -316,6 +319,24 @@ export const GAMES: readonly GameDef[] = [
       return { eligible: candidates.length, bySignal: signalPoolSizes(candidates) };
     },
     Component: RemixGame,
+  },
+  {
+    id: SENTENCE_GROWTH_GAME_ID,
+    title: 'Sentence Growth',
+    blurb:
+      "Hear a real sentence and see only its verb, then rebuild it one piece at a time — who, what, where — picking each from the sentence's own pieces. Finish by saying it along with the clip and rating it yourself.",
+    needs:
+      'Needs sentences you have met, with native audio, a translation, a single clause and two or more noun + particle pieces before the verb.',
+    skill: 'building a sentence around its verb',
+    roundSize: SENTENCE_GROWTH_ROUND_SIZE,
+    // Not ranked by FSRS: it uses only the sentence's own pieces, no word-level signal.
+    signals: [],
+    signalCopy: DEFAULT_SIGNAL_COPY,
+    loadPools: async () => {
+      const candidates = await getSentenceGrowthCandidates();
+      return { eligible: candidates.length, bySignal: { weak: 0, stale: 0, strong: 0 } };
+    },
+    Component: SentenceGrowthGame,
   },
   {
     id: THEN_AND_NOW_GAME_ID,

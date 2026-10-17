@@ -1216,6 +1216,8 @@ export interface GameRoundItem {
    * per-particle weakness signal.
    */
   parts?: { key: string; correct: boolean; note?: string }[];
+  /** The learner's own verdict, for games that end on a self-rating (Sentence Growth). Never derived. */
+  selfRating?: 'hard' | 'ok' | 'easy';
 }
 
 /**
