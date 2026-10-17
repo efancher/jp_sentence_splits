@@ -90,6 +90,13 @@ export interface SyncMetaState {
   id: 'sync';
   clientId: string;
   userId?: string;
+  /**
+   * True once this device has held a session, cleared only by an explicit
+   * sign-out. Unlike `userId` (cleared on any SIGNED_OUT event, including an
+   * expired refresh token), it survives involuntary session loss so
+   * SignedOutGate can tell "was signed in, lost it" from "never signed in".
+   */
+  wasSignedIn?: boolean;
   lastPullEventId: number;
   lastSyncAt?: string;
   lastError?: string;

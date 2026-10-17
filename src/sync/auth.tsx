@@ -54,7 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(data.session);
       setLoading(false);
       if (data.session?.user) {
-        void updateSyncMeta({ userId: data.session.user.id });
+        void updateSyncMeta({ userId: data.session.user.id, wasSignedIn: true });
       }
     });
 
@@ -62,7 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(next);
       syncLog('info', `Auth state: ${event}`, 'AUTH');
       if (next?.user) {
-        void updateSyncMeta({ userId: next.user.id });
+        void updateSyncMeta({ userId: next.user.id, wasSignedIn: true });
       } else if (event === 'SIGNED_OUT') {
         void updateSyncMeta({ userId: undefined });
       }
@@ -106,6 +106,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback(async () => {
     const supabase = getSupabase();
     if (!supabase) return;
+    // Deliberate sign-out: clear wasSignedIn so SignedOutGate doesn't nag.
+    await updateSyncMeta({ wasSignedIn: false });
     await supabase.auth.signOut();
     await updateSyncMeta({ userId: undefined });
   }, []);

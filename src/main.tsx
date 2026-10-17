@@ -5,6 +5,7 @@ import App from './App';
 import './styles/global.css';
 import { APP_NAME } from './appConfig';
 import { ensureSettings } from './db/database';
+import { SignedOutGate } from './components/SignedOutGate';
 import { AuthProvider } from './sync/auth';
 import { SyncProvider } from './sync/SyncProvider';
 
@@ -15,7 +16,9 @@ void ensureSettings().finally(() => {
     <StrictMode>
       <AuthProvider>
         <SyncProvider>
-          <App />
+          <SignedOutGate>
+            <App />
+          </SignedOutGate>
         </SyncProvider>
       </AuthProvider>
     </StrictMode>,
