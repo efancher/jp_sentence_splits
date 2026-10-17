@@ -45,6 +45,16 @@ source text changes. It is a point-in-time report, not a live lock on learner da
 - An unfinished sentence may still contain a complete local noun modifier,
   object–predicate relation, or nominalization. Prefer such a question when it
   does not rely on the missing continuation; explain the limited scope.
+- Every question needs a real choice: two or more wrong options, or one wrong
+  option outside the highlighted target (`hasRealChoice`, enforced by
+  `questions:coverage --check`). A two-part sentence where the only other option
+  is the highlighted part ("which following part is linked to the clause?") is
+  not a question. For connected clauses ask about the link instead: which word
+  marks the highlighted clause as the reason (ので/から), the “but / although” (が),
+  the “when / if” (と/ば/たら) or a て-form link, with the connective as the answer
+  and two other words from the sentence as distractors. Sentences with only a
+  topic and a description, a lone quotation and its verb, or a two-word noun
+  phrase get a review note instead.
 - Prefer a useful simpler relationship when no multi-clause question fits. Do not
   fill coverage with arbitrary distractors or invent missing context. Fragmented
   transcripts, greetings and genuinely unsuitable cases can receive an exact-source
@@ -99,3 +109,10 @@ without a useful contrast selected in this pass. They can be revisited later.
 A follow-up review recovered 12 local relationships within previously deferred
 sources: the same active scope now has 410 ready questions and 39 review notes
 (428 questions in the complete catalog). Missing continuations are not inferred.
+
+2026-10-17: 75 questions that had no real choice (a user report: one sentence's
+only other option was the highlighted part) were replaced — 46 connected-clause
+questions rewritten as connective-link questions (new `-clause-v2` ids, so old
+feedback does not attach to the new content) and 29 too-short sentences moved to
+review notes. The active scope is now 365 ready questions and 64 review notes
+(399 questions in the complete catalog).

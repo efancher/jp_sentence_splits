@@ -2926,7 +2926,7 @@ error stats), `src/lib/boundaryEditor.ts`, `src/lib/rangePlayer.ts`, `src/db/wor
 
 ## Clause-question pilot
 
-428 curated source sentences offer “Try a clause question (preview)” inside
+399 curated source sentences offer “Try a clause question (preview)” inside
 `SentenceWalkthrough`. `ClausePilotPreview` uses exact source text and uniquely
 located target/option spans, independent of saved chunk boundaries; an edited
 sentence expires its stale reference and shows the unprepared notice. Choices and explanations are ungraded and
@@ -2936,7 +2936,7 @@ and starts collapsed. References are assistant drafts awaiting independent revie
 The expanded set includes both repaired pilot sentences plus compound-particle,
 subject and noun-modifier questions. Existing reference IDs preserve prior feedback.
 The active-scope expansion added 396 source-reviewed drafts. At preparation time,
-410 of 449 active unique sentences have questions and 39 have review notes.
+365 of 429 active unique sentences have questions and 64 have review notes (2026-10-17, after replacing no-choice questions).
 A second review added 12 local questions within previously deferred fragments,
 without inferring the missing continuation. All
 remain assistant-drafted and self-reviewed, without independent validation.
