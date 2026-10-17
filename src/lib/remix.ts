@@ -18,8 +18,9 @@ import { seededShuffle } from './seededShuffle';
  *    nothing is generated and there are no made-up Japanese distractors. Fixed text and
  *    particles are copied from the sentence; replacements are the learner's own
  *    own nouns;
- *  - only single-clause, verb-final sentences with 2–4 plain "noun + case
- *    particle" slots, so a swap cannot break the clause around it;
+ *  - only predicate-final sentences (one verb or adjective, optionally with one
+ *    earlier clause linked by て/から/の) with 2–4 plain "noun + case particle"
+ *    slots, so a swap replaces a noun and nothing around it;
  *  - the replacement's English is its first gloss, and a noun is offered only
  *    if no other pool noun shares that gloss (the "reverse English → Japanese"
  *    ambiguity rule). Synonyms the learner might type are accepted by reading;
@@ -113,26 +114,79 @@ function tokensOf(sentence: Pick<Sentence, 'vocabularySuggestions'>): Token[] {
     .sort((a, b) => a.start - b.start);
 }
 
+/** Knobs for what counts as a clean skeleton; `REMIX_RULES` is what ships. */
+export interface RemixRules {
+  /** Accept an adjective predicate (形容詞 / 形状詞+だ・です) in place of a single verb. */
+  adjectivePredicates: boolean;
+  /** How many clause-linking particles (て/で/から/の-nominaliser) may appear before the final predicate. */
+  linkingParticles: number;
+  /** Allow two slots to share a particle (the prompt then names the original noun). */
+  repeatedParticles: boolean;
+  maxLength: number;
+}
+
+/**
+ * Measured on 2,896 production sentences (2026-10-17): the original strict rule
+ * (one verb, no linking particle, distinct particles) left 20 audio-backed
+ * skeletons; adjectives + one linking particle + repeated particles gives ~100.
+ * Raising the length cap added only 3, so it stays at 45. Every setting keeps
+ * noun-only swap slots and a predicate-final sentence.
+ */
+export const REMIX_RULES: RemixRules = {
+  adjectivePredicates: true,
+  linkingParticles: 1,
+  repeatedParticles: true,
+  maxLength: MAX_SENTENCE_LENGTH,
+};
+
+/** The pre-2026-10-17 strict rule, kept for the feasibility script and tests. */
+export const STRICT_REMIX_RULES: RemixRules = {
+  adjectivePredicates: false,
+  linkingParticles: 0,
+  repeatedParticles: false,
+  maxLength: MAX_SENTENCE_LENGTH,
+};
+
+/**
+ * What to call a slot in a prompt: the original noun + particle ("巣を"), with
+ * "(1st)"/"(2nd)" when the same text appears twice (声が … 声が).
+ */
+export function slotLabel(skeleton: RemixSkeleton, index: number): string {
+  const slot = skeleton.slots[index]!;
+  const text = `${slot.noun}${slot.particle}`;
+  const same = skeleton.slots.flatMap((other, i) => (`${other.noun}${other.particle}` === text ? [i] : []));
+  return same.length > 1 ? `${text} (${same.indexOf(index) + 1 === 1 ? '1st' : '2nd'})` : text;
+}
+
 /**
  * The sentence's swappable slots and fixed predicate, or null when it is not a
- * clean, single-clause, verb-final "noun + particle … verb" sentence.
+ * clean "noun + particle … predicate-final" sentence (see `RemixRules`).
  */
 export function findRemixSkeleton(
   sentence: Pick<Sentence, 'japanese' | 'vocabularySuggestions'>,
+  rules: RemixRules = REMIX_RULES,
 ): RemixSkeleton | null {
-  if (sentence.japanese.length > MAX_SENTENCE_LENGTH) return null;
+  if (sentence.japanese.length > rules.maxLength) return null;
   // Quoted speech: the verb that ends the quote is not this sentence's predicate.
   if (/[「」『』]/.test(sentence.japanese)) return null;
   // Tokens must tile the text exactly, so every slice below is trustworthy.
   if (!chunkSentenceIntoTiles(sentence)) return null;
   const tokens = tokensOf(sentence);
 
-  // Single clause: exactly one full verb, the sentence ends on the verb phrase, no connective particle.
+  // The sentence ends on its one main predicate; earlier clauses (if allowed) are joined by a linking particle.
+  const linking = tokens.filter((t) => t.pos.startsWith('助詞/接続助詞') || t.pos.startsWith('助詞/準体助詞'));
+  if (linking.length > rules.linkingParticles) return null;
   const fullVerbs = tokens.filter((t) => t.pos.startsWith('動詞') && !t.pos.startsWith('動詞/非自立可能'));
-  if (fullVerbs.length !== 1) return null;
-  if (tokens.some((t) => t.pos.startsWith('助詞/接続助詞') || t.pos.startsWith('助詞/準体助詞'))) return null;
   const body = tokens.filter((t) => !/^(補助記号|空白|助動詞|助詞|接尾辞)/.test(t.pos));
-  if (!body.length || !body[body.length - 1]!.pos.startsWith('動詞')) return null;
+  const finalPos = body[body.length - 1]?.pos ?? '';
+  if (finalPos.startsWith('動詞')) {
+    if (fullVerbs.length < 1 || fullVerbs.length > 1 + linking.length) return null;
+  } else if (rules.adjectivePredicates && /^(形容詞|形状詞)/.test(finalPos)) {
+    // Adjective predicate: no full verb anywhere unless a linking particle introduces an earlier clause.
+    if (fullVerbs.length > linking.length) return null;
+  } else {
+    return null;
+  }
 
   const slots: RemixSlot[] = [];
   for (let k = 1; k < tokens.length; k += 1) {
@@ -150,6 +204,8 @@ export function findRemixSkeleton(
     if (!isNounToken(tokens[first]!.pos)) continue;
     // お/ご… prefixes belong to the noun and would be left dangling; an adjacent particle makes the slot a compound (には).
     if (first > 0 && tokens[first - 1]!.pos.startsWith('接頭辞')) continue;
+    // A noun the run does not absorb (proper noun, numeral: スウェーデン+語) would be left dangling by a swap.
+    if (first > 0 && /^(名詞|代名詞)/.test(tokens[first - 1]!.pos)) continue;
     if (tokens[k + 1]?.pos.startsWith('助詞')) continue;
     const run = tokens.slice(first, k);
     const noun = run.map((t) => t.surface).join('');
@@ -165,7 +221,7 @@ export function findRemixSkeleton(
   }
   if (slots.length < MIN_SLOTS || slots.length > MAX_SLOTS) return null;
   // Two slots sharing a particle (羽を … 真似を) make "which one" ambiguous in the prompt.
-  if (new Set(slots.map((s) => s.particle)).size !== slots.length) return null;
+  if (!rules.repeatedParticles && new Set(slots.map((s) => s.particle)).size !== slots.length) return null;
   const last = slots[slots.length - 1]!;
   const lastParticle = tokens.find((t) => t.start >= last.end && t.surface === last.particle)!;
   return { slots, verbText: sentence.japanese.slice(lastParticle.end) };

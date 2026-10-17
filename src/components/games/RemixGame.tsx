@@ -25,6 +25,7 @@ import {
   REMIX_GAME_ID,
   REMIX_ROUND_SIZE,
   remixedSentence,
+  slotLabel,
   swapPoints,
   type RemixNoun,
   type RemixPuzzle,
@@ -204,7 +205,7 @@ function RemixCard({
             return (
               <label key={swap.slot} className="stack" style={{ gap: '0.15rem' }}>
                 <span>
-                  Replace the <span className="jp">{slot.particle}</span> slot ({slot.hint}) with{' '}
+                  Replace <span className="jp">{slotLabel(skeleton, swap.slot)}</span> ({slot.hint}) with{' '}
                   <strong>“{swap.noun.gloss}”</strong> — type it in Japanese
                 </span>
                 <input
@@ -341,8 +342,8 @@ export function RemixGame({ signal }: { signal: GameSignal }) {
       <section className="panel stack">
         <h2 style={{ margin: 0 }}>Remix</h2>
         <p className="muted" style={{ margin: 0 }}>
-          Needs at least {REMIX_ROUND_SIZE} sentences you&apos;ve met, with native audio, a single clause and two or
-          more noun + particle slots, plus enough nouns from your sentences to swap in — you have{' '}
+          Needs at least {REMIX_ROUND_SIZE} sentences you&apos;ve met, with native audio, a verb or adjective ending
+          and two or more noun + particle slots, plus enough nouns from your sentences to swap in — you have{' '}
           {data.candidates.length} sentence{data.candidates.length === 1 ? '' : 's'} and {data.pool.length}{' '}
           usable nouns so far.
         </p>

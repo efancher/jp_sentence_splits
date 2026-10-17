@@ -8,6 +8,8 @@ import {
   isCorrectNoun,
   remixedSentence,
   remixRejection,
+  slotLabel,
+  STRICT_REMIX_RULES,
   swapPoints,
   type RemixNoun,
 } from './remix';
@@ -67,19 +69,53 @@ describe('findRemixSkeleton', () => {
     expect(skeleton.verbText).toBe('作りました。');
   });
 
-  it('rejects multi-clause, quoted, noun-less and non-verb-final sentences', () => {
-    const te: Seg[] = [...BASE.slice(0, 7), ['起き', '動詞/一般'], ['て', '助詞/接続助詞'], ...BASE.slice(7)];
-    expect(findRemixSkeleton(sentenceOf('s2', te))).toBeNull();
+  it('rejects quoted, noun-less and non-predicate-final sentences', () => {
     const quoted: Seg[] = [['「', '補助記号'], ...BASE.slice(0, 10), ['」', '補助記号']];
     expect(findRemixSkeleton(sentenceOf('s3', quoted))).toBeNull();
     expect(findRemixSkeleton(sentenceOf('s4', BASE.slice(0, 5)))).toBeNull();
+    // Ends on a noun after the linked clause: the main predicate is not final.
+    const nounFinal: Seg[] = [...BASE.slice(0, 7), ['起き', '動詞/一般'], ['て', '助詞/接続助詞'], ['犬', N]];
+    expect(findRemixSkeleton(sentenceOf('s4b', nounFinal))).toBeNull();
   });
 
-  it('skips formal nouns and repeated particles as slots', () => {
+  it('allows one clause-linking particle (て) but not two', () => {
+    const te: Seg[] = [...BASE.slice(0, 7), ['起き', '動詞/一般'], ['て', '助詞/接続助詞'], ...BASE.slice(7)];
+    expect(findRemixSkeleton(sentenceOf('s2', te), STRICT_REMIX_RULES)).toBeNull();
+    const one = findRemixSkeleton(sentenceOf('s2', te))!;
+    expect(one.slots.map((slot) => slot.noun)).toEqual(['親鳥', 'ひな', '巣']);
+    expect(one.verbText).toBe('起きて作りました。');
+    const two: Seg[] = [['走っ', '動詞/一般'], ['て', '助詞/接続助詞'], ...te.slice(0, 7), ['起き', '動詞/一般'], ['て', '助詞/接続助詞'], ...BASE.slice(7)];
+    expect(findRemixSkeleton(sentenceOf('s2b', two))).toBeNull();
+  });
+
+  it('accepts adjective predicates (形容詞, 形状詞+です) and not noun predicates', () => {
+    const adj: Seg[] = [['親鳥', N], ['は', '助詞/係助詞'], ['巣', N], ['が', CASE], ['大きい', '形容詞/一般'], ['です', '助動詞']];
+    expect(findRemixSkeleton(sentenceOf('a1', adj))!.slots.map((slot) => `${slot.noun}${slot.particle}`)).toEqual(['親鳥は', '巣が']);
+    expect(findRemixSkeleton(sentenceOf('a1', adj), STRICT_REMIX_RULES)).toBeNull();
+    const na: Seg[] = [['親鳥', N], ['は', '助詞/係助詞'], ['犬', N], ['が', CASE], ['好き', '形状詞/一般'], ['です', '助動詞']];
+    expect(findRemixSkeleton(sentenceOf('a2', na))).not.toBeNull();
+    const noun: Seg[] = [['親鳥', N], ['は', '助詞/係助詞'], ['犬', N], ['が', CASE], ['先生', N], ['です', '助動詞']];
+    expect(findRemixSkeleton(sentenceOf('a3', noun))).toBeNull();
+  });
+
+  it('skips formal nouns, nouns that follow an unabsorbed proper noun, and allows repeated particles', () => {
     const formal: Seg[] = [['こと', N], ['が', CASE], ...BASE.slice(3)];
     expect(findRemixSkeleton(sentenceOf('s5', formal))!.slots.map((slot) => slot.noun)).toEqual(['ひな', '巣']);
     const dup: Seg[] = [['犬', N], ['を', CASE], ...BASE.slice(5)];
-    expect(findRemixSkeleton(sentenceOf('s6', dup))).toBeNull();
+    expect(findRemixSkeleton(sentenceOf('s6', dup), STRICT_REMIX_RULES)).toBeNull();
+    expect(findRemixSkeleton(sentenceOf('s6', dup))!.slots.map((slot) => `${slot.noun}${slot.particle}`)).toEqual(['犬を', '巣を']);
+    // スウェーデン語は → swapping 語 alone would leave スウェーデン dangling.
+    const proper: Seg[] = [['スウェーデン', '名詞/固有名詞'], ['語', N], ['は', '助詞/係助詞'], ...BASE.slice(3)];
+    expect(findRemixSkeleton(sentenceOf('s7', proper))!.slots.map((slot) => slot.noun)).toEqual(['ひな', '巣']);
+  });
+
+  it('labels repeated slots so the prompt is unambiguous', () => {
+    const twice: Seg[] = [['声', N], ['が', CASE], ['声', N], ['が', CASE], ['聞こえ', '動詞/一般'], ['まし', '助動詞'], ['た', '助動詞']];
+    const skeleton = findRemixSkeleton(sentenceOf('s8', twice))!;
+    expect(skeleton.slots).toHaveLength(2);
+    expect([slotLabel(skeleton, 0), slotLabel(skeleton, 1)]).toEqual(['声が (1st)', '声が (2nd)']);
+    const plain = findRemixSkeleton(sentenceOf('s1', BASE))!;
+    expect(slotLabel(plain, 2)).toBe('巣を');
   });
 });
 
