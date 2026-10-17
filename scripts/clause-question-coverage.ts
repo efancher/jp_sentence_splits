@@ -3,7 +3,7 @@ import { writeFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 import { CLAUSE_PILOT } from '../src/data/clausePilot';
 import notes from '../src/data/clauseReviewNotes.json';
-import { clausePilotFor } from '../src/lib/clausePilot';
+import { clausePilotFor, hasRealChoice } from '../src/lib/clausePilot';
 import { activeQuestionCoverage, type CoverageBook } from '../src/lib/clauseQuestionCoverage';
 import { fetchAll, requireAuthedUser } from './lib/scriptHelpers';
 import { createScriptSupabaseClient } from './lib/scriptSupabaseClient';
@@ -14,6 +14,9 @@ for (const reference of CLAUSE_PILOT) {
   if (!reference.id || !reference.question.trim() || !reference.explanation.trim() ||
       ids.has(reference.id) || sources.has(reference.source) || clausePilotFor(reference.source, [reference]) !== reference) {
     throw new Error(`Invalid or duplicate question: ${reference.id}`);
+  }
+  if (!hasRealChoice(reference)) {
+    throw new Error(`No real choice (every wrong option lies inside the highlighted target) — ask a different question or add a review note: ${reference.id}`);
   }
   ids.add(reference.id); sources.add(reference.source);
 }

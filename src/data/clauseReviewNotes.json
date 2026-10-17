@@ -193,5 +193,150 @@
     "id": "sent_9425d754-clause-note-v1",
     "source": "食べ物はどうですか？",
     "reason": "This short conversational prompt has no useful attachment contrast."
+  },
+  {
+    "id": "sent_082ea2c0-clause-note-v1",
+    "source": "もう一つは映画祭です。",
+    "reason": "This short two-part statement has only a topic and a description, so there is no contrasting span to choose from."
+  },
+  {
+    "id": "sent_0520b436-clause-note-v1",
+    "source": "私の名前はあかりです。",
+    "reason": "This short two-part statement has only a topic and a description, so there is no contrasting span to choose from."
+  },
+  {
+    "id": "sent_d8bc21d2-clause-note-v1",
+    "source": "私はひとりっ子です。",
+    "reason": "This short two-part statement has only a topic and a description, so there is no contrasting span to choose from."
+  },
+  {
+    "id": "sent_864e5c82-clause-note-v1",
+    "source": "今日はここまでです。",
+    "reason": "This short two-part statement has only a topic and a description, so there is no contrasting span to choose from."
+  },
+  {
+    "id": "sent_0296827d-clause-note-v1",
+    "source": "エピソード1で、私は趣味がたくさんあると言いました。",
+    "reason": "The only predicate outside the quoted or thought content is the one that introduces it, so there is nothing to choose between."
+  },
+  {
+    "id": "sent_fcfbaf96-clause-note-v1",
+    "source": "それは本当です。",
+    "reason": "This short two-part statement has only a topic and a description, so there is no contrasting span to choose from."
+  },
+  {
+    "id": "sent_061b8a4a-clause-note-v1",
+    "source": "だから私は言語を学ぶことはとても面白いと思います。",
+    "reason": "The only predicate outside the quoted or thought content is the one that introduces it, so there is nothing to choose between."
+  },
+  {
+    "id": "sent_25a29e0c-clause-note-v1",
+    "source": "さて、今日のトピックは習慣です。",
+    "reason": "This short two-part statement has only a topic and a description, so there is no contrasting span to choose from."
+  },
+  {
+    "id": "sent_339b1bab-clause-note-v1",
+    "source": "スロージャパニーズの時間です。",
+    "reason": "This is a two-part noun phrase with only one noun to modify, so there is nothing to choose between."
+  },
+  {
+    "id": "sent_6521e3ad-clause-note-v1",
+    "source": "こんかいは、ここまでです。",
+    "reason": "This short two-part statement has only a topic and a description, so there is no contrasting span to choose from."
+  },
+  {
+    "id": "sent_d388617e-clause-note-v1",
+    "source": "メッセージでおしえてください。",
+    "reason": "This short sentence has only the highlighted predicate and one other phrase, so there is no contrasting span to choose from."
+  },
+  {
+    "id": "sent_e0fe3f82-clause-note-v1",
+    "source": "バルセローナの近くにあります。",
+    "reason": "This is a two-part noun phrase with only one noun to modify, so there is nothing to choose between."
+  },
+  {
+    "id": "sent_5eca3a01-clause-note-v1",
+    "source": "来年はもっとたくさんフェスティバルに行きたいなあと思っています。",
+    "reason": "The only predicate outside the quoted or thought content is the one that introduces it, so there is nothing to choose between."
+  },
+  {
+    "id": "sent_7dc1043d-clause-note-v1",
+    "source": "アマゾンで買います。",
+    "reason": "This short sentence has only the highlighted predicate and one other phrase, so there is no contrasting span to choose from."
+  },
+  {
+    "id": "sent_4540c133-clause-note-v1",
+    "source": "スロージャパニーズのあかりです。",
+    "reason": "This is a two-part noun phrase with only one noun to modify, so there is nothing to choose between."
+  },
+  {
+    "id": "sent_a784c993-clause-note-v1",
+    "source": "メッセージなどで教えてください。",
+    "reason": "This short sentence has only the highlighted predicate and one other phrase, so there is no contrasting span to choose from."
+  },
+  {
+    "id": "sent_3dc1f8af-clause-note-v1",
+    "source": "でも、来年は行けたらいいなあと思っています。",
+    "reason": "The only predicate outside the quoted or thought content is the one that introduces it, so there is nothing to choose between."
+  },
+  {
+    "id": "sent_8f92c962-clause-note-v1",
+    "source": "日本語タイトルは『情熱のシーラ』です。",
+    "reason": "This short two-part statement has only a topic and a description, so there is no contrasting span to choose from."
+  },
+  {
+    "id": "sent_00e7c084-clause-note-v1",
+    "source": "栗やかぼちゃ、さつまいもが人気です。",
+    "reason": "This short sentence has only the highlighted predicate and one other phrase, so there is no contrasting span to choose from."
+  },
+  {
+    "id": "sent_9caeb719-clause-note-v1",
+    "source": "どの季節に旅行しても面白いと思います。",
+    "reason": "The only predicate outside the quoted or thought content is the one that introduces it, so there is nothing to choose between."
+  },
+  {
+    "id": "sent_b57a84bf-clause-note-v1",
+    "source": "どの季節が好きですか？",
+    "reason": "This short sentence has only the highlighted predicate and one other phrase, so there is no contrasting span to choose from."
+  },
+  {
+    "id": "sent_031f8563-clause-note-v1",
+    "source": "私の最近のお気に入りは花札です。",
+    "reason": "This short two-part statement has only a topic and a description, so there is no contrasting span to choose from."
+  },
+  {
+    "id": "sent_9960a450-clause-note-v1",
+    "source": "勉強は一度で終わりというものではないと私は思います。",
+    "reason": "The only predicate outside the quoted or thought content is the one that introduces it, so there is nothing to choose between."
+  },
+  {
+    "id": "sent_d81f4396-clause-note-v1",
+    "source": "どんなものを食べますか？",
+    "reason": "This short sentence has only the highlighted predicate and one other phrase, so there is no contrasting span to choose from."
+  },
+  {
+    "id": "sent_733c1768-clause-note-v1",
+    "source": "コメントやメッセージなどで教えてください。",
+    "reason": "This short sentence has only the highlighted predicate and one other phrase, so there is no contrasting span to choose from."
+  },
+  {
+    "id": "sent_45175a21-clause-note-v1",
+    "source": "どんな食べ物が人気ですか？",
+    "reason": "This short sentence has only the highlighted predicate and one other phrase, so there is no contrasting span to choose from."
+  },
+  {
+    "id": "sent_097e750f-clause-note-v1",
+    "source": "お父さん鳥は、「もうだめだ」と思いました。",
+    "reason": "The only predicate outside the quoted or thought content is the one that introduces it, so there is nothing to choose between."
+  },
+  {
+    "id": "sent_fdaf0b2d-clause-note-v1",
+    "source": "「そうね。じゃあ、そろそろ巣に帰りましょう」と、お母さん鳥が言いました。",
+    "reason": "The only predicate outside the quoted or thought content is the one that introduces it, so there is nothing to choose between."
+  },
+  {
+    "id": "sent_091b509b-clause-note-v1",
+    "source": "もう１羽のひなも、「僕も疲れた」と言いました。",
+    "reason": "The only predicate outside the quoted or thought content is the one that introduces it, so there is nothing to choose between."
   }
 ]

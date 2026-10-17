@@ -55,40 +55,17 @@ export const CLAUSE_PILOT = [
     "explanation": "The directly modified head is やつ. 紙 and やつ refer to the same thing here, so ask specifically for the grammatical head, not what the description is about."
   },
   {
-    "id": "sent_097e750f-clause-v1",
-    "source": "お父さん鳥は、「もうだめだ」と思いました。",
-    "targetText": "「もうだめだ」と",
-    "question": "Which predicate takes this thought as its content?",
-    "options": [
-      "思いました",
-      "もうだめだ"
-    ],
-    "answerText": "思いました",
-    "explanation": "The quoted thought is the content of 思いました. もうだめだ is the predicate inside the thought, not the predicate that introduces it."
-  },
-  {
-    "id": "sent_fdaf0b2d-clause-v1",
-    "source": "「そうね。じゃあ、そろそろ巣に帰りましょう」と、お母さん鳥が言いました。",
-    "targetText": "「そうね。じゃあ、そろそろ巣に帰りましょう」と",
-    "question": "Which predicate introduces these spoken words?",
-    "options": [
-      "言いました",
-      "帰りましょう"
-    ],
-    "answerText": "言いました",
-    "explanation": "The entire quotation attaches to 言いました despite the intervening お母さん鳥が. 帰りましょう belongs inside the quotation."
-  },
-  {
-    "id": "sent_6be3be8e-clause-v1",
+    "id": "sent_6be3be8e-clause-v2",
     "source": "ひなたちが全員集まったら、お母さん鳥は木の枝から飛び立ちました。",
     "targetText": "ひなたちが全員集まったら",
-    "question": "Which following event is linked to this clause?",
+    "question": "Which word makes the highlighted part a “when / if” condition for what follows?",
     "options": [
-      "お母さん鳥は木の枝から飛び立ちました",
-      "ひなたちが全員集まったら"
+      "集まったら",
+      "木の枝から",
+      "ひなたちが"
     ],
-    "answerText": "お母さん鳥は木の枝から飛び立ちました",
-    "explanation": "The gathering clause supplies the setting/condition for the mother bird taking off. This structural link is clear without forcing a choice between English “when” and “if”."
+    "answerText": "集まったら",
+    "explanation": "「集まったら」 ends the highlighted part with a conditional form (と, ば or たら), which sets it up as the “when / if” for what follows. 「木の枝から」 and 「ひなたちが」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
     "id": "sent_a1947e28-clause-v1",
@@ -129,18 +106,6 @@ export const CLAUSE_PILOT = [
     "explanation": "こと nominalizes 飛ぶ. 飛ぶことができました means the chick was able to fly; なんとか describes managing it somehow, not nominalization."
   },
   {
-    "id": "sent_091b509b-clause-v1",
-    "source": "もう１羽のひなも、「僕も疲れた」と言いました。",
-    "targetText": "「僕も疲れた」と",
-    "question": "Which predicate introduces these spoken words?",
-    "options": [
-      "言いました",
-      "疲れた"
-    ],
-    "answerText": "言いました",
-    "explanation": "言いました introduces the quotation. 疲れた is the predicate inside it: the chick says that he is tired too."
-  },
-  {
     "id": "sent_9842387d-clause-v1",
     "source": "そして、「さあみんな、羽はこうやって使うのよ」と言って、飛び方を見せました。",
     "targetText": "「さあみんな、羽はこうやって使うのよ」と",
@@ -154,40 +119,43 @@ export const CLAUSE_PILOT = [
     "explanation": "The quotation is the content of 言って. 見せました describes the accompanying demonstration, while 使う belongs inside the quoted explanation."
   },
   {
-    "id": "sent_9fdc7208-clause-v1",
+    "id": "sent_9fdc7208-clause-v2",
     "source": "３羽のひなたちは、お母さんの真似をして、必死に飛びました。",
     "targetText": "お母さんの真似をして",
-    "question": "Which following event is linked to this clause?",
+    "question": "Which word is in the て-form that links the highlighted part to what follows?",
     "options": [
-      "必死に飛びました",
-      "お母さんの真似をして"
+      "真似をして",
+      "飛びました",
+      "必死に"
     ],
-    "answerText": "必死に飛びました",
-    "explanation": "The chicks flew desperately while imitating their mother. The て-form clause links the imitation to the main flying event; it does not say that the mother is the subject of 飛びました."
+    "answerText": "真似をして",
+    "explanation": "「真似をして」 is in the て-form (or its で counterpart), which joins the highlighted part to the statement that follows. 「飛びました」 and 「必死に」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
-    "id": "sent_e069c9d6-clause-v1",
+    "id": "sent_e069c9d6-clause-v2",
     "source": "そして、羽を大きく広げると、思い切って巣から飛び出しました。",
     "targetText": "羽を大きく広げると",
-    "question": "Which following event is linked to this clause?",
+    "question": "Which word makes the highlighted part a “when / if” condition for what follows?",
     "options": [
-      "思い切って巣から飛び出しました",
-      "羽を大きく広げると"
+      "広げると",
+      "巣から",
+      "思い切って"
     ],
-    "answerText": "思い切って巣から飛び出しました",
-    "explanation": "Spreading the wings leads into the event of launching from the nest. Here と links the clauses; it is not quoting spoken words."
+    "answerText": "広げると",
+    "explanation": "「広げると」 ends the highlighted part with a conditional form (と, ば or たら), which sets it up as the “when / if” for what follows. 「巣から」 and 「思い切って」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
-    "id": "sent_0843827e-clause-v1",
+    "id": "sent_0843827e-clause-v2",
     "source": "ひなたちは大きな声でピーピーと鳴いて、口を大きく開けました。",
     "targetText": "大きな声でピーピーと鳴いて",
-    "question": "Which following event is linked to this clause?",
+    "question": "Which word is in the て-form that links the highlighted part to what follows?",
     "options": [
-      "口を大きく開けました",
-      "大きな声でピーピーと鳴いて"
+      "鳴いて",
+      "開けました",
+      "大きな声で"
     ],
-    "answerText": "口を大きく開けました",
-    "explanation": "鳴いて connects the chirping to the chicks opening their mouths. Both actions share the topic ひなたちは. The て-form alone need not force a precise before/after ordering."
+    "answerText": "鳴いて",
+    "explanation": "「鳴いて」 is in the て-form (or its で counterpart), which joins the highlighted part to the statement that follows. 「開けました」 and 「大きな声で」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
     "id": "sent_c540c63a-clause-v1",

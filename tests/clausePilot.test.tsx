@@ -2,14 +2,16 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { CLAUSE_PILOT } from '../src/data/clausePilot';
 import { ClausePilotPreview } from '../src/components/ClausePilotPreview';
-import { clauseQuestionAvailability, clausePilotFor, uniqueTextSpan, clausePilotFeedbackKey } from '../src/lib/clausePilot';
+import { clauseQuestionAvailability, clausePilotFor, hasRealChoice, uniqueTextSpan, clausePilotFeedbackKey } from '../src/lib/clausePilot';
 import { PILOT_CHUNK_REPAIRS, repairPilotChunks } from '../src/lib/pilotChunkRepairs';
 import type { AnalysisChunk } from '../src/domain/types';
 
 beforeEach(() => localStorage.clear());
 describe('clause preview references', () => {
   it('validates every pilot and refuses stale text or ambiguous spans', () => {
-    expect(CLAUSE_PILOT).toHaveLength(428);
+    expect(CLAUSE_PILOT).toHaveLength(399);
+    for (const reference of CLAUSE_PILOT) expect(hasRealChoice(reference), reference.id).toBe(true);
+    expect(hasRealChoice({ targetText: '遅いですが', options: ['遅いですが', 'ございます'], answerText: 'ございます' })).toBe(false);
     expect(new Set(CLAUSE_PILOT.map((reference) => reference.id)).size).toBe(CLAUSE_PILOT.length);
     expect(new Set(CLAUSE_PILOT.map((reference) => reference.source)).size).toBe(CLAUSE_PILOT.length);
     for (const reference of CLAUSE_PILOT) expect(clausePilotFor(reference.source)).toBe(reference);

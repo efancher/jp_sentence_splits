@@ -25,7 +25,19 @@ export function clausePilotFor(source: string, references: readonly ClausePilotR
     reference.options.includes(reference.answerText)) ?? null;
 }
 
-export type ClausePilotFeedback = 'helpful' | 'disputed';
+/**
+ * A question offers a real choice if it has two or more wrong options, or its
+ * one wrong option lies outside the highlighted target. Otherwise the learner
+ * just picks "the part that isn't highlighted" (a two-part sentence whose only
+ * other option is the target, or something inside it).
+ */
+export function hasRealChoice(reference: Pick<ClausePilotReference, 'targetText' | 'options' | 'answerText'>): boolean {
+  const wrong = reference.options.filter((option) => option !== reference.answerText);
+  return wrong.length >= 2 || wrong.some((option) =>
+    !reference.targetText.includes(option) && !option.includes(reference.targetText));
+}
+
+export type ClausePilotFeedback ='helpful' | 'disputed';
 // Separate from learner evidence, sync and scheduling. A draft revision gets a new key.
 export const clausePilotFeedbackKey = (id: string) => `glossbook.clausePilot.feedback.${id}`;
 

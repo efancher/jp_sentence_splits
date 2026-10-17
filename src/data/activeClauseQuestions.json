@@ -1,15 +1,16 @@
 [
   {
-    "id": "sent_c955bfbc-clause-v1",
+    "id": "sent_c955bfbc-clause-v2",
     "source": "少し遅いですが、あけましておめでとうございます。",
     "targetText": "少し遅いですが",
-    "question": "Which following part is linked to the highlighted clause?",
+    "question": "Which word joins the highlighted clause to what follows as a “but / although” link?",
     "options": [
-      "あけましておめでとうございます",
-      "少し遅いですが"
+      "遅いですが",
+      "少し",
+      "ございます"
     ],
-    "answerText": "あけましておめでとうございます",
-    "explanation": "「少し遅いですが」 links to 「あけましておめでとうございます」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
+    "answerText": "遅いですが",
+    "explanation": "「遅いですが」 ends the highlighted clause with が, which sets it beside the statement that follows as a “but / although” link. 「少し」 and 「ございます」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
     "id": "sent_806121c3-clause-v1",
@@ -96,18 +97,6 @@
     "explanation": "「メタル音楽の」 describes the noun in 「フェスティバル」. Read the modifier together with that noun; the question asks for the grammatical head, not another related thing mentioned in the sentence."
   },
   {
-    "id": "sent_082ea2c0-clause-v1",
-    "source": "もう一つは映画祭です。",
-    "targetText": "映画祭です",
-    "question": "Which は-marked phrase supplies a topic for the highlighted description?",
-    "options": [
-      "もう一つは",
-      "映画祭"
-    ],
-    "answerText": "もう一つは",
-    "explanation": "「もう一つは」 uses は to set a topic for 「映画祭です」. A topic frames the statement; it is not automatically the grammatical subject of every clause."
-  },
-  {
     "id": "sent_22a31587-clause-v1",
     "source": "私が行きたい映画祭は秋にスペインであります。",
     "targetText": "私が行きたい",
@@ -120,28 +109,30 @@
     "explanation": "「私が行きたい」 describes the noun in 「映画祭」. Read the modifier together with that noun; the question asks for the grammatical head, not another related thing mentioned in the sentence."
   },
   {
-    "id": "sent_75a93aa5-clause-v1",
+    "id": "sent_75a93aa5-clause-v2",
     "source": "ホラー映画がたくさん上映されるので、私は毎年この映画祭に行っていました。",
     "targetText": "ホラー映画がたくさん上映されるので",
-    "question": "Which following part is linked to the highlighted clause?",
+    "question": "Which word marks the highlighted clause as the reason for what follows?",
     "options": [
-      "私は毎年この映画祭に行っていました",
-      "ホラー映画がたくさん上映されるので"
+      "上映されるので",
+      "毎年",
+      "この映画祭に"
     ],
-    "answerText": "私は毎年この映画祭に行っていました",
-    "explanation": "「ホラー映画がたくさん上映されるので」 links to 「私は毎年この映画祭に行っていました」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
+    "answerText": "上映されるので",
+    "explanation": "「上映されるので」 ends the highlighted clause with ので, which presents it as the reason for the statement that follows. 「毎年」 and 「この映画祭に」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
-    "id": "sent_0f6f7c1d-clause-v1",
+    "id": "sent_0f6f7c1d-clause-v2",
     "source": "ここ数年は行っていなかったので、今年は行かなければなりません。",
     "targetText": "ここ数年は行っていなかったので",
-    "question": "Which following part is linked to the highlighted clause?",
+    "question": "Which word marks the highlighted clause as the reason for what follows?",
     "options": [
-      "今年は行かなければなりません",
-      "ここ数年は行っていなかったので"
+      "行っていなかったので",
+      "今年は",
+      "行かなければ"
     ],
-    "answerText": "今年は行かなければなりません",
-    "explanation": "「ここ数年は行っていなかったので」 links to 「今年は行かなければなりません」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
+    "answerText": "行っていなかったので",
+    "explanation": "「行っていなかったので」 ends the highlighted clause with ので, which presents it as the reason for the statement that follows. 「今年は」 and 「行かなければ」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
     "id": "sent_70a66f97-clause-v1",
@@ -156,16 +147,17 @@
     "explanation": "「この映画祭に行く」 describes the noun in 「目的」. Read the modifier together with that noun; the question asks for the grammatical head, not another related thing mentioned in the sentence."
   },
   {
-    "id": "sent_26e1b017-clause-v1",
+    "id": "sent_26e1b017-clause-v2",
     "source": "私は特殊メイクが得意なので、ゾンビになるのも大好きです。",
     "targetText": "私は特殊メイクが得意なので",
-    "question": "Which following part is linked to the highlighted clause?",
+    "question": "Which word marks the highlighted clause as the reason for what follows?",
     "options": [
-      "ゾンビになるのも大好きです",
-      "私は特殊メイクが得意なので"
+      "得意なので",
+      "ゾンビに",
+      "大好きです"
     ],
-    "answerText": "ゾンビになるのも大好きです",
-    "explanation": "「私は特殊メイクが得意なので」 links to 「ゾンビになるのも大好きです」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
+    "answerText": "得意なので",
+    "explanation": "「得意なので」 ends the highlighted clause with ので, which presents it as the reason for the statement that follows. 「ゾンビに」 and 「大好きです」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
     "id": "sent_fee153e6-clause-v1",
@@ -240,28 +232,17 @@
     "explanation": "「今年スペインに行く」 describes the noun in 「とき」. Read the modifier together with that noun; the question asks for the grammatical head, not another related thing mentioned in the sentence."
   },
   {
-    "id": "sent_85d37419-clause-v1",
+    "id": "sent_85d37419-clause-v2",
     "source": "今日は初めてのエピソードなので、まずは私について話します。",
     "targetText": "今日は初めてのエピソードなので",
-    "question": "Which following part is linked to the highlighted clause?",
+    "question": "Which word marks the highlighted clause as the reason for what follows?",
     "options": [
-      "まずは私について話します",
-      "今日は初めてのエピソードなので"
+      "エピソードなので",
+      "まずは",
+      "私について"
     ],
-    "answerText": "まずは私について話します",
-    "explanation": "「今日は初めてのエピソードなので」 links to 「まずは私について話します」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
-  },
-  {
-    "id": "sent_0520b436-clause-v1",
-    "source": "私の名前はあかりです。",
-    "targetText": "あかりです",
-    "question": "Which は-marked phrase supplies a topic for the highlighted description?",
-    "options": [
-      "私の名前は",
-      "あかり"
-    ],
-    "answerText": "私の名前は",
-    "explanation": "「私の名前は」 uses は to set a topic for 「あかりです」. A topic frames the statement; it is not automatically the grammatical subject of every clause."
+    "answerText": "エピソードなので",
+    "explanation": "「エピソードなので」 ends the highlighted clause with ので, which presents it as the reason for the statement that follows. 「まずは」 and 「私について」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
     "id": "sent_c9ca7ac6-clause-v1",
@@ -432,18 +413,6 @@
     "explanation": "The が in 「兄弟が」 marks the subject linked to 「いません」. Keep this local subject–predicate relationship separate from any broader は-marked topic."
   },
   {
-    "id": "sent_d8bc21d2-clause-v1",
-    "source": "私はひとりっ子です。",
-    "targetText": "ひとりっ子です",
-    "question": "Which は-marked phrase supplies a topic for the highlighted description?",
-    "options": [
-      "私は",
-      "ひとりっ子"
-    ],
-    "answerText": "私は",
-    "explanation": "「私は」 uses は to set a topic for 「ひとりっ子です」. A topic frames the statement; it is not automatically the grammatical subject of every clause."
-  },
-  {
     "id": "sent_1bbb8ce4-clause-v1",
     "source": "今はペットがいませんが、昔、魚を飼っていました。",
     "targetText": "飼っていました",
@@ -456,16 +425,17 @@
     "explanation": "The を in 「魚を」 marks the object linked to 「飼っていました」. It identifies what the action is applied to, rather than its time, place, or actor."
   },
   {
-    "id": "sent_8c28213b-clause-v1",
+    "id": "sent_8c28213b-clause-v2",
     "source": "私は動物が好きなので、動物と一緒に住みたいです。",
     "targetText": "私は動物が好きなので",
-    "question": "Which following part is linked to the highlighted clause?",
+    "question": "Which word marks the highlighted clause as the reason for what follows?",
     "options": [
-      "動物と一緒に住みたいです",
-      "私は動物が好きなので"
+      "好きなので",
+      "動物と",
+      "一緒に"
     ],
-    "answerText": "動物と一緒に住みたいです",
-    "explanation": "「私は動物が好きなので」 links to 「動物と一緒に住みたいです」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
+    "answerText": "好きなので",
+    "explanation": "「好きなので」 ends the highlighted clause with ので, which presents it as the reason for the statement that follows. 「動物と」 and 「一緒に」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
     "id": "sent_519942fa-clause-v1",
@@ -516,16 +486,17 @@
     "explanation": "「好きな」 describes the noun in 「食べ物」. Read the modifier together with that noun; the question asks for the grammatical head, not another related thing mentioned in the sentence."
   },
   {
-    "id": "sent_ed61f175-clause-v1",
+    "id": "sent_ed61f175-clause-v2",
     "source": "日本の食べ物はもちろん好きですが、イタリア料理やスペイン料理もとても好きです。",
     "targetText": "日本の食べ物はもちろん好きですが",
-    "question": "Which following part is linked to the highlighted clause?",
+    "question": "Which word joins the highlighted clause to what follows as a “but / although” link?",
     "options": [
-      "イタリア料理やスペイン料理もとても好きです",
-      "日本の食べ物はもちろん好きですが"
+      "好きですが",
+      "もちろん",
+      "イタリア料理や"
     ],
-    "answerText": "イタリア料理やスペイン料理もとても好きです",
-    "explanation": "「日本の食べ物はもちろん好きですが」 links to 「イタリア料理やスペイン料理もとても好きです」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
+    "answerText": "好きですが",
+    "explanation": "「好きですが」 ends the highlighted clause with が, which sets it beside the statement that follows as a “but / although” link. 「もちろん」 and 「イタリア料理や」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
     "id": "sent_164ccd96-clause-v1",
@@ -600,18 +571,6 @@
     "explanation": "The が in 「どんな食べ物が」 marks the subject linked to 「好きですか」. Keep this local subject–predicate relationship separate from any broader は-marked topic."
   },
   {
-    "id": "sent_864e5c82-clause-v1",
-    "source": "今日はここまでです。",
-    "targetText": "ここまでです",
-    "question": "Which は-marked phrase supplies a topic for the highlighted description?",
-    "options": [
-      "今日は",
-      "ここまで"
-    ],
-    "answerText": "今日は",
-    "explanation": "「今日は」 uses は to set a topic for 「ここまでです」. A topic frames the statement; it is not automatically the grammatical subject of every clause."
-  },
-  {
     "id": "sent_f12003ae-clause-v1",
     "source": "次のエピソードでまた会いましょう。",
     "targetText": "次の",
@@ -634,30 +593,6 @@
     ],
     "answerText": "趣味",
     "explanation": "「趣味」 is the subject matter introduced by 「について」: “about / concerning 趣味”. について stays together as a compound expression."
-  },
-  {
-    "id": "sent_0296827d-clause-v1",
-    "source": "エピソード1で、私は趣味がたくさんあると言いました。",
-    "targetText": "私は趣味がたくさんあると",
-    "question": "Which predicate directly takes the highlighted quotation or content phrase?",
-    "options": [
-      "言いました",
-      "ある"
-    ],
-    "answerText": "言いました",
-    "explanation": "「言いました」 takes 「私は趣味がたくさんあると」 as its quoted, thought, or named content. The content and the predicate that introduces it occupy different grammatical levels."
-  },
-  {
-    "id": "sent_fcfbaf96-clause-v1",
-    "source": "それは本当です。",
-    "targetText": "本当です",
-    "question": "Which は-marked phrase supplies a topic for the highlighted description?",
-    "options": [
-      "それは",
-      "本当"
-    ],
-    "answerText": "それは",
-    "explanation": "「それは」 uses は to set a topic for 「本当です」. A topic frames the statement; it is not automatically the grammatical subject of every clause."
   },
   {
     "id": "sent_fff7b7ff-clause-v1",
@@ -708,16 +643,17 @@
     "explanation": "「私の」 describes the noun in 「趣味」. Read the modifier together with that noun; the question asks for the grammatical head, not another related thing mentioned in the sentence."
   },
   {
-    "id": "sent_9b3b82e3-clause-v1",
+    "id": "sent_9b3b82e3-clause-v2",
     "source": "言語を学ぶと、文化や生活も学ぶことができます。",
     "targetText": "言語を学ぶと",
-    "question": "Which following part is linked to the highlighted clause?",
+    "question": "Which word makes the highlighted part a “when / if” condition for what follows?",
     "options": [
-      "文化や生活も学ぶことができます",
-      "言語を学ぶと"
+      "学ぶと",
+      "文化や生活も",
+      "言語を"
     ],
-    "answerText": "文化や生活も学ぶことができます",
-    "explanation": "「言語を学ぶと」 links to 「文化や生活も学ぶことができます」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
+    "answerText": "学ぶと",
+    "explanation": "「学ぶと」 ends the highlighted part with a conditional form (と, ば or たら), which sets it up as the “when / if” for what follows. 「文化や生活も」 and 「言語を」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
     "id": "sent_0f881c11-clause-v1",
@@ -730,18 +666,6 @@
     ],
     "answerText": "いろいろな人と",
     "explanation": "「いろいろな人と」 names the other people involved in 「話す」. That participant phrase belongs with the interaction, rather than describing its result."
-  },
-  {
-    "id": "sent_061b8a4a-clause-v1",
-    "source": "だから私は言語を学ぶことはとても面白いと思います。",
-    "targetText": "言語を学ぶことはとても面白いと",
-    "question": "Which predicate directly takes the highlighted quotation or content phrase?",
-    "options": [
-      "思います",
-      "学ぶ"
-    ],
-    "answerText": "思います",
-    "explanation": "「思います」 takes 「言語を学ぶことはとても面白いと」 as its quoted, thought, or named content. The content and the predicate that introduces it occupy different grammatical levels."
   },
   {
     "id": "sent_1954eefd-clause-v1",
@@ -802,18 +726,6 @@
     ],
     "answerText": "エピソード",
     "explanation": "「次の」 describes the noun in 「エピソード」. Read the modifier together with that noun; the question asks for the grammatical head, not another related thing mentioned in the sentence."
-  },
-  {
-    "id": "sent_25a29e0c-clause-v1",
-    "source": "さて、今日のトピックは習慣です。",
-    "targetText": "習慣です",
-    "question": "Which は-marked phrase supplies a topic for the highlighted description?",
-    "options": [
-      "今日のトピックは",
-      "習慣"
-    ],
-    "answerText": "今日のトピックは",
-    "explanation": "「今日のトピックは」 uses は to set a topic for 「習慣です」. A topic frames the statement; it is not automatically the grammatical subject of every clause."
   },
   {
     "id": "sent_ea1f0950-clause-v1",
@@ -1068,18 +980,6 @@
     "explanation": "The が in 「どんな家具が」 marks the subject linked to 「ありますか」. Keep this local subject–predicate relationship separate from any broader は-marked topic."
   },
   {
-    "id": "sent_339b1bab-clause-v1",
-    "source": "スロージャパニーズの時間です。",
-    "targetText": "スロージャパニーズの",
-    "question": "Which following expression contains the noun directly modified by the highlighted words?",
-    "options": [
-      "時間",
-      "スロージャパニーズ"
-    ],
-    "answerText": "時間",
-    "explanation": "「スロージャパニーズの」 describes the noun in 「時間」. Read the modifier together with that noun; the question asks for the grammatical head, not another related thing mentioned in the sentence."
-  },
-  {
     "id": "sent_83420c81-clause-v1",
     "source": "この番組では、いろいろな話題について、ゆっくりな日本語で話します。",
     "targetText": "ゆっくりな",
@@ -1116,16 +1016,17 @@
     "explanation": "「デュッセルドルフに」 supplies the location for 「すんでいます」. The location belongs with that part of the sentence, rather than being its actor or object."
   },
   {
-    "id": "sent_744be7ec-clause-v1",
+    "id": "sent_744be7ec-clause-v2",
     "source": "デュッセルドルフはおおきいので、おみせがたくさんあります。",
     "targetText": "デュッセルドルフはおおきいので",
-    "question": "Which following part is linked to the highlighted clause?",
+    "question": "Which word marks the highlighted clause as the reason for what follows?",
     "options": [
-      "おみせがたくさんあります",
-      "デュッセルドルフはおおきいので"
+      "おおきいので",
+      "おみせが",
+      "たくさん"
     ],
-    "answerText": "おみせがたくさんあります",
-    "explanation": "「デュッセルドルフはおおきいので」 links to 「おみせがたくさんあります」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
+    "answerText": "おおきいので",
+    "explanation": "「おおきいので」 ends the highlighted clause with ので, which presents it as the reason for the statement that follows. 「おみせが」 and 「たくさん」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
     "id": "sent_3386a436-clause-v1",
@@ -1164,16 +1065,17 @@
     "explanation": "「ここのコーヒーは」 uses は to set a topic for 「おいしいです」. A topic frames the statement; it is not automatically the grammatical subject of every clause."
   },
   {
-    "id": "sent_c949a050-clause-v1",
+    "id": "sent_c949a050-clause-v2",
     "source": "そして装飾もきれいなので、このカフェは私のお気に入りです。",
     "targetText": "装飾もきれいなので",
-    "question": "Which following part is linked to the highlighted clause?",
+    "question": "Which word marks the highlighted clause as the reason for what follows?",
     "options": [
-      "このカフェは私のお気に入りです",
-      "装飾もきれいなので"
+      "きれいなので",
+      "このカフェは",
+      "お気に入りです"
     ],
-    "answerText": "このカフェは私のお気に入りです",
-    "explanation": "「装飾もきれいなので」 links to 「このカフェは私のお気に入りです」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
+    "answerText": "きれいなので",
+    "explanation": "「きれいなので」 ends the highlighted clause with ので, which presents it as the reason for the statement that follows. 「このカフェは」 and 「お気に入りです」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
     "id": "sent_28f9c02b-clause-v1",
@@ -1248,18 +1150,6 @@
     "explanation": "The が in 「なにが」 marks the subject linked to 「ありますか」. Keep this local subject–predicate relationship separate from any broader は-marked topic."
   },
   {
-    "id": "sent_6521e3ad-clause-v1",
-    "source": "こんかいは、ここまでです。",
-    "targetText": "ここまでです",
-    "question": "Which は-marked phrase supplies a topic for the highlighted description?",
-    "options": [
-      "こんかいは",
-      "ここまで"
-    ],
-    "answerText": "こんかいは",
-    "explanation": "「こんかいは」 uses は to set a topic for 「ここまでです」. A topic frames the statement; it is not automatically the grammatical subject of every clause."
-  },
-  {
     "id": "sent_521dda45-clause-v1",
     "source": "きょうもきいてくれて、ありがとうございます。",
     "targetText": "きいてくれて",
@@ -1270,18 +1160,6 @@
     ],
     "answerText": "ありがとうございます",
     "explanation": "「きいてくれて」 links to 「ありがとうございます」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
-  },
-  {
-    "id": "sent_d388617e-clause-v1",
-    "source": "メッセージでおしえてください。",
-    "targetText": "おしえてください",
-    "question": "Which phrase gives the means or medium used for the highlighted action?",
-    "options": [
-      "メッセージで",
-      "ください"
-    ],
-    "answerText": "メッセージで",
-    "explanation": "「メッセージで」 gives the means or medium for 「おしえてください」. Here で links the method to the action."
   },
   {
     "id": "sent_be359772-clause-v1",
@@ -1380,16 +1258,17 @@
     "explanation": "「日本にいた」 describes the noun in 「とき」. Read the modifier together with that noun; the question asks for the grammatical head, not another related thing mentioned in the sentence."
   },
   {
-    "id": "sent_6cbcd594-clause-v1",
+    "id": "sent_6cbcd594-clause-v2",
     "source": "でも、今、いろいろなコンサートに行くことができて、とてもうれしいです。",
     "targetText": "いろいろなコンサートに行くことができて",
-    "question": "Which following part is linked to the highlighted clause?",
+    "question": "Which word is in the て-form that links the highlighted part to what follows?",
     "options": [
-      "とてもうれしいです",
-      "いろいろなコンサートに行くことができて"
+      "できて",
+      "とても",
+      "うれしいです"
     ],
-    "answerText": "とてもうれしいです",
-    "explanation": "「いろいろなコンサートに行くことができて」 links to 「とてもうれしいです」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
+    "answerText": "できて",
+    "explanation": "「できて」 is in the て-form (or its で counterpart), which joins the highlighted part to the statement that follows. 「とても」 and 「うれしいです」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
     "id": "sent_be3279ed-clause-v1",
@@ -1438,18 +1317,6 @@
     ],
     "answerText": "町",
     "explanation": "「スペインにある」 describes the noun in 「町」. Read the modifier together with that noun; the question asks for the grammatical head, not another related thing mentioned in the sentence."
-  },
-  {
-    "id": "sent_e0fe3f82-clause-v1",
-    "source": "バルセローナの近くにあります。",
-    "targetText": "バルセローナの",
-    "question": "Which following expression contains the noun directly modified by the highlighted words?",
-    "options": [
-      "近く",
-      "バルセローナ"
-    ],
-    "answerText": "近く",
-    "explanation": "「バルセローナの」 describes the noun in 「近く」. Read the modifier together with that noun; the question asks for the grammatical head, not another related thing mentioned in the sentence."
   },
   {
     "id": "sent_97a1282b-clause-v1",
@@ -1560,28 +1427,17 @@
     "explanation": "「いろいろな人に」 names the other people involved in 「会って」. That participant phrase belongs with the interaction, rather than describing its result."
   },
   {
-    "id": "sent_b4411d80-clause-v1",
+    "id": "sent_b4411d80-clause-v2",
     "source": "2020年にもフェスティバルに行きたかったですが、残念ながら行くことができませんでした。",
     "targetText": "2020年にもフェスティバルに行きたかったですが",
-    "question": "Which following part is linked to the highlighted clause?",
+    "question": "Which word joins the highlighted clause to what follows as a “but / although” link?",
     "options": [
-      "残念ながら行くことができませんでした",
-      "2020年にもフェスティバルに行きたかったですが"
+      "行きたかったですが",
+      "残念ながら",
+      "2020年に"
     ],
-    "answerText": "残念ながら行くことができませんでした",
-    "explanation": "「2020年にもフェスティバルに行きたかったですが」 links to 「残念ながら行くことができませんでした」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
-  },
-  {
-    "id": "sent_5eca3a01-clause-v1",
-    "source": "来年はもっとたくさんフェスティバルに行きたいなあと思っています。",
-    "targetText": "来年はもっとたくさんフェスティバルに行きたいなあと",
-    "question": "Which predicate directly takes the highlighted quotation or content phrase?",
-    "options": [
-      "思っています",
-      "行きたい"
-    ],
-    "answerText": "思っています",
-    "explanation": "「思っています」 takes 「来年はもっとたくさんフェスティバルに行きたいなあと」 as its quoted, thought, or named content. The content and the predicate that introduces it occupy different grammatical levels."
+    "answerText": "行きたかったですが",
+    "explanation": "「行きたかったですが」 ends the highlighted clause with が, which sets it beside the statement that follows as a “but / although” link. 「残念ながら」 and 「2020年に」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
     "id": "sent_7efcbba4-clause-v1",
@@ -1740,16 +1596,17 @@
     "explanation": "「私」 is the person before 「にとって」. Read the phrase as “for 私 / from 私’s viewpoint”; にとって stays together as a compound expression."
   },
   {
-    "id": "sent_cf1ca58f-clause-v1",
+    "id": "sent_cf1ca58f-clause-v2",
     "source": "このメモがあれば、買うものを忘れません。",
     "targetText": "このメモがあれば",
-    "question": "Which following part is linked to the highlighted clause?",
+    "question": "Which word makes the highlighted part a “when / if” condition for what follows?",
     "options": [
-      "買うものを忘れません",
-      "このメモがあれば"
+      "あれば",
+      "買うものを",
+      "このメモが"
     ],
-    "answerText": "買うものを忘れません",
-    "explanation": "「このメモがあれば」 links to 「買うものを忘れません」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
+    "answerText": "あれば",
+    "explanation": "「あれば」 ends the highlighted part with a conditional form (と, ば or たら), which sets it up as the “when / if” for what follows. 「買うものを」 and 「このメモが」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
     "id": "sent_c1bdb4f5-clause-v1",
@@ -1774,18 +1631,6 @@
     ],
     "answerText": "オンラインで",
     "explanation": "「オンラインで」 gives the means or medium for 「買います」. Here で links the method to the action."
-  },
-  {
-    "id": "sent_7dc1043d-clause-v1",
-    "source": "アマゾンで買います。",
-    "targetText": "買います",
-    "question": "Which phrase gives the location for the highlighted part of the sentence?",
-    "options": [
-      "アマゾンで",
-      "買います"
-    ],
-    "answerText": "アマゾンで",
-    "explanation": "「アマゾンで」 supplies the location for 「買います」. The location belongs with that part of the sentence, rather than being its actor or object."
   },
   {
     "id": "sent_ba94aedb-clause-v1",
@@ -1846,18 +1691,6 @@
     ],
     "answerText": "エピソード",
     "explanation": "「次の」 describes the noun in 「エピソード」. Read the modifier together with that noun; the question asks for the grammatical head, not another related thing mentioned in the sentence."
-  },
-  {
-    "id": "sent_4540c133-clause-v1",
-    "source": "スロージャパニーズのあかりです。",
-    "targetText": "スロージャパニーズの",
-    "question": "Which following expression contains the noun directly modified by the highlighted words?",
-    "options": [
-      "あかり",
-      "スロージャパニーズ"
-    ],
-    "answerText": "あかり",
-    "explanation": "「スロージャパニーズの」 describes the noun in 「あかり」. Read the modifier together with that noun; the question asks for the grammatical head, not another related thing mentioned in the sentence."
   },
   {
     "id": "sent_27facd56-clause-v1",
@@ -2112,18 +1945,6 @@
     "explanation": "「旅行の」 describes the noun in 「思い出」. Read the modifier together with that noun; the question asks for the grammatical head, not another related thing mentioned in the sentence."
   },
   {
-    "id": "sent_a784c993-clause-v1",
-    "source": "メッセージなどで教えてください。",
-    "targetText": "教えてください",
-    "question": "Which phrase gives the means or medium used for the highlighted action?",
-    "options": [
-      "メッセージなどで",
-      "ください"
-    ],
-    "answerText": "メッセージなどで",
-    "explanation": "「メッセージなどで」 gives the means or medium for 「教えてください」. Here で links the method to the action."
-  },
-  {
     "id": "sent_a80f6d09-clause-v1",
     "source": "今日のお話はここまでです。",
     "targetText": "今日の",
@@ -2244,18 +2065,6 @@
     "explanation": "「コロナのため難しかったので」 links to 「行きませんでした」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
   },
   {
-    "id": "sent_3dc1f8af-clause-v1",
-    "source": "でも、来年は行けたらいいなあと思っています。",
-    "targetText": "来年は行けたらいいなあと",
-    "question": "Which predicate directly takes the highlighted quotation or content phrase?",
-    "options": [
-      "思っています",
-      "行けたら"
-    ],
-    "answerText": "思っています",
-    "explanation": "「思っています」 takes 「来年は行けたらいいなあと」 as its quoted, thought, or named content. The content and the predicate that introduces it occupy different grammatical levels."
-  },
-  {
     "id": "sent_fe3256f3-clause-v1",
     "source": "私は自然、特に岩や崖がとても好きです。",
     "targetText": "好きです",
@@ -2268,16 +2077,17 @@
     "explanation": "The が in 「岩や崖が」 marks the subject linked to 「好きです」. Keep this local subject–predicate relationship separate from any broader は-marked topic."
   },
   {
-    "id": "sent_8d377645-clause-v1",
+    "id": "sent_8d377645-clause-v2",
     "source": "ノルウェーにはすばらしい岩がたくさんあるので、必ず行きたいです。",
     "targetText": "ノルウェーにはすばらしい岩がたくさんあるので",
-    "question": "Which following part is linked to the highlighted clause?",
+    "question": "Which word marks the highlighted clause as the reason for what follows?",
     "options": [
-      "必ず行きたいです",
-      "ノルウェーにはすばらしい岩がたくさんあるので"
+      "あるので",
+      "ノルウェーには",
+      "必ず"
     ],
-    "answerText": "必ず行きたいです",
-    "explanation": "「ノルウェーにはすばらしい岩がたくさんあるので」 links to 「必ず行きたいです」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
+    "answerText": "あるので",
+    "explanation": "「あるので」 ends the highlighted clause with ので, which presents it as the reason for the statement that follows. 「ノルウェーには」 and 「必ず」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
     "id": "sent_33fefa8d-clause-v1",
@@ -2304,16 +2114,17 @@
     "explanation": "「車で」 gives the means or medium for 「旅行しました」. Here で links the method to the action."
   },
   {
-    "id": "sent_87b43415-clause-v1",
+    "id": "sent_87b43415-clause-v2",
     "source": "北には行かなかったですが、次回は行きたいです。",
     "targetText": "北には行かなかったですが",
-    "question": "Which following part is linked to the highlighted clause?",
+    "question": "Which word joins the highlighted clause to what follows as a “but / although” link?",
     "options": [
-      "次回は行きたいです",
-      "北には行かなかったですが"
+      "行かなかったですが",
+      "次回は",
+      "北には"
     ],
-    "answerText": "次回は行きたいです",
-    "explanation": "「北には行かなかったですが」 links to 「次回は行きたいです」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
+    "answerText": "行かなかったですが",
+    "explanation": "「行かなかったですが」 ends the highlighted clause with が, which sets it beside the statement that follows as a “but / although” link. 「次回は」 and 「北には」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
     "id": "sent_f96a3da8-clause-v1",
@@ -2376,18 +2187,6 @@
     "explanation": "The を in 「スペインのドラマ『El tiempo entre costuras』を」 marks the object linked to 「見ました」. It identifies what the action is applied to, rather than its time, place, or actor."
   },
   {
-    "id": "sent_8f92c962-clause-v1",
-    "source": "日本語タイトルは『情熱のシーラ』です。",
-    "targetText": "『情熱のシーラ』です",
-    "question": "Which は-marked phrase supplies a topic for the highlighted description?",
-    "options": [
-      "日本語タイトルは",
-      "情熱のシーラ"
-    ],
-    "answerText": "日本語タイトルは",
-    "explanation": "「日本語タイトルは」 uses は to set a topic for 「『情熱のシーラ』です」. A topic frames the statement; it is not automatically the grammatical subject of every clause."
-  },
-  {
     "id": "sent_ef0e91d4-clause-v1",
     "source": "モロッコに興味を持ちました。",
     "targetText": "持ちました",
@@ -2448,16 +2247,17 @@
     "explanation": "「テネリフェ島とグランカナリア島に」 gives the destination of 「行きたいです」. Here に marks where the movement is directed; an added は or も does not remove that relationship."
   },
   {
-    "id": "sent_9c78e559-clause-v1",
+    "id": "sent_9c78e559-clause-v2",
     "source": "カナリア諸島は、木がたくさんある場所や、木があまりなくて岩だけの場所、そして砂漠もあるので、とても興味深いです。",
     "targetText": "木がたくさんある場所や、木があまりなくて岩だけの場所、そして砂漠もあるので",
-    "question": "Which following part is linked to the highlighted clause?",
+    "question": "Which word marks the highlighted clause as the reason for what follows?",
     "options": [
-      "とても興味深いです",
-      "木があまりなくて"
+      "あるので",
+      "とても",
+      "砂漠も"
     ],
-    "answerText": "とても興味深いです",
-    "explanation": "「木がたくさんある場所や、木があまりなくて岩だけの場所、そして砂漠もあるので」 links to 「とても興味深いです」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
+    "answerText": "あるので",
+    "explanation": "「あるので」 ends the highlighted clause with ので, which presents it as the reason for the statement that follows. 「とても」 and 「砂漠も」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
     "id": "sent_56fd1dd5-clause-v1",
@@ -2520,16 +2320,17 @@
     "explanation": "「北海道は」 uses は to set a topic for 「違います」. A topic frames the statement; it is not automatically the grammatical subject of every clause."
   },
   {
-    "id": "sent_58efbfd7-clause-v1",
+    "id": "sent_58efbfd7-clause-v2",
     "source": "北海道は11月になると雪が降り始めます。",
     "targetText": "11月になると",
-    "question": "Which following part is linked to the highlighted clause?",
+    "question": "Which word makes the highlighted part a “when / if” condition for what follows?",
     "options": [
-      "雪が降り始めます",
-      "11月になると"
+      "なると",
+      "北海道は",
+      "雪が"
     ],
-    "answerText": "雪が降り始めます",
-    "explanation": "「11月になると」 links to 「雪が降り始めます」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
+    "answerText": "なると",
+    "explanation": "「なると」 ends the highlighted part with a conditional form (と, ば or たら), which sets it up as the “when / if” for what follows. 「北海道は」 and 「雪が」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
     "id": "sent_dc18f4fc-clause-v1",
@@ -2652,16 +2453,17 @@
     "explanation": "「桜を見に行く」 describes the noun in 「人」. Read the modifier together with that noun; the question asks for the grammatical head, not another related thing mentioned in the sentence."
   },
   {
-    "id": "sent_063a6c7e-clause-v1",
+    "id": "sent_063a6c7e-clause-v2",
     "source": "夏は20年前くらいはあまり暑くありませんでしたが、最近は暑いです。",
     "targetText": "20年前くらいはあまり暑くありませんでしたが",
-    "question": "Which following part is linked to the highlighted clause?",
+    "question": "Which word joins the highlighted clause to what follows as a “but / although” link?",
     "options": [
-      "最近は暑いです",
-      "20年前くらいはあまり暑くありませんでしたが"
+      "暑くありませんでしたが",
+      "最近は",
+      "夏は"
     ],
-    "answerText": "最近は暑いです",
-    "explanation": "「20年前くらいはあまり暑くありませんでしたが」 links to 「最近は暑いです」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
+    "answerText": "暑くありませんでしたが",
+    "explanation": "「暑くありませんでしたが」 ends the highlighted clause with が, which sets it beside the statement that follows as a “but / although” link. 「最近は」 and 「夏は」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
     "id": "sent_45330966-clause-v1",
@@ -2700,16 +2502,17 @@
     "explanation": "「北海道の」 describes the noun in 「夏で」. Read the modifier together with that noun; the question asks for the grammatical head, not another related thing mentioned in the sentence."
   },
   {
-    "id": "sent_a8a08449-clause-v1",
+    "id": "sent_a8a08449-clause-v2",
     "source": "9月になると涼しくなり始めます。",
     "targetText": "9月になると",
-    "question": "Which following part is linked to the highlighted clause?",
+    "question": "Which word makes the highlighted part a “when / if” condition for what follows?",
     "options": [
-      "涼しくなり始めます",
-      "9月になると"
+      "なると",
+      "涼しく",
+      "始めます"
     ],
-    "answerText": "涼しくなり始めます",
-    "explanation": "「9月になると」 links to 「涼しくなり始めます」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
+    "answerText": "なると",
+    "explanation": "「なると」 ends the highlighted part with a conditional form (と, ば or たら), which sets it up as the “when / if” for what follows. 「涼しく」 and 「始めます」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
     "id": "sent_32394444-clause-v1",
@@ -2722,18 +2525,6 @@
     ],
     "answerText": "食べ物",
     "explanation": "「おいしい」 describes the noun in 「食べ物」. Read the modifier together with that noun; the question asks for the grammatical head, not another related thing mentioned in the sentence."
-  },
-  {
-    "id": "sent_00e7c084-clause-v1",
-    "source": "栗やかぼちゃ、さつまいもが人気です。",
-    "targetText": "人気です",
-    "question": "Which choice contains the が-marked subject linked to the highlighted description or event?",
-    "options": [
-      "栗やかぼちゃ、さつまいもが",
-      "人気"
-    ],
-    "answerText": "栗やかぼちゃ、さつまいもが",
-    "explanation": "The が in 「栗やかぼちゃ、さつまいもが」 marks the subject linked to 「人気です」. Keep this local subject–predicate relationship separate from any broader は-marked topic."
   },
   {
     "id": "sent_3e3f7861-clause-v1",
@@ -2760,16 +2551,17 @@
     "explanation": "「札幌で」 supplies the location for 「あります」. The location belongs with that part of the sentence, rather than being its actor or object."
   },
   {
-    "id": "sent_b8d00308-clause-v1",
+    "id": "sent_b8d00308-clause-v2",
     "source": "札幌はドイツのミュンヘンと姉妹都市なので、このようなドイツのイベントがいくつかあります。",
     "targetText": "札幌はドイツのミュンヘンと姉妹都市なので",
-    "question": "Which following part is linked to the highlighted clause?",
+    "question": "Which word marks the highlighted clause as the reason for what follows?",
     "options": [
-      "このようなドイツのイベントがいくつかあります",
-      "札幌はドイツのミュンヘンと姉妹都市なので"
+      "姉妹都市なので",
+      "ミュンヘンと",
+      "いくつか"
     ],
-    "answerText": "このようなドイツのイベントがいくつかあります",
-    "explanation": "「札幌はドイツのミュンヘンと姉妹都市なので」 links to 「このようなドイツのイベントがいくつかあります」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
+    "answerText": "姉妹都市なので",
+    "explanation": "「姉妹都市なので」 ends the highlighted clause with ので, which presents it as the reason for the statement that follows. 「ミュンヘンと」 and 「いくつか」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
     "id": "sent_98f2cdf5-clause-v1",
@@ -2784,18 +2576,6 @@
     "explanation": "The を in 「ホットワインを」 marks the object linked to 「飲む」. It identifies what the action is applied to, rather than its time, place, or actor."
   },
   {
-    "id": "sent_9caeb719-clause-v1",
-    "source": "どの季節に旅行しても面白いと思います。",
-    "targetText": "どの季節に旅行しても面白いと",
-    "question": "Which predicate directly takes the highlighted quotation or content phrase?",
-    "options": [
-      "思います",
-      "旅行しても"
-    ],
-    "answerText": "思います",
-    "explanation": "「思います」 takes 「どの季節に旅行しても面白いと」 as its quoted, thought, or named content. The content and the predicate that introduces it occupy different grammatical levels."
-  },
-  {
     "id": "sent_0fdb68e0-clause-v1",
     "source": "みなさんの住んでいる場所はどうですか？",
     "targetText": "みなさんの住んでいる",
@@ -2806,18 +2586,6 @@
     ],
     "answerText": "場所",
     "explanation": "「みなさんの住んでいる」 describes the noun in 「場所」. Read the modifier together with that noun; the question asks for the grammatical head, not another related thing mentioned in the sentence."
-  },
-  {
-    "id": "sent_b57a84bf-clause-v1",
-    "source": "どの季節が好きですか？",
-    "targetText": "好きですか",
-    "question": "Which choice contains the が-marked subject linked to the highlighted description or event?",
-    "options": [
-      "どの季節が",
-      "好き"
-    ],
-    "answerText": "どの季節が",
-    "explanation": "The が in 「どの季節が」 marks the subject linked to 「好きですか」. Keep this local subject–predicate relationship separate from any broader は-marked topic."
   },
   {
     "id": "sent_7d4188bd-clause-v1",
@@ -2880,28 +2648,30 @@
     "explanation": "The が in 「雪が」 marks the subject linked to 「降りません」. Keep this local subject–predicate relationship separate from any broader は-marked topic."
   },
   {
-    "id": "sent_f2f33907-clause-v1",
+    "id": "sent_f2f33907-clause-v2",
     "source": "私はスキーが大好きなので、北海道の冬が懐かしいです。",
     "targetText": "私はスキーが大好きなので",
-    "question": "Which following part is linked to the highlighted clause?",
+    "question": "Which word marks the highlighted clause as the reason for what follows?",
     "options": [
-      "北海道の冬が懐かしいです",
-      "私はスキーが大好きなので"
+      "大好きなので",
+      "懐かしいです",
+      "北海道の冬が"
     ],
-    "answerText": "北海道の冬が懐かしいです",
-    "explanation": "「私はスキーが大好きなので」 links to 「北海道の冬が懐かしいです」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
+    "answerText": "大好きなので",
+    "explanation": "「大好きなので」 ends the highlighted clause with ので, which presents it as the reason for the statement that follows. 「懐かしいです」 and 「北海道の冬が」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
-    "id": "sent_0e18c1e6-clause-v1",
+    "id": "sent_0e18c1e6-clause-v2",
     "source": "北海道の冬は寒いですが、晴れの日もたくさんあります。",
     "targetText": "北海道の冬は寒いですが",
-    "question": "Which following part is linked to the highlighted clause?",
+    "question": "Which word joins the highlighted clause to what follows as a “but / although” link?",
     "options": [
-      "晴れの日もたくさんあります",
-      "北海道の冬は寒いですが"
+      "寒いですが",
+      "晴れの日も",
+      "北海道の冬は"
     ],
-    "answerText": "晴れの日もたくさんあります",
-    "explanation": "「北海道の冬は寒いですが」 links to 「晴れの日もたくさんあります」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
+    "answerText": "寒いですが",
+    "explanation": "「寒いですが」 ends the highlighted clause with が, which sets it beside the statement that follows as a “but / although” link. 「晴れの日も」 and 「北海道の冬は」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
     "id": "sent_24ef3622-clause-v1",
@@ -2928,16 +2698,17 @@
     "explanation": "The が in 「晴れの日が」 marks the subject linked to 「好きです」. Keep this local subject–predicate relationship separate from any broader は-marked topic."
   },
   {
-    "id": "sent_448dc3fc-clause-v1",
+    "id": "sent_448dc3fc-clause-v2",
     "source": "なぜなら、天気が晴れだと散歩ができるからです。",
     "targetText": "天気が晴れだと",
-    "question": "Which following part is linked to the highlighted clause?",
+    "question": "Which word makes the highlighted part a “when / if” condition for what follows?",
     "options": [
-      "散歩ができる",
-      "天気が晴れだと"
+      "晴れだと",
+      "散歩が",
+      "天気が"
     ],
-    "answerText": "散歩ができる",
-    "explanation": "「天気が晴れだと」 links to 「散歩ができる」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
+    "answerText": "晴れだと",
+    "explanation": "「晴れだと」 ends the highlighted part with a conditional form (と, ば or たら), which sets it up as the “when / if” for what follows. 「散歩が」 and 「天気が」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
     "id": "sent_668cb3de-clause-v1",
@@ -2964,28 +2735,30 @@
     "explanation": "「私は外を歩くのがあまり好きじゃないので」 links to 「大抵家にいます」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
   },
   {
-    "id": "sent_05c2d868-clause-v1",
+    "id": "sent_05c2d868-clause-v2",
     "source": "また、晴れの日が多いと、私の気持ちも明るくなります。",
     "targetText": "晴れの日が多いと",
-    "question": "Which following part is linked to the highlighted clause?",
+    "question": "Which word makes the highlighted part a “when / if” condition for what follows?",
     "options": [
-      "私の気持ちも明るくなります",
-      "晴れの日が多いと"
+      "多いと",
+      "私の気持ちも",
+      "晴れの日が"
     ],
-    "answerText": "私の気持ちも明るくなります",
-    "explanation": "「晴れの日が多いと」 links to 「私の気持ちも明るくなります」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
+    "answerText": "多いと",
+    "explanation": "「多いと」 ends the highlighted part with a conditional form (と, ば or たら), which sets it up as the “when / if” for what follows. 「私の気持ちも」 and 「晴れの日が」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
-    "id": "sent_61da8b8e-clause-v1",
+    "id": "sent_61da8b8e-clause-v2",
     "source": "今は太陽の光が少ないので、私はこの季節が少し苦手です。",
     "targetText": "今は太陽の光が少ないので",
-    "question": "Which following part is linked to the highlighted clause?",
+    "question": "Which word marks the highlighted clause as the reason for what follows?",
     "options": [
-      "私はこの季節が少し苦手です",
-      "今は太陽の光が少ないので"
+      "少ないので",
+      "この季節が",
+      "苦手です"
     ],
-    "answerText": "私はこの季節が少し苦手です",
-    "explanation": "「今は太陽の光が少ないので」 links to 「私はこの季節が少し苦手です」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
+    "answerText": "少ないので",
+    "explanation": "「少ないので」 ends the highlighted clause with ので, which presents it as the reason for the statement that follows. 「この季節が」 and 「苦手です」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
     "id": "sent_832b8cef-clause-v1",
@@ -3156,16 +2929,17 @@
     "explanation": "The を in 「ペットボトルの冷たい煎茶を」 marks the object linked to 「買っています」. It identifies what the action is applied to, rather than its time, place, or actor."
   },
   {
-    "id": "sent_9178b7d8-clause-v1",
+    "id": "sent_9178b7d8-clause-v2",
     "source": "煎茶はとても人気なので、いろいろなブランドがあったり、健康のための特別な煎茶も買うことができます。",
     "targetText": "煎茶はとても人気なので",
-    "question": "Which following part is linked to the highlighted clause?",
+    "question": "Which word marks the highlighted clause as the reason for what follows?",
     "options": [
-      "いろいろなブランドがあったり、健康のための特別な煎茶も買うことができます",
-      "煎茶はとても人気なので"
+      "人気なので",
+      "煎茶は",
+      "ブランドが"
     ],
-    "answerText": "いろいろなブランドがあったり、健康のための特別な煎茶も買うことができます",
-    "explanation": "「煎茶はとても人気なので」 links to 「いろいろなブランドがあったり、健康のための特別な煎茶も買うことができます」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
+    "answerText": "人気なので",
+    "explanation": "「人気なので」 ends the highlighted clause with ので, which presents it as the reason for the statement that follows. 「煎茶は」 and 「ブランドが」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
     "id": "sent_f2c5096f-clause-v1",
@@ -3288,18 +3062,6 @@
     "explanation": "「面白い」 describes the noun in 「もの」. Read the modifier together with that noun; the question asks for the grammatical head, not another related thing mentioned in the sentence."
   },
   {
-    "id": "sent_031f8563-clause-v1",
-    "source": "私の最近のお気に入りは花札です。",
-    "targetText": "花札です",
-    "question": "Which は-marked phrase supplies a topic for the highlighted description?",
-    "options": [
-      "私の最近のお気に入りは",
-      "花札"
-    ],
-    "answerText": "私の最近のお気に入りは",
-    "explanation": "「私の最近のお気に入りは」 uses は to set a topic for 「花札です」. A topic frames the statement; it is not automatically the grammatical subject of every clause."
-  },
-  {
     "id": "sent_3e9a4ed9-clause-v1",
     "source": "こいこいと呼ぶこともあります。",
     "targetText": "こいこいと",
@@ -3348,28 +3110,30 @@
     "explanation": "「十二か月分の」 describes the noun in 「絵柄のタイプ」. Read the modifier together with that noun; the question asks for the grammatical head, not another related thing mentioned in the sentence."
   },
   {
-    "id": "sent_0b0d2fb9-clause-v1",
+    "id": "sent_0b0d2fb9-clause-v2",
     "source": "花札で遊ぶと、日本のいろいろな季節の植物や動物を知ることができます。",
     "targetText": "花札で遊ぶと",
-    "question": "Which following part is linked to the highlighted clause?",
+    "question": "Which word makes the highlighted part a “when / if” condition for what follows?",
     "options": [
-      "日本のいろいろな季節の植物や動物を知ることができます",
-      "花札で遊ぶと"
+      "遊ぶと",
+      "花札で",
+      "季節の"
     ],
-    "answerText": "日本のいろいろな季節の植物や動物を知ることができます",
-    "explanation": "「花札で遊ぶと」 links to 「日本のいろいろな季節の植物や動物を知ることができます」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
+    "answerText": "遊ぶと",
+    "explanation": "「遊ぶと」 ends the highlighted part with a conditional form (と, ば or たら), which sets it up as the “when / if” for what follows. 「花札で」 and 「季節の」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
-    "id": "sent_10168a5b-clause-v1",
+    "id": "sent_10168a5b-clause-v2",
     "source": "同じ月のカードを集めたり、特別な絵柄のカードを集めると、ポイントをもらうことができます。",
     "targetText": "同じ月のカードを集めたり、特別な絵柄のカードを集めると",
-    "question": "Which following part is linked to the highlighted clause?",
+    "question": "Which word makes the highlighted part a “when / if” condition for what follows?",
     "options": [
-      "ポイントをもらうことができます",
-      "特別な絵柄のカードを集めると"
+      "集めると",
+      "同じ月の",
+      "ポイントを"
     ],
-    "answerText": "ポイントをもらうことができます",
-    "explanation": "「同じ月のカードを集めたり、特別な絵柄のカードを集めると」 links to 「ポイントをもらうことができます」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
+    "answerText": "集めると",
+    "explanation": "「集めると」 ends the highlighted part with a conditional form (と, ば or たら), which sets it up as the “when / if” for what follows. 「同じ月の」 and 「ポイントを」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
     "id": "sent_d26ed77d-clause-v1",
@@ -3384,16 +3148,17 @@
     "explanation": "「青色のリボンのカードを全部集めると」 links to 「六点」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
   },
   {
-    "id": "sent_0bdf7e09-clause-v1",
+    "id": "sent_0bdf7e09-clause-v2",
     "source": "絵柄がとてもきれいなので、このゲームは私のおすすめです。",
     "targetText": "絵柄がとてもきれいなので",
-    "question": "Which following part is linked to the highlighted clause?",
+    "question": "Which word marks the highlighted clause as the reason for what follows?",
     "options": [
-      "このゲームは私のおすすめです",
-      "絵柄がとてもきれいなので"
+      "きれいなので",
+      "このゲームは",
+      "おすすめです"
     ],
-    "answerText": "このゲームは私のおすすめです",
-    "explanation": "「絵柄がとてもきれいなので」 links to 「このゲームは私のおすすめです」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
+    "answerText": "きれいなので",
+    "explanation": "「きれいなので」 ends the highlighted clause with ので, which presents it as the reason for the statement that follows. 「このゲームは」 and 「おすすめです」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
     "id": "sent_6b9a37d4-clause-v1",
@@ -3408,16 +3173,17 @@
     "explanation": "「かるたという」 describes the noun in 「カードゲーム」. Read the modifier together with that noun; the question asks for the grammatical head, not another related thing mentioned in the sentence."
   },
   {
-    "id": "sent_77429b7d-clause-v1",
+    "id": "sent_77429b7d-clause-v2",
     "source": "とても簡単なので、子供も遊ぶことができます。",
     "targetText": "とても簡単なので",
-    "question": "Which following part is linked to the highlighted clause?",
+    "question": "Which word marks the highlighted clause as the reason for what follows?",
     "options": [
-      "子供も遊ぶことができます",
-      "とても簡単なので"
+      "簡単なので",
+      "子供も",
+      "遊ぶ"
     ],
-    "answerText": "子供も遊ぶことができます",
-    "explanation": "「とても簡単なので」 links to 「子供も遊ぶことができます」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
+    "answerText": "簡単なので",
+    "explanation": "「簡単なので」 ends the highlighted clause with ので, which presents it as the reason for the statement that follows. 「子供も」 and 「遊ぶ」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
     "id": "sent_0b5d6a0a-clause-v1",
@@ -3516,16 +3282,17 @@
     "explanation": "「モノポリーと」 gives what the other thing resembles in 「似ています」. と here marks a comparison partner, not a spoken quotation."
   },
   {
-    "id": "sent_1a94e0f0-clause-v1",
+    "id": "sent_1a94e0f0-clause-v2",
     "source": "私もすごろくが大好きで、子供の時からモノポリーでよく遊んでいました。",
     "targetText": "私もすごろくが大好きで",
-    "question": "Which following part is linked to the highlighted clause?",
+    "question": "Which word is in the て-form that links the highlighted part to what follows?",
     "options": [
-      "子供の時からモノポリーでよく遊んでいました",
-      "私もすごろくが大好きで"
+      "大好きで",
+      "モノポリーで",
+      "遊んでいました"
     ],
-    "answerText": "子供の時からモノポリーでよく遊んでいました",
-    "explanation": "「私もすごろくが大好きで」 links to 「子供の時からモノポリーでよく遊んでいました」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
+    "answerText": "大好きで",
+    "explanation": "「大好きで」 is in the て-form (or its で counterpart), which joins the highlighted part to the statement that follows. 「モノポリーで」 and 「遊んでいました」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
     "id": "sent_8e16156f-clause-v1",
@@ -3624,18 +3391,6 @@
     "explanation": "The を in 「たくさんのことを」 marks the object linked to 「学び続けています」. It identifies what the action is applied to, rather than its time, place, or actor."
   },
   {
-    "id": "sent_9960a450-clause-v1",
-    "source": "勉強は一度で終わりというものではないと私は思います。",
-    "targetText": "勉強は一度で終わりというものではないと",
-    "question": "Which predicate directly takes the highlighted quotation or content phrase?",
-    "options": [
-      "思います",
-      "終わり"
-    ],
-    "answerText": "思います",
-    "explanation": "「思います」 takes 「勉強は一度で終わりというものではないと」 as its quoted, thought, or named content. The content and the predicate that introduces it occupy different grammatical levels."
-  },
-  {
     "id": "sent_b8ddffa3-clause-v1",
     "source": "特に言語は常に変化しているので、学び続ける必要があると私は思っています。",
     "targetText": "学び続ける必要があると",
@@ -3696,16 +3451,17 @@
     "explanation": "The を in 「スウェーデン語を」 marks the object linked to 「話せませんでした」. It identifies what the action is applied to, rather than its time, place, or actor."
   },
   {
-    "id": "sent_68115b4f-clause-v1",
+    "id": "sent_68115b4f-clause-v2",
     "source": "でも、その後もずっとスウェーデン語を学び続けて、今はあの時よりも話すことができます。",
     "targetText": "その後もずっとスウェーデン語を学び続けて",
-    "question": "Which following part is linked to the highlighted clause?",
+    "question": "Which word is in the て-form that links the highlighted part to what follows?",
     "options": [
-      "今はあの時よりも話すことができます",
-      "その後もずっとスウェーデン語を学び続けて"
+      "学び続けて",
+      "スウェーデン語を",
+      "話すことが"
     ],
-    "answerText": "今はあの時よりも話すことができます",
-    "explanation": "「その後もずっとスウェーデン語を学び続けて」 links to 「今はあの時よりも話すことができます」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
+    "answerText": "学び続けて",
+    "explanation": "「学び続けて」 is in the て-form (or its で counterpart), which joins the highlighted part to the statement that follows. 「スウェーデン語を」 and 「話すことが」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
     "id": "sent_895480bc-clause-v1",
@@ -3744,16 +3500,17 @@
     "explanation": "「思います」 takes 「充実した1年だったと」 as its quoted, thought, or named content. The content and the predicate that introduces it occupy different grammatical levels."
   },
   {
-    "id": "sent_29c06fd7-clause-v1",
+    "id": "sent_29c06fd7-clause-v2",
     "source": "でも今年は前よりも運動の量が減ったので、あまり健康な生活ではありませんでした。",
     "targetText": "今年は前よりも運動の量が減ったので",
-    "question": "Which following part is linked to the highlighted clause?",
+    "question": "Which word marks the highlighted clause as the reason for what follows?",
     "options": [
-      "あまり健康な生活ではありませんでした",
-      "今年は前よりも運動の量が減ったので"
+      "減ったので",
+      "今年は",
+      "前よりも"
     ],
-    "answerText": "あまり健康な生活ではありませんでした",
-    "explanation": "「今年は前よりも運動の量が減ったので」 links to 「あまり健康な生活ではありませんでした」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
+    "answerText": "減ったので",
+    "explanation": "「減ったので」 ends the highlighted clause with ので, which presents it as the reason for the statement that follows. 「今年は」 and 「前よりも」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
     "id": "sent_09ddb6be-clause-v1",
@@ -3876,16 +3633,17 @@
     "explanation": "「聞きます」 takes 「「えぇ、どうしてそんなにたくさんの言語を学びますか？」と」 as its quoted, thought, or named content. The content and the predicate that introduces it occupy different grammatical levels."
   },
   {
-    "id": "sent_d4671ff3-clause-v1",
+    "id": "sent_d4671ff3-clause-v2",
     "source": "例えば、イタリア語はたくさん語彙を忘れているので、復習をする必要があります。",
     "targetText": "イタリア語はたくさん語彙を忘れているので",
-    "question": "Which following part is linked to the highlighted clause?",
+    "question": "Which word marks the highlighted clause as the reason for what follows?",
     "options": [
-      "復習をする必要があります",
-      "イタリア語はたくさん語彙を忘れているので"
+      "忘れているので",
+      "例えば",
+      "復習を"
     ],
-    "answerText": "復習をする必要があります",
-    "explanation": "「イタリア語はたくさん語彙を忘れているので」 links to 「復習をする必要があります」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
+    "answerText": "忘れているので",
+    "explanation": "「忘れているので」 ends the highlighted clause with ので, which presents it as the reason for the statement that follows. 「例えば」 and 「復習を」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
     "id": "sent_970467dd-clause-v1",
@@ -4188,28 +3946,30 @@
     "explanation": "「思っていませんでした」 takes 「ドイツでも食べることができるとは」 as its quoted, thought, or named content. The content and the predicate that introduces it occupy different grammatical levels."
   },
   {
-    "id": "sent_740d3e5e-clause-v1",
+    "id": "sent_740d3e5e-clause-v2",
     "source": "私は日本でりんご飴を食べたことがなかったので、このクリスマスマーケットで初めて食べました。",
     "targetText": "私は日本でりんご飴を食べたことがなかったので",
-    "question": "Which following part is linked to the highlighted clause?",
+    "question": "Which word marks the highlighted clause as the reason for what follows?",
     "options": [
-      "このクリスマスマーケットで初めて食べました",
-      "私は日本でりんご飴を食べたことがなかったので"
+      "なかったので",
+      "りんご飴を",
+      "初めて"
     ],
-    "answerText": "このクリスマスマーケットで初めて食べました",
-    "explanation": "「私は日本でりんご飴を食べたことがなかったので」 links to 「このクリスマスマーケットで初めて食べました」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
+    "answerText": "なかったので",
+    "explanation": "「なかったので」 ends the highlighted clause with ので, which presents it as the reason for the statement that follows. 「りんご飴を」 and 「初めて」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
-    "id": "sent_f39ea19b-clause-v1",
+    "id": "sent_f39ea19b-clause-v2",
     "source": "やっと食べることができて、とてもうれしかったです。",
     "targetText": "やっと食べることができて",
-    "question": "Which following part is linked to the highlighted clause?",
+    "question": "Which word is in the て-form that links the highlighted part to what follows?",
     "options": [
-      "とてもうれしかったです",
-      "やっと食べることができて"
+      "できて",
+      "やっと",
+      "うれしかった"
     ],
-    "answerText": "とてもうれしかったです",
-    "explanation": "「やっと食べることができて」 links to 「とてもうれしかったです」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
+    "answerText": "できて",
+    "explanation": "「できて」 is in the て-form (or its で counterpart), which joins the highlighted part to the statement that follows. 「やっと」 and 「うれしかった」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
     "id": "sent_241405e6-clause-v1",
@@ -4234,18 +3994,6 @@
     ],
     "answerText": "お弁当を",
     "explanation": "The を in 「お弁当を」 marks the object linked to 「作りますか」. It identifies what the action is applied to, rather than its time, place, or actor."
-  },
-  {
-    "id": "sent_d81f4396-clause-v1",
-    "source": "どんなものを食べますか？",
-    "targetText": "食べますか",
-    "question": "Which choice contains the を-marked object linked to the highlighted action?",
-    "options": [
-      "どんなものを",
-      "食べますか"
-    ],
-    "answerText": "どんなものを",
-    "explanation": "The を in 「どんなものを」 marks the object linked to 「食べますか」. It identifies what the action is applied to, rather than its time, place, or actor."
   },
   {
     "id": "sent_ec86b326-clause-v1",
@@ -4308,16 +4056,17 @@
     "explanation": "「新年の」 describes the noun in 「抱負」. Read the modifier together with that noun; the question asks for the grammatical head, not another related thing mentioned in the sentence."
   },
   {
-    "id": "sent_5c040ceb-clause-v1",
+    "id": "sent_5c040ceb-clause-v2",
     "source": "去年はいろいろな健康の問題があったので、今年はそれを改善したいです。",
     "targetText": "去年はいろいろな健康の問題があったので",
-    "question": "Which following part is linked to the highlighted clause?",
+    "question": "Which word marks the highlighted clause as the reason for what follows?",
     "options": [
-      "今年はそれを改善したいです",
-      "去年はいろいろな健康の問題があったので"
+      "あったので",
+      "去年は",
+      "今年は"
     ],
-    "answerText": "今年はそれを改善したいです",
-    "explanation": "「去年はいろいろな健康の問題があったので」 links to 「今年はそれを改善したいです」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
+    "answerText": "あったので",
+    "explanation": "「あったので」 ends the highlighted clause with ので, which presents it as the reason for the statement that follows. 「去年は」 and 「今年は」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
     "id": "sent_5743bd65-clause-v1",
@@ -4380,16 +4129,17 @@
     "explanation": "The を in 「語彙を」 marks the object linked to 「覚えて」. It identifies what the action is applied to, rather than its time, place, or actor."
   },
   {
-    "id": "sent_b0723405-clause-v1",
+    "id": "sent_b0723405-clause-v2",
     "source": "また、自分の言語の学習方法も改善したいので、いろいろなことを試したいです。",
     "targetText": "自分の言語の学習方法も改善したいので",
-    "question": "Which following part is linked to the highlighted clause?",
+    "question": "Which word marks the highlighted clause as the reason for what follows?",
     "options": [
-      "いろいろなことを試したいです",
-      "自分の言語の学習方法も改善したいので"
+      "改善したいので",
+      "学習方法も",
+      "いろいろな"
     ],
-    "answerText": "いろいろなことを試したいです",
-    "explanation": "「自分の言語の学習方法も改善したいので」 links to 「いろいろなことを試したいです」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
+    "answerText": "改善したいので",
+    "explanation": "「改善したいので」 ends the highlighted clause with ので, which presents it as the reason for the statement that follows. 「学習方法も」 and 「いろいろな」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
     "id": "sent_f6103615-clause-v1",
@@ -4404,28 +4154,30 @@
     "explanation": "「自分の音楽に歌を入れたいので」 links to 「2年前から歌を学び始めました」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
   },
   {
-    "id": "sent_86b41c6e-clause-v1",
+    "id": "sent_86b41c6e-clause-v2",
     "source": "また、歌を学ぶと発音も学ぶことができます。",
     "targetText": "歌を学ぶと",
-    "question": "Which following part is linked to the highlighted clause?",
+    "question": "Which word makes the highlighted part a “when / if” condition for what follows?",
     "options": [
-      "発音も学ぶことができます",
-      "歌を学ぶと"
+      "学ぶと",
+      "発音も",
+      "また"
     ],
-    "answerText": "発音も学ぶことができます",
-    "explanation": "「歌を学ぶと」 links to 「発音も学ぶことができます」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
+    "answerText": "学ぶと",
+    "explanation": "「学ぶと」 ends the highlighted part with a conditional form (と, ば or たら), which sets it up as the “when / if” for what follows. 「発音も」 and 「また」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
-    "id": "sent_799591a1-clause-v1",
+    "id": "sent_799591a1-clause-v2",
     "source": "私の発音は時々あまり良くないので、発音も上達させて、このポッドキャストももっと聴きやすくなるように改善したいです。",
     "targetText": "私の発音は時々あまり良くないので",
-    "question": "Which following part is linked to the highlighted clause?",
+    "question": "Which word marks the highlighted clause as the reason for what follows?",
     "options": [
-      "発音も上達させて、このポッドキャストももっと聴きやすくなるように改善したいです",
-      "私の発音は時々あまり良くないので"
+      "良くないので",
+      "発音も",
+      "聴きやすく"
     ],
-    "answerText": "発音も上達させて、このポッドキャストももっと聴きやすくなるように改善したいです",
-    "explanation": "「私の発音は時々あまり良くないので」 links to 「発音も上達させて、このポッドキャストももっと聴きやすくなるように改善したいです」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
+    "answerText": "良くないので",
+    "explanation": "「良くないので」 ends the highlighted clause with ので, which presents it as the reason for the statement that follows. 「発音も」 and 「聴きやすく」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
     "id": "sent_0b4a11b5-clause-v1",
@@ -4464,18 +4216,6 @@
     "explanation": "The を in 「これらの目標を」 marks the object linked to 「達成できる」. It identifies what the action is applied to, rather than its time, place, or actor."
   },
   {
-    "id": "sent_733c1768-clause-v1",
-    "source": "コメントやメッセージなどで教えてください。",
-    "targetText": "教えてください",
-    "question": "Which phrase gives the means or medium used for the highlighted action?",
-    "options": [
-      "コメントやメッセージなどで",
-      "ください"
-    ],
-    "answerText": "コメントやメッセージなどで",
-    "explanation": "「コメントやメッセージなどで」 gives the means or medium for 「教えてください」. Here で links the method to the action."
-  },
-  {
     "id": "sent_ece26125-clause-v1",
     "source": "今日のスロージャパニーズは、ピクニックについて話します。",
     "targetText": "について",
@@ -4500,16 +4240,17 @@
     "explanation": "The を in 「ピクニックを」 marks the object linked to 「しますか」. It identifies what the action is applied to, rather than its time, place, or actor."
   },
   {
-    "id": "sent_833c1588-clause-v1",
+    "id": "sent_833c1588-clause-v2",
     "source": "私はドイツに住み始めてから時々ピクニックをしています。",
     "targetText": "ドイツに住み始めてから",
-    "question": "Which following part is linked to the highlighted clause?",
+    "question": "Which word marks the highlighted part as the point in time something starts from?",
     "options": [
-      "時々ピクニックをしています",
-      "ドイツに住み始めてから"
+      "始めてから",
+      "ドイツに",
+      "時々"
     ],
-    "answerText": "時々ピクニックをしています",
-    "explanation": "「ドイツに住み始めてから」 links to 「時々ピクニックをしています」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
+    "answerText": "始めてから",
+    "explanation": "「始めてから」 ends the highlighted part with てから, which marks the time from which the rest of the sentence holds. 「ドイツに」 and 「時々」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
     "id": "sent_1ef83538-clause-v1",
@@ -4620,18 +4361,6 @@
     "explanation": "The を in 「これらの食べ物を」 marks the object linked to 「入れます」. It identifies what the action is applied to, rather than its time, place, or actor."
   },
   {
-    "id": "sent_45175a21-clause-v1",
-    "source": "どんな食べ物が人気ですか？",
-    "targetText": "人気ですか",
-    "question": "Which choice contains the が-marked subject linked to the highlighted description or event?",
-    "options": [
-      "どんな食べ物が",
-      "人気"
-    ],
-    "answerText": "どんな食べ物が",
-    "explanation": "The が in 「どんな食べ物が」 marks the subject linked to 「人気ですか」. Keep this local subject–predicate relationship separate from any broader は-marked topic."
-  },
-  {
     "id": "sent_ce402227-clause-v1",
     "source": "しかし、日本でお花見の季節にピクニックをする人が多いですが、最近、マナーに関する問題もあります。",
     "targetText": "マナーに関する",
@@ -4668,16 +4397,17 @@
     "explanation": "「自分のゴミは」 names what is taken home in 「持ち帰らなければいけません」. は presents that object as the topic; it does not make the rubbish the person performing the action."
   },
   {
-    "id": "sent_8780696c-clause-v1",
+    "id": "sent_8780696c-clause-v2",
     "source": "そうしないときれいな自然や町が汚くなるからです。",
     "targetText": "そうしないと",
-    "question": "Which following part is linked to the highlighted clause?",
+    "question": "Which word makes the highlighted part a “when / if” condition for what follows?",
     "options": [
-      "きれいな自然や町が汚くなる",
-      "そうしないと"
+      "しないと",
+      "きれいな",
+      "からです"
     ],
-    "answerText": "きれいな自然や町が汚くなる",
-    "explanation": "「そうしないと」 links to 「きれいな自然や町が汚くなる」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
+    "answerText": "しないと",
+    "explanation": "「しないと」 ends the highlighted part with a conditional form (と, ば or たら), which sets it up as the “when / if” for what follows. 「きれいな」 and 「からです」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
     "id": "sent_9c34bc5e-clause-v1",
