@@ -1,4 +1,4 @@
-import { isHiragana, toHiragana } from 'wanakana';
+import { isHiragana, toHiragana, toKana } from 'wanakana';
 
 import { fixNumeralsInReadingOnly } from './fixNumeralReadings';
 import { normalizeSentenceKey } from './normalize';
@@ -124,4 +124,16 @@ export function gradeDictation(
     expectedSegments: toSegments(targetChars, chosen.flags.a),
     typedSegments: toSegments(typedChars, chosen.flags.b),
   };
+}
+
+/**
+ * The typed answer with any romaji converted to kana (lowercase → hiragana,
+ * uppercase → katakana). Null when there's nothing to convert, so the UI can
+ * skip a redundant second line.
+ */
+export function typedAsKana(typed: string): string | null {
+  const trimmed = typed.trim();
+  if (!/[A-Za-z]/.test(trimmed)) return null;
+  const converted = toKana(trimmed);
+  return converted === trimmed ? null : converted;
 }

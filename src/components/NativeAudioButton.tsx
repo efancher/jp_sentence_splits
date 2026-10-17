@@ -19,6 +19,8 @@ interface NativeAudioButtonProps {
   hideAdjust?: boolean;
   /** Headphone glyph only; accessible name and tooltip still say what it plays. */
   iconOnly?: boolean;
+  /** Show a "Loop" toggle; when on, playback repeats until stopped. */
+  loopable?: boolean;
 }
 
 export function NativeAudioButton({
@@ -28,11 +30,13 @@ export function NativeAudioButton({
   playbackRate,
   hideAdjust = false,
   iconOnly = false,
+  loopable = false,
 }: NativeAudioButtonProps) {
   const native = useNativeAudio();
   const speech = useJapaneseSpeech();
   const active = native.isPlaying && native.activeItemId === audio.id;
   const [editing, setEditing] = useState(false);
+  const [loop, setLoop] = useState(false);
   const sourceUrl = useClipSourceUrl(audio);
 
   const hasOverride = audio.trimStartMs != null && audio.trimEndMs != null;
@@ -61,11 +65,25 @@ export function NativeAudioButton({
             }
             speech.stop();
             onPlay?.();
-            void native.play(audio, playbackRate);
+            void native.play(audio, playbackRate, loop ? { loop: true } : undefined);
           }}
         >
           {iconOnly ? '🎧' : active ? '🎧 Playing…' : `🎧 ${displayLabel}`}
         </button>
+        {loopable ? (
+          <label>
+            <input
+              type="checkbox"
+              checked={loop}
+              onChange={(event) => {
+                setLoop(event.target.checked);
+                // Changing mode mid-play: stop so the next press starts in the new mode.
+                if (active) native.stop();
+              }}
+            />{' '}
+            Loop
+          </label>
+        ) : null}
         {canAdjust && sourceUrl ? (
           <SentenceAudioAdjuster audio={audio} sourceUrl={sourceUrl} label="Adjust" />
         ) : canAdjust ? (

@@ -124,7 +124,7 @@ import {
   analyzePitchAccentDrillRecording,
   type PitchAccentDrillAnalysisState,
 } from '../lib/pitchAccentDrillAnalysis';
-import { gradeDictation, type DictationGrade } from '../lib/dictationAnswer';
+import { gradeDictation, typedAsKana, type DictationGrade } from '../lib/dictationAnswer';
 import { isReadingAnswerCorrect, surfaceReadingFromInline } from '../lib/readingAnswer';
 import { MAX_RECORDING_DURATION_MS, PLAYBACK_SPEEDS, type TimeRangeMs } from '../lib/recording';
 import { splitOnSurfaceForm } from '../lib/surfaceForm';
@@ -3820,6 +3820,7 @@ function DictationCard({
           audio={audio}
           displayLabel="Play audio"
           playbackRate={playbackRate}
+          loopable
           onPlay={() => {
             playCountRef.current += 1;
             if (playCountRef.current > 1) onReplay();
@@ -3864,12 +3865,19 @@ function DictationCard({
       ) : (
         <>
           <div className="muted">{grade?.correct ? '✓ Correct' : '✗ Not quite'}</div>
-          {grade && !grade.correct ? (
+          <div className="muted">
+            You typed:{' '}
+            <span className="jp">
+              {!value.trim()
+                ? '(blank)'
+                : grade && !grade.correct
+                  ? renderSegments(grade.typedSegments)
+                  : value}
+            </span>
+          </div>
+          {typedAsKana(value) ? (
             <div className="muted">
-              You typed:{' '}
-              <span className="jp">
-                {value.trim() ? renderSegments(grade.typedSegments) : '(blank)'}
-              </span>
+              As kana: <span className="jp">{typedAsKana(value)}</span>
             </div>
           ) : null}
           <div className="jp jp-lg">
