@@ -28,3 +28,12 @@ After completing a significant feature:
 2. Update ARCHITECTURE.md if architecture changed.
 3. Update ROADMAP.md if milestones changed.
 4. Commit logically related changes separately.
+
+Current learning mode: the app runs the **sentence-led flow** by default
+(`settings.sentenceLedFlow`, since 2026-10-02) — vocabulary and grammar cards are
+not shown or seeded, so never gate new work on vocabulary-card history, word
+proficiency or "words the learner studies". Use the sentence-level "introduced"
+signal (`getIntroducedSentenceIds` / `filterToIntroducedSentenceIds`). See
+docs/ARCHITECTURE.md "Learning mode" and the callout at the top of
+docs/AI_OVERVIEW.md. Before writing a gate, check against real data (e.g.
+`npm run db:query`) that it can still be satisfied by recently imported sentences.

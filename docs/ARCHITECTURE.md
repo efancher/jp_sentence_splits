@@ -29,6 +29,18 @@ suggestions*: they pre-fill a field or a chip, the learner confirms, and the
 whole app still works with them unreachable. Keep it that way unless a real
 need forces the issue.
 
+## Learning mode: sentence-led flow (default since 2026-10-02)
+
+`settings.sentenceLedFlow` (default on, `src/lib/sentenceLed.ts`) makes the
+sentence the unit of study: a finished guided walkthrough seeds one
+`reading_in_context` card; vocabulary and grammar drill cards are neither shown
+nor seeded (existing ones are kept, paused). Anything that decides "has the
+learner met this?" must use the sentence-level signal
+(`getIntroducedSentenceIds`: walked through, started in a book, or has a
+sentence card), not vocabulary-card history or confirmed vocabulary, or it will
+starve on every sentence imported after the switch. Flag off restores the older
+card-based gates. Details: `docs/AI_OVERVIEW.md` §4a.
+
 ## Data flow
 
 Native-only shadow preparation (`NativePitchPractice`) reuses the reference

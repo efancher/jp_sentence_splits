@@ -47,6 +47,22 @@ service). It is offline-first (IndexedDB/Dexie is the real source of truth)
 with optional Supabase cloud sync and basic book-sharing (invite
 collaborators as editor/viewer).
 
+> **Current learning mode (read before assuming any card or gate exists).** Since
+> 2026-10-02 the app runs the **sentence-led flow** (`settings.sentenceLedFlow`,
+> default on; §4a). The description above and §4 list every activity type the
+> code supports, but by default **vocabulary and grammar cards are not shown and
+> not seeded**: new sentences get one `reading_in_context` card (pick the English
+> meaning) when their guided walkthrough finishes. Older word cards (~700, all
+> from before 2026-10-02) still exist but are paused. Consequences for new work:
+> *do not gate a feature on vocabulary-card history, FSRS word proficiency or
+> "words you study"* — they cannot be satisfied for newer sentences. The honest
+> "has the learner met this sentence" signal is `filterToIntroducedSentenceIds` /
+> `getIntroducedSentenceIds` (walked through, started in a book, or already has a
+> sentence card). Vocabulary *confirmation* (the picker's Confirm) still exists
+> but is now rare, so it is a poor gate too; `SentenceVocabulary` links exist only
+> for sentences whose vocabulary was confirmed. With the flag off the older
+> card-based flow and its gates apply again.
+
 ## Tech stack & deployment
 
 - **Frontend**: React 19 + TypeScript 6 + Vite 8, `react-router-dom` v7
@@ -1392,7 +1408,7 @@ shortcut ("Play a round") and the `/play` hub. Currently ten activities:
   auto-rating. A sentence qualifies when it is single-clause and verb-final with
   2–4 plain noun + case-particle slots (が/を/に/で/から/まで/は, distinct
   particles, no quotes, no formal/time nouns), has audio ≤10 s, a translation
-  and has been *met* (`filterToMetSentenceIds`: walked through / started in a book /
+  and has been *introduced* (`filterToIntroducedSentenceIds`: walked through / started in a book /
   has a card — vocabulary confirmation and vocabulary-card history are not
   required, since cards are paused under the sentence-led flow); it is a candidate only if a puzzle can really be
   built from the current noun pool (so the hub gate is satisfiable). The pool is
@@ -1530,7 +1546,7 @@ passage line the card shows up front doesn't hand over reading practice
 before the learner has attempted it. Shared `ContextSentenceReading`
 helper in `ReviewPage.tsx`, used by `ReadingInContextCard` and
 `GrammarCompletionCard` (introduced 2026-09-27).
-Activity types currently wired, grouped by subject/eligibility:
+Activity types currently wired, grouped by subject/eligibility (under the default sentence-led flow only the sentence-subject cards below are shown or seeded; the word and grammar cards are paused — see the callout at the top):
 - **Sentence subject**: `reading_in_context` (JP framed by its
   reading-order neighbours — preceding sentences shown untranslated above
   it, the following sentence folded into the reveal — then reveal EN+vocab,
