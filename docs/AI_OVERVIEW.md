@@ -2931,7 +2931,7 @@ error stats), `src/lib/boundaryEditor.ts`, `src/lib/rangePlayer.ts`, `src/db/wor
 located target/option spans, independent of saved chunk boundaries; an edited
 sentence expires its stale reference and shows the unprepared notice. Choices and explanations are ungraded and
 have no callbacks into review, gloss evidence, or FSRS. Helpful/disputed feedback
-is stored only on that device, keyed by reference revision. The pilot is opt-in
+is appended to the synced `clause_question_feedback` table (migration `20261017000000`; reaction, chosen option, draft answer, keyed by reference revision; latest row per question is current; older device-local reactions are imported once; read with `npm run diagnose:clause-feedback`). The pilot is opt-in
 and starts collapsed. References are assistant drafts awaiting independent review.
 The expanded set includes both repaired pilot sentences plus compound-particle,
 subject and noun-modifier questions. Existing reference IDs preserve prior feedback.
