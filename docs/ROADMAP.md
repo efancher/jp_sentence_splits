@@ -386,6 +386,22 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
 **`comprehension` vs `reading_in_context` differentiation**, and
 **Retention / progress-over-time view** under Done above.
 
+- [ ] **Learned practice routing above FSRS.** (2026-10-18 research;
+  implementation not started.) Keep FSRS for review timing; learn which
+  exercise, easier variant, or helper improves later independent performance.
+  Start with the sentence-led flow and existing review/gloss evidence.
+  First audit and connect attempt → help → delayed check data, then introduce
+  a few explainable routes, learn their effectiveness with shared evidence,
+  and compare them against fixed rules before expanding scheduling authority.
+  The graph must distinguish content relationships from measured learning
+  effects; assisted success does not establish unaided recall, and related
+  cards must not receive automatic FSRS credit. First experiment: does targeted
+  help after a sentence miss improve the next independent attempt and transfer
+  to another sentence using the same skill, for the time spent?
+  Findings, data contract, phased acceptance criteria, evaluation design,
+  implementation pointers, open questions, and primary research sources:
+  [Adaptive scheduling research](ADAPTIVE_SCHEDULING_RESEARCH.md).
+
 - [x] **Reconsider pitch-accent emphasis outside shadowing.** (2026-09-28,
   user reflection) User questioned whether they're over-investing effort in
   pitch-accent precision/perfectionism outside the shadowing loop, given
