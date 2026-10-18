@@ -23,7 +23,6 @@ import { parkedDecisionKeys } from '../lib/glossSkill';
 
 import { buildStructureChecks } from '../lib/structureChecks';
 
-import { EarTilesCheck } from './EarTilesCheck';
 import { StructureChecks } from './StructureChecks';
 import { GlossDecisionPanel, planGlossDecisions, type GlossDecisionInput } from './GlossDecisionPanel';
 import { SentenceExpressionCard, meaningUnits } from './SentenceExpressionCard';
@@ -191,7 +190,8 @@ export function SentenceWalkthrough({
   }, [chunks, sentence.japanese]);
   const [step, setStep] = useState(0);
   const visitId = useMemo(() => createId('visit'), []);
-  // Sentences with audio open on the ear-tiles check, unless earlier checks on it are parked for a retry.
+  // The tap-what-you-hear tile check is its own review card now (`ear_tiles`, ReviewPage). Here the
+  // same eligibility (audio + a clean tile split) just selects the structure checks over the gloss panel.
   const tilePuzzle = useMemo(
     () =>
       !skipCheck && audio && onGlossDecision != null && glossRecords != null && !parkedDecisionKeys(glossRecords).has(sentence.id)
@@ -206,9 +206,8 @@ export function SentenceWalkthrough({
     [chunks, visitId],
   );
   const hasStructureChecks = structureChecks.roles != null || structureChecks.describes != null;
-  const [tilesDone, setTilesDone] = useState(false);
   const [tryFirst, setTryFirst] = useState(() =>
-    !skipCheck && onGlossDecision != null && glossRecords != null && (tilePuzzle != null || planGlossDecisions(walkthroughChunks(sentence, savedChunks, structureDraft).chunks, glossRecords, new Date(), sentence.id, particleChecks).length > 0));
+    !skipCheck && onGlossDecision != null && glossRecords != null && (tilePuzzle != null ? hasStructureChecks : planGlossDecisions(walkthroughChunks(sentence, savedChunks, structureDraft).chunks, glossRecords, new Date(), sentence.id, particleChecks).length > 0));
   const [showTranslation, setShowTranslation] = useState(false);
   const [showFurigana, setShowFurigana] = useState(false);
   const [stickyEnglish, setStickyEnglish] = useState(false);
@@ -369,17 +368,7 @@ export function SentenceWalkthrough({
           {(Object.keys(PRESET_LABELS) as SupportPreset[]).map((key) => <option key={key} value={key}>{PRESET_LABELS[key]}</option>)}
         </select>
       </label>
-      {tryFirst && onGlossDecision && tilePuzzle && audio && !tilesDone ? (
-        <EarTilesCheck
-          sentenceId={sentence.id}
-          visitId={visitId}
-          puzzle={tilePuzzle}
-          audio={audio}
-          onRecord={onGlossDecision}
-          onFinish={() => (hasStructureChecks ? setTilesDone(true) : setTryFirst(false))}
-        />
-      ) : null}
-      {tryFirst && onGlossDecision && tilePuzzle && tilesDone ? (
+      {tryFirst && onGlossDecision && tilePuzzle ? (
         <StructureChecks
           sentenceId={sentence.id}
           visitId={visitId}

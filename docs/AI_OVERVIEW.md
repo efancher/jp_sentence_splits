@@ -1263,7 +1263,7 @@ occurrence in the episode, highlighted). These write
 `sentenceLearningEvents` (synced as append-only `sentence_learning_events` once the migration is applied; not in backups) and never create Reviews,
 StudyItems or FSRS state.
 
-Sentences with native audio (3–8 tiles, no parked checks) open on an **Ear Tiles check** instead (`EarTilesCheck`, `buildCheckPuzzle` in `src/lib/earTiles.ts`): hear the clip, tap the phrase tiles said, in order, while skipping 2 fakes (a real tile with a particle or polite/negative ending swapped). Particle fakes are logged to `gloss_decisions` as `particle:<p>:ear` rows (`independent_correct` or `assisted_correct`, never `unresolved`). It is followed by two chunk-based checks (`src/lib/structureChecks.ts`, `StructureChecks`) that replace the fixed predicate/attachment questions: **who does what** (tap the chunk marked が/を/で/から/まで, read from its particle; logged `particle:<p>:tap`) and **tap everything that describes this noun** (only for an の chain two or more deep or a plain verb right before a noun; logged `attachment:<chain|clause>:describes`). Each is skipped when the sentence has no non-trivial target, and neither logs `unresolved`. Otherwise the structural checks below apply.
+Sentences with native audio (3–8 tiles, no parked checks) open on two chunk-based checks (`src/lib/structureChecks.ts`, `StructureChecks`) that replace the fixed predicate/attachment questions: **who does what** (tap the chunk marked が/を/で/から/まで, read from its particle; logged `particle:<p>:tap`) and **tap everything that describes this noun** (only for an の chain two or more deep or a plain verb right before a noun; logged `attachment:<chain|clause>:describes`). Each is skipped when the sentence has no non-trivial target, and neither logs `unresolved`. Otherwise the structural checks below apply.
 
 Progressive glossing: before the chunk-by-chunk walkthrough, the learner makes up to three structural decisions (main predicate, particle relations) at a per-skill support level (worked example / partial / guided / independent), recomputed from the synced `gloss_decisions` log. Help is typed (word / form / connection / unsure) and climbs a hint ladder; wrong first answers can retry; disputes are not failures; word/form gaps do not lower structural support. Also: try-unaided, partial translation at level 2, a noun-link (の) skill, one-tap too-easy/right/too-hard self-report (never graded), parked checks re-asked first on the next visit and surfaced by the planner revisit step, advisory known-word readiness (thin opens glosses), and a Progress panel. Not built: AI-verified dependency reference, clause skills. No FSRS.
 
@@ -1620,17 +1620,21 @@ Activity types currently wired, grouped by subject/eligibility (under the defaul
   `Review` field — and `classifyReviewError` now classifies a miss here as
   `grammar_misunderstanding`. No flagged/readable chunk → the card is
   unchanged from before this feature.
-- **Sentence subject, audio-gated**: `dictation` (2026-10-12) — same
-  candidates and descriptor as `listening`, but the learner types what they
-  hear (kanji or kana) before anything is revealed. `gradeDictation`
-  (`src/lib/dictationAnswer.ts`) accepts either `sentence.japanese` or
-  `readingOnly`, ignoring punctuation/whitespace and hiragana/katakana, and
-  returns an LCS diff used to mark missed runs in both the typed answer and
-  the target. The ✓/✗ is supplementary evidence only (typed text +
-  graded-against target land in `Review.responseRaw`/`expectedAnswer`; a
-  miss classifies as `listening_failure`); the 4-point self-rate still sets
-  the schedule. Seeds only for a sentence whose `listening` item has
-  `reps >= 1`, and is costed as a `practice` activity.
+- **Sentence subject, audio-gated**: `ear_tiles` and `dictation_tile:N`
+  (2026-10-18) — same candidates and descriptor as `listening`. `ear_tiles`
+  is the walkthrough's old warm-up as its own card: hear the clip, tap the
+  tiles said in order (3–8 tiles from `buildCheckPuzzle`, with 2 fakes);
+  finishing reveals the self-rate buttons, and particle fakes still log to
+  `gloss_decisions`. `dictation_tile:N` replaces the whole-sentence
+  `dictation` (2026-10-12, no longer seeded or shown): the same clip plays,
+  the sentence is shown with tile N blanked, and the learner types just that
+  phrase (kanji, kana or romaji; `gradeDictation` against the tile text or
+  its token readings). N lives in the activity type so the study item stays
+  keyed by the sentence id. A dictation tile seeds only once that sentence's
+  `ear_tiles` item is known well (`earTilesKnownWell`: reps >= 2, state
+  `review`). The ✓/✗ is supplementary; the 4-point self-rate still sets the
+  schedule; a miss classifies as `listening_failure`. Dictation tiles are
+  `practice`-costed, `ear_tiles` is `retain`-costed.
 - **Sentence subject, audio-gated**: `listening` — only eligible for
   sentences with a `SentenceAudio` row; audio plays first, Japanese text
   stays hidden until reveal. A playback-speed `<select>` (same

@@ -259,7 +259,7 @@ export function classifyReviewError(input: {
     if (input.activityType === 'grammar_completion') return 'grammar_misunderstanding';
     if (input.activityType === 'grammar_contrast') return 'grammar_misunderstanding';
     if (input.activityType === 'pitch_accent') return 'pronunciation_difficulty';
-    if (input.activityType === 'dictation') return 'listening_failure';
+    if (input.activityType === 'dictation' || input.activityType.startsWith('dictation_tile:')) return 'listening_failure';
     // reading_in_context's optional later-review structure check (2026-09-29
     // repetition pass) — a missed chunk reading is a structural/grammar miss,
     // not a meaning miss (that's what comprehensionCheckCorrect covers below).

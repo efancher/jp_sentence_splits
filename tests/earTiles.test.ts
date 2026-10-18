@@ -3,8 +3,12 @@ import { describe, expect, it } from 'vitest';
 import type { Sentence, VocabularySuggestion } from '../src/domain/types';
 import {
   buildEarTilesPuzzle,
+  buildTileDictation,
   chunkSentenceIntoTiles,
   describeEarTilesPick,
+  DICTATION_TILE_TYPES,
+  dictationTileIndex,
+  earTilesKnownWell,
   earTilesPointsAvailable,
   earTilesRejection,
   isCorrectTile,
@@ -238,5 +242,49 @@ describe('scoring', () => {
     expect(describeEarTilesPick('weak', ['猫', '犬'])).toContain('猫・犬');
     expect(describeEarTilesPick('weak', [])).toBe('From your confirmed sentences.');
     expect(describeEarTilesPick('strong', [])).toContain('solidly');
+  });
+});
+
+describe('single-tile dictation', () => {
+  const s = sentence([
+    ['私', '代名詞'],
+    ['は', '助詞/係助詞'],
+    ['猫', NOUN],
+    ['が', KAKU],
+    ['魚', NOUN],
+    ['を', KAKU],
+    ['食べ', VERB],
+    ['ました', AUX],
+    ['。', PUNCT],
+  ]);
+
+  it('cuts one tile out of the sentence, keeping the text either side', () => {
+    expect(buildTileDictation(s, 1)).toMatchObject({ text: '猫が', before: '私は', after: '魚を食べました。' });
+    expect(buildTileDictation(s, 3)?.text).toBe('食べました');
+  });
+
+  it('has no tile past the last one, or for a sentence too short to tile', () => {
+    expect(buildTileDictation(s, 9)).toBeNull();
+    expect(buildTileDictation(sentence([['猫', NOUN], ['が', KAKU]]), 0)).toBeNull();
+  });
+
+  it('finds the right occurrence when a tile repeats', () => {
+    const repeated = sentence([
+      ['猫', NOUN], ['が', KAKU], ['猫', NOUN], ['が', KAKU], ['猫', NOUN], ['を', KAKU],
+    ]);
+    expect(buildTileDictation(repeated, 1)).toMatchObject({ before: '猫が', after: '猫を' });
+  });
+
+  it('reads the tile index off the activity type', () => {
+    expect(dictationTileIndex('dictation_tile:3')).toBe(3);
+    expect(dictationTileIndex('dictation')).toBeNull();
+    expect(dictationTileIndex('dictation_tile:x')).toBeNull();
+    expect(DICTATION_TILE_TYPES).toContain('dictation_tile:0');
+  });
+
+  it('unlocks dictation only once ear_tiles is reviewed twice and out of (re)learning', () => {
+    expect(earTilesKnownWell({ reps: 1, state: 'review' })).toBe(false);
+    expect(earTilesKnownWell({ reps: 3, state: 'relearning' })).toBe(false);
+    expect(earTilesKnownWell({ reps: 2, state: 'review' })).toBe(true);
   });
 });

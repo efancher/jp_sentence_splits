@@ -1,4 +1,5 @@
 import type { SessionBucket, StudyActivityType } from '../domain/types';
+import { DICTATION_TILE_TYPES, EAR_TILES_ACTIVITY } from './earTiles';
 
 /**
  * Tunable constants for the Learning Orchestrator (docs/AI_OVERVIEW.md).
@@ -43,6 +44,7 @@ export const RETAIN_ACTIVITY_TYPES: StudyActivityType[] = [
   'reading_in_context',
   'reading_retrieval',
   'listening',
+  EAR_TILES_ACTIVITY,
   'word_listening',
   'grammar_comprehension',
   'grammar_recognition',
@@ -64,6 +66,7 @@ export const PRACTICE_ACTIVITY_TYPES: StudyActivityType[] = [
   'cloze',
   'reading_production',
   'dictation',
+  ...DICTATION_TILE_TYPES,
   'sentence_transformation',
   'contrastive',
   'grammar_completion',

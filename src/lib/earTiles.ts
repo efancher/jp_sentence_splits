@@ -48,6 +48,7 @@ export interface TileToken {
   /** Dictionary form (UniDic lemma), used to recognise する. */
   expression: string;
   pos: string;
+  reading: string;
 }
 
 const startsWithAny = (pos: string, prefixes: readonly string[]) =>
@@ -71,6 +72,8 @@ interface TileDetail {
   /** POS and surface of the tile's final token, which decides what can be swapped for a distractor. */
   lastPos: string;
   lastSurface: string;
+  /** The tile's tokens' readings joined (kana as UniDic stores it). */
+  reading: string;
 }
 
 function chunkSentenceIntoTileDetails(
@@ -84,6 +87,7 @@ function chunkSentenceIntoTileDetails(
       surface: token.surface,
       expression: token.expression,
       pos: token.pos,
+      reading: token.reading ?? '',
     }))
     .sort((a, b) => a.start - b.start);
   if (tokens.length === 0) return null;
@@ -104,6 +108,7 @@ function chunkSentenceIntoTileDetails(
 
   const chunks: TileDetail[] = [];
   let prefixPending = '';
+  let prefixPendingReading = '';
   // Punctuation is a phrase boundary even though it isn't a tile: 揺れた。だけど
   // must not glue into 揺れただけど.
   let afterBoundary = false;
@@ -116,6 +121,7 @@ function chunkSentenceIntoTileDetails(
     if (token.pos.startsWith('接頭辞')) {
       // お/ご/未… belong to the word that follows.
       prefixPending += token.surface;
+      prefixPendingReading += token.reading;
       continue;
     }
     const joinsPrevious =
@@ -136,9 +142,16 @@ function chunkSentenceIntoTileDetails(
       previous.text += token.surface;
       previous.lastPos = token.pos;
       previous.lastSurface = token.surface;
+      previous.reading += token.reading;
     } else {
-      chunks.push({ text: prefixPending + token.surface, lastPos: token.pos, lastSurface: token.surface });
+      chunks.push({
+        text: prefixPending + token.surface,
+        lastPos: token.pos,
+        lastSurface: token.surface,
+        reading: prefixPendingReading + token.reading,
+      });
       prefixPending = '';
+      prefixPendingReading = '';
     }
     afterBoundary = false;
   }
@@ -384,3 +397,60 @@ export const EAR_TILES_COPY = {
     strong: 'Sentences made of words you know solidly — a relaxed listening round.',
   },
 };
+
+/**
+ * Review-card ladder built on the tiles: `ear_tiles` (the sentence-level tap-what-you-hear
+ * puzzle) is the stepping stone, and `dictation_tile:N` cards (type just tile N of the same
+ * sentence) wait until it is known well. Tile N is carried in the activity type so the study
+ * item stays keyed by the sentence id (cascade delete, sync and learning events need no change).
+ */
+export const EAR_TILES_ACTIVITY = 'ear_tiles';
+export const DICTATION_TILE_PREFIX = 'dictation_tile:';
+export const DICTATION_TILE_TYPES: string[] = Array.from(
+  { length: CHECK_MAX_TILES },
+  (_, index) => `${DICTATION_TILE_PREFIX}${index}`,
+);
+/** The tile index a `dictation_tile:N` activity type targets, or null for any other type. */
+export function dictationTileIndex(activityType: string): number | null {
+  if (!activityType.startsWith(DICTATION_TILE_PREFIX)) return null;
+  const index = Number(activityType.slice(DICTATION_TILE_PREFIX.length));
+  return Number.isInteger(index) && index >= 0 ? index : null;
+}
+
+/** `ear_tiles` is known well enough to unlock single-tile dictation: reviewed twice and not currently relearning. */
+export const EAR_TILES_KNOWN_MIN_REPS = 2;
+export function earTilesKnownWell(fsrs: { reps: number; state: string }): boolean {
+  return fsrs.reps >= EAR_TILES_KNOWN_MIN_REPS && fsrs.state === 'review';
+}
+
+export interface TileDictation {
+  /** The tile's written text, the answer graded against. */
+  text: string;
+  /** Its kana reading (accepted as an alternative to the written form), or '' when the tokens have none. */
+  reading: string;
+  /** The sentence with the tile cut out: `before` ＿＿ `after`. */
+  before: string;
+  after: string;
+}
+
+/** Tile `index` of the sentence plus the surrounding text, or null when the sentence has no such tile (or splits badly). */
+export function buildTileDictation(
+  sentence: Pick<Sentence, 'japanese' | 'vocabularySuggestions'>,
+  index: number,
+): TileDictation | null {
+  const details = chunkSentenceIntoTileDetails(sentence);
+  if (!details || details.length < CHECK_MIN_TILES || details.length > CHECK_MAX_TILES) return null;
+  const detail = details[index];
+  if (!detail) return null;
+  // Tiles are in spoken order, so a left-to-right search lands on this tile even when its text repeats.
+  let at = 0;
+  for (let i = 0; i < index; i += 1) at = sentence.japanese.indexOf(details[i]!.text, at) + details[i]!.text.length;
+  const start = sentence.japanese.indexOf(detail.text, at);
+  if (start < 0) return null;
+  return {
+    text: detail.text,
+    reading: detail.reading,
+    before: sentence.japanese.slice(0, start),
+    after: sentence.japanese.slice(start + detail.text.length),
+  };
+}

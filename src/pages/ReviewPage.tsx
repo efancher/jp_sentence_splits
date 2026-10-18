@@ -36,6 +36,7 @@ import {
   getAutoTrackEligibleGrammarCandidates,
   getConfusionPairCandidates,
   getDb,
+  logGlossDecision,
   countVocabularyWordsSeededSince,
   getDueStudyItems,
   getLatestMissedReadings,
@@ -125,6 +126,17 @@ import {
   type PitchAccentDrillAnalysisState,
 } from '../lib/pitchAccentDrillAnalysis';
 import { gradeDictation, typedAsKana, type DictationGrade } from '../lib/dictationAnswer';
+import {
+  buildCheckPuzzle,
+  buildTileDictation,
+  DICTATION_TILE_TYPES,
+  dictationTileIndex,
+  EAR_TILES_ACTIVITY,
+  earTilesKnownWell,
+  type TileDictation,
+} from '../lib/earTiles';
+import { createId } from '../lib/ids';
+import { EarTilesCheck } from '../components/EarTilesCheck';
 import { isReadingAnswerCorrect, surfaceReadingFromInline } from '../lib/readingAnswer';
 import { MAX_RECORDING_DURATION_MS, PLAYBACK_SPEEDS, type TimeRangeMs } from '../lib/recording';
 import { splitOnSurfaceForm } from '../lib/surfaceForm';
@@ -183,12 +195,19 @@ const VOCABULARY_ACTIVITY_TYPES: StudyActivityType[] = [
  * Audio comprehension (Phase 7.4, docs/STATUS.md) — sentence-subject, like
  * `comprehension`/`reading_in_context`, but only eligible for sentences
  * that have at least one `SentenceAudio` row; the Japanese text stays
- * hidden until reveal, audio plays first. `dictation` rides on the same
- * candidates: type what you hear, then compare to the native text. It only
- * seeds once the sentence's `listening` card has been reviewed at least once
- * (the learner has already seen this sentence's text).
+ * hidden until reveal, audio plays first. Two tile-based cards ride on the same
+ * candidates (src/lib/earTiles.ts): `ear_tiles` taps the tiles you hear in
+ * order (the walkthrough's old warm-up, now its own card), and
+ * `dictation_tile:N` types just tile N of the sentence, replacing the
+ * whole-sentence dictation. A dictation tile only seeds once the sentence's
+ * `ear_tiles` card is known well (earTilesKnownWell) — the easier card is the
+ * stepping stone.
  */
-const AUDIO_ACTIVITY_TYPES: StudyActivityType[] = ['listening', 'dictation'];
+const AUDIO_ACTIVITY_TYPES: StudyActivityType[] = [
+  'listening',
+  EAR_TILES_ACTIVITY,
+  ...DICTATION_TILE_TYPES,
+];
 
 /**
  * Word-in-context listening (user request): subjectType `sentenceVocabulary`,
@@ -314,6 +333,7 @@ const ACTIVITY_LABELS: Record<string, string> = {
   reading_production: 'Reading production',
   listening: 'Listening',
   dictation: 'Dictation',
+  ear_tiles: 'Ear tiles',
   word_listening: 'Word listening',
   contrastive: 'Contrastive pair',
   sentence_transformation: 'Conjugation in context',
@@ -968,14 +988,20 @@ function buildActivityDescriptors(scope: ReviewScope): ActivityDescriptor[] {
       gateSentenceId: (candidate) => candidate.sentence.id,
       isReady: (candidate, ctx) =>
         ctx.listeningReadiness.get(candidate.sentence.id) !== false,
-      activityIsReady: (candidate, activityType) =>
-        activityType !== 'dictation' ||
-        scope.existingAudioItems.some(
+      activityIsReady: (candidate, activityType) => {
+        if (activityType === 'listening') return true;
+        // Both tile cards need a sentence that splits cleanly into check-sized tiles.
+        const tileCount = buildCheckPuzzle(candidate.sentence, candidate.sentence.id)?.answer.length ?? 0;
+        if (activityType === EAR_TILES_ACTIVITY) return tileCount > 0;
+        const tile = dictationTileIndex(activityType);
+        if (tile === null || tile >= tileCount) return false;
+        return scope.existingAudioItems.some(
           (item) =>
             item.subjectId === candidate.sentence.id &&
-            item.activityType === 'listening' &&
-            item.fsrsState.reps >= 1,
-        ),
+            item.activityType === EAR_TILES_ACTIVITY &&
+            earTilesKnownWell(item.fsrsState),
+        );
+      },
     }),
     defineActivityDescriptor<WordListeningCandidate>({
       key: 'wordListening',
@@ -2257,10 +2283,18 @@ export function ReviewPage() {
                 revealed={revealed}
                 onReveal={() => setRevealed(true)}
               />
-            ) : current.audio && current.studyItem.activityType === 'dictation' ? (
+            ) : current.audio && current.studyItem.activityType === EAR_TILES_ACTIVITY ? (
+              <EarTilesCard
+                key={current.studyItem.id}
+                sentence={current.sentence}
+                audio={current.audio}
+                onDone={() => setRevealed(true)}
+              />
+            ) : current.audio && dictationTileIndex(current.studyItem.activityType) !== null ? (
               <DictationCard
                 key={current.studyItem.id}
                 sentence={current.sentence}
+                tileIndex={dictationTileIndex(current.studyItem.activityType)!}
                 audio={current.audio}
                 revealed={revealed}
                 onReplay={() => markAssistance('audio_replayed')}
@@ -3774,6 +3808,52 @@ function SentenceNativePitchContour({ sentenceId }: { sentenceId: string }) {
 }
 
 /**
+ * `ear_tiles` card body: the walkthrough's old warm-up as its own review card —
+ * hear the clip, tap the tiles that were said in order, skip the fakes. Finishing
+ * the puzzle reveals the self-rate buttons (the 4-point rating still sets the
+ * schedule). Particle fakes are logged to the gloss decision log as before, when
+ * the sentence's book can be found. This card is the stepping stone `dictation_tile`
+ * cards wait on.
+ */
+function EarTilesCard({
+  sentence,
+  audio,
+  onDone,
+}: {
+  sentence: Sentence;
+  audio: SentenceAudio;
+  onDone: () => void;
+}) {
+  const visitId = useMemo(() => createId('visit'), []);
+  // Chosen once so the bank doesn't reshuffle under the learner.
+  const puzzle = useMemo(
+    () => buildCheckPuzzle(sentence, visitId),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sentence.id, visitId],
+  );
+  if (!puzzle) return <div className="muted">This sentence no longer splits into tiles.</div>;
+  return (
+    <EarTilesCheck
+      sentenceId={sentence.id}
+      visitId={visitId}
+      puzzle={puzzle}
+      audio={audio}
+      onRecord={(decision) => {
+        void getDb()
+          .bookSentences.where('sentenceId')
+          .equals(sentence.id)
+          .first()
+          .then((membership) => {
+            if (membership) void logGlossDecision({ ...decision, bookId: membership.bookId });
+          });
+      }}
+      finishLabel="Rate this card"
+      onFinish={onDone}
+    />
+  );
+}
+
+/**
  * `dictation` card body: play the native clip (text hidden), type what you
  * hear, "Check" — then the written sentence is shown with the missed runs
  * marked against your answer, plus the translation. Either the written
@@ -3784,6 +3864,7 @@ function SentenceNativePitchContour({ sentenceId }: { sentenceId: string }) {
  */
 function DictationCard({
   sentence,
+  tileIndex,
   audio,
   revealed,
   onReplay,
@@ -3792,6 +3873,8 @@ function DictationCard({
   onCheck,
 }: {
   sentence: Sentence;
+  /** Which of the sentence's tiles (src/lib/earTiles.ts) to type. */
+  tileIndex: number;
   audio: SentenceAudio;
   revealed: boolean;
   /** Called on every play *after* the first — the first play is the exercise itself, not assistance. */
@@ -3801,6 +3884,10 @@ function DictationCard({
   onCheck: (typed: string, gradedAgainst: string) => void;
 }) {
   const playCountRef = useRef(0);
+  const tile: TileDictation | null = useMemo(
+    () => buildTileDictation(sentence, tileIndex),
+    [sentence, tileIndex],
+  );
   const [value, setValue] = useState('');
   const [grade, setGrade] = useState<DictationGrade | null>(null);
 
@@ -3845,15 +3932,20 @@ function DictationCard({
           className="stack"
           onSubmit={(event) => {
             event.preventDefault();
-            const result = gradeDictation(value, sentence.japanese, sentence.readingOnly);
+            const result = gradeDictation(value, tile?.text ?? sentence.japanese, tile ? tile.reading : sentence.readingOnly);
             setGrade(result);
             onCheck(value, result.gradedAgainst);
           }}
         >
+          {tile ? (
+            <div className="jp jp-lg" aria-label="Sentence with one phrase missing">
+              {tile.before}<span style={{ borderBottom: '2px dashed var(--accent)', padding: '0 0.6rem' }}>＿＿</span>{tile.after}
+            </div>
+          ) : null}
           <label>
-            Type what you hear (kanji, kana or romaji)
+            {tile ? 'Type the missing phrase (kanji, kana or romaji)' : 'Type what you hear (kanji, kana or romaji)'}
             <textarea
-              rows={2}
+              rows={tile ? 1 : 2}
               lang="ja"
               value={value}
               autoComplete="off"
@@ -3886,9 +3978,11 @@ function DictationCard({
             </div>
           ) : null}
           <div className="jp jp-lg">
-            {grade ? renderSegments(grade.expectedSegments) : sentence.japanese}
+            {tile ? tile.before : null}
+            {tile ? <strong>{grade ? renderSegments(grade.expectedSegments) : tile.text}</strong> : grade ? renderSegments(grade.expectedSegments) : sentence.japanese}
+            {tile ? tile.after : null}
           </div>
-          {grade && grade.gradedAgainst !== sentence.japanese ? (
+          {!tile && grade && grade.gradedAgainst !== sentence.japanese ? (
             <div className="jp">{sentence.japanese}</div>
           ) : null}
           <div>{sentence.translation || '(no translation)'}</div>

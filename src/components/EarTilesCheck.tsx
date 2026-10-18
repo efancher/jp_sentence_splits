@@ -19,13 +19,16 @@ export function EarTilesCheck({
   audio,
   onRecord,
   onFinish,
+  finishLabel = 'Continue to the walkthrough',
 }: {
   sentenceId: string;
   visitId: string;
   puzzle: EarTilesPuzzle;
   audio: SentenceAudio;
-  onRecord: (decision: GlossDecisionInput) => void;
+  /** Omit where there is no gloss decision log to feed (the review card). */
+  onRecord?: (decision: GlossDecisionInput) => void;
   onFinish: () => void;
+  finishLabel?: string;
 }) {
   const total = puzzle.answer.length;
   const [placed, setPlaced] = useState<string[]>([]);
@@ -41,7 +44,7 @@ export function EarTilesCheck({
     if (recorded.current) return;
     recorded.current = true;
     for (const outcome of particleOutcomes(puzzle, finalWrongTaps)) {
-      onRecord({
+      onRecord?.({
         visitId,
         sentenceId,
         skill: 'particle',
@@ -170,7 +173,7 @@ export function EarTilesCheck({
             </div>
           ))}
           <div>
-            <button type="button" className="primary" onClick={onFinish}>Continue to the walkthrough</button>
+            <button type="button" className="primary" onClick={onFinish}>{finishLabel}</button>
           </div>
         </div>
       )}
