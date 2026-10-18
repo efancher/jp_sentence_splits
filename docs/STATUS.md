@@ -1,6 +1,7 @@
 # Status
 
 Current implementation snapshot, reviewed 2026-10-18 against main at `024a4e9`.
+Includes the incoming Ear Tiles refinement from `9be3657`.
 Earlier chronological detail remains in `STATUS_ARCHIVE.md` (frozen) and git
 history. `AI_OVERVIEW.md` describes features; `ROADMAP.md` keeps unfinished work
 and possible extensions. This snapshot does not certify a live deployment.
@@ -13,6 +14,9 @@ and possible extensions. This snapshot does not certify a live deployment.
 - Audio reviews offer `ear_tiles`, then `dictation_tile:N` after Ear Tiles has
   two reviews and is out of learning/relearning. Whole-sentence dictation is
   retired. Typed-match feedback never chooses the FSRS rating.
+  Ear Tiles accepts up to nine tiles and merges splits of ten to twelve tiles
+  down to nine by joining the shortest neighbours, retaining inner punctuation.
+  Single-tile dictation keeps the raw split and its nine-tile limit.
 - Reader, Analyze, review and Shadow support chapter layouts. The reader has
   per-sentence play/loop, new-word furigana and optional phrase/construction
   explanations. Episode preparation accepts the main JSON and structure lines

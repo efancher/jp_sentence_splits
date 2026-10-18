@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { Sentence, VocabularySuggestion } from '../src/domain/types';
 import {
+  buildCheckPuzzle,
   buildEarTilesPuzzle,
   buildTileDictation,
   chunkSentenceIntoTiles,
@@ -206,6 +207,25 @@ describe('buildEarTilesPuzzle', () => {
     const b = buildEarTilesPuzzle(sentence(FIVE), { seed: 'x' })!;
     expect(a.bank).toEqual(b.bank);
     expect(buildEarTilesPuzzle({ id: 's', japanese: '猫', vocabularySuggestions: [] }, { seed: 'x' })).toBeNull();
+  });
+});
+
+describe('buildCheckPuzzle merging', () => {
+  const NOUN_P = '名詞/普通名詞';
+  const COMMA = '補助記号/読点';
+  const nouns = (n: number): Piece[] =>
+    Array.from({ length: n }, (_, i): Piece[] => [
+      [`語${i}`, NOUN_P],
+      ['が', KAKU],
+      ['、', COMMA],
+    ]).flat();
+
+  it('accepts 9 tiles as is, merges 10-12 down to 9 keeping the comma, and refuses more', () => {
+    expect(buildCheckPuzzle(sentence(nouns(9)), 'v')!.answer).toHaveLength(9);
+    const merged = buildCheckPuzzle(sentence(nouns(11)), 'v')!;
+    expect(merged.answer).toHaveLength(9);
+    expect(merged.answer.join('')).toContain('、');
+    expect(buildCheckPuzzle(sentence(nouns(13)), 'v')).toBeNull();
   });
 });
 

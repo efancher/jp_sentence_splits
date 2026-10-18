@@ -74,6 +74,9 @@ interface TileDetail {
   lastSurface: string;
   /** The tile's tokens' readings joined (kana as UniDic stores it). */
   reading: string;
+  /** Offsets of the tile's first and last character in the sentence, so merged tiles can keep inner punctuation. */
+  start: number;
+  end: number;
 }
 
 function chunkSentenceIntoTileDetails(
@@ -143,12 +146,15 @@ function chunkSentenceIntoTileDetails(
       previous.lastPos = token.pos;
       previous.lastSurface = token.surface;
       previous.reading += token.reading;
+      previous.end = token.end;
     } else {
       chunks.push({
         text: prefixPending + token.surface,
         lastPos: token.pos,
         lastSurface: token.surface,
         reading: prefixPendingReading + token.reading,
+        start: prefixPending === '' ? token.start : token.start - prefixPending.length,
+        end: token.end,
       });
       prefixPending = '';
       prefixPendingReading = '';
@@ -248,12 +254,40 @@ function distractorCandidates(detail: TileDetail): { text: string; distractor: E
   return out;
 }
 
+/**
+ * Merge the shortest adjacent pair of tiles (text joined with whatever punctuation sat between
+ * them: 私、あかりが) until at most `target` remain. Short neighbours are the least separately
+ * audible, so the merge costs the listener the least ordering information.
+ */
+function mergeShortestTiles(details: TileDetail[], japanese: string, target: number): TileDetail[] {
+  const out = details.map((detail) => ({ ...detail }));
+  while (out.length > target) {
+    let best = 0;
+    for (let i = 1; i < out.length - 1; i += 1) {
+      if (out[i]!.text.length + out[i + 1]!.text.length < out[best]!.text.length + out[best + 1]!.text.length) best = i;
+    }
+    const [a, b] = [out[best]!, out[best + 1]!];
+    out.splice(best, 2, {
+      text: japanese.slice(a.start, b.end),
+      lastPos: b.lastPos,
+      lastSurface: b.lastSurface,
+      reading: a.reading + b.reading,
+      start: a.start,
+      end: b.end,
+    });
+  }
+  return out;
+}
+
 export function buildEarTilesPuzzle(
   sentence: Pick<Sentence, 'id' | 'japanese' | 'vocabularySuggestions'>,
-  options: { seed: string; distractors?: number },
+  options: { seed: string; distractors?: number; mergeTo?: number },
 ): EarTilesPuzzle | null {
-  const details = chunkSentenceIntoTileDetails(sentence);
+  let details = chunkSentenceIntoTileDetails(sentence);
   if (!details) return null;
+  if (options.mergeTo !== undefined && details.length > options.mergeTo) {
+    details = mergeShortestTiles(details, sentence.japanese, options.mergeTo);
+  }
   const tiles = details.map((detail) => detail.text);
   const tagged: EarTilesTile[] = tiles.map((text, index) => ({ id: `tile-${index}`, text }));
 
@@ -304,17 +338,22 @@ export function buildEarTilesPuzzle(
 
 /** The pre-walkthrough check takes shorter and longer sentences than the game: it is one warm-up, not a round. */
 export const CHECK_MIN_TILES = 3;
-export const CHECK_MAX_TILES = 8;
+export const CHECK_MAX_TILES = 9;
+/** Sentences with up to this many raw tiles still get the check: the shortest neighbours are merged down to CHECK_MAX_TILES. */
+export const CHECK_MAX_MERGEABLE_TILES = 12;
 export const CHECK_DISTRACTORS = 2;
 
-/** The tile check shown before a sentence's walkthrough, or null when the sentence doesn't split cleanly into 3–8 tiles. */
+/**
+ * The tile check shown before a sentence's walkthrough, or null when the sentence doesn't split cleanly into
+ * 3–12 tiles (anything over 9 is merged down to 9 by joining the shortest neighbouring tiles).
+ */
 export function buildCheckPuzzle(
   sentence: Pick<Sentence, 'id' | 'japanese' | 'vocabularySuggestions'>,
   seed: string,
 ): EarTilesPuzzle | null {
-  const puzzle = buildEarTilesPuzzle(sentence, { seed, distractors: CHECK_DISTRACTORS });
-  if (!puzzle) return null;
-  return puzzle.answer.length >= CHECK_MIN_TILES && puzzle.answer.length <= CHECK_MAX_TILES ? puzzle : null;
+  const rawCount = chunkSentenceIntoTileDetails(sentence)?.length ?? 0;
+  if (rawCount < CHECK_MIN_TILES || rawCount > CHECK_MAX_MERGEABLE_TILES) return null;
+  return buildEarTilesPuzzle(sentence, { seed, distractors: CHECK_DISTRACTORS, mergeTo: CHECK_MAX_TILES });
 }
 
 export interface ParticleOutcome {
