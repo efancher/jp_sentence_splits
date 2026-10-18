@@ -53,6 +53,35 @@ The items below retain unfinished work, optional refinements and future ideas.
 
 Unfinished work and optional extensions; completed behavior is in `AI_OVERVIEW.md`.
 
+- [ ] **UI load-time and database performance tests, with Supabase usage budgets.**
+  (2026-10-18 request; not implemented.) Catch slowdowns as the library grows
+  and prevent routine study/sync from exhausting the available Supabase usage
+  early in the billing period. Build on the test setup in [TESTING.md](TESTING.md).
+  - **UI:** measure cold startup, warm navigation and time until useful content
+    and controls are ready on Home, Books, Reader and Review. Use representative
+    small/large libraries, phone/desktop profiles and offline/slow-network
+    scenarios. Separate local rendering/data access from background sync and
+    audio loading; record repeated-run median and p95 timings.
+  - **Database:** benchmark IndexedDB reads/writes in a real browser and the
+    sync/Postgres paths with realistic fixture sizes. Cover review-queue building,
+    opening a long chapter, import/commit, first sync, incremental sync and
+    reconnect. Track query/request counts, rows and bytes transferred alongside
+    latency; inspect query plans for server hotspots. Catch repeated per-row
+    queries, full-table reloads, unnecessary polling and redundant audio transfers.
+  - **Supabase budget:** set configurable per-scenario budgets for requests,
+    transferred bytes, storage growth and relevant function calls/retries. Model
+    normal study, imports, background activity and multiple devices, then compare
+    projected period usage with the project's actual usage and current plan
+    allowances/reset dates. Include other consumers of the shared project and
+    reserve headroom, with an early warning when projected usage exceeds budget.
+    Request counts alone are not a quota or billing model; identify the actual
+    metered resources when implementing this.
+  - **Regression checks:** establish measured baselines before choosing limits.
+    Use deterministic count/byte budgets in CI and repeated, controlled timing
+    runs with tolerances to avoid flaky gates. Keep routine tests on synthetic
+    local/disposable services; use a separate read-only account-usage check for
+    real consumption so the tests themselves do not burn the production budget.
+
 - [ ] **Learned practice routing above FSRS.** (2026-10-18 research;
   implementation not started.) Keep FSRS for review timing; learn which
   exercise, easier variant, or helper improves later independent performance.
