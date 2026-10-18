@@ -994,7 +994,8 @@ function buildActivityDescriptors(scope: ReviewScope): ActivityDescriptor[] {
         const tileCount = buildCheckPuzzle(candidate.sentence, candidate.sentence.id)?.answer.length ?? 0;
         if (activityType === EAR_TILES_ACTIVITY) return tileCount > 0;
         const tile = dictationTileIndex(activityType);
-        if (tile === null || tile >= tileCount) return false;
+        // Dictation tiles are the raw split (never merged), so check them directly.
+        if (tile === null || buildTileDictation(candidate.sentence, tile) === null) return false;
         return scope.existingAudioItems.some(
           (item) =>
             item.subjectId === candidate.sentence.id &&
