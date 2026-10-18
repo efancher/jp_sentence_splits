@@ -58,8 +58,18 @@ real-Postgres checks also run on relevant pull requests.
 Performance testing now has a separate browser baseline command and configurable
 request/body-byte budgets for sync and audio. The browser harness uses small and
 large synthetic local libraries; Postgres uses the disposable migration/RLS
-harness. Timings remain report-only and actual account-budget forecasting is
-still planned. See [PERFORMANCE.md](PERFORMANCE.md) for scope and reproduction.
+harness. Timings remain report-only. The new snapshot-based
+[Supabase budget report](SUPABASE_BUDGET.md) projects cumulative usage,
+time-weighted storage/disk and database capacity, with headroom/data-quality
+warnings. A blank template is provided; actual account figures are still
+needed, and automatic retrieval is unimplemented. See
+[PERFORMANCE.md](PERFORMANCE.md) for scope and reproduction.
+
+Snapshot-report validation (2026-10-18): all 34 usage tests, application and
+performance TypeScript checks passed. Lint passed with 36 existing warnings.
+CLI smoke checks confirmed an example overrun and an incomplete blank template
+(`--check` exits 2). Next: fill the template with actual dashboard figures;
+broader import/restore workloads and calibrated UI timing gates remain open.
 
 Review now reads meaning-choice and missed-reading history for the active card
 only, through existing indexes. The question waits for a fixed history snapshot

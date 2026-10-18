@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "source": "dashboard",
+  "organization": "Fill in organization name",
+  "plan": null,
+  "allProjectsIncluded": null,
+  "periodStart": null,
+  "periodEnd": null,
+  "capturedAt": null,
+  "usageThrough": null,
+  "headroomPercent": 20,
+  "maxAgeHours": 48,
+  "minimumElapsedHours": 24,
+  "metrics": [
+    { "resource": "uncached_egress", "used": null, "allowance": null, "dailyUsage": null, "additionalUsage": 0 },
+    { "resource": "cached_egress", "used": null, "allowance": null, "dailyUsage": null, "additionalUsage": 0 },
+    { "resource": "edge_function_invocations", "used": null, "allowance": null, "dailyUsage": null, "additionalUsage": 0 },
+    { "resource": "storage_size", "used": null, "allowance": null, "currentSize": null, "growthPerDay": null },
+    { "resource": "database_size", "project": "Fill in project name; remove if not applicable", "used": null, "allowance": null, "growthPerDay": null },
+    { "resource": "disk_size", "project": "Fill in project name; remove if not applicable", "used": null, "allowance": null, "currentSize": null, "growthPerDay": null }
+  ]
+}

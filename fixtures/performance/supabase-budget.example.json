@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "source": "example",
+  "organization": "Synthetic example organization",
+  "plan": "Illustrative allowances, not a Supabase plan",
+  "allProjectsIncluded": true,
+  "periodStart": "2026-10-01T00:00:00Z",
+  "periodEnd": "2026-11-01T00:00:00Z",
+  "capturedAt": "2026-10-16T00:00:00Z",
+  "usageThrough": "2026-10-16T00:00:00Z",
+  "headroomPercent": 20,
+  "maxAgeHours": 48,
+  "minimumElapsedHours": 24,
+  "metrics": [
+    { "resource": "uncached_egress", "used": 2000000000, "allowance": 5000000000, "dailyUsage": null, "additionalUsage": 1000000000 },
+    { "resource": "cached_egress", "used": 100000000, "allowance": 5000000000, "dailyUsage": null, "additionalUsage": 0 },
+    { "resource": "edge_function_invocations", "used": 1000, "allowance": 50000, "dailyUsage": 100, "additionalUsage": 300 },
+    { "resource": "storage_size", "used": 900000000, "allowance": 1000000000, "currentSize": 300000000, "growthPerDay": 0 },
+    { "resource": "database_size", "project": "Example project", "used": 200000000, "allowance": 500000000, "growthPerDay": 5000000 }
+  ]
+}

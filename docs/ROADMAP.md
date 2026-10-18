@@ -58,8 +58,10 @@ Unfinished work and optional extensions; completed behavior is in `AI_OVERVIEW.m
   Home/Books/Reader/Review now have repeated document, warm and offline-navigation
   measurements with small/large synthetic libraries in Chromium and WebKit.
   Real-Postgres sync and synthetic-transport audio tests enforce configurable
-  request/body-byte ceilings. Timing gates and actual account-usage forecasting
-  remain unfinished. The first measured Review bottleneck is addressed by
+  request/body-byte ceilings. A [snapshot budget report](SUPABASE_BUDGET.md)
+  now projects usage with configurable headroom; actual account figures and
+  automatic retrieval remain outstanding. Timing gates are unfinished.
+  The first measured Review bottleneck is addressed by
   loading history per active card; see [the comparison](PERFORMANCE_REVIEW_FOLLOWUP.md).
   Commands, measurement boundaries and follow-ups:
   [PERFORMANCE.md](PERFORMANCE.md).

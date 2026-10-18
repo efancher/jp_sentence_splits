@@ -93,7 +93,10 @@ collaborators as editor/viewer).
   and remaining gaps; `e2e/README.md` documents the local browser container.
   A separate performance suite measures local screen readiness and enforces
   synthetic sync/audio request/body-byte budgets (`docs/PERFORMANCE.md`).
-  It does not yet predict actual Supabase account usage or gate UI timings.
+  The separate `report:supabase-budget` command forecasts configured resources
+  from a dated dashboard snapshot, with missing/stale-data and headroom warnings
+  (`docs/SUPABASE_BUDGET.md`). Actual account inputs and automatic retrieval
+  remain outstanding; UI timings are not gated yet.
 - **Hosting/CI**: `.github/workflows/deploy.yml` — on push to `main`, runs
   TypeScript checks, lint and the full unit suite with coverage, then `npm run build:pages`
   and publishes `dist/` to GitHub Pages. Several other workflows

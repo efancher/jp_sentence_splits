@@ -10,6 +10,9 @@
     "tests/usageMeter.test.ts",
     "tests/audioUsage.test.ts",
     "tests/performanceSummary.test.ts",
+    "tests/supabaseBudget.test.ts",
+    "scripts/report-supabase-budget.ts",
+    "scripts/lib/supabaseBudget.ts",
     "tests/pgIntegration"
   ]
 }

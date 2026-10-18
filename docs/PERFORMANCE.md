@@ -1,8 +1,11 @@
 # Performance baselines and usage budgets
 
-The first slice measures local screen readiness and enforces repeatable HTTP
-request/body budgets. It does not yet forecast account consumption or enforce
-calibrated UI timing limits. No production account is needed.
+The browser/HTTP suite measures local screen readiness and enforces repeatable
+request/body budgets. A separate [Supabase budget report](SUPABASE_BUDGET.md)
+forecasts configured resources from a dated dashboard snapshot, with a blank
+template and an explicitly synthetic example. A real account snapshot has not
+yet been supplied. UI timing limits remain uncalibrated. Tests need no production
+account.
 
 The [2026-10-18 baseline](PERFORMANCE_BASELINE.md) records the first complete
 local run and its raw observations. Global Review was the clearest scaling
@@ -151,8 +154,10 @@ Remaining roadmap work:
   not fixed or covered by these immediate-error retry checks.
 - Benchmark server query plans at realistic sizes under the authenticated role.
 - Test a genuinely cold offline PWA start and physical-device performance.
-- Read account usage and actual plan/reset dates, then forecast normal study,
-  imports, cache losses and multiple devices with headroom. Include other
+- Populate and review the snapshot-based budget report with actual account
+  usage, plan allowances and reset dates; automatic retrieval remains open.
+  Extend workload estimates for study, imports, cache losses and multiple
+  devices, avoiding double counting observed activity. Include other
   consumers/projects sharing the organization. Reconcile independently metered
   resources, not one generic request quota: cached/uncached egress, database
   capacity, bucket storage and function invocations. Storage billing uses
