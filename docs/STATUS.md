@@ -11,6 +11,10 @@ and possible extensions. This snapshot does not certify a live deployment.
 - Sentence-led learning is on by default. A completed walkthrough introduces one
   `reading_in_context` card; word/grammar cards stay paused. Introduction gates
   use sentence learning events, started book membership or a sentence card.
+- "Fresh try" revisits: automatic ones (parked checks, spaced schedule) are capped
+  at `EXPLORE_REVISITS_PER_BOOK` per book per plan; ones requested via the review
+  card's "Fresh try this sentence" button are exempt from that cap and drafted
+  first. The glossing time budget still bounds the total.
 - Audio reviews offer `ear_tiles`, then `dictation_tile:N` after Ear Tiles has
   two reviews and is out of learning/relearning. Whole-sentence dictation is
   retired. Typed-match feedback never chooses the FSRS rating.
