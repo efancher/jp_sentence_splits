@@ -9,8 +9,8 @@ test remains in WebKit.
 
 The host has browser downloads but lacks their Linux shared libraries. Use the
 cached `mcr.microsoft.com/playwright:v1.61.1-jammy` image, matching the installed
-Playwright version. Earlier successful Docker runs are also recorded in
-`docs/STATUS.md` (the vocabulary POS-labeling entry). Do not install host browser
+Playwright version. Verification results are recorded in
+`docs/TESTING.md`. Do not install host browser
 libraries just to repeat these checks.
 
 From the implementation checkout, build and start a local-only preview:
@@ -43,14 +43,15 @@ there too. The chapter tests check chapter boundaries, answer masking, target
 scrolling, horizontal overflow and a single persisted review after grading.
 Keep the image version in step with Playwright when upgrading dependencies.
 
-## Extras workflow in GitHub Actions
+## Browser and backend workflow in GitHub Actions
 
 `.github/workflows/extras-tests.yml` runs on pull requests, pushes to `main`,
-and manually from Actions → **Extras workflow tests**. It runs the assistant-run
-Python API tests and `book-extras.spec.ts` plus `clause-pilot.spec.ts` in Chromium and WebKit. The existing
-Deploy workflow's `npm run check` also picks up the extras unit/component tests.
-These checks need no repository secrets: API calls are mocked, browser data is
-synthetic, and the Python runner is faked. Browser failures upload `test-results/`
+and manually from Actions → **Browser and backend tests**. It runs all offline
+Python backend tests (with ffmpeg installed) and the full configured Chromium/
+WebKit suite. The Deploy workflow runs unit/component tests with whole-src coverage.
+These checks need no repository secrets: external API calls are mocked, browser
+data is synthetic, and assistant processes are faked. The optional real-chapter
+cases skip unless their private fixture is mounted. Browser failures upload `test-results/`
 (including retry traces) for seven days. This workflow is separate from the Pages
 deploy job; it does not itself gate deployment.
 

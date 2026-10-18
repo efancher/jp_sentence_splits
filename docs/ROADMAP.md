@@ -3,351 +3,29 @@
 At-a-glance list. `STATUS.md` is the current-state snapshot,
 `STATUS_ARCHIVE.md` the frozen chronological detail (files touched, test
 counts, production-run logs), `AI_OVERVIEW.md` the feature-oriented
-reference. Each entry here is one or two lines — follow the pointer for the
-rest. Update the checkbox and the one-line note when a phase's status
-changes.
+reference. Keep implementation logs in git history; retain unresolved decisions and
+future ideas here. Update an entry when its scope or status changes.
 
 Original phases match `docs/UNIFIED_APP_ARCHITECTURE.md` §15.
 
-## Done
+## Completed foundation
 
-- [x] **Phase 0 — Repository analysis.** `docs/UNIFIED_APP_ARCHITECTURE.md`.
-- [x] **Phase 1 — Unified data model.** Additive Dexie/Postgres tables;
-  migration live on Supabase 2026-08-13.
-- [x] **Phase 2 — Existing data migration.** WaniKani kanji catalog (2101
-  rows) + one-time Anki note import (16 new sentences, 332 vocab items, 500
-  links) run against production. JMDict scoped to a local lookup tool
-  (`npm run jmdict:lookup`), not bulk-imported — see STATUS.md.
-- [x] **Phase 3 — Unified shadowing.** Record/save/compare/rate loop,
-  `attempts` table, `ShadowPage`. Live overlay + pitch analysis delivered
-  later under Phase 8.
-- [x] **Phase 4 — FSRS.** `ts-fsrs` integrated (`src/lib/scheduling.ts`);
-  `/review` (global) + `/books/:bookId/review` (scoped) queue. Real
-  per-activity-type UI differentiation still deferred (see STATUS.md gaps).
-- [~] **Phase 5 — Vocabulary/kanji relationships.** `VocabularyPicker`
-  confirm materializes `vocabulary_items`/`sentence_vocabulary`/`kanji`/
-  `vocabulary_kanji` (all sync-wired); `/vocabulary` + `/kanji/:character`
-  browsing. Part 2 (JMDict meaning backfill + retroactive materialization)
-  run against production 2026-08-15. **Still unverified**: the interactive
-  confirm-vocabulary flow itself (`AnalyzePage.tsx`/`VocabularyReviewPage`)
-  — see STATUS.md.
-- [x] **Phase 6 — Anki interoperability cleanup.** Verified no further
-  content needed; `efancher/anki` archived. No export-back planned.
-- [x] **Phase 7 — Adaptive learning.** All slices 7.1–7.11 done and
-  verified against production (evidence model, reading retrieval, contextual
-  cloze, audio comprehension, mnemonic gating, interference detection,
-  contrastive pairs, natural-encounter evidence, production ladder, session
-  planner/graduation/explainability, full-sentence review gating). Slice
-  detail in STATUS_ARCHIVE.md.
-- [x] **Phase 8 — Shadowing feature parity + practice-target isolation.**
-  8.1–8.5 done, browser-verified (playback speed, loop-point marking, mic
-  calibration + shadow-mode recording + live waveform, pitch/waveform
-  comparison analysis, polish). Detail in STATUS_ARCHIVE.md.
-- [x] **Phase 9 — Shadowing pronunciation/prosody feedback.** All 9
-  milestones (mora segmentation, forced-alignment service, phone/pitch
-  timing feedback, ranked "fix one thing" + one-tap practice, ASR secondary
-  signal, pronunciation history, ground-truth pitch-accent scoring; the
-  standalone 5-stage guided/progressive practice panel was folded away
-  2026-09-09 — `ShadowPage` now leads with the hands-free close-shadow loop
-  above the free-form record-and-analyze controls) plus the **cross-sentence learner
-  profile** (2026-08-31, brief's Phase 15) — `pronunciationProfile.ts` +
-  `/pronunciation`, a ranked recurring-focus-area view + timing/pitch trend
-  aggregated across every analyzed attempt. Detail in STATUS.md /
-  STATUS_ARCHIVE.md.
-- [x] **Learning Orchestrator.** "What should I do?" planner — four learning
-  modes, neglect-aware allocation, review-priority scoring, `HomePage`
-  dashboard, `SessionRunnerPage`. Reworked to one growing **daily** session;
-  vocabulary confirmations get first claim on the glossing bucket. Detail
-  in STATUS.md's 2026-08-20 / 2026-08-21 / 2026-08-29 entries.
-- [x] **Re-segment an existing shadowing source.** `ResegmentSourcePage`,
-  `/books/:bookId/resegment` — rebuild a source's sentences on real
-  boundaries for pre-`resegment.py` imports; carries study progress + audio
-  across. Run against "After Work" 2026-08-29. Detail in STATUS.md.
-- [x] **Vocabulary meaning glossing.** POS-aware JMDict + JMnedict matcher
-  for offline backfill scripts, plus a runtime `vocab-assist` Claude Haiku
-  Edge Function that glosses in sentence context. Detail in STATUS.md's
-  2026-08-28 entry.
-- [x] **WaniKani mnemonics on review cards.** ~~Vocab + kanji mnemonic/hint
-  slices + a script-only `wanikani_subjects` Supabase cache + deferral
-  fall-through. Deployed 2026-08-29/30/31 (303 vocab, 2101 kanji).~~
-  **Removed 2026-09-02** — learning-in-context replaced it; feature,
-  importers, cache table, and columns all gone. Detail in STATUS.md.
-- [x] **Contextual conjugation cards.** `sentence_transformation` reworked
-  to one card per word-in-sentence occurrence, quizzing the form that
-  sentence actually used. Migration `20260901000000_...` live 2026-08-30.
-  Not yet browser-verified.
-- [x] **Progressive listening (two-tier ladder).** `word_listening`
-  activity type (one card per surface-form occurrence) gated behind reading
-  proficiency; full-sentence `listening` gated behind every `word_listening`
-  occurrence. Done 2026-08-30. Reworked 2026-09-02 from an isolated-word
-  loop into an audio cloze (whole clip → sentence with target blanked +
-  translation → answer; isolated loop demoted to optional scaffolding) —
-  the isolated card was an unfair vacuum test for short function words and
-  degraded badly when forced alignment couldn't isolate the word. Not yet
-  browser-verified.
-- [x] **Grammar-learning system.** Phases 1–9-Contrast-slice: schema/
-  repository/sync foundation, manual annotation from Analyze, `/grammar`
-  browser + personalized curriculum dashboard, AI-assisted suggestion/
-  explanation, `grammar_comprehension`/`grammar_completion`/
-  `grammar_contrast` review cards, derived learner-state ladder,
-  `GrammarRelationship` browsing/creation, plus a `grammar_production` card
-  (2026-09-01, the output rung — see below). Prediction/transformation
-  activity types deliberately not started.
-- [x] **Review new-card backlog fix.** (2026-08-31) The session planner
-  counts confirmed-but-never-introduced vocabulary
-  (`countNewVocabularyCardBacklog`), reserves `min(backlog, session limit)`
-  retain-costed minutes in the review bucket, folds that slice into the
-  review step's `targetCount`/label, and `ReviewPage` holds the review step
-  open through seeding. Backlog still drains at `newCardsPerSessionLimit`
-  (default 20) per daily session by design. Detail in STATUS.md.
-- [x] **Cross-sentence shadowing learner profile.** (2026-08-31)
-  `src/lib/pronunciationProfile.ts` + `PronunciationProfilePage`
-  (`/pronunciation`) — ranked recurring focus areas (which
-  `primaryIssueKind` leads most often, over how many sentences, with an
-  improving/worsening/steady trend) + overall timing/pitch trend,
-  aggregated across every analyzed attempt. Closes Phase 9's last
-  milestone. Future extension: finer-grained per-word accent-class stats
-  need more persisted in `AttemptAnalysisSummary` than v1 stores.
-- [x] **Grammar production ladder.** (2026-09-01) `grammar_production`
-  review card — produce a sentence using a recognized pattern, reveal a
-  model to self-rate against; gated on `grammar_comprehension` FSRS
-  proficiency. Weak `grammarPatternUsedIn` hint; self-rated. No
-  `GrammarLearnerState` `productive` rung yet. Detail in STATUS.md.
-- [x] **`comprehension` vs `reading_in_context` differentiation.** (2026-09-01)
-  `reading_in_context` now frames the sentence under test with its
-  reading-order neighbours (`src/lib/readingContext.ts` +
-  `ReadingInContextCard`): preceding sentences shown untranslated above it,
-  the following sentence's translation folded into the reveal, a "In
-  context · <book>" caption. Home book = the sentence's most recently
-  opened book. Degrades to the isolated layout when no context is
-  available. Closes the Phase 4 gap.
-  **Superseded 2026-09-08:** the isolated `comprehension` card was retired
-  entirely (user: "always better to learn in context if possible") —
-  `reading_in_context` is the only sentence-subject card now, existing
-  `comprehension` items migrated to it
-  (`scripts/migrate-comprehension-to-reading-in-context.ts`). Detail in
-  STATUS.md.
-- [x] **Audio-less pitch-accent production drill.** (2026-09-01)
-  `PitchAccentDrillPage` (`/pitch-accent`, Home shortcut) +
-  `getPitchAccentDrillSentences` — a non-SRS practice loop over Satori
-  sentences with confirmed pitch-accent-bearing vocabulary, no reference
-  recording, and words already reviewed to proficiency (same
-  `getSentenceFullReviewReadiness` gate as shadowing candidates). Record
-  the sentence; `buildPitchAccentShapeObservations` scores each target
-  word's realized contour against the dictionary shape using only the
-  learner's own forced alignment + pitch. Nothing saved or scheduled.
-  **2026-09-06:** briefly opened each sentence on a "predict-the-drop"
-  perceptual step. **2026-09-07:** that step was removed (user request) —
-  the drill is now purely "say it and get the pitch checked". Added a
-  **Single words** mode alongside Full sentence: one proficient,
-  pitch-carrying word at a time (`getPitchAccentDrillWords`, *not* gated on
-  the example sentence lacking audio, so a much larger pool), record just
-  the word (+ any trailing bunsetsu particle — it carries the phrase-final
-  fall), same dictionary-shape check. Quiet mode no longer touches this
-  page. Also 2026-09-07: the scorer itself now measures that following
-  particle (`expectedPitchShape`'s 3rd arg + `classifyLearnerMorae`), so
-  odaka vs heiban is finally graded, not collapsed — both in the drill and
-  in `AnalysisPanel` shadowing feedback. **2026-09-11:** every take is now
-  logged (`PitchDrillAttempt`) — see the usage-tracking entry below; the
-  drill itself is still ungated, nothing here blocks or reorders practice.
-- [x] **Retention / progress-over-time view.** (2026-09-01)
-  `src/lib/progressReport.ts` (`buildProgressReport`, pure) +
-  `ProgressPage` (`/progress`, in the nav + Home shortcut row): vocabulary
-  ladder counts (tracked / proficient / mature / first-recalled-recently),
-  FSRS recall-success rate (30d + all-time, natural encounters excluded),
-  grammar tracked/recognized, shadowing attempt count + timing/pitch trend
-  (reuses `getPronunciationProfile`), and an 8-week reviews-per-week +
-  cumulative-words-learned trend rendered with the existing `.progress-bar`
-  meter (no charting dep). All recomputed from `Review`/`StudyItem`/
-  analysis-summary evidence — nothing seeded or stored.
-- [x] **Native-clip measured pitch overlay.** (2026-09-03) The *measured*
-  YIN pitch track of the **reference** recording, drawn under the sentence on
-  the `listening` / `word_listening` review reveals and the shadowing
-  surfaces (`MeasuredPitchContour` + `SyncedShadowText`) — not a predicted
-  contour, complementing the per-word dictionary H/L marks. Persisted
-  per-clip in the new local-only `referencePitchTracks` Dexie cache (DB v16)
-  via `src/lib/referencePitchCache.ts`; `AnalysisPanel` warms it. Detail in
-  STATUS.md.
-- [x] **Quiet mode.** (2026-09-06) `settings.quietMode` (per-device, toggle
-  on Settings + Home) pauses every speak-aloud activity: the session planner
-  withholds all `shadowCandidates` (minutes flow to the other buckets,
-  nothing consumed) and `/shadow` shows a non-blocking banner. For noisy
-  environments / working somewhere you can't talk. Detail in STATUS.md.
-  (2026-09-07: no longer affects the pitch-accent drill.)
-- [x] **Analytics pass 1: blind spots, error mix, shadowing→SRS bridge.**
-  (2026-09-08) Two new `/progress` panels + the first link between the
-  shadowing world and the SRS world:
-  - **Blind spots** (`src/lib/blindSpots.ts`, `getBlindSpots`) — vocabulary
-    (tokenizer + Satori suggestions) and grammar (`worth_learning_now`
-    bucket) that recur across books the learner has worked but were never
-    confirmed / tracked.
-  - **What to work on** (`src/lib/errorMix.ts`, `getErrorMix`) — aggregates
-    `Review.errorClassification` into a ranked breakdown with a next-action
-    per category + a 30/90/all window toggle, plus a pronunciation block
-    from the shadowing side.
-  - **Shadowing → SRS bridge** — a `better`/`same` A/B rating on a shadow
-    attempt logs one `natural_encounter` review against the sentence's
-    existing `reading_in_context` card (`recordShadowingEncounter`, no-op if
-    the card doesn't exist, deduped per cycle); per-word pitch-accent
-    mismatches persist on `AttemptAnalysisSummary.wordIssues` and feed a
-    read-only "weak words" signal (`buildShadowingWeakWords`) named in the
-    error-mix pronunciation block. Detail in STATUS.md.
-- [x] **Word-audio isolation stops depending on the tailnet at review time.**
-  (2026-09-10) From "why aren't `pitch_accent` cards showing word-level
-  playback" (`で、なんか結構怖がってたりもしてね、最近は`). Three parts:
-  - `isolatedWordRange` bails to whole-sentence when an `<unk>` (OOV
-    contraction) precedes the target — the proportional char→time map is
-    unreliable past a token whose characters left the basis but whose
-    airtime didn't.
-  - `SegmentLoopPlayer`'s "Adjust" editor is reachable even when forced
-    alignment produced no span, seeded with a duration-proportional guess;
-    never looped or persisted until the learner commits a drag.
-  - **Alignment is now stored + shared.** `loadOrComputeAlignment` resolves
-    in three tiers — local Dexie cache → the owner-scoped
-    `reference_alignment` Supabase table (`src/sync/alignmentRemote.ts`,
-    direct query, *not* the sync-event engine — same treatment as the
-    reference-audio blobs) → the tailnet MFA service. A fresh service result
-    is pushed to the table opportunistically;
-    `scripts/backfill-reference-alignment.ts` (run on codex-dev, localhost
-    aligner) covers the existing corpus. Migration
-    `20260910000000_reference_alignment.sql`. Off-tailnet clients now get
-    word spans for anything aligned once elsewhere. Detail in STATUS.md;
-    §18 exception noted in ARCHITECTURE.md.
-- [x] **Pitch-accent misses carry a corrective "Try this:" hint.**
-  (2026-09-10) `pitchAccentCorrections.ts` classifies the H/L divergence
-  (first-mora-high, held-high, early-drop, no-downstep, final-fall,
-  particle-fall, flat) and returns a practice cue, several naming the
-  English-transfer cause. The scorer also now flags a correct drop with
-  the wrong shape around it (medium/low confidence, measured morae only).
-  Detail in STATUS.md.
-- [x] **Suspend a too-hard book.** (2026-09-11) New `Book.suspendedAt`,
-  distinct from `archived`: shelves a book that's currently too hard — out of
-  session-planner rotation *and* its exclusive review cards held back from the
-  global queue (only when every book a word/sentence belongs to is suspended —
-  `src/lib/suspendedBooks.ts`). Resume spreads now-overdue held-back cards over
-  the next week. `BookDetailPage` "Suspend studying" / "Resume studying" toggle;
-  "Resume" jump button renamed "Continue". Detail in STATUS.md.
-  Follow-up (2026-09-26): extended to single chapters (`BookChapter.suspendedAt`,
-  `setChapterSuspended`) for when only part of a book is the problem. Detail
-  in STATUS.md.
-- [x] **Pitch-accent drill usage tracking + SRS-miss-triggered extra
-  practice + H/L shape tracking.** (2026-09-11) User asked whether the free
-  drill is actually helping their pitch perception — three additive pieces,
-  none of them touch the `pitch_accent` SRS card's FSRS scheduling:
-  1. **Usage log** — `PitchDrillAttempt` (new table, `logPitchDrillAttempt`),
-     one row per scored target word per take on `PitchAccentDrillPage`
-     (both modes): `measured`/`mismatch`/`confidence`, plus the dictionary
-     vs. measured H/L shape strings (`expectedShape`/`measuredShape`).
-  2. **"Missed in review" focus queue** — `getPitchAccentFocusWords`: a word
-     whose `pitch_accent` card's last 2 reviews were both `again`/`hard`
-     surfaces in a new banner on `PitchAccentDrillPage`; "Start extra
-     practice" walks just that list in single-word mode. Clears the moment
-     any drill attempt is logged for the word (any outcome — it's practice,
-     not a retest), reappears on a fresh 2-miss streak. Implements the
-     "Shadowing weak words → pitch-accent drill" idea's sibling for SRS
-     misses, and a pitch-specific slice of "Cross-activity error routing"
-     below.
-  3. **H/L shape tracking on the SRS card too** — `Review` gained
-     `pitchExpectedShape`/`pitchChosenShape` (both `'h'/'l'` strings from
-     `expectedPitchShape`), populated on `pitch_accent` card grading.
-  4. **Query path** — `scripts/report-pitch-drill-effectiveness.ts`: drill
-     usage over time, weekly `pitch_accent` pass-rate, drill-volume-vs-
-     pass-rate, and the most common H/L shape confusions across both the
-     drill and the SRS card. Point-and-run, no export/import. Migration
-     `20260911010000_pitch_drill_attempts.sql` to apply. Detail in
-     STATUS.md.
-- [x] **Grammar SRS: 4-card ladder collapsed to one context-rich
-  `grammar_completion` card.** (2026-09-15) Resolves the 2026-09-09 open
-  question. A performance check (`scripts/report-grammar-card-performance.ts`)
-  found the ladder essentially never fired — of 74 tracked patterns only 2
-  had ever produced a study item — because `pickContextSentenceForGrammarPattern`
-  gated every card on the same strict "vocab already proficient" rule
-  `reading_in_context` uses. First attempt collapsed all four types into
-  an ambient "noticing" strip shown under every review card; tried in real
-  use, that "makes the review cards clunky and doesn't help with learning"
-  (user) — reverted. Second attempt, kept:
-  - **One surviving card, `grammar_completion`** — `grammar_comprehension`/
-    `grammar_contrast`/`grammar_production` retired outright, not rebuilt.
-  - **Gated the same as vocabulary** — `pickContextSentenceForGrammarPattern`
-    dropped its full-sentence-readiness requirement entirely, mirroring
-    `pickContextSentenceForVocabularyItem` (just needs a linked sentence,
-    nothing about the rest of that sentence's vocabulary).
-  - **Translation shown up front, not behind reveal** — it's the input
-    signal for picking the right construct, the same idea as giving the
-    audio in a pitch-accent card and asking for the shape.
-  - **Passage context** — the target sentence is framed by its
-    reading-order neighbours, same convention `reading_in_context` uses
-    (`ReadingContext` from `src/lib/readingContext.ts`), resolved via a
-    new bounded per-sentence query (`getReadingContextForSentence` in
-    repository.ts) rather than the shared scope-wide context map, since
-    grammar patterns are global-scope and can reference a sentence from
-    any book.
-  - Learner-state ladder simplified back to 3 rungs (encountered/noticed/
-    recognized) — `recognized` now reads FSRS proficiency off
-    `grammar_completion` instead of the retired `grammar_comprehension`.
-  - `scripts/retire-non-completion-grammar-items.ts` soft-deleted the 3
-    non-`grammar_completion` items across the 2 tracked patterns; both
-    patterns' `grammar_completion` items kept their FSRS state untouched.
-    Detail in STATUS.md.
-- [x] **`grammar_completion`: multiple choice → typed recall.** (2026-09-17,
-  card issue triage — "not sure if the way this card type is setup is
-  helpful, it's just kind of a search and find.") With the translation
-  always visible, multiple choice let a learner eliminate options by
-  grammatical shape alone without ever recalling the construct from its
-  meaning — user's own framing: "what should the card be teaching me to
-  retain?" Replaced with a typed answer (same shape as
-  SentenceConjugationCard/ReadingProductionCard), graded via the new
-  `isGrammarPatternAnswerCorrect` (`src/lib/grammarPatterns.ts` —
-  tilde/annotation/whitespace-insensitive, reusing
-  `normalizeGrammarPatternKey`). `buildGrammarCompletionChoices`/
-  `GRAMMAR_COMPLETION_CHOICE_COUNT` and the `GrammarRelationship`-ranked-
-  distractor logic are deleted, not just unused — see git history if the
-  discrimination-card idea below wants them back. Also removes the old
-  "fewer than 2 choices" degenerate case: every tracked pattern gets the
-  same card now, even a lone one with nothing to contrast against.
-- [x] **Real-audio pitch-perception bridge.** Follow-on to the
-  pitch-accent drill and the synthetic `pitch-ear-trainer` /
-  `relative-pitch-trainer`. Prompted by the 2026-09-06 ChatGPT pitch-ear
-  discussion: the learner passes synthetic-tone discrimination but still
-  misses lexical accent in real speech, so the gap is the Japanese-specific
-  layer (mora timing, voicing cues, per-speaker normalization, phrase-level
-  downstep), which only *real* audio trains. Two exercises, both built from
-  the existing native-clip corpus (`SentenceAudio` + per-word alignment +
-  dictionary `pitchAccentPositions`), staged as an optional warm-up **inside
-  the drill**, not a standalone module (keeps the "skill over metalabel
-  quiz" principle):
-  - [x] **Word-alone vs. word-in-phrase.** (2026-09-14) Play the isolated
-    word span, then the word + following particle span, ask "did the drop
-    land before the particle?" The odaka-vs-heiban bridge, which no
-    isolated view can teach. Shipped as `PitchWordPhraseWarmup` inside the
-    `pitch_accent` SRS card, gated to heiban/odaka candidates where forced
-    alignment locates both spans; ungraded, local state only. Detail in
-    STATUS.md.
-  - [x] **Same/different + ABX on near-minimal pairs.** (2026-09-18) Shipped
-    as `PitchAccentMinimalPairWarmup` on `PitchAccentDrillPage` —
-    same-reading, different-accent-position word pairs (true homophones,
-    e.g. 箸/橋) played from real clips via `isolatedWordRange`, guessed
-    before reveal. Up to 5 trials, same-book (same-speaker proxy) first
-    then cross-book if available — no per-clip speaker identity exists in
-    this corpus, so `Book.id` stands in for it (see STATUS.md's 2026-09-18
-    entry for the caveat). Corpus currently thin (two "Nihongo con Teppei
-    (Beginners)" episodes mined in as a known single-narrator source, after
-    confirming NHK Easy publishes no narrator metadata to check by) — pool
-    grows as more single-speaker content is mined.
-  - **Not** an F0-resynthesis pipeline (ChatGPT's centre-piece): real
-    near-minimal pairs from the corpus get most of the perceptual benefit
-    without a PSOLA/WORLD service on the memory-constrained analysis host
-    (same footprint constraint that parked PASQA).
-  - [x] **Live pitch biofeedback on `pitch_accent`'s reveal ("Practice this
-    word").** (2026-09-28) Everything above is post-hoc feedback (score/
-    contour after recording). Genuinely new modality: an optional "🔁
-    Practice this word" step draws the learner's pitch live, overlaid on the
-    real native contour, while they're still speaking — reuses
-    `startShadowLoop` + `LiveShadowWaveform` from ShadowPage's "Close
-    shadow" loop, scoped to the word's own span. Unscored. Detail in
-    STATUS.md.
+Phases 0–9 established the unified data model, imports, FSRS, vocabulary/kanji,
+grammar, shadowing and pronunciation feedback. The daily planner, progress
+panels, source resegmentation, podcast/NHK Easy import, read-along, pitch practice
+and short games are implemented. The default sentence-led flow pauses the older
+word/grammar card ladder; its code remains available when that setting is off.
+
+Completed implementation logs and superseded designs have been pruned from this
+living roadmap. See `AI_OVERVIEW.md` for current behavior, `STATUS_ARCHIVE.md`
+for the frozen earlier history, and git history for later implementation detail.
+The items below retain unfinished work, optional refinements and future ideas.
 
 ## In progress
+
+- [~] **Phase 5 — Vocabulary/kanji relationships.** Implemented and covered by
+  repository/component tests. The original interactive confirm-vocabulary
+  manual verification remains unrecorded; retain it as a verification follow-up.
 
 - [~] **Sentence-membership integrity (class of bug).** Detector, guards, the
   cascade-soft-delete migration and a manual `check-sentence-integrity.yml`
@@ -363,28 +41,17 @@ Original phases match `docs/UNIFIED_APP_ARCHITECTURE.md` §15.
   browser tests. Other activities and the learning/preparation model remain.
   Browser test instructions: `e2e/README.md`.
 
-- [ ] **Mining pipeline v2.** Staged, re-runnable YouTube mining
-  (transcript → segment → translate → commit, audio at every stage) fixing
-  the auto-caption-as-source-of-truth quality issue. Slices A (ASR
-  transcript), B (full UniDic form/reading/accent + JMnedict proper-noun
-  check), C (retained source audio), and the wizard W1–W6 + deferred-polish
-  pass **all landed 2026-08-31**. Full design in
-  `docs/mining-pipeline-v2.md` / `docs/mining-wizard-spec.md`.
-  - Still deferred: a `source_audio` Supabase table + Storage mirror for
-    cache durability (blocked on a Supabase-creds decision for the Python
-    service; recommendation on file is box-level backups of the cache dir
-    instead).
+- [ ] **Source audio refinements.** Mining pipeline v2 and its Storage
+  durability path (`app/source_backup.py`, private `source-audio` bucket) are
+  implemented, enabled when the service has credentials. Keep offline
+  whole-episode caching/adjustment improvements as optional follow-ups.
+  Design: `docs/mining-pipeline-v2.md` / `docs/mining-wizard-spec.md`.
 
 - [~] **Progressive glossing.** Slices 1-2 shipped 2026-10-01 (STATUS), including feasibility script, try-unaided, partial translation, self-report, park-and-prepare, readiness tiers, progress panel, heuristic の attachment skill, planner revisit. Left: AI-verified dependency reference and clause skills. Diagnostic refreshed 2026-10-15: 50/64 analysed sentences have a settled heuristic decision; attachment coverage is 25 の decisions. Pilot drafted 2026-10-16: 12 real sentences, 8 promising, 2 needing chunk repairs, 2 deferred for context/ambiguity; see `research/GLOSS_CLAUSE_PILOT.md`. References are self-reviewed drafts, not independently validated. Opt-in span-based preview shipped and expanded to all active unique sentences (365 questions, 64 reviewed notes as of 2026-10-17, after replacing 46 no-choice questions with connective-link questions and noting 29 too-short ones), including the repaired examples and missing-question notices; independent reference review still required before auto-grading. Helpful/disputed reactions sync as of 2026-10-17 (`clause_question_feedback`; `npm run diagnose:clause-feedback`) so the dispute rate can guide that review.
 
 ## Planned
 
-Detail/rationale in `docs/STATUS.md`'s "Open / deferred" section and the
-note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
-**Review new-card backlog fix**, **Cross-sentence learner profile**,
-**Grammar production ladder**, **Audio-less pitch-accent production drill**,
-**`comprehension` vs `reading_in_context` differentiation**, and
-**Retention / progress-over-time view** under Done above.
+Unfinished work and optional extensions; completed behavior is in `AI_OVERVIEW.md`.
 
 - [ ] **Learned practice routing above FSRS.** (2026-10-18 research;
   implementation not started.) Keep FSRS for review timing; learn which
@@ -402,194 +69,42 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
   implementation pointers, open questions, and primary research sources:
   [Adaptive scheduling research](ADAPTIVE_SCHEDULING_RESEARCH.md).
 
-- [x] **Reconsider pitch-accent emphasis outside shadowing.** (2026-09-28,
-  user reflection) User questioned whether they're over-investing effort in
-  pitch-accent precision/perfectionism outside the shadowing loop, given
-  non-Tokyo accents vary and even native listeners tolerate learner
-  deviation. Investigation found no single "emphasis knob" — the
-  `pitch_accent` review card isn't even weighted in the session planner
-  (raw FSRS due-date queue), and the standalone drill page is just an
-  opt-in Home shortcut, not pushed by anything. The one real lever found:
-  `getSentenceShadowingReadiness` required every linked word's `pitch_accent`
-  card to be FSRS-proficient before a sentence could be shadowed at all —
-  backwards, since shadowing is meant to be the primary way pitch accent
-  gets learned. **Shipped same day**: removed that pitch requirement
-  entirely, and (per user's own framing — "shadowing should be gated by
-  having seen all the vocabulary words at least once") lowered the sibling
-  reading/meaning requirement from full FSRS proficiency to merely
-  introduced (seen once). Detail + manual test plan in STATUS.md's
-  2026-09-28 "Shadowing readiness loosened" entry.
-  **Follow-up, same day: user decided to go further and pause pitch-accent
-  practice outright** rather than merely de-emphasize it — new per-device
-  `settings.pitchAccentPaused` toggle (Settings + Home, mirrors `quietMode`),
-  fully reversible. Withholds `pitch_accent`/`pitch_accent_production` from
-  `/review` and the session planner, hides `/pitch-accent` (shows a resume
-  panel instead) and its Home shortcut, hides the three pitch-based `/play`
-  games (Odd Ear Out, Homophone Hunt, Speaker Match) with a "paused" reason,
-  and exempts `getSentenceListeningReadiness`'s own separate pitch
-  sub-requirement while paused (so `listening` cards don't starve in the
-  meantime). Detail + manual test plan in STATUS.md's 2026-09-28 "Pause
-  pitch accent setting" entry.
-- [x] **Deterministic ids for get-or-create sync entities + real-Postgres sync tests.**
-  (2026-09-20, shipped) `kanji`, `vocabulary_items`, `grammar_patterns`,
-  `sentence_grammar`, `grammar_relationships` and `vocabulary_kanji` ids are now derived
-  from owner + natural key (`deterministicId`, `mintGetOrCreateId`), so two devices minting
-  the same word make the same row. Signed-out devices and existing rows keep their ids;
-  the adopt/remap machinery stays for those. `npm run test:pg` runs the push path against
-  the real migrations + RLS (Docker). Follow-ups if wanted: `study_items` (FSRS state;
-  natural-key duplicates still rely on the unique index) and `sentence_vocabulary` ids
-  are still random; run `test:pg` in the Deploy gate if the ~1 GB image pull becomes
-  acceptable (it has its own non-gating workflow today).
+- [ ] **Deterministic-id and sync-test follow-ups.** Existing get-or-create
+  entities use deterministic ids. Optional extensions: `study_items` (whose
+  FSRS state needs care) and `sentence_vocabulary` still use random ids.
+  Consider making `test:pg` a deployment gate if its image-pull cost is acceptable;
+  it currently runs independently on relevant pushes and pull requests.
 
-- [ ] **Short games (`/play`).** (2026-09-19; **P1 shipped 2026-09-19** —
-  see the Phases bullet) A few 60–180 s, non-arcade
-  rounds that break up study while still training a skill, and — longer
-  term — can be aimed at weaknesses or strengths. Came out of four
-  parallel read-only design passes (audio / vocab / grammar / framework
-  lenses); nothing built yet. Design rules the passes converged on:
-  - Each game is its **own short activity** on a `/play` hub + Home chip —
-    not an ambient strip on existing cards (that pattern was reverted
-    2026-09-15, see the grammar-SRS entry). Tap-only UI (no drag, no
-    `prompt`/`confirm`); any audio starts from a tap, never a timer (iOS).
-  - **Games do not write FSRS in v1.** They're cued (hints, choices,
-    pacing), so grading them would inflate the proficiency signals that
-    gate `continue_book`/shadowing/listening (`getProficientVocabularyItemIds`).
-    Results go to a **local-only append-only `game_rounds` log** modelled
-    on `pitch_drill_attempts` (no Supabase migration at first — the
-    migration-apply gap has bitten before; add sync once the games prove
-    useful, and confirm the migration is applied to prod first). Any
-    FSRS-adjacent write is opt-in and user-explicit (e.g. a result-screen
-    "Queue misses for review" toggle that only seeds cards, never grades).
-  - **Shared item picker** (`src/lib/gamePicker.ts`, pure):
-    `pickItems({signal: weak|strong|stale|new|frontier, game, n, seed})`.
-    Signals reuse `getLeechList`, `scoreReviewPriority`,
-    `predictRetrievability`, `countNewVocabularyCardBacklog`,
-    `bookCoverage.ts`. Every game ships an `eligible()` that runs
-    **before** ranking; a too-thin pool hides the game/signal with a
-    reason and falls back (weak → stale → any) rather than an empty round
-    (the per-item-gate starvation lesson, 2026-09-16).
-  - **GameShell** (`src/components/games/GameShell.tsx` + registry
-    `src/games/registry.ts`): intro (signal chip + "why these items", the
-    Start tap does the gesture-gated audio setup) → play (item-count-capped,
-    a pace bar with no fail state) → result (per-item replay + one-line
-    why, strength/weakness tag).
-  - **Session integration — SHIPPED 2026-09-21 (P2; see STATUS).** Planned as: a `game`
-    `PlannerStepTargetKind` (`types.ts`) with a query-free path
-    (`/play/:gameId/:signal`, since `useActiveSession` matches by exact
-    pathname), **no** fifth `SessionBucket` (it's a `Record` across
-    allocation/settings/recap/Home), settled only via the SessionBar's
-    "Mark complete". `game_*` activity types stay out of `recentActivity`
-    neglect scoring; `stepUsefulness` gives skip-rate for free as the kill
-    switch. As built, break minutes come out of the requested time (open question 4
-    answered: displace, not extra); still open: per-game round-time estimate (3 min is a guess),
-    a Settings toggle/frequency for breaks, and a game-aware weak-skill pick instead of day rotation.
-  - **Feasibility (prod, 2026-09-19, `scripts/report-game-feasibility.ts`,
-    read-only):** *Word Detective* — 490 confirmed words, 194 with 2+
-    sentences (121 with 2+ audio sentences); 41 lapsed, only 25 of them
-    with 2+ sentences (thin weakness pool); 127 no-card backlog words have
-    2+ sentences. *Odd Ear Out* — 209 pitch-carrying citation-form words,
-    113 with aligned audio and 2+ morae; a 3+1 round is possible at 2/3/4/5
-    morae (upper bound, proficiency **not** filtered). *Particle Puzzle* —
-    994 of 1269 sentences have 2+ particle tokens (800 with 3+); all
-    tokens are UniDic `morphology` source, so imports are not token-poor.
-  - **Candidates (ranked by the design passes):**
-    1. **Word Detective** (vocab, M) — a mystery word from your books,
-       typed reading, clue ladder (blanked sentence → 2nd sentence →
-       translation → audio → first kana), fewer clues = higher score.
-       Weakness signal: leeches / lowest retrievability. Overlaps `cloze`
-       and `reading_production`; the multi-context clue ladder is the
-       differentiator.
-    2. ~~**Odd Ear Out**~~ **[shipped 2026-09-19; playable after the 2026-09-19 `backfill:reference-alignment` refresh — see STATUS]** (pitch, M) — 4 native clips of same-length words,
-       tap the odd accent shape, reveal the measured contours
-       (`MeasuredPitchContour`). Reuses
-       `getPitchAccentMinimalPairOccurrences` / `expectedPitchShape`; keep
-       the heiban-vs-odaka exclusion. `Book.id` as speaker proxy.
-    3. ~~**Verb Lego**~~ **[shipped 2026-09-19 — hybrid: real sentence chains + composed "monster" forms; follow-ups: 〜たくなかった / 〜でした pieces, a reverse "which piece is the passive?" mode]** (grammar, M) — stack suffix blocks to build stacked
-       verb forms (食べさせられなかった); fills the gap the conjugation
-       card skips (`identifyConjugationForm` ignores stacked surfaces).
-       Needs an aux-lemma → label table; UniDic is inconsistent on
-       causative/passive stems.
-    4. ~~**Particle Puzzle**~~ **[shipped 2026-09-19]** (grammar, S–M) — fill 3–4 particle blanks from
-       one shared chip bank (+1–2 decoys), translation hidden until check,
-       accept curated equivalents (に/へ). Cheapest; per-particle-pair
-       miss rate is the weakness signal.
-    5. ~~**Keystone**~~ **[shipped 2026-09-26 — see STATUS]** ("which of these
-       words unlock the most of the next chapter" — front door to the no-card
-       backlog, 127 words in prod per the 2026-09-19 feasibility report).
-       ~~**Ear Tiles**~~
-       **[shipped 2026-09-21 — see STATUS; follow-ups: a slower-replay button, per-phrase
-       "hear this phrase" once alignment spans are loaded for sentence audio, more tiles
-       from the 91 sentences rejected as too few — ~half of eligible-audio sentences are
-       under 4 phrases]**, ~~**Then & Now**~~ **[shipped 2026-09-27 — see
-       STATUS; built as a purely reflective listen, not a scored round — the
-       user picked that framing over a scored guess-then-reveal or skipping
-       it, since there's nothing to grade]** (replay
-       an old clip with then-unknown words ducked out — needs per-word
-       alignment spans; **now unblocked** — 2026-09-19's
-       `backfill:reference-alignment` refresh populated these broadly), **Draft Day**
-       (choose which backlog words to adopt), **Pair Sort** (only if the error mix
-       shows discrimination errors; unlocked by the discrimination-card item below).
-    Skipped as overlapping an existing card or a sibling game: Connections,
-    Furigana Fog (≈ `reading_in_context`), Gremlin Hunt (≈ Verb Lego),
-    Ghost Run (largest build, most likely to feel like work).
-    New ideas from a 2026-09-26 brainstorm, unscheduled:
-    - ~~**Homophone Hunt**~~ **[shipped 2026-09-26 — see STATUS]** (pitch,
-      S–M) — score the existing minimal-pair ABX warm-up
-      (`getPitchAccentMinimalPairOccurrences`, true homophones like 箸/橋) as
-      its own round instead of an ungraded in-drill warm-up.
-    - ~~**Speaker Match**~~ **[shipped 2026-09-27 — see STATUS]** (pitch, S) —
-      gamifies the 2026-09-25 "Compare speakers" browse tool
-      (`/pitch-accent/compare`): play two same-word clips from different
-      books, guess which is which. Built as the roadmap's own "(or which is
-      which)" framing, not the literal "matches a dictionary shape" one —
-      two real, correctly-pronounced clips of the same word both match the
-      dictionary shape, so there was no wrong answer to detect that way.
-      Pool-size caveat from the compare tool carries over and is real: 2026-
-      09-27 feasibility check found only 14 prod words with clips in 2+
-      non-suspended books (before the span-quality filters narrow it
-      further) — cross-book same-word overlap after Odd Ear Out's span/
-      suspended-book filters is the limiting factor, not code.
-    - ~~**Grammar Detective**~~ **[shipped 2026-09-27 — see STATUS]** (grammar, M) —
-      Word Detective's clue-ladder format sourced from `grammar_completion`
-      misses instead of vocab leeches, reusing the passage-context convention
-      `grammar_completion` already uses (`pickContextSentenceForGrammarPattern`).
-      Built with a looser eligibility bar than Word Detective: needs only the
-      one tracked sentence the review card already requires (translation
-      present), not a second distinct occurrence — passage context is the
-      differentiator clue instead, and degrades away when a pattern has none.
-      62 of 93 prod patterns eligible (2026-09-27 feasibility check); only 12
-      have 2+ sentences, confirming the looser bar was the right call.
-  - **Phases:** **P1 — DONE 2026-09-19** (`GameShell`, `src/lib/gamePicker.ts`,
-    `/play` hub + Home shortcut, local `gameRounds` log, **Word Detective**; see
-    STATUS.md). **Particle Puzzle also shipped 2026-09-19** (candidate #4 below;
-    142 confirmed playable sentences in prod after its conservative blanking
-    rules, ~28 distinct rounds). Original scope: GameShell + picker (weak/stale/strong from existing
-    data) + one game + `/play` + Home chip + local `game_rounds`, no sync,
-    no session step. **P2** optional session interlude + recap line
-    (`sessionRecap.ts`). **P3 — DONE 2026-09-22**: `/progress` "Games" panel
-    (accuracy by game and signal, the `weak` row doubling as weak-item
-    recovery rate, a cued-vs-FSRS gap in the style of
-    `selfRatingCalibration` — see STATUS) + adaptive difficulty (each
-    game's own last 3 rounds' accuracy narrows/widens the picker's sampled
-    pool depth via a new `difficulty` tier on `pickItems`; never changes
-    signal). **P4** sync `game_rounds`; add "Queue misses". **P5** — Keystone
-    shipped 2026-09-26, Then & Now shipped 2026-09-27 (see STATUS). **P6**
-    let game misses feed the planner's weakness term (riskiest, last).
-  - **Decisions taken for P1 (2026-09-19, the recommended defaults):** games are
-    strictly read-only w.r.t. FSRS (no "Queue misses" yet); standalone `/play`
-    only, no session interlude; local-only data; no streak. Still open: whether
-    game time should displace review minutes or be extra (only matters at P2).
-    Original questions: (1) strictly read-only vs. opt-in "Queue misses";
-    (2) standalone `/play` only vs. also a session interlude; (3) is a
-    rolling "rounds this week" count enough, or any streak; (4) should
-    game time displace review minutes or be extra; (5) local-only data
-    acceptable at first (phone/desktop histories diverge until sync).
-  - Manual test plan for P1: open `/play`, run a weak round, confirm the
-    "why" line matches the leech list; confirm no `reviews`/`study_items`
-    rows changed; confirm a too-small pool hides the game with a reason.
+- [~] **Short games (`/play`) — remaining extensions.** The hub, picker,
+  individual games, local round log, planner breaks, progress panel and adaptive
+  pool depth are built. Keep games cued and separate from FSRS grading. Future
+  work and ideas from the original design:
+  - Sync `game_rounds` after usefulness is established; explicitly offer
+    "Queue misses for review" to seed cards without grading them. Eventually
+    evaluate game misses as planner weakness evidence (the riskiest phase).
+  - Replace the fixed three-minute break estimate with per-game timing, add a
+    Settings toggle/frequency, and consider weak-skill selection instead of day
+    rotation. Breaks already displace requested session time. A rolling rounds
+    count versus a streak remains an optional product choice.
+  - Verb Lego: add 〜たくなかった / 〜でした pieces and a reverse "which piece
+    is the passive?" mode; preserve careful aux-lemma labelling.
+  - Ear Tiles: slower replay, per-phrase replay when alignment spans exist, and
+    ways to include sentences rejected for too few phrases.
+  - Unbuilt candidates: **Draft Day** (choose backlog words to adopt) and
+    **Pair Sort** (only when discrimination errors justify it). Earlier ideas
+    deferred for overlap or size remain possibilities: Connections, Furigana
+    Fog, Gremlin Hunt and Ghost Run.
+  - Re-measure eligible pools rather than relying on the September feasibility
+    counts. Speaker Match needs the same word in multiple non-suspended books;
+    Word Detective's multi-context weakness pool can also be thin. Eligibility
+    must run before ranking, with an explanation and fallback for a small pool.
+  - Browser verification remains useful: run a weak round, check that its reason
+    matches the evidence, verify no review/study-item writes, and exercise the
+    small-pool fallback. New game gates should respect the default sentence-led
+    flow rather than depend on paused word-card history.
 
 - [ ] **Grammar pattern discrimination card.** (2026-09-17, follow-up to
-  the `grammar_completion` recall redesign above) A second retention target
+  the `grammar_completion` recall redesign) A second retention target
   distinct from recall: not "can you produce this construction" but "can
   you tell it apart from the pattern you actually confuse it with" (e.g.
   〜わけがない vs 〜はずがない). `GrammarRelationship` (`commonly_confused` in
@@ -623,342 +138,41 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
   authoring, or an AI-suggested pass) in the meantime, that would remove
   the bigger blocker on its own.
   - **Root cause of the low `grammar_completion` volume fixed 2026-09-28** —
-    see "Grammar patterns auto-track once vocab-ready" under Done. The
+    see the grammar section in `AI_OVERVIEW.md`. The
     dominant cause turned out to be 68% of annotated patterns sitting
     Track-eligible and simply forgotten, not the readiness bar or a lack of
     annotation. Should raise `grammar_completion` volume organically over
     time; `commonly_confused` still needs its own separate seeding
     mechanism (manual authoring or AI-suggested) regardless.
-- [ ] **Podcast mining.** (2026-09-13) Extend the existing YouTube-mining
-  pipeline to podcast episodes rather than building a new one — the backend
-  is already more source-agnostic than it looks: `POST /jobs` takes a raw
-  URL with no YouTube-only gate, `youtube.fetch_audio`/`download_subtitles`
-  (`server/youtube-mining/app/youtube.py`) are plain `yt-dlp` calls that
-  already handle direct audio URLs and many non-YouTube hosts, and the
-  no-captions **ASR fallback already built** for undercaptioned YouTube
-  videos covers "podcast has no JA subtitle track" for free. Plan:
-  1. ~~**Smoke-test first**~~ **Done 2026-09-13.** (Correction: this dev
-     session turned out to be running directly on `codex-dev`, the same box
-     the `youtube-mining-api` systemd service runs on — not a separate
-     sandbox, per the unit file's `WorkingDirectory` pointing at this exact
-     checkout.) Called `youtube.fetch_audio`/`inspect_url`/
-     `download_subtitles` directly against a real live episode (Nihongo con
-     Teppei #1581, a plain `media.blubrry.com` mp3 URL pulled from the
-     show's real RSS feed). Download succeeded (7.4MB m4a, no exit-node/
-     bot-blocking issue — that's YouTube-specific), and `download_subtitles`
-     correctly found nothing, confirming the ASR fallback path would engage.
-     Found `inspect_url`'s generic extractor has no page metadata for a bare
-     mp3 URL (title comes back as the filename, duration as `None`) —
-     motivated steps 2/4 below.
-  2. ~~**RSS episode picker**~~ **Done 2026-09-13**, backend + UI + wiring,
-     all verified live against the real production service (not just unit
-     tests): `app/podcasts.py` (`parse_podcast_feed`/`fetch_podcast_feed`) +
-     `POST /podcast-feed`; `fetchPodcastFeed` in `src/lib/miningApi.ts`; a
-     collapsible "Or import a podcast episode" section on
-     `YouTubeMinePage.tsx`'s idle screen (feed URL → episode list, capped at
-     the latest 30 — some feeds run 1000+ episodes — → tap one to mine it).
-     Restarted `youtube-mining-api.service` (checked `GET /jobs` was empty
-     first, so nothing in flight got dropped) and ran a real episode through
-     the live service end to end: downloaded, correctly found no captions,
-     fell back to ASR, and produced 107 real sentence cues from actual
-     speech (~5 min wall-clock for a 5:32 episode on this box — real
-     evidence for step 3 below). Test job deleted after verifying. One
-     real-world finding: Nihongo con Teppei's feed has no `<itunes:duration>`
-     tags at all, so durations show blank for every episode there — the UI
-     already treats the field as optional, not assumed present.
-  3. ~~**Long-episode ASR headroom**~~ **Resolved, verified live 2026-09-22.**
-     `MINING_ASR_TIMEOUT_SECONDS` (on `youtube-mining-api`, not
-     `shadowing-analysis-api` — a separate timeout from the `/align` cap
-     above) was already raised from its 1800s default to **3600s**, deployed
-     and committed (`server/youtube-mining/deploy/youtube-mining-api.service`,
-     `1642a34`) — this ROADMAP entry just hadn't been updated to say so.
-     Verified with a real, previously-untested episode: Miku Real Japanese's
-     "No 227" (17:05 audio, a personal-essay episode picked as one of the
-     longer items in that show's feed, real RSS → `/jobs` → ASR → parse, no
-     mocking) took **~17.5 minutes wall-clock** end to end (download +
-     transcription + sentence parsing — essentially 1× realtime, matching
-     the 5:32 episode's ratio from 2026-09-13) and produced 293 sentences.
-     `shadowing-analysis-api`'s RSS climbed to ~4.2–4.8 GB during
-     transcription (baseline ~3.1 GB, `youtube-mining-api` itself under
-     100 MB throughout) and settled back to ~3.9 GB after — no OOM, no
-     leftover growth, comfortably inside the 8 GB box even mid-job. The
-     known MFA/kalpy leak (weekly-restarted, see "Services" in STATUS.md)
-     is a separate multi-day accumulation from repeated *alignment* calls,
-     not something one long *transcription* job triggers. Test job deleted
-     after verifying, per the existing convention. **Conclusion: no further
-     action needed for episodes in the 10–20 min range this feature targets**;
-     chunked transcription past ~30 min remains theoretical, not yet needed.
-  3b. **Found + fixed while dogfooding this feature, not really podcast-
-     specific**: "Auto-fill translations (AI)" silently shifted every
-     translation down by one row on a real 162-sentence episode — the
-     `sentence-realign` Edge Function dropped blank/whitespace rows from its
-     reply array instead of preserving position, and separately its
-     `MAX_GROUPS = 60` cap silently truncated anything past the first 60
-     rows with no client-visible signal. Both are latent bugs in shared
-     mining-wizard translate infrastructure that a long YouTube video could
-     trip too — podcast mining just has a much higher rate of >60-row
-     sources. Full writeup + fix in `docs/STATUS.md`'s 2026-09-13 entry.
-     **Needs `supabase functions deploy sentence-realign` run by someone
-     with Supabase CLI credentials before it's live** — not deployable from
-     this session.
-  4. ~~**Dedup/labeling polish**~~ **Partly done 2026-09-13** — the title
-     half. `SourceInfo.type` widened to `Literal["youtube", "podcast"]`;
-     `CreateJobRequest` gained `title`/`sourceType`, threaded through
-     `create_job` → `Job.title_override`/`source_type` (checkpointed, so it
-     survives a process restart mid-job) → applied onto `SourceInfo` once
-     `info_to_source()` builds it. Verified live: the created book's title
-     is the real RSS episode title, not yt-dlp's filename-derived one.
-     Still open: `alreadyMined`'s "already imported" video-id matching
-     (`src/lib/youtubeUrl.ts`) still only recognizes YouTube URLs — a
-     re-mined podcast episode won't get the warning banner. Low priority,
-     cosmetic only.
-  5. ~~**Difficulty screening checkpoint**~~ **Done 2026-09-13** — see
-     "Difficulty screening checkpoint" under Planned below (promoted out of
-     this list since it ended up applying just as much to NHK Easy import
-     as to podcast mining).
-  - **Finding a show's RSS URL:** `https://itunes.apple.com/search?term=
-    <show name>&media=podcast` returns a `feedUrl` field directly — verified
-    2026-09-13 against Nihongo con Teppei
-    (`feedUrl: http://nihongoconteppei.com/feed/podcast`, confirmed live).
-    Most indie-hosted shows also link "RSS" directly on their own site.
-    Spotify-exclusive shows generally have no public feed and won't work.
+- [~] **Podcast mining — remaining refinements.** RSS selection, episode titles,
+  ASR fallback, difficulty screening and the longer ASR timeout are implemented.
+  The earlier 10–20 minute episode checks succeeded; preserve chunked
+  transcription beyond roughly 30 minutes as an optional future design.
+  - Direct podcast URLs still lack the YouTube-id-based "already imported"
+    warning. Feed episode badges/chapter dedup are separate; extending the raw
+    URL warning remains a low-priority refinement.
+  - Bare audio URLs can lack useful titles/durations, and some RSS feeds omit
+    duration tags. Retain optional metadata handling; public RSS discovery is
+    useful for supported shows, while feedless sources need another approach.
+  - The old `sentence-realign` blank-row/truncation fixes are in the source.
+    The 2026-09-13 deployment handoff has not been verified in this audit;
+    check deployment state before treating it as either complete or pending.
 
-- [x] **NHK News Web Easy import.** (2026-09-13, plan corrected same day
-  after verifying against the live sites — see below) Native narrated audio
-  + furigana-graded text is a stronger comprehensible-input fit than YouTube
-  auto-captions, and the text being already-correct makes the pipeline
-  *simpler* in one way: forced-alignment instead of transcription.
-  1. ~~**Scraper module** (direct NHK scrape)~~ **Abandoned 2026-09-13,
-     verified live, not guessed:** `https://www3.nhk.or.jp/news/easy/`
-     redirects to a rebuilt `news.web.nhk` Next.js SPA (part of the new
-     "NHK ONE" platform) — the listing/article content isn't in the initial
-     HTML at all, and its `api.web.nhk` backend 403s on a plain
-     unauthenticated request. The OSS reference scrapers this plan
-     originally cited (`nhk-easy-api`, `nhkeasy`) target the old static-HTML
-     site and no longer apply. Direct NHK scraping is not practical right
-     now.
-  2. ~~**Sentence splitting off clean punctuation**~~ **Done differently,
-     2026-09-13** — see below; turned out to need one real fix.
-  - **Found instead, verified live:** https://nhkeasier.com — an existing
-    third-party site that already republishes NHK Easy articles for
-    learners specifically, as a **standard RSS feed**
-    (`https://nhkeasier.com/feed/`, confirmed live, 50 items). Each item is
-    exactly the same "podcast" shape `podcasts.py` (above) already parses —
-    title, `pubDate`, and an `<enclosure>` pointing at the real NHK
-    narration audio (hosted on nhkeasier.com's own media server, not
-    NHK's) — **plus** a `<description>` containing the full article body as
-    `<ruby>漢字<rt>かな</rt></ruby>` HTML, which is the piece a real podcast
-    never has. This reframes the whole feature: it's not a bespoke scraper,
-    it's **the existing podcast RSS path, plus one new module that pulls
-    known text out of the description instead of transcribing the audio**.
-  - **Done 2026-09-13**: `server/youtube-mining/app/nhk_easy.py` —
-    `parse_nhkeasier_description()` converts `<ruby>` spans to this app's
-    `漢字[かな]` `inlineReading` format and splits into sentences.
-    `assign_sentence_spans()` maps `shadowing-analysis-api`'s `/align`
-    word-level output back onto sentence boundaries, discovered/verified by
-    actually calling the live aligner on real articles rather than assuming
-    the shape of its output (see below). `app/align_client.py` calls
-    `POST /align`. `POST /nhk-easy/import` (`main.py`) wires it all
-    together: parse → fetch audio → align → cut per-sentence clips with the
-    existing `clip.py` ffmpeg logic → degrade to text-only sentences
-    (`audioAligned: false`) on any failure, never failing the whole import
-    over the audio half. 23 tests (parsing + span-assignment against a real
-    baked-in alignment fixture + the import endpoint with network/ffmpeg
-    mocked), full backend suite green (127). Deployed and verified against
-    the live service end to end on two different held-out real articles.
-    Three real bugs found this way, not by unit tests against a
-    hand-picked fixture:
-    1. NHK Easy articles routinely report measurements like `350.5ミリ`/
-       `36.5度`; a naive split on `.` (otherwise a legitimate sentence-end
-       char) cut those mid-number. Fixed: `_is_decimal_point` guards any
-       `.` flanked by digits.
-    2. Sentence-final punctuation (`。`) is never itself a spoken/aligned
-       word, so targeting a sentence's *full* length (including its
-       trailing `。`) for the anchor lookup overshot into the next
-       sentence's first matched word. Fixed: target the sentence's
-       last *non-punctuation* character instead.
-    3. Real prose routinely embeds a quoted title or reported speech
-       *mid*-sentence (`「スター・ウォーズ」などたくさんの映画を監督してい
-       ます。`; `区の人は「…」と話しています。`) — treating `」`/`』` as
-       sentence-final (`subtitles.py`'s `SENTENCE_END_CHARS`, tuned for
-       noisy ASR/caption text) cut 88 of 471 real sentences (19%) apart at
-       the bracket. Fixed: `nhk_easy.py` now defines its own narrower
-       `SENTENCE_END_CHARS` (drops the bracket chars) rather than reusing
-       the ASR-tuned one — NHK Easy's edited-prose style always closes a
-       real sentence with proper terminal punctuation even around a quote,
-       so this costs no real splits.
-  - ~~**Blocked**~~ **Resolved 2026-09-14, cap raised again + committed 2026-09-22:**
-    `shadowing-analysis-api`'s `/align` rejects any transcript over
-    `ANALYSIS_MAX_TRANSCRIPT_LENGTH` (a cap sized for its original
-    per-sentence reference-alignment use case, `422 transcript too long`).
-    Real data: **80% of the 50-item corpus's articles exceed 200 chars**
-    (the original default) once joined into one whole-article transcript
-    (median 239, max 335) — raised to 500 same day (2026-09-14), then a
-    longer-than-usual real article still hit *that* cap and 422'd, so it
-    was raised again to **2000** (generous headroom over any real NHK Easy
-    article, still far short of anything that would meaningfully change
-    per-call compute/memory on the box). Both changes were made and
-    deployed live directly on `shadowing-analysis-api` at the time, but the
-    working-tree edit was never committed and this ROADMAP entry was never
-    updated — found stale 2026-09-22 while auditing open items; committed
-    then (`shadowing-analysis-api@c572f31`) with the reasoning above
-    as the unit-file comment. Still not a durable fix for a genuinely
-    unbounded input (option 3 below remains the real fix if a future
-    article blows even 2000). Options 2/3 below were never implemented:
-    1. ~~**Raise the cap**~~ **Done** (see above).
-    2. Chunk by paragraph and align each chunk separately — doesn't
-       actually work: alignment needs audio whose duration matches its
-       given transcript, and there's no way to know where in the audio one
-       paragraph ends and the next begins without already having aligned
-       it (the exact problem this feature exists to solve).
-    3. Silence-gap-based audio chunking (reusing `waveform.py`'s existing
-       pause detection, already trusted elsewhere in this codebase for
-       "Snap to pauses") matched to paragraph boundaries — plausible, but
-       relies on the number of major pauses lining up with paragraph
-       breaks, not guaranteed.
-  - ~~**Not done — the wizard/commit UI**~~ **Done 2026-09-13**:
-    `NhkEasyImportPage.tsx` (`/import/nhk-easy`, linked from `ImportPage`) —
-    paste a feed URL (reuses `fetchPodcastFeed`/`POST /podcast-feed`, now
-    carrying each item's `descriptionHtml`), pick an article (one
-    `POST /nhk-easy/import` call, no job/polling/ASR since the text is
-    already known-correct), "Auto-fill translations (AI)" (calls
-    `realignTranslations` directly, one group per sentence — no
-    provenance-grouping needed since there's no resegmentation happening),
-    then the same `ShadowingPreviewCard` commit step the YouTube-mining
-    wizard ends on. `NhkEasySentenceResult` also carries UniDic `tokens`
-    now (`morphology.tokenize_japanese`, same as YouTube-mined sentences)
-    so the vocabulary picker gets suggestions — but NHK's own furigana
-    stays the committed `inlineReading` (overwritten after
-    `buildShadowingPreview` runs, since that function otherwise re-derives
-    it from tokens, which can differ on names/uncommon readings); the
-    plain-kana `reading` field is similarly derived from NHK's furigana
-    (`parseInlineReadings`) rather than left blank. Verified live
-    end-to-end on a fresh, previously-untested article — 9 real sentences,
-    real audio, correct furigana, real vocabulary tokens, all in one pass.
-    **v1 of NHK Easy import is now feature-complete**: import → translate →
-    commit all work. Remaining known gaps (per-chapter granularity for
-    "Ready to read" scoring against these books, and the silence-gap
-    audio-chunking idea above) are optional refinements, not blockers.
-    **Manual test plan:** go to `/import` → "Import from NHK Easy News",
-    paste `https://nhkeasier.com/feed/`, "Load articles," pick any article.
-    Correct: a short wait, then a sentence list each with a real playable
-    audio clip (native NHK narration) and an editable translation box.
-    Click "Auto-fill translations (AI)" — every box should fill with a
-    plausible English sentence (needs a signed-in, synced session; degrades
-    to an inline "unavailable" note otherwise, same as the mining wizard's
-    equivalent button). Click "Continue to review," then commit. Corruption
-    spot-check: open the new book and confirm sentence text isn't garbled
-    mid-word (the closing-bracket bug's old symptom) and that a couple of
-    audio clips actually contain the right words, not silence or the wrong
-    sentence.
-  - Rights note: nhkeasier.com is itself a third-party redistribution of
-    NHK's copyrighted news content for learners; using its feed for
-    personal single-user study is the same posture as the existing
-    YouTube-mining approach, just a different (and more permissive-in-
-    intent) rights-holder relationship.
-  - ~~One book per episode/article~~ **Changed 2026-09-13, per user
-    request**: a podcast's episodes and every NHK Easy article now land in
-    one shared book per series (one book overall for NHK Easy, one per
-    podcast feed), each as its own chapter, kept chronological by publish
-    date regardless of import-click order. New repository function
-    `commitSeriesEpisodeImport` (`src/db/repository.ts`) — looks up the
-    book by a series-level `sourceKey` (`podcast-series-<hash of feed URL>`
-    or the fixed `nhk-easy-news`) instead of a per-episode one, dedups
-    chapters by the episode's own `source.id` (a new `BookChapter.sourceId`
-    field — matching by title alone would risk merging two differently-
-    titled re-imports of the same episode, or duplicating on a title that
-    changed upstream) so re-importing the same episode updates its chapter
-    rather than duplicating it, and `reorderChaptersChronologically`
-    cascades a new `BookChapter.sourceDate` field into
-    `bookSentences.position` (chapter-major order) after every import.
-    `ShadowingPreviewCard` gained an `onCommit` override (defaulting to the
-    original one-book-per-source `commitShadowingPackageImport`, still used
-    for plain YouTube videos and `.shadowing.zip` uploads) so both
-    `YouTubeMinePage`'s podcast branch and `NhkEasyImportPage` route through
-    the new series-aware path instead. 4 new repository tests. Deliberately
-    scoped down from a fuller "bulk-import a whole feed" ask (would need
-    real throttling/pause-resume design for a 1000+-episode feed) to just
-    this structural change — still click episodes/articles one at a time.
-    **Known gap**: any book already created under the old one-per-episode
-    scheme before this change (e.g. an episode imported earlier today)
-    stays a separate single-chapter book — not retroactively merged.
-    **Closed 2026-09-26**: "Move into another book" button on
-    `BookDetailPage` (`mergeBookIntoChapter`) does this by hand, one book at
-    a time — still no bulk/automatic retroactive merge.
-  - **Follow-up, same day, user request**: the episode/article picker now
-    shows an "Imported" badge (via a new `getSeriesImportedSourceIds`
-    lookup, matched against the same as-picked URL used as the chapter's
-    `sourceId`) and the feed's own publish date next to each row — both
-    pickers were silent about either before. Podcast duration still only
-    shows when the feed's own `itunes:duration` tag is present (many don't,
-    e.g. Nihongo con Teppei's); NHK Easy articles have no pre-import
-    duration signal at all (the real clip lengths only exist after forced
-    alignment), so that one stays blank by design, not a gap.
+- [ ] **NHK Easy import refinements.** Import, translation and commit are built;
+  articles/episodes share a series book, with imported badges and chapter dedup.
+  Preserve the optional long-input idea: split audio at silence gaps and align
+  matched paragraphs if articles outgrow the aligner's transcript cap. Paragraph
+  text splitting alone cannot locate corresponding audio without alignment;
+  pauses need not coincide with paragraph breaks, so validate that assumption.
+  Bulk feed import still needs throttling and pause/resume design. Existing
+  single-episode books can be merged manually; bulk/automatic retroactive merge
+  remains an optional extension. Per-chapter coverage is tracked below.
 
-- [x] **Difficulty screening checkpoint.** (2026-09-13, was item 5 under
-  Podcast mining above) `server/youtube-mining/app/difficulty.py`
-  (`score_difficulty`) — content-word JMDict-common ratio + average
-  sentence length + morae/second when timing's available, rendered as a
-  rough beginner/intermediate/advanced readout. One shared function, two
-  call sites: a new stateless `POST /difficulty` (wizard Transcript stage,
-  a "Check difficulty" button on `TranscriptStage.tsx` — shared by both
-  YouTube and podcast mining) and inline in NHK Easy import (reuses the
-  tokens already attached to each sentence, no second tokenize pass).
-  JMDict's "common" flag only lives on the Node/TS side and tokenization
-  only in Python, so `scripts/generate-common-words-asset.ts`
-  (`npm run generate:common-words-asset`) flattens it into a committed
-  Python-side asset (38,360 entries). Detail + manual test plan in
-  docs/STATUS.md's 2026-09-13 entry. **Not browser-verified** (this host
-  has no browser libs installed) — shipped on the full test suite +
-  typecheck + a direct curl against the live service instead.
-
-- [x] **"Ready to read" difficulty/coverage scoring.** (2026-09-13,
-  promoted from "Possibilities" below; step 3 closed 2026-09-17) The direct
-  answer to "I have several
-  books/sources now, which is the easiest one to pick up next" — and the
-  natural companion to the two importers above: NHK Easy content is
-  *labeled* easy by NHK, but Satori books, YouTube-mined books, and future
-  podcast/NHK imports all need the same yardstick to be comparable. Plan:
-  1. ~~**Per-book known-word coverage**~~ **Done 2026-09-13** —
-     `src/lib/bookCoverage.ts` (`buildBookCoverage`, pure, 8 tests) reuses
-     the exact same primitives `isSentenceReadyForFullReview` is built from
-     (`getReviewableVocabularyItemIdsBySentence` /
-     `getProficientVocabularyItemIds`) so "known" means the same thing here
-     as everywhere else in the app — no new proficiency concept.
-     `getBookVocabularyCoverage()` (`src/db/repository.ts`) batches this
-     once across every book (one pass, not N+1), same convention as
-     `getBlindSpots`. Ratio is `null` (not 0%) for a book with zero
-     confirmed vocabulary yet — "not analyzed" is a different state from
-     "read and found unfamiliar." **Per-chapter** breakdown not done —
-     v1 is book-level only; a chapter's sentences aren't currently queried
-     separately from the rest of the book's, so this would need a real slice
-     of new code, not just a smaller reuse of the same function.
-  2. ~~**Sort/filter by coverage**~~ **Done 2026-09-13** — `BooksPage.tsx`
-     gained a "Recent" / "Easiest first" toggle (`SortMode`); easiest-first
-     sorts by coverage ratio descending, with not-yet-analyzed books (null
-     ratio) always last rather than sorting as 0%. Each book row shows
-     "~NN% known vocabulary (X/Y words)" or "Vocabulary not confirmed yet."
-     Not yet browser-verified — `BooksPage` has no existing test file to
-     extend and the underlying `buildBookCoverage` logic is fully unit
-     tested, so this follows the same "pure function tested, thin
-     Dexie-reading page left for manual verification" convention as
-     `getBlindSpots`/`/progress`'s other panels rather than a new component
-     test. **Manual test plan:** open `/books` with at least one book whose
-     vocabulary is partly confirmed+proficient and one that's unanalyzed;
-     toggle "Easiest first" and confirm the higher-coverage book floats up
-     and the unanalyzed one sorts to the bottom regardless of ratio.
-  3. ~~**Feed `findExploreCandidates`**~~ **Done 2026-09-17** — among books
-     that are otherwise tied (both caught up on vocabulary confirmation, the
-     existing rank-0-vs-1 gate untouched), `getBookVocabularyCoverage()` now
-     breaks the tie by coverage ratio descending before falling back to
-     recency; unanalyzed books (`ratio: null`) still sort last, same
-     convention as `BooksPage`'s "Easiest first" toggle. A light touch on
-     top of the existing vocab-first gating, not a rewrite of it — verified
-     with a repository test (`tests/sessionPlannerRepository.test.ts`) where
-     a more-recently-opened harder book is deliberately outranked by an
-     older, fully-known one.
-  - Out of scope for v1: cross-book recommendation ("read X before Y") —
-    just a per-book number the learner reads themselves.
+- [ ] **"Ready to read" coverage refinements.** Book-level known-word coverage,
+  easiest-first sorting and planner tie-breaking are built. Preserve per-chapter
+  coverage and cross-book recommendations ("read X before Y") as optional work.
+  Browser checks of the difficulty checkpoint and easiest-first book sorting
+  remain a coverage gap; pure/repository tests do not verify these screens.
 
 - [ ] **Remaining inflected `pitch_accent` gaps.** 2026-09-12 extended
   coverage from godan-only to godan + ichidan + i-adjective + the -masu
@@ -1050,17 +264,6 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
   - Deliberately **not** a standalone blind-A/B perception quiz — cuts
     against the "skill over metalabel quiz" principle. Only revisit as a
     small gate inside an existing drill if the above ships and needs one.
-
-- [x] **Daily practice panel.** (2026-09-19) A small set of non-SRS daily
-  practice targets ("say 5 pitch-drill words", one Odd Ear Out round, one rotating
-  game) as `DailyPracticePanel` on Home and the session page — counters read from
-  the activity logs, not session steps (see STATUS 2026-09-19 for why). Possible
-  follow-ups, unscheduled: a settings UI for the targets; per-device-agnostic game
-  progress (needs `gameRounds` to sync, currently local-only by design); adaptive
-  targets (e.g. more drill words while d′ on fall-vs-rise is ~0); adding the
-  fall-or-rise binary drill and the calibrated continuous drill scoring
-  (see "Pitch-accent: analysis tools") as panel items once built; a recap line
-  ("practised 5 words, 1 round") in `SessionRecapPanel`.
 
 - [ ] **Pitch-accent: analysis tools & practice ideas.** (2026-09-19; first
   pieces shipped) Prompted by the user doing well on the standalone pitch ear
@@ -1241,43 +444,20 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
     beside the content they act on; no `window.prompt`/`confirm` (dead in the iOS PWA);
     gesture-gated audio; progress + undo-last; a "why this item" chip.
 
-- [x] **Chapter/book read-along viewer (`ReaderPage`).** (2026-09-23 idea;
-  shipped 2026-09-26, un-gated per user request the same day — see
-  STATUS.md.) A continuous, multi-sentence reading/listening surface for a
-  whole `BookChapter` or book, always available (no vocabulary-coverage
-  unlock — user explicitly dropped that in favor of "something to try from
-  time to time to see how comprehension is doing"). Not a card: no `Review`
-  row, no FSRS, no self-rating, same non-graded treatment as
-  `ShadowPage`/`/play`. Continuous sentence-by-sentence follow-along audio
-  auto-advances via a new `NativeAudioController` `onEnded` completion
-  callback (generation-guarded, so it only fires on a genuine natural end,
-  never on a manual `stop()` or a superseded clip); reuses
-  `KaraokeSentenceText` for per-word highlight + tap-word gloss, but only on
-  the currently-playing sentence (highlighting only ever means something
-  there, and it keeps the alignment-fetch cost to one clip at a time instead
-  of stampeding the whole chapter on open). Viewer-local `textDisplayMode`
-  toggle (plain/furigana/reading, defaulting from the global setting);
-  furigana/reading modes render statically (no per-word highlight — ruby
-  markup and the plain-text character-offset highlighting don't currently
-  compose, a deliberate scope cut, not an oversight). Degrades, doesn't
-  hide: a sentence with no `SentenceAudio` just renders as static text with
-  no play control, rather than blocking the chapter. Shipped along with the
-  unscheduled suggestions below: playback-speed selector (`PLAYBACK_SPEEDS`),
-  tap-a-sentence-to-jump-and-continue-reading, auto-scroll to the active
-  sentence, entry points on `BookDetailPage` (whole-book + per-chapter
-  "Read" buttons), and a per-sentence translation reveal (not in the
-  original sketch — added since a comprehension self-check needs some way
-  to confirm you understood correctly). **Not built** (dropped along with
-  the coverage gate, since they only made sense for it): per-chapter
-  coverage breakdown, sticky first-reached unlock flag, a `/progress`
-  "chapters ready to read" list, a second stricter/furigana-off threshold.
-  Also not built: tap-to-loop a single sentence (`SegmentLoopPlayer`-style)
-  — jump-and-continue covers the "hear that again" need without a second
-  player implementation.
+- [ ] **Read-along optional extensions.** The reader already supports per-sentence
+  play/loop and karaoke with furigana. Earlier coverage-gated ideas remain
+  deferred: per-chapter coverage, a sticky first-reached unlock, a `/progress`
+  "chapters ready to read" list, and a second stricter/furigana-off threshold.
+  The reader itself stays ungated.
+
+- [ ] **Other retained foundation follow-ups.** Finer per-word accent-class
+  pronunciation statistics need more persisted attempt detail. Grammar prediction
+  and transformation activity types remain unstarted. The older progressive
+  word-listening card still needs a recorded browser verification.
 
 ## Possibilities (sentence-led flow follow-ups)
 
-- **Writing ladder (native-clip anchored).** Rung 1, `dictation`, shipped 2026-10-12 (see STATUS): type what you hear, compare to the native text. Next rungs, only if dictation proves useful: (2) *reconstruct from cues* — show the sentence's content words and/or its translation and rebuild the sentence, then reveal the native version (no free composition, always compared to a real sentence); (3) *shadow-then-vary* — after a shadowing pass change one slot (subject/tense/noun) and check it against vocab/grammar constraints; hardest to grade, so last. `grammar_production` (free composition, retired) is the cautionary precedent: always anchor to a native sentence. Open question for dictation: whether to count the typed match toward `/progress` (e.g. a dictation pass-rate panel) — currently only visible via `Review.responseRaw`/`expectedAnswer` and the `listening_failure` error class.
+- **Writing ladder (native-clip anchored).** The audio ladder now uses `ear_tiles` followed by `dictation_tile:N` (2026-10-18): reconstruct the clip, then type one missing phrase. Whole-sentence dictation is retired. Next rungs, only if dictation proves useful: (2) *reconstruct from cues* — show the sentence's content words and/or its translation and rebuild the sentence, then reveal the native version (no free composition, always compared to a real sentence); (3) *shadow-then-vary* — after a shadowing pass change one slot (subject/tense/noun) and check it against vocab/grammar constraints; hardest to grade, so last. `grammar_production` (free composition, retired) is the cautionary precedent: always anchor to a native sentence. Open question for dictation: whether to count the typed match toward `/progress` (e.g. a dictation pass-rate panel) — currently only visible via `Review.responseRaw`/`expectedAnswer` and the `listening_failure` error class.
 
 - **Reverse English -> Japanese exercise (not built, by design).** Would show an English meaning and ask the learner to pick/produce the Japanese. Constraints if ever built: the Japanese must be unchanged real source material (no generated Japanese distractors); candidates must pass an ambiguity check (an English sentence that several source sentences could translate is excluded); no auto-rating (house rule: self-rate).
 - Bank coverage: shipped 2026-10-02 (book-page "Meaning choices: bulk generate" panel with copy/paste and AI-now, plus background auto-generation for sentences with no check). Remaining: auto top-up of thin banks (manual only today) and wiring generation directly into each import commit instead of the background worker.
@@ -1285,213 +465,18 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
 
 ## Possibilities (analytics & cross-activity coherence)
 
-From a 2026-09-08 discussion on measuring performance, surfacing what to
-learn next, and making the review card types + shadowing reinforce each
-other instead of running as silos. **Blind-spot surfacing**, the
-**error-mix view**, and the **shadowing → SRS evidence bridge** shipped
-2026-09-08 — see "Analytics pass 1" under Done. The rest are unscheduled
-possibilities, kept here so the thinking isn't lost:
+Unfinished ideas from the 2026-09-08 discussion. Shipped progress panels,
+error routing, reveal helpers and deep-dive details are in `AI_OVERVIEW.md`.
+These extensions remain unscheduled:
 
-- [x] **Leech list** — shipped 2026-09-17 as a `/progress` panel:
-  `src/lib/leechList.ts` (`buildLeechList`) ranks every study item with a
-  real FSRS `lapses > 0` by `lapses + weakness` (the same
-  `recentAgainCount / recentReviewCount` term `sessionPlanner.ts`'s
-  `scoreReviewPriority` uses), each row showing its most common recent
-  `errorClassification` reason and a next action — reuses `errorMix.ts`'s
-  `metaFor`/`classificationKey` (both exported for this) rather than a
-  second label table, so the two views never disagree. Deliberately
-  excludes items whose recent misses haven't produced a real lapse yet
-  (a still-new item defaults to a nonzero `weakness` in the planner's own
-  formula, which would otherwise leak in here too). `repository.ts#getLeechList`
-  only fetches reviews for the lapsed subset, not the whole `reviews`
-  table. Not a standalone drill — each row links to `/study-items/:id`
-  (existing debug view) and, when classified, the same next-action route
-  `errorMix` already points at.
-- [x] **Skill-imbalance metric** — shipped 2026-09-16 as "Skill coverage"
-  on `/progress`: of reading-*recognized* words (`reading_retrieval`/`cloze`
-  proficient — the recognition-only denominator, deliberately excluding
-  `reading_production`, a separate rung), what share have also reached
-  production, pitch, and word-listening proficiency. `skillCoverage.ts` /
-  `repository.ts#getSkillCoverage`.
-- [x] **Self-rating calibration** — shipped 2026-09-16 as "Self-rating
-  check" on `/progress`: global pass-rate comparison between self-rated
-  activity types (`reading_retrieval`/`cloze`/`reading_in_context`/
-  `listening`/`word_listening` — `grammar_production` from the original
-  note no longer exists, retired 2026-09-15) and objectively-graded ones
-  (`reading_production`/`sentence_transformation`/`grammar_completion`/
-  `pitch_accent`/`contrastive`), plus a per-self-rated-activity-type
-  breakdown. Deliberately a global comparison, not a same-subject join —
-  see `selfRatingCalibration.ts`'s doc comment for why.
-- [x] **"Ready to read" coverage** — promoted to "Planned" 2026-09-13 as
-  "'Ready to read' difficulty/coverage scoring," see above.
-- [x] **FSRS calibration surfacing** — shipped 2026-09-16, scoped down to
-  the buildable half: "FSRS confidence" on `/progress` shows a live
-  bucketed snapshot of every active study item's *current* predicted
-  retrievability (`scheduling.ts#predictRetrievability`, wrapping
-  ts-fsrs's own `get_retrievability` rather than reimplementing the
-  formula). **Not** predicted-vs-actual validation or a desired-retention
-  knob — both need the predicted retrievability logged on each `Review`
-  row at grading time, which nothing does today; still open if wanted.
-- [x] **Per-review predicted-retrievability logging.** (2026-09-17) The gap
-  above is closed: `recordReview` (`repository.ts`) now calls
-  `predictRetrievability` against the study item's FSRS state *before*
-  scheduling and stores the result on the new `Review.predictedRetrievability`
-  field (undefined for `new`-state items and any item without a real
-  `lastReview` yet, matching the same guard the "FSRS confidence" panel
-  uses — checking `state !== 'new'` alone isn't enough, ts-fsrs throws
-  without a `lastReview` to diff against). Synced via a new nullable
-  `predicted_retrievability` column (`supabase/migrations/
-  20260917000000_review_predicted_retrievability.sql` — **not yet applied
-  to prod**, see the migration-apply-gap note in STATUS.md) and
-  `reviewToRemote`/`remoteToReview` in `src/sync/mappers.ts`. Only reviews
-  recorded from this point on carry the value — historical rows stay
-  unset, so predicted-vs-actual calibration and a desired-retention knob
-  are both still open, now blocked on accumulating data rather than on
-  missing plumbing.
-- [x] **Step usefulness** (new, 2026-09-16) — `PlannerSessionStep.status`
-  already recorded completed/skipped per step, but nothing rolled it up
-  across sessions by `targetKind` — no way to see "which step kinds
-  actually get done vs. quietly skipped every time" without a one-off
-  script. Shipped as a `/progress` panel, 56-day window, sorted by skip
-  rate. `stepUsefulness.ts` / `repository.ts#getStepUsefulness`.
-- [x] **Gate funnel / "what's stuck"** (new, 2026-09-16) — every gate-
-  starvation bug found earlier the same session (`continue_book`, shadow,
-  listening) was caught by a one-off Node script against Supabase or a
-  user report, not by anything the app itself surfaced. Shipped as a
-  `/progress` panel: confirmed sentences whose words were never reviewed
-  (`continue_book` backlog), and shadow-/listening-ready sentences blocked
-  on specifically the pitch requirement. `repository.ts#getGateFunnelSnapshot`
-  — no separate pure lib module, since the logic is mostly Dexie-side
-  counting reusing the gate primitives directly.
-- [x] **Velocity / ETA** — shipped 2026-09-17 as a "New-card backlog"
-  `/progress` panel. `src/lib/velocity.ts` (`buildVelocityReport`) combines
-  `countNewVocabularyCardBacklog()`'s raw count with the words-learned-per-
-  week trend `buildProgressReport` already computes (`ProgressReport.weeks`)
-  — no new Dexie reads, computed client-side in `ProgressPage` from data
-  it's already fetching. Averages only *complete* weeks (the most recent
-  bucket is the current, still-in-progress week and would understate the
-  rate); reports "no estimate yet" rather than a divide-by-zero/infinity
-  when the recent rate is 0.
-- [x] **Per-sentence mastery arc — the view.** (2026-09-22) `src/lib/masteryArc.ts`
-  (`buildSentenceMasteryArc`, pure) + `repository.ts#getSentenceMasteryArcs`/
-  `getSentenceMasteryOverview` compute the 8-rung ladder (vocab confirmed →
-  reading-proficient → listening-proficient → conjugations → grammar
-  recognized → `reading_in_context` mature → shadowed → pitch known) for
-  every confirmed sentence, reusing the same proficiency primitives every
-  other gate is built from — no new proficiency concept. A rung is `null`
-  ("not applicable," never blocking) when the sentence has nothing to gate
-  on for it — no audio, no inflectable words, no tagged grammar. New
-  "Sentence mastery" panel on `/progress`: confirmed/complete counts, then
-  in-progress sentences ranked fewest-rungs-left-first (`rankSentenceMasteryArcs`),
-  each linking into its book with its single next blocking rung named. Turns
-  the flat multi-card review queue into a visible arc. **Not built**: the
-  "finish sentence X" planner step (a dedicated session-step target kind) —
-  scoped out for now, same phased-rollout precedent as the short games
-  feature (ship the read-only view first, decide on session integration
-  once it's seen real use). Detail in STATUS.md.
-- [x] **Cross-activity error routing.** (2026-09-22) The `pitch_accent`
-  slice shipped 2026-09-11 (`getPitchAccentFocusWords`); this is the rest,
-  extending `preferCoherentChains`'s within-plan grouping to miss-driven
-  scheduling:
-  - **`cloze` miss → shadow target.** `ReviewPage` now records every
-    review's `contextSentenceId` as `current.sentence.id` (generalized from
-    a `pitch_accent`-only field — every `QueueCard` already carries the
-    sentence it displayed). `getRecentlyMissedClozeSentenceIds`
-    (`src/db/repository.ts`) finds sentences whose `cloze` card was missed
-    twice in a row (same 2-consecutive-again/hard signal as the pitch
-    case), and `findShadowCandidates` floats those sentences to the front
-    of its usual fewest-attempts order, with the reason "Missed in review —
-    reinforce with shadowing".
-  - **`sentence_transformation` miss → grammar pattern.** Scoped down from
-    the original idea of deriving "the grammar pattern behind this
-    conjugation form": checked prod's 83 tracked `GrammarPattern` rows and
-    none represent bare morphology (causative/passive/te-form/etc — that
-    paradigm is `sentence_transformation`'s own closed set, not something
-    the freeform `GrammarPattern` catalog tracks), so a form→pattern
-    mapping would either match nothing or require guessing. Built the
-    grounded version instead: `getRecentlyMissedSentenceTransformationSentenceIds`
-    finds sentences whose conjugation card was missed twice, and
-    `ReviewPriorityInput` gained `crossActivityMissBoost` — set on a due
-    `grammar_completion` item when its pattern (via the real
-    `sentence_grammar` join) occurs in one of those sentences,
-    adding +0.4 to `scoreReviewPriority`'s score and a
-    "linked to a recently missed conjugation" reason. Reorders among
-    already-due items only — never makes a not-due pattern due.
-- [x] **Ambient connective tissue in the reveal.** (2026-09-26) Two small,
-  independent additions, both read-only/ungraded — reinforcement, not new
-  mechanics:
-  - On a `cloze` reveal, a "You've shadowed this sentence — replay your
-    attempt" note (`ShadowingReplayNote`, `src/pages/ReviewPage.tsx`) when
-    `listAttemptsForSentence` finds one, with a single toggle button (not a
-    Record/Stop pair) that plays the most recent attempt's own recording via
-    `useRangeLoop`. Renders nothing for a never-shadowed sentence, so most
-    reveals are unaffected.
-  - On `reading_in_context`, a tracked grammar pattern recurring in the
-    *passage* context lines (not the target sentence, which is under test)
-    gets a `<mark>` highlight with the pattern name as its title — new
-    `getTrackedGrammarSpansForSentences()` (`src/db/repository.ts`, one
-    `confirmedByLearner` occurrence per sentence, batched over the passage's
-    sentence ids) + `ContextSentenceText`. 6 new repository tests
-    (`tests/trackedGrammarSpans.test.ts`).
-  Matches the "ambient surfacing" feedback note. (The `pitch_accent` "missed
-  in the drill twice too" case shipped 2026-09-11 as the focus-queue banner
-  instead of an inline reveal note — see Done.)
-- [x] **Opt-in single-sentence deep dive.** (2026-09-28) An explicit focus
-  block that walks one lagging sentence through its remaining mastery rungs
-  back to back — distinct from the default queue, which
-  `spaceOutSiblingCards` deliberately keeps siblings apart in. User decision
-  up front: reviewing a rung's card in the deep dive counts as a real FSRS
-  review (graded), not a read-only/ungraded practice pass — so this
-  deliberately bypasses normal due-date pacing, opt-in and scoped to one
-  sentence only.
-  - `SentenceMasteryOverview`'s existing arc/rung data (already scoped to
-    exactly this use case) drives it — `getSentenceDeepDiveInfo`
-    (`src/db/repository.ts`) plus a new `SentenceDeepDivePage`
-    (`/sentences/:sentenceId/deep-dive`, linked from `/progress`'s "Sentence
-    mastery" panel rows).
-  - **Reused `ReviewPage` itself rather than duplicating any of its ~10
-    per-activity-type card renderers** (`ReadingInContextCard`,
-    `SentenceConjugationCard`, `GrammarCompletionCard`, etc. — all
-    module-private to that file). A new `?sentenceId=` search param narrows
-    `ReviewPage`'s whole candidate-building scope to just that one sentence
-    (the same `scope.sentences` plumbing book-scoped `/books/:bookId/review`
-    already uses, just narrower) and sets a new `ignoreDue` option on
-    `getDueStudyItems` so not-yet-due cards for that sentence are pulled in
-    anyway. Every other gate (full-sentence readiness, quiet mode, grammar's
-    global-scope candidate picking) is untouched — this only relaxes the due
-    check.
-  - **`ignoreDue` only bypasses `new`/`learning`-state items.** An
-    already-`review`/`relearning` item (i.e. already proficient, or —
-    `contextMature` specifically — already reviewed at least once but not
-    yet mature) is deliberately left on its real schedule: cramming an early
-    review there wouldn't grow `scheduledDays` the way FSRS maturity needs
-    and would just miscalibrate its stability estimate. Concretely this
-    means `contextMature` and already-proficient rungs can't be force-
-    completed by the deep dive — `SentenceDeepDivePage` shows `contextMature`
-    as informational only ("comes with time"), never a button.
-  - `vocabConfirmed` and `shadowed` aren't FSRS cards at all, so those two
-    rungs link to their existing flows (`/books/:bookId/vocabulary/:sentenceId`,
-    `/books/:bookId/shadow/:sentenceId`) instead of joining the pinned
-    review session.
-  - New repository tests (`getDueStudyItems` ignoreDue behavior,
-    `getSentenceDeepDiveInfo`) plus a `ReviewPage` integration test proving
-    `?sentenceId=` surfaces a not-yet-due card the plain queue withholds.
-  - **Manual test plan:** on `/progress`, find a "Sentence mastery" row with
-    a rung left, click the sentence to open its deep dive, click "Start
-    deep-dive review" — it should open `/review` showing that sentence's
-    cards even if none were otherwise due today; grade one and confirm it
-    behaves like any other review (records a `Review` row, advances FSRS
-    state). Corruption spot-check: open `/study-items/:id` for the graded
-    item afterward and confirm its `Review` history looks normal, not
-    duplicated or misattributed to a different subject.
-- [x] **Shadowing weak words → pitch-accent drill.** (2026-09-22)
-  `getPitchAccentShadowingFocusWords` resolves `getShadowingWeakWords`'
-  flagged surface forms back to vocabulary items and surfaces them as a
-  second "extra practice" queue ("Weak in shadowing") on
-  `PitchAccentDrillPage`, alongside the 2026-09-11 SRS-miss queue
-  ("Missed in review") — same single-word session/exit machinery, now
-  keyed by a `focusSource: 'review' | 'shadowing' | null` instead of a
-  single boolean. Detail in STATUS.md.
+- **FSRS calibration and a desired-retention control.** The confidence panel
+  and per-review predicted-retrievability logging are built. Predicted-versus-
+  actual validation and a desired-retention knob remain possible future work;
+  check the volume and quality of recorded predictions first. Historical reviews
+  without a prediction stay unset.
+- **Sentence mastery planner step.** The read-only mastery view and opt-in
+  single-sentence deep dive are built. A dedicated "finish sentence X" session
+  step remains deferred until there is evidence it helps the default flow.
 - [ ] **Free-composition ("writing") skill node** (2026-09-16 discussion,
   card-type/skill graph mapping). `reading_production` only tests
   decode→encode of a word already placed in a sentence (type its reading);
@@ -1507,57 +492,18 @@ possibilities, kept here so the thinking isn't lost:
   first whether "communicate what I want" means free-form text (hard to
   auto-grade) or something more constrained (translate this prompt,
   graded against expected structure).
-- [x] **Context-aware comprehension check for `reading_in_context`**
-  (2026-09-16 discussion; shipped 2026-09-24 for `reading_in_context` only —
-  see STATUS.md). Open question resolved: a wrong pick **informs** the
-  review (supplementary evidence, `Review.comprehensionCheckCorrect`,
-  closes the `classifyReviewError` gap) rather than overriding the
-  self-rating — matches the house convention every other "objectively
-  graded" card already uses. Distractor authoring reused the "Segment with
-  AI help" copy-paste-to-AI shape (new `src/lib/comprehensionCheck.ts`,
-  wired up on `AnalyzePage` via `ComprehensionCheckPicker`), with the
-  cold-vs-in-context-translation recipe as planned. **Not built**: adaptive
-  distractor difficulty — still an open angle, parked as originally
-  discussed. **2026-09-25**: single-sentence authoring was the main
-  bottleneck for covering a whole book, so added a book-scoped batch
-  round-trip (`BookComprehensionCheckBatch` on `BookDetailPage`) — one
-  prompt/reply covers many eligible sentences at once instead of one
-  round-trip each. **2026-09-25**: shipped `listening`'s equivalent too —
-  turned out not to need net-new UI as originally assumed: the same
-  authored check just gates `listening`'s existing "Reveal text" button
-  (audio-only, no text shown until the pick is made), no separate passage-
-  context display needed since `listening` already hides all text
-  pre-reveal. Detail in STATUS.md.
-- [x] **Pull the pitch-accent production drill into a review card**
-  (2026-09-16 discussion; shipped 2026-09-24 — see STATUS.md). The two
-  blockers resolved:
-  1. **Rating derivation, resolved by not building it.** Rather than
-     inventing a noisy-score-to-rating heuristic, the measured per-mora
-     score is shown as feedback and recorded as supplementary evidence
-     (`Review.pitchProductionMeasuredCount`/`pitchProductionMismatchCount`)
-     alongside an ordinary self-rate — matching the one convention already
-     used by every other card in this app (see `ReadingProductionCard`'s
-     doc comment: no card auto-derives a rating from an objective result).
-     Alignment failures (`unavailable`) record nothing and let the learner
-     re-record, sidestepping the "what rating does an unmeasured take get"
-     question entirely.
-  2. **Cost model** — `pitch_accent_production` got its own
-     `MODE_ACTIVITY_ESTIMATE_MINUTES.pitchProduction` tier (3 min) instead
-     of silently defaulting to `retain`, and quiet-mode exclusion in both
-     the session planner and ReviewPage's own queue, same reasoning as
-     shadowing's existing exclusion.
-  Sentence-mode only for v1 (the drill's single-word mode isn't wired into
-  scheduling). The shadowing/listening pitch-proficiency question is left
-  exactly where it was: still points at perception `pitch_accent` only,
-  not resolved by this pass.
-- [x] **Pitch-accent "Compare speakers" browse tool.** (2026-09-25 — see
-  STATUS.md) Words mined from 2+ distinct books, played side by side
-  against the dictionary pitch pattern with each clip's own measured
-  contour (`/pitch-accent/compare`). Not a drill — nothing scored or
-  scheduled. Real usable pool is smaller than a raw cross-book count once
-  Odd Ear Out's span-plausibility/suspended-book filters apply; worth
-  re-measuring as more single-speaker content is mined. Dual-ear/binaural
-  playback deliberately deferred (sequential tap-to-play for v1).
+- **Adaptive comprehension distractors.** Context-aware checks, book-level
+  authoring and listening checks are built. Adaptive distractor difficulty
+  remains an open possibility; answers continue to inform the learner's
+  self-rating rather than setting it automatically.
+- **Pitch-production review extensions.** Sentence-mode production cards are
+  built; single-word production is still free practice only. Scheduling that
+  mode and reconsidering which pitch evidence listening gates should use remain
+  optional work. Preserve self-rating, the explicit time cost and quiet-mode
+  behavior if this is extended; pitch practice can also be paused entirely.
+- **Compare-speakers refinements.** The sequential native-clip comparison tool
+  is built. Re-measure its usable pool as single-speaker content grows; dual-ear/
+  binaural playback remains deliberately deferred.
 
 ## Possibilities (sentence glossing accessibility)
 
@@ -1813,9 +759,10 @@ hints.
     sentences) → needs a single-clause filter and head-noun quality filters;
     reuse `findBlankableParticles` conservatism (no の/へ, no adjacent
     particles, は/が/も swaps flagged "often grammatical").
-  - Substitutes come from confirmed vocabulary nouns (~400+ of ~1,080 items;
-    POS formats mixed, UniDic `名詞/…` vs JMdict `n`). Gate: offer a slot
-    only if enough other confirmed nouns exist — check the gate is satisfiable
+  - Substitutes come from vocabulary linked to introduced sentences in the
+    default sentence-led flow (POS formats mix UniDic `名詞/…` and JMdict `n`).
+    The older flow still requires confirmed nouns. Offer a slot
+    only if enough substitute nouns exist — check the gate is satisfiable
     before shipping. Semantic fit ("eat the house") is not machine-checkable;
     tell the learner. Checks are structural (particle kept, fixed text
     unchanged, reading correct); no generated Japanese distractors; learner

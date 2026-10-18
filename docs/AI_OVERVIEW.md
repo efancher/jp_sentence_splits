@@ -71,8 +71,8 @@ collaborators as editor/viewer).
   hand-rolled CSS.
 - **Local storage**: Dexie 4 (IndexedDB wrapper), read reactively in
   components via `dexie-react-hooks`' `useLiveQuery`. Dexie is the
-  **only** read/write path the UI ever talks to — 12 schema versions to
-  date (`src/db/database.ts`), each additive.
+  **only** read/write path for the UI's study data. Schema upgrades are defined
+  in `src/db/database.ts`.
 - **Cloud sync (optional)**: `@supabase/supabase-js` against a single
   shared Supabase Postgres project (also shared, via table-prefix
   isolation, with a sibling now-retired `shadowing` repo). App is fully
@@ -87,11 +87,12 @@ collaborators as editor/viewer).
   `fflate` (zip read/write for `.shadowing.zip` packages), Web Speech API
   (device TTS, no cloud TTS), Web Audio API (recording, YIN pitch
   detection, waveform).
-- **Testing**: Vitest (unit + component, jsdom + `fake-indexeddb`), 600+
-  tests as of the latest status update; Playwright for a WebKit e2e happy
-  path.
+- **Testing**: Vitest unit/component tests with jsdom and `fake-indexeddb`,
+  Chromium/WebKit browser flows, offline Python backend tests, and real-Postgres
+  migration/RLS integration tests. See `docs/TESTING.md` for measured coverage
+  and remaining gaps; `e2e/README.md` documents the local browser container.
 - **Hosting/CI**: `.github/workflows/deploy.yml` — on push to `main`, runs
-  `npm run check` (typecheck + full unit suite) then `npm run build:pages`
+  TypeScript checks, lint and the full unit suite with coverage, then `npm run build:pages`
   and publishes `dist/` to GitHub Pages. Several other workflows
   (`backfill-*.yml`) exist purely to let one-off maintenance scripts (see
   below) be triggered from the Actions tab instead of requiring local
@@ -1047,9 +1048,9 @@ word-for-word, not fluent translation — a local heuristic, never machine
 translation; every Claude Edge Function this app calls (`grammar-assist`,
 `chunk-why-assist`, `vocab-assist`) only ever pre-fills *editable* fields,
 never the chunk/sentence sticky English). Supports synthetic zero-が chunks for
-Japanese's frequent implicit subject. Chunks render as visually distinct
-"puzzle piece" shapes (`puzzleShapes.ts`/`puzzlePiecePath.ts`) whose edge
-shape encodes grammatical fit, so structure is visually scannable.
+Japanese's frequent implicit subject. `ChunkPuzzleStrip` renders clause-tinted
+blocks with predicate emphasis and an active-chunk highlight. The older
+interlocking SVG edge renderer has been removed.
 `lintAnalysis` (`analysisSuggestions.ts`) flags likely mistakes (e.g.
 discarded annotations, chunk/source mismatches). Sentence translation is
 directly editable inline (textarea, autosave). The preceding one or two
@@ -2829,19 +2830,12 @@ aren't JSON-serializable/aren't worth backing up).
   extend-in-place action" limitation is now resolved — that's what the
   daily top-up model *is*.
 
-**Browser automation is viable, not blocked.** Playwright's own Chromium/
-WebKit builds fail to launch on this host (missing system libs, no
-passwordless sudo to `apt install` them), but a manually-extracted NSS/NSPR
-lib directory at `/tmp/chromium-libs` (present since 2026-08-27, reused
-successfully as recently as 2026-09-14) lets `playwright-core` launch
-headless Chromium via `LD_LIBRARY_PATH=/tmp/chromium-libs`. Docker
-(`mcr.microsoft.com/playwright`, `--network host`) is the fallback when
-that directory is unavailable (e.g. a fresh sandbox after `/tmp` is
-cleared) — both approaches have shipped real click-through verification
-(seed data into Dexie via the page's own `getDb()`, drive the UI, screenshot).
-Most older features were still verified only via unit/component tests plus
-code review, but that reflects when they shipped, not a standing tooling
-gap — new UI work should default to a real-browser check per CLAUDE.md.
+**Browser automation:** the configured Chromium and WebKit suites run in CI.
+Local runs can install Playwright's system dependencies or use the matching
+`mcr.microsoft.com/playwright` image when host libraries are unavailable.
+See `e2e/README.md` for setup and `docs/TESTING.md` for measured coverage and
+remaining UI gaps. Do not depend on temporary library directories from old
+sessions.
 
 ## External services & dependencies
 

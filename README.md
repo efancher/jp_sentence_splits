@@ -106,10 +106,11 @@ Useful commands:
 ```bash
 npm run check          # typecheck + unit tests
 npm test               # unit / component tests
+npm run test:coverage  # whole-src coverage, including unimported modules
 npm run build          # production build (local base `/`)
 npm run build:pages    # production build with GitHub Pages base path
 npm run preview        # serve the production build
-npm run test:e2e       # Playwright happy path (WebKit)
+npm run test:e2e       # Chromium + WebKit browser flows (see e2e/README.md)
 ```
 
 ## Content ingestion scripts
@@ -299,7 +300,8 @@ documented gaps — see `docs/UNIFIED_APP_ARCHITECTURE.md` §9/§11).
 
 - **Unit tests** cover CSV import/dedupe, chunking regressions, furigana parsing, Dexie data operations, and backup round-trips.
 - **Component tests** cover import → book → analysis autosave, explicit reorder controls, and Practice reveal stages.
-- **Playwright** covers a concise WebKit happy path including reload persistence and backup export.
+- **Playwright** covers import/backup, chapter review, reader walkthroughs, sentence lessons, episode preparation, extras recovery, clause questions and native pitch preparation in Chromium/WebKit.
+- **Backend and database checks** exercise the offline mining API and real Postgres migrations/RLS. See [Testing and coverage](docs/TESTING.md) for commands, results and known gaps.
 
 Fixtures live in [`fixtures/`](fixtures/). Do **not** commit personal full Satori exports (for example `exported 4.csv`); those patterns are gitignored. If you place `exported 4.csv` at the repo root, `tests/personal-export.smoke.test.ts` runs local aggregate checks; CI skips it when the file is absent.
 
