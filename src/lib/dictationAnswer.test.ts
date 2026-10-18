@@ -48,6 +48,11 @@ describe('gradeDictation', () => {
     expect(grade.typedSegments.map((s) => s.text).join('')).toContain('きました');
   });
 
+  it('reads n before y as ん when that makes the romaji answer correct', () => {
+    const jp = 'ふゆにぜんぜんゆきがふりません。';
+    expect(gradeDictation('fuyu ni zenzenyuki ga furimasen', jp).correct).toBe(true);
+  });
+
   it('does not convert mixed latin/kana garbage', () => {
     expect(gradeDictation('kinou q とも', JP, KANA).correct).toBe(false);
   });

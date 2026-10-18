@@ -16,6 +16,8 @@ export interface DictationGrade {
   expectedSegments: DictationSegment[];
   /** What the learner typed split into runs that matched / were extra or wrong. */
   typedSegments: DictationSegment[];
+  /** The kana the answer was graded as (romaji converted); the raw answer when nothing was converted. */
+  typedKana: string;
 }
 
 function comparable(text: string): string {
@@ -34,9 +36,11 @@ function diffKey(char: string): string {
  * dropping spaces and punctuation becomes kana, so a stray latin typo can't
  * partially mutate into a match. Anything else is returned untouched.
  */
-function romajiToKana(typed: string): string {
+function romajiToKana(typed: string, nBeforeY = false): string {
   if (!/[A-Za-z]/.test(typed)) return typed;
-  const converted = toHiragana(typed.trim());
+  // "zenzenyuki": plain conversion reads "nyu" as にゅ; the apostrophe forces ん + ゆ.
+  const source = nBeforeY ? typed.trim().replace(/n(?=y)/gi, "n'") : typed.trim();
+  const converted = toHiragana(source);
   const core = converted.replace(/[\p{P}\p{S}\s]/gu, '');
   return core && isHiragana(core) ? converted : typed;
 }
@@ -97,7 +101,14 @@ export function gradeDictation(
   japanese: string,
   readingOnly?: string,
 ): DictationGrade {
-  const typed = romajiToKana(rawTyped);
+  const plain = gradeConverted(romajiToKana(rawTyped), japanese, readingOnly);
+  if (plain.correct || !/ny/i.test(rawTyped)) return plain;
+  // Romaji can't tell ん+や-row (zenzenyuki) from に+ゃ-row (nyu); give the learner the benefit of the doubt.
+  const alt = gradeConverted(romajiToKana(rawTyped, true), japanese, readingOnly);
+  return alt.correct ? alt : plain;
+}
+
+function gradeConverted(typed: string, japanese: string, readingOnly?: string): DictationGrade {
   const targets = [
     japanese,
     ...(readingOnly && readingOnly.trim() ? [fixNumeralsInReadingOnly(readingOnly)] : []),
@@ -123,6 +134,7 @@ export function gradeDictation(
       : chosen.target,
     expectedSegments: toSegments(targetChars, chosen.flags.a),
     typedSegments: toSegments(typedChars, chosen.flags.b),
+    typedKana: typed.trim(),
   };
 }
 

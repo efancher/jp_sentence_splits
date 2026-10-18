@@ -3881,7 +3881,7 @@ function DictationCard({
               <span className="jp">
                 {grade && !grade.correct
                   ? renderSegments(grade.typedSegments)
-                  : typedAsKana(value)}
+                  : (grade?.typedKana ?? typedAsKana(value))}
               </span>
             </div>
           ) : null}
