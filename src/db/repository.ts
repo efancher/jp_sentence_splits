@@ -6056,56 +6056,38 @@ export async function recordNaturalEncounter(input: {
 // (src/lib/meaningChoices.ts, src/lib/sequentialStudy.ts).
 // ---------------------------------------------------------------------------
 
-/** Stored meaning-choice records per sentence (oldest first), used to avoid repeating the same distractor set. */
-export async function getMeaningChoiceRecords(
-  sentenceIds: readonly string[],
-): Promise<Map<string, MeaningChoiceRecord[]>> {
-  const db = getDb();
-  const wanted = new Set(sentenceIds);
-  const items = await db.studyItems
-    .where('activityType')
-    .equals('reading_in_context')
-    .filter((item) => item.subjectType === 'sentence' && wanted.has(item.subjectId))
-    .toArray();
-  const out = new Map<string, MeaningChoiceRecord[]>();
-  if (items.length === 0) return out;
-  const sentenceByItem = new Map(items.map((item) => [item.id, item.subjectId]));
-  const reviews = await db.reviews.where('studyItemId').anyOf([...sentenceByItem.keys()]).toArray();
-  reviews.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
-  for (const review of reviews) {
-    if (!review.meaningChoice) continue;
-    const sentenceId = sentenceByItem.get(review.studyItemId)!;
-    const list = out.get(sentenceId);
-    if (list) list.push(review.meaningChoice);
-    else out.set(sentenceId, [review.meaningChoice]);
-  }
-  return out;
+export interface SentenceReviewHistory {
+  /** Oldest first, so meaning-choice distractors can rotate between attempts. */
+  meaningChoices: MeaningChoiceRecord[];
+  /** Latest reading-in-context review only; a later unflagged review clears this. */
+  missedReadings: string[];
 }
 
 /**
- * Surface forms the learner flagged "Missed reading" on each sentence's most
- * recent `reading_in_context` review (empty/absent once a later review
- * flags nothing). Read-only.
+ * Read the active sentence's history through the existing compound/item indexes.
+ * Queue eligibility doesn't depend on this evidence: fetching it for every
+ * queued sentence made opening Review scale with the entire review history.
+ * One snapshot supplies both the meaning choices and the missed-reading prompt.
  */
-export async function getLatestMissedReadings(
-  sentenceIds: readonly string[],
-): Promise<Map<string, string[]>> {
+export async function getSentenceReviewHistory(sentenceId: string): Promise<SentenceReviewHistory> {
   const db = getDb();
-  const wanted = new Set(sentenceIds);
-  const items = await db.studyItems
-    .where('activityType')
-    .equals('reading_in_context')
-    .filter((item) => item.subjectType === 'sentence' && wanted.has(item.subjectId))
-    .toArray();
-  const out = new Map<string, string[]>();
-  if (items.length === 0) return out;
-  const sentenceByItem = new Map(items.map((item) => [item.id, item.subjectId]));
-  const reviews = await db.reviews.where('studyItemId').anyOf([...sentenceByItem.keys()]).toArray();
-  reviews.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
-  for (const review of reviews) {
-    out.set(sentenceByItem.get(review.studyItemId)!, review.missedReadings ?? []);
-  }
-  return out;
+  return db.transaction('r', db.studyItems, db.reviews, async () => {
+    const items = await db.studyItems
+      .where('[subjectType+subjectId+activityType]')
+      .equals(['sentence', sentenceId, 'reading_in_context'])
+      .toArray();
+    if (items.length === 0) return { meaningChoices: [], missedReadings: [] };
+    const query = db.reviews.where('studyItemId');
+    // Normally one item; retain history from duplicate items in older imports.
+    const reviews = await (items.length === 1
+      ? query.equals(items[0]!.id)
+      : query.anyOf(items.map((item) => item.id))).toArray();
+    reviews.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+    return {
+      meaningChoices: reviews.flatMap((review) => review.meaningChoice ? [review.meaningChoice] : []),
+      missedReadings: reviews.at(-1)?.missedReadings ?? [],
+    };
+  });
 }
 
 /**

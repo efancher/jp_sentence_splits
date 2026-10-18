@@ -59,7 +59,9 @@ Unfinished work and optional extensions; completed behavior is in `AI_OVERVIEW.m
   measurements with small/large synthetic libraries in Chromium and WebKit.
   Real-Postgres sync and synthetic-transport audio tests enforce configurable
   request/body-byte ceilings. Timing gates and actual account-usage forecasting
-  remain unfinished. Commands, measurement boundaries and follow-ups:
+  remain unfinished. The first measured Review bottleneck is addressed by
+  loading history per active card; see [the comparison](PERFORMANCE_REVIEW_FOLLOWUP.md).
+  Commands, measurement boundaries and follow-ups:
   [PERFORMANCE.md](PERFORMANCE.md).
   Catch slowdowns as the library grows
   and prevent routine study/sync from exhausting the available Supabase usage

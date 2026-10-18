@@ -6,7 +6,7 @@ import {
   createBook,
   ensureStudyItem,
   getDb,
-  getMeaningChoiceRecords,
+  getSentenceReviewHistory,
   getSequentialBookStatus,
   getSequentialSentenceView,
   latchSequentialUnlocks,
@@ -98,9 +98,35 @@ describe('sentence-led flow repository', () => {
   it('stores the meaning choice record with the review and returns it per sentence', async () => {
     const { ids } = await seedBook(1);
     await answer(ids[0]!, [true, false]);
-    const records = await getMeaningChoiceRecords(ids);
-    expect(records.get(ids[0]!)).toHaveLength(2);
-    expect(records.get(ids[0]!)![1]!.chosenText).toBe(CHECK.options[1]);
+    const history = await getSentenceReviewHistory(ids[0]!);
+    expect(history.meaningChoices).toHaveLength(2);
+    expect(history.meaningChoices[1]!.chosenText).toBe(CHECK.options[1]);
+    expect(history.missedReadings).toEqual([]);
+  });
+
+  it('loads only the active sentence reading history, including older duplicate items, in timestamp order', async () => {
+    const { ids } = await seedBook(2);
+    const db = getDb();
+    const reading = await ensureStudyItem('sentence', ids[0]!, 'reading_in_context');
+    const listening = await ensureStudyItem('sentence', ids[0]!, 'listening');
+    const other = await ensureStudyItem('sentence', ids[1]!, 'reading_in_context');
+    const otherType = await ensureStudyItem('vocabularyItem', ids[0]!, 'reading_in_context');
+    await db.studyItems.put({ ...reading, id: 'duplicate-reading' });
+    await db.reviews.bulkPut([
+      { id: 'a-newest', studyItemId: reading.id, timestamp: '2026-01-03T00:00:00.000Z', rating: 'good', meaningChoice: record(true), missedReadings: ['猫'] },
+      { id: 'z-oldest', studyItemId: 'duplicate-reading', timestamp: '2026-01-01T00:00:00.000Z', rating: 'again', meaningChoice: record(false), missedReadings: ['寝ています'] },
+      ...[listening, other, otherType].map((item) => ({ id: `unrelated-${item.id}`, studyItemId: item.id, timestamp: '2026-01-04T00:00:00.000Z', rating: 'good' as const, meaningChoice: record(false), missedReadings: ['unrelated'] })),
+    ]);
+    expect(await getSentenceReviewHistory(ids[0]!)).toEqual({
+      meaningChoices: [record(false), record(true)], missedReadings: ['猫'],
+    });
+    // A later legacy review without supplementary evidence clears the reading
+    // flag while retaining earlier meaning-choice attempts.
+    await db.reviews.add({ id: 'cleared', studyItemId: reading.id, timestamp: '2026-01-05T00:00:00.000Z', rating: 'good' });
+    expect(await getSentenceReviewHistory(ids[0]!)).toEqual({
+      meaningChoices: [record(false), record(true)], missedReadings: [],
+    });
+    expect(await getSentenceReviewHistory('missing')).toEqual({ meaningChoices: [], missedReadings: [] });
   });
 
   it('opens only the first sentence on a fresh book', async () => {

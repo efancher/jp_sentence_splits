@@ -39,8 +39,7 @@ import {
   logGlossDecision,
   countVocabularyWordsSeededSince,
   getDueStudyItems,
-  getLatestMissedReadings,
-  getMeaningChoiceRecords,
+  getSentenceReviewHistory,
   getPitchAccentDrillSentences,
   getReferencePitchTrack,
   loadSuspendedBookIndex,
@@ -61,6 +60,7 @@ import {
   updatePlannerSessionStep,
   type ConfusionPairCandidate,
   type PitchAccentDrillSentence,
+  type SentenceReviewHistory,
   type TrackedGrammarSpan,
   type VocabularyOccurrenceCandidate,
   type VocabularyTargetCandidate,
@@ -688,10 +688,6 @@ interface QueueCard {
   comprehensionCheck?: ComprehensionCheck;
   /** Set for `reading_in_context` cards whose sentence has a saved structural analysis. */
   analysisChunks?: AnalysisChunk[];
-  /** Earlier meaning-choice attempts on this sentence, so the sampled distractors rotate. */
-  meaningHistory?: MeaningChoiceRecord[];
-  /** Surface forms flagged "Missed reading" on this sentence's latest review; the next `reading_in_context` asks for the first one's typed reading. */
-  missedReadings?: string[];
 }
 
 /** `${subjectType}:${subjectId}` — same key the sibling-bury filter uses. */
@@ -870,9 +866,6 @@ interface ReviewScope {
   comprehensionCheckBySentenceId: Map<string, ComprehensionCheck>;
   /** Saved structural-analysis chunks per in-scope sentence, for `reading_in_context`'s later-review structure check. */
   chunksBySentenceId: Map<string, AnalysisChunk[]>;
-  /** Stored meaning-choice records per sentence (oldest first). */
-  meaningHistoryBySentenceId: Map<string, MeaningChoiceRecord[]>;
-  missedReadingsBySentenceId: Map<string, string[]>;
   /**
    * Sentence-led flow only: sentences the learner has been introduced to
    * (gloss walkthrough done, started/completed in a book, or already carrying a
@@ -915,8 +908,6 @@ function buildActivityDescriptors(scope: ReviewScope): ActivityDescriptor[] {
         readingContext: scope.readingContextBySentenceId.get(sentence.id),
         comprehensionCheck: scope.comprehensionCheckBySentenceId.get(sentence.id),
         analysisChunks: scope.chunksBySentenceId.get(sentence.id),
-        meaningHistory: scope.meaningHistoryBySentenceId.get(sentence.id),
-        missedReadings: scope.missedReadingsBySentenceId.get(sentence.id),
       }),
       ensure: (sentence, activityType) => ensureStudyItem('sentence', sentence.id, activityType),
       gateSentenceId: (sentence) => sentence.id,
@@ -978,7 +969,6 @@ function buildActivityDescriptors(scope: ReviewScope): ActivityDescriptor[] {
         sentence: candidate.sentence,
         audio: candidate.audio,
         comprehensionCheck: scope.comprehensionCheckBySentenceId.get(candidate.sentence.id),
-        meaningHistory: scope.meaningHistoryBySentenceId.get(candidate.sentence.id),
       }),
       ensure: (candidate, activityType) =>
         ensureStudyItem('sentence', candidate.sentence.id, activityType),
@@ -1562,8 +1552,6 @@ export function ReviewPage() {
     });
 
     const ledFlow = isSentenceLedFlow(settings);
-    const meaningHistoryBySentenceId = await getMeaningChoiceRecords(sentenceIds);
-    const missedReadingsBySentenceId = await getLatestMissedReadings(sentenceIds);
     let introducedSentenceIds: Set<string> | undefined;
     if (ledFlow) {
       const walked = (await db.sentenceLearningEvents.toArray())
@@ -1589,8 +1577,6 @@ export function ReviewPage() {
       readingContextBySentenceId,
       comprehensionCheckBySentenceId,
       chunksBySentenceId,
-      meaningHistoryBySentenceId,
-      missedReadingsBySentenceId,
       introducedSentenceIds,
       ledFlow,
       vocabularyTargetCandidates: paused ? [] : vocabularyTargetCandidates,
@@ -1908,6 +1894,27 @@ export function ReviewPage() {
 
   const current = queue[0];
   const currentSentenceId = current?.sentence.id;
+  const historyCardId = current && (
+    current.studyItem.activityType === 'reading_in_context' || current.studyItem.activityType === 'listening'
+  ) ? current.studyItem.id : undefined;
+  const [historyLoad, setHistoryLoad] = useState<
+    { cardId: string; history: SentenceReviewHistory; failed?: false } |
+    { cardId: string; failed: true } | undefined
+  >();
+  const [historyRetry, setHistoryRetry] = useState(0);
+  useEffect(() => {
+    if (!historyCardId || !currentSentenceId) return;
+    let cancelled = false;
+    // A snapshot per card: history must arrive before the question samples its
+    // choices, then remain fixed while the learner answers and rates it.
+    void getSentenceReviewHistory(currentSentenceId).then(
+      (history) => { if (!cancelled) setHistoryLoad({ cardId: historyCardId, history }); },
+      () => { if (!cancelled) setHistoryLoad({ cardId: historyCardId, failed: true }); },
+    );
+    return () => { cancelled = true; };
+  }, [historyCardId, currentSentenceId, historyRetry]);
+  const currentHistory = historyLoad?.cardId === historyCardId && !historyLoad?.failed
+    ? historyLoad?.history : undefined;
   const sourceBooks = useLiveQuery(async () => {
     if (!currentSentenceId) return undefined;
     const db = getDb();
@@ -2154,6 +2161,15 @@ export function ReviewPage() {
               </span>
             )}
           </div>
+        ) : historyCardId && !currentHistory ? (
+          historyLoad?.cardId === historyCardId && historyLoad.failed ? (
+            <div role="alert">
+              <p>Couldn't load this card's review history.</p>
+              <button type="button" onClick={() => { setHistoryLoad(undefined); setHistoryRetry((value) => value + 1); }}>
+                Retry
+              </button>
+            </div>
+          ) : <p className="muted">Loading next card…</p>
         ) : (
           <>
             <div className="row" style={{ justifyContent: 'space-between' }}>
@@ -2313,7 +2329,7 @@ export function ReviewPage() {
                 sentence={current.sentence}
                 audio={current.audio}
                 check={current.comprehensionCheck}
-                history={current.meaningHistory ?? []}
+                history={currentHistory?.meaningChoices ?? []}
                 revealed={revealed}
                 onReveal={() => setRevealed(true)}
                 onReplay={() => markAssistance('audio_replayed')}
@@ -2405,7 +2421,7 @@ export function ReviewPage() {
                   // A word flagged "Missed reading" last time wins: ask for
                   // its reading before anything else.
                   pickMissedReadingTarget(
-                    current.missedReadings,
+                    currentHistory?.missedReadings,
                     current.sentence.japanese,
                     current.sentence.inlineReading,
                   ) ??
@@ -2421,7 +2437,7 @@ export function ReviewPage() {
                 onMissedReadingsChange={setMissedReadings}
                 revealed={revealed}
                 onReveal={() => setRevealed(true)}
-                history={current.meaningHistory ?? []}
+                history={currentHistory?.meaningChoices ?? []}
                 bookId={current.readingContext?.bookId ?? bookId}
                 onComprehensionAnswered={(correct, chosenIndex, meaningChoice) =>
                   setComprehensionCheckAnswer({ correct, chosenIndex, meaningChoice })

@@ -57,6 +57,11 @@ large synthetic local libraries; Postgres uses the disposable migration/RLS
 harness. Timings remain report-only and actual account-budget forecasting is
 still planned. See [PERFORMANCE.md](PERFORMANCE.md) for scope and reproduction.
 
+Review now reads meaning-choice and missed-reading history for the active card
+only, through existing indexes. The question waits for a fixed history snapshot
+and offers a retry on read failure. This removes the two library-wide history
+reads from queue loading; see the [measured follow-up](PERFORMANCE_REVIEW_FOLLOWUP.md).
+
 Pruned the unused SVG puzzle-path renderer and unused sync barrel. The active
 chunk strip uses clause-tinted blocks. Older word/grammar flows, migration and
 repair tooling, research materials and future roadmap ideas remain available.

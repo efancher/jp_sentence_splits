@@ -5,8 +5,9 @@ request/body budgets. It does not yet forecast account consumption or enforce
 calibrated UI timing limits. No production account is needed.
 
 The [2026-10-18 baseline](PERFORMANCE_BASELINE.md) records the first complete
-local run and its raw observations. Global Review is the clearest scaling
-concern in that synthetic workload.
+local run and its raw observations. Global Review was the clearest scaling
+concern in that synthetic workload. The [Review follow-up](PERFORMANCE_REVIEW_FOLLOWUP.md)
+measures the first fix: fetching history only for the active card.
 
 ## Run and inspect
 

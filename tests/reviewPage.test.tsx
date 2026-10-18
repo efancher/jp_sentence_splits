@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 import { ensureSettings, resetDbForTests } from '../src/db/database';
+import * as repository from '../src/db/repository';
 import {
   confirmSentenceVocabulary,
   ensureGrammarPattern,
@@ -689,6 +690,83 @@ describe('ReviewPage', () => {
       expect(review?.meaningChoice?.shown).toHaveLength(4);
       expect(review?.meaningChoice?.shown[review.meaningChoice.chosenIndex]).toBe(wrong.textContent);
     });
+  });
+
+  it('waits for active-card history, rotates past choices, and loads fresh evidence on advance', async () => {
+    await updateSettings({ sentenceLedFlow: true });
+    await seedBookWithSentence();
+    const db = getDb();
+    const check = {
+      options: ['I read a book.', 'I do not read a book.', 'I wrote a book.', 'I will read a book.'],
+      correctIndex: 0,
+      extraDistractors: ['I bought a book.', 'He reads a book.', 'I am reading a magazine.'],
+      provenance: 'manual' as const,
+      createdAt: new Date().toISOString(),
+    };
+    await db.sentences.update('sent-1', { inlineReading: '本[ほん]を読[よ]みます。' });
+    await db.sentences.put({ ...(await db.sentences.get('sent-1'))!, id: 'sent-2', normalizedKey: 'sent-2', firstOccurrenceIndex: 1 });
+    await db.analyses.update('sent-1', { comprehensionCheck: check });
+    await db.analyses.put({ ...(await db.analyses.get('sent-1'))!, sentenceId: 'sent-2' });
+    const first = await ensureStudyItem('sentence', 'sent-1', 'reading_in_context');
+    const second = await ensureStudyItem('sentence', 'sent-2', 'reading_in_context');
+    await db.studyItems.update(first.id, { fsrsState: { ...first.fsrsState, due: '2026-01-01T00:00:00.000Z' } });
+    await db.studyItems.update(second.id, { fsrsState: { ...second.fsrsState, due: '2026-01-02T00:00:00.000Z' } });
+    await db.reviews.add({
+      id: 'earlier', studyItemId: first.id, timestamp: '2025-12-31T00:00:00.000Z', rating: 'good',
+      missedReadings: ['本'],
+      meaningChoice: { shown: check.options, chosenIndex: 0, chosenText: check.options[0]!, correctText: check.options[0]!, correct: true, qualifying: true },
+    });
+    const readHistory = repository.getSentenceReviewHistory;
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    const historyRead = vi.spyOn(repository, 'getSentenceReviewHistory')
+      .mockImplementationOnce(async (id) => { await held; return readHistory(id); });
+    try {
+      const user = userEvent.setup();
+      renderReviewPage('/review', '/review');
+      await waitFor(() => expect(historyRead).toHaveBeenCalledWith('sent-1'));
+      expect(screen.queryByRole('button', { name: 'I read a book.', exact: true })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Reveal' })).not.toBeInTheDocument();
+      await act(async () => { release(); });
+      await user.type(await screen.findByLabelText('Type the reading of the highlighted part'), 'ほん');
+      await user.click(screen.getByRole('button', { name: 'Check', exact: true }));
+      for (const text of check.extraDistractors) expect(screen.getByRole('button', { name: text, exact: true })).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'I read a book.', exact: true }));
+      await user.click(screen.getByRole('button', { name: 'Reveal' }));
+      await user.click(screen.getByRole('button', { name: 'Good' }));
+      await screen.findByRole('button', { name: 'I read a book.', exact: true });
+      expect(historyRead.mock.calls.map(([id]) => id)).toEqual(['sent-1', 'sent-2']);
+      expect(screen.queryByLabelText('Type the reading of the highlighted part')).not.toBeInTheDocument();
+      const choices = screen.getAllByRole('button', { name: /^(I |He )/ }).map((button) => button.textContent);
+      // A concurrent history arrival must not replace an already displayed prompt.
+      await act(async () => { await db.reviews.add({ id: 'arrived', studyItemId: second.id, timestamp: new Date().toISOString(), rating: 'again', missedReadings: ['本'] }); });
+      expect(screen.queryByLabelText('Type the reading of the highlighted part')).not.toBeInTheDocument();
+      expect(screen.getAllByRole('button', { name: /^(I |He )/ }).map((button) => button.textContent)).toEqual(choices);
+      expect(await db.reviews.where('studyItemId').equals(first.id).count()).toBe(2);
+    } finally {
+      release();
+      historyRead.mockRestore();
+    }
+  });
+
+  it('offers a retry instead of presenting a card with missing history after a read failure', async () => {
+    await updateSettings({ sentenceLedFlow: true });
+    await seedBookWithSentence();
+    await ensureStudyItem('sentence', 'sent-1', 'reading_in_context');
+    const historyRead = vi.spyOn(repository, 'getSentenceReviewHistory')
+      .mockRejectedValueOnce(new Error('Synthetic IndexedDB failure'));
+    try {
+      const user = userEvent.setup();
+      renderReviewPage('/review', '/review');
+      expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't load this card's review history.");
+      expect(screen.queryByRole('button', { name: 'Reveal' })).not.toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'Retry' }));
+      await screen.findByRole('button', { name: 'Reveal' });
+      expect(historyRead).toHaveBeenCalledTimes(2);
+      expect(await getDb().reviews.count()).toBe(0);
+    } finally {
+      historyRead.mockRestore();
+    }
   });
 
   it('does not double-record a review on a rapid double-click', async () => {
