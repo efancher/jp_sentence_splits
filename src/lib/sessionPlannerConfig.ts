@@ -222,7 +222,7 @@ export const EXPLORE_CANDIDATE_LIMIT = 5;
 /** Cap on how many of a book's next unstarted sentences findExploreCandidates previews per book — generous relative to any realistic single day's glossing budget (MODE_ACTIVITY_ESTIMATE_MINUTES.glossing is 2.5 min/item, so 20 covers 50 min of glossing alone). */
 export const EXPLORE_SENTENCE_PREVIEW_LIMIT = 20;
 
-/** Sentence-first: most "fresh try" revisits drafted per book in one plan, so revisits never crowd out new lessons. */
+/** Sentence-first: most automatic "fresh try" revisits drafted per book in one plan, so revisits never crowd out new lessons. Learner-requested ones (review-card button) are exempt. */
 export const EXPLORE_REVISITS_PER_BOOK = 2;
 
 /** How many not-yet-tracked grammar patterns to consider as candidates. */

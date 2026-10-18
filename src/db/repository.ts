@@ -10294,7 +10294,15 @@ async function findExploreCandidates(
     // Review-card requests jump the spacing queue (walked-through sentences only).
     const requestedIds = walked ? pendingFreshTryRequestIds(freshTryRequests, bookEvents).filter((id) => walked.has(id)) : [];
     const revisitIds = sentenceFirst
-      ? [...new Set([...requestedIds, ...parkedGlossIds, ...sentencesDueForFreshTry(bookEvents)])].slice(0, EXPLORE_REVISITS_PER_BOOK)
+      ? [
+          ...new Set([
+            ...requestedIds,
+            // The per-book cap only throttles automatic revisits; ones the learner asked for are all kept.
+            ...[...new Set([...parkedGlossIds, ...sentencesDueForFreshTry(bookEvents)])]
+              .filter((id) => !requestedIds.includes(id))
+              .slice(0, EXPLORE_REVISITS_PER_BOOK),
+          ]),
+        ]
       : [];
     const parkedGlossSet = new Set(parkedGlossIds);
     // Sequential study mode gates *introduction* only: a locked sentence is
