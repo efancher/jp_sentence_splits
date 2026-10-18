@@ -3870,14 +3870,19 @@ function DictationCard({
             <span className="jp">
               {!value.trim()
                 ? '(blank)'
-                : grade && !grade.correct
+                : grade && !grade.correct && !typedAsKana(value)
                   ? renderSegments(grade.typedSegments)
-                  : value}
+                  : value.trim()}
             </span>
           </div>
           {typedAsKana(value) ? (
             <div className="muted">
-              As kana: <span className="jp">{typedAsKana(value)}</span>
+              As kana:{' '}
+              <span className="jp">
+                {grade && !grade.correct
+                  ? renderSegments(grade.typedSegments)
+                  : typedAsKana(value)}
+              </span>
             </div>
           ) : null}
           <div className="jp jp-lg">
