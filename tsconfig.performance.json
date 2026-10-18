@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.node.json",
+  "compilerOptions": {
+    "types": ["node", "vite/client", "vitest/globals"]
+  },
+  "include": [
+    "playwright.performance.config.ts",
+    "e2e/performance",
+    "tests/helpers/usageMeter.ts",
+    "tests/usageMeter.test.ts",
+    "tests/audioUsage.test.ts",
+    "tests/performanceSummary.test.ts",
+    "tests/pgIntegration"
+  ]
+}

@@ -15,6 +15,8 @@
     "test:watch": "vitest",
     "test:pg": "bash scripts/pg-test.sh",
     "test:e2e": "playwright test",
+    "test:performance": "playwright test --config=playwright.performance.config.ts",
+    "test:usage": "vitest run tests/usageMeter.test.ts tests/audioUsage.test.ts tests/performanceSummary.test.ts",
     "check": "npm run typecheck && npm run test",
     "ci": "npm run check && npm run build:pages",
     "jmdict:lookup": "tsx scripts/lookup-jmdict.ts",

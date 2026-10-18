@@ -53,8 +53,15 @@ The items below retain unfinished work, optional refinements and future ideas.
 
 Unfinished work and optional extensions; completed behavior is in `AI_OVERVIEW.md`.
 
-- [ ] **UI load-time and database performance tests, with Supabase usage budgets.**
-  (2026-10-18 request; not implemented.) Catch slowdowns as the library grows
+- [~] **UI load-time and database performance tests, with Supabase usage budgets.**
+  (2026-10-18: initial baseline harness and deterministic usage gates implemented.)
+  Home/Books/Reader/Review now have repeated document, warm and offline-navigation
+  measurements with small/large synthetic libraries in Chromium and WebKit.
+  Real-Postgres sync and synthetic-transport audio tests enforce configurable
+  request/body-byte ceilings. Timing gates and actual account-usage forecasting
+  remain unfinished. Commands, measurement boundaries and follow-ups:
+  [PERFORMANCE.md](PERFORMANCE.md).
+  Catch slowdowns as the library grows
   and prevent routine study/sync from exhausting the available Supabase usage
   early in the billing period. Build on the test setup in [TESTING.md](TESTING.md).
   - **UI:** measure cold startup, warm navigation and time until useful content

@@ -1,5 +1,10 @@
 # Browser tests
 
+For repeated load-time measurements, use `npm run test:performance`, with its
+separate config/port and synthetic small/large libraries. See
+[PERFORMANCE.md](../docs/PERFORMANCE.md) for the matching container command,
+reports and measurement limits. The regular suite excludes those benchmarks.
+
 The regular suite uses `playwright.config.ts`. Run `npm run test:e2e` on a host
 with the browser libraries installed. The chapter-review checks run at phone
 and desktop widths in Chromium and WebKit; the original import/analyze/backup

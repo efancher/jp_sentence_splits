@@ -1,0 +1,11 @@
+{
+  "sync-first-pull-120-books": { "requests": 4, "requestBodyBytes": 0, "responseBodyBytes": 80000 },
+  "sync-unchanged": { "requests": 1, "requestBodyBytes": 0, "responseBodyBytes": 2 },
+  "sync-one-remote-edit": { "requests": 2, "requestBodyBytes": 0, "responseBodyBytes": 1024 },
+  "sync-reconnect-120-books": { "requests": 4, "requestBodyBytes": 0, "responseBodyBytes": 80000 },
+  "sync-import-120-books": { "requests": 8, "requestBodyBytes": 50000, "responseBodyBytes": 25000 },
+  "audio-restore-four-clips": { "requests": 5, "requestBodyBytes": 0, "responseBodyBytes": 131584 },
+  "audio-warm-cache": { "requests": 0, "requestBodyBytes": 0, "responseBodyBytes": 0 },
+  "audio-retry-one-clip": { "requests": 2, "requestBodyBytes": 0, "responseBodyBytes": 32896 },
+  "source-episode-two-reads": { "requests": 1, "requestBodyBytes": 0, "responseBodyBytes": 32768 }
+}

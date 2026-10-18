@@ -1,0 +1,77 @@
+name: Performance baseline and usage budgets
+
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'e2e/performance/**'
+      - 'tests/*Usage.test.ts'
+      - 'tests/usageMeter.test.ts'
+      - 'tests/performanceSummary.test.ts'
+      - 'tests/helpers/usage*.ts'
+      - 'fixtures/performance/**'
+      - 'playwright.performance.config.ts'
+      - 'tsconfig.performance.json'
+      - 'package*.json'
+      - 'vite.config.ts'
+      - '.github/workflows/performance-tests.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'e2e/performance/**'
+      - 'tests/*Usage.test.ts'
+      - 'tests/usageMeter.test.ts'
+      - 'tests/performanceSummary.test.ts'
+      - 'tests/helpers/usage*.ts'
+      - 'fixtures/performance/**'
+      - 'playwright.performance.config.ts'
+      - 'tsconfig.performance.json'
+      - 'package*.json'
+      - 'vite.config.ts'
+      - '.github/workflows/performance-tests.yml'
+  workflow_dispatch:
+    inputs:
+      samples:
+        description: 'Samples per screen/profile/mode (20 or more for p95)'
+        default: '5'
+      latency_ms:
+        description: 'Fixed added latency per local asset request; not bandwidth throttling'
+        default: '0'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: performance-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PERF_USAGE_REPORT_DIR: test-results/performance/usage
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npx tsc -p tsconfig.performance.json --pretty false
+      - run: npm run test:usage
+      - run: npx playwright install --with-deps chromium webkit
+      - name: Measure local screens
+        env:
+          PERF_SAMPLES: ${{ inputs.samples || '5' }}
+          PERF_LATENCY_MS: ${{ inputs.latency_ms || '0' }}
+        run: npm run test:performance
+      - name: Retain baselines and failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-baseline
+          path: test-results/performance/
+          retention-days: 14
+          if-no-files-found: warn

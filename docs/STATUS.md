@@ -51,6 +51,12 @@ browser fixtures/assertions, and expands CI to the full offline backend and
 browser suites. Coverage includes unimported application modules;
 real-Postgres checks also run on relevant pull requests.
 
+Performance testing now has a separate browser baseline command and configurable
+request/body-byte budgets for sync and audio. The browser harness uses small and
+large synthetic local libraries; Postgres uses the disposable migration/RLS
+harness. Timings remain report-only and actual account-budget forecasting is
+still planned. See [PERFORMANCE.md](PERFORMANCE.md) for scope and reproduction.
+
 Pruned the unused SVG puzzle-path renderer and unused sync barrel. The active
 chunk strip uses clause-tinted blocks. Older word/grammar flows, migration and
 repair tooling, research materials and future roadmap ideas remain available.

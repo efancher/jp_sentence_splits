@@ -91,6 +91,9 @@ collaborators as editor/viewer).
   Chromium/WebKit browser flows, offline Python backend tests, and real-Postgres
   migration/RLS integration tests. See `docs/TESTING.md` for measured coverage
   and remaining gaps; `e2e/README.md` documents the local browser container.
+  A separate performance suite measures local screen readiness and enforces
+  synthetic sync/audio request/body-byte budgets (`docs/PERFORMANCE.md`).
+  It does not yet predict actual Supabase account usage or gate UI timings.
 - **Hosting/CI**: `.github/workflows/deploy.yml` — on push to `main`, runs
   TypeScript checks, lint and the full unit suite with coverage, then `npm run build:pages`
   and publishes `dist/` to GitHub Pages. Several other workflows

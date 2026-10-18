@@ -8,6 +8,12 @@ hand-written fake in `tests/syncPushIncident.test.ts` can only model what we
 already know about; this catches what we don't (constraint/policy behaviour, the
 shape of real error codes, request counts).
 
+`syncUsage.pg.test.ts` also enforces request and decoded-body-byte budgets for
+initial/incremental pulls, a reconnect backlog and bulk push. Set
+`PERF_USAGE_REPORT_DIR=test-results/performance/usage` to retain measurements;
+see [PERFORMANCE.md](../../docs/PERFORMANCE.md). These bytes are test payloads,
+not Supabase billing measurements.
+
 - `bootstrap.sql` — shims for what GoTrue / storage-api normally provide
   (`auth.jwt()`, `auth.uid()` from PostgREST's claims, storage columns). It does
   not touch any project table or policy.

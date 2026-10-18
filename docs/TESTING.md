@@ -80,6 +80,14 @@ retains these artifacts for seven days.
 
 ## Remaining priorities
 
+The initial performance harness is documented in [PERFORMANCE.md](PERFORMANCE.md):
+repeated real-browser screen timings and deterministic sync/audio HTTP budgets.
+These are separate from coverage percentages. Timing regression thresholds and
+production account-usage forecasts remain planned.
+The [first baseline](PERFORMANCE_BASELINE.md) records 16 passing browser cases
+(240 timing observations), 8 usage/summary unit tests and 12 Postgres tests.
+These are scoped follow-up checks, not a rerun of the full coverage suite above.
+
 1. **Sync recovery and audio transfer.** `sync/engine.ts` has 34.24% line
    coverage and `audioSync.ts` 5.96%. Queue/conflict and real-RLS tests already
    provide useful protection, but do not establish browser behavior across token

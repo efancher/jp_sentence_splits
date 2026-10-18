@@ -1,0 +1,633 @@
+{
+  "generatedAt": "2026-10-18T21:47:00.951Z",
+  "revision": "9e2f096+performance-worktree",
+  "status": "passed",
+  "timingGate": false,
+  "failures": [],
+  "samples": [
+    {
+      "screen": "Home",
+      "library": "small",
+      "project": "chromium-desktop",
+      "browserVersion": "149.0.7827.55",
+      "latencyMs": 0,
+      "fixture": {
+        "books": 2,
+        "sentencesPerBook": 100,
+        "chapterSize": 50,
+        "sentences": 200,
+        "reviews": 1000,
+        "seedCommitMs": 206.0999994277954
+      },
+      "timings": {
+        "document": [
+          1035.5,
+          1020.0999994277954,
+          959,
+          939.3000001907349,
+          1004.8000001907349
+        ],
+        "warm": [
+          82.59999942779541,
+          87.59999942779541,
+          87.09999942779541,
+          71,
+          63.10000038146973
+        ],
+        "offline": [
+          82,
+          105,
+          79.5,
+          98.89999961853027,
+          91.5
+        ]
+      },
+      "externalRequests": 0
+    },
+    {
+      "screen": "Books",
+      "library": "small",
+      "project": "chromium-desktop",
+      "browserVersion": "149.0.7827.55",
+      "latencyMs": 0,
+      "fixture": {
+        "books": 2,
+        "sentencesPerBook": 100,
+        "chapterSize": 50,
+        "sentences": 200,
+        "reviews": 1000,
+        "seedCommitMs": 178.19999980926514
+      },
+      "timings": {
+        "document": [
+          1025.6999998092651,
+          975.6999998092651,
+          978.5,
+          885.6999998092651,
+          1020.9000005722046
+        ],
+        "warm": [
+          54.29999923706055,
+          42.59999942779541,
+          44.60000038146973,
+          44.80000019073486,
+          48.29999923706055
+        ],
+        "offline": [
+          30.199999809265137,
+          50.5,
+          49.59999942779541,
+          45.19999980926514,
+          46.79999923706055
+        ]
+      },
+      "externalRequests": 0
+    },
+    {
+      "screen": "Reader",
+      "library": "small",
+      "project": "chromium-desktop",
+      "browserVersion": "149.0.7827.55",
+      "latencyMs": 0,
+      "fixture": {
+        "books": 2,
+        "sentencesPerBook": 100,
+        "chapterSize": 50,
+        "sentences": 200,
+        "reviews": 1000,
+        "seedCommitMs": 229.80000019073486
+      },
+      "timings": {
+        "document": [
+          1022,
+          1029.6999998092651,
+          1082.8000001907349,
+          951.6999998092651,
+          1066.1000003814697
+        ],
+        "warm": [
+          80.80000019073486,
+          82.40000057220459,
+          71.69999980926514,
+          82.79999923706055,
+          111.30000019073486
+        ],
+        "offline": [
+          102.10000038146973,
+          48,
+          91.29999923706055,
+          79.89999961853027,
+          66
+        ]
+      },
+      "externalRequests": 0
+    },
+    {
+      "screen": "Review",
+      "library": "small",
+      "project": "chromium-desktop",
+      "browserVersion": "149.0.7827.55",
+      "latencyMs": 0,
+      "fixture": {
+        "books": 2,
+        "sentencesPerBook": 100,
+        "chapterSize": 50,
+        "sentences": 200,
+        "reviews": 1000,
+        "seedCommitMs": 191.89999961853027
+      },
+      "timings": {
+        "document": [
+          1049.3999996185303,
+          1067.4000005722046,
+          929.8000001907349,
+          994.5,
+          951.6000003814697
+        ],
+        "warm": [
+          326.0999994277954,
+          327.80000019073486,
+          329.3999996185303,
+          208.5999994277954,
+          242.39999961853027
+        ],
+        "offline": [
+          330.3999996185303,
+          334.1000003814697,
+          361.4000005722046,
+          211,
+          227.4000005722046
+        ]
+      },
+      "externalRequests": 0
+    },
+    {
+      "screen": "Home",
+      "library": "large",
+      "project": "chromium-desktop",
+      "browserVersion": "149.0.7827.55",
+      "latencyMs": 0,
+      "fixture": {
+        "books": 20,
+        "sentencesPerBook": 200,
+        "chapterSize": 200,
+        "sentences": 4000,
+        "reviews": 20000,
+        "seedCommitMs": 41877.10000038147
+      },
+      "timings": {
+        "document": [
+          1132.6000003814697,
+          1009.5,
+          1030.3000001907349,
+          1071.3000001907349,
+          1033.1999998092651
+        ],
+        "warm": [
+          899.5999994277954,
+          940,
+          962.2999992370605,
+          885.8999996185303,
+          911.6000003814697
+        ],
+        "offline": [
+          892.8000001907349,
+          900.5,
+          857.8999996185303,
+          937.6999998092651,
+          906.8999996185303
+        ]
+      },
+      "externalRequests": 0
+    },
+    {
+      "screen": "Books",
+      "library": "large",
+      "project": "chromium-desktop",
+      "browserVersion": "149.0.7827.55",
+      "latencyMs": 0,
+      "fixture": {
+        "books": 20,
+        "sentencesPerBook": 200,
+        "chapterSize": 200,
+        "sentences": 4000,
+        "reviews": 20000,
+        "seedCommitMs": 43255.300000190735
+      },
+      "timings": {
+        "document": [
+          1114.4000005722046,
+          1014.3000001907349,
+          993.6999998092651,
+          943.7999992370605,
+          1030.1999998092651
+        ],
+        "warm": [
+          99.89999961853027,
+          66.30000019073486,
+          71.59999942779541,
+          94.69999980926514,
+          88.40000057220459
+        ],
+        "offline": [
+          65.10000038146973,
+          83.59999942779541,
+          70.19999980926514,
+          87.70000076293945,
+          74.80000019073486
+        ]
+      },
+      "externalRequests": 0
+    },
+    {
+      "screen": "Reader",
+      "library": "large",
+      "project": "chromium-desktop",
+      "browserVersion": "149.0.7827.55",
+      "latencyMs": 0,
+      "fixture": {
+        "books": 20,
+        "sentencesPerBook": 200,
+        "chapterSize": 200,
+        "sentences": 4000,
+        "reviews": 20000,
+        "seedCommitMs": 42282.89999961853
+      },
+      "timings": {
+        "document": [
+          1210.4000005722046,
+          1044.2000007629395,
+          969.8000001907349,
+          1071.2000007629395,
+          986.1999998092651
+        ],
+        "warm": [
+          118.20000076293945,
+          95.09999942779541,
+          136.80000019073486,
+          85.59999942779541,
+          98.89999961853027
+        ],
+        "offline": [
+          111.60000038146973,
+          123.5,
+          128,
+          114,
+          72.80000019073486
+        ]
+      },
+      "externalRequests": 0
+    },
+    {
+      "screen": "Review",
+      "library": "large",
+      "project": "chromium-desktop",
+      "browserVersion": "149.0.7827.55",
+      "latencyMs": 0,
+      "fixture": {
+        "books": 20,
+        "sentencesPerBook": 200,
+        "chapterSize": 200,
+        "sentences": 4000,
+        "reviews": 20000,
+        "seedCommitMs": 42848.199999809265
+      },
+      "timings": {
+        "document": [
+          4269.199999809265,
+          4045,
+          4046.300000190735,
+          4580.099999427795,
+          4431.200000762939
+        ],
+        "warm": [
+          3903.3999996185303,
+          3381,
+          3891.3999996185303,
+          3368.0999994277954,
+          3936.2000007629395
+        ],
+        "offline": [
+          3363.5,
+          3348.800000190735,
+          3380.5999994277954,
+          3864.6000003814697,
+          3944.1000003814697
+        ]
+      },
+      "externalRequests": 0
+    },
+    {
+      "screen": "Home",
+      "library": "small",
+      "project": "webkit-phone",
+      "browserVersion": "26.5",
+      "latencyMs": 0,
+      "fixture": {
+        "books": 2,
+        "sentencesPerBook": 100,
+        "chapterSize": 50,
+        "sentences": 200,
+        "reviews": 1000,
+        "seedCommitMs": 492
+      },
+      "timings": {
+        "document": [
+          1720,
+          1010,
+          1802,
+          1261,
+          1675
+        ],
+        "warm": [
+          545,
+          400,
+          418,
+          659,
+          373
+        ],
+        "offline": [
+          524,
+          466,
+          553,
+          615,
+          396
+        ]
+      },
+      "externalRequests": 0
+    },
+    {
+      "screen": "Books",
+      "library": "small",
+      "project": "webkit-phone",
+      "browserVersion": "26.5",
+      "latencyMs": 0,
+      "fixture": {
+        "books": 2,
+        "sentencesPerBook": 100,
+        "chapterSize": 50,
+        "sentences": 200,
+        "reviews": 1000,
+        "seedCommitMs": 368
+      },
+      "timings": {
+        "document": [
+          1303,
+          822,
+          679,
+          910,
+          637
+        ],
+        "warm": [
+          233,
+          256,
+          238,
+          218,
+          190
+        ],
+        "offline": [
+          213,
+          240,
+          247,
+          215,
+          239
+        ]
+      },
+      "externalRequests": 0
+    },
+    {
+      "screen": "Reader",
+      "library": "small",
+      "project": "webkit-phone",
+      "browserVersion": "26.5",
+      "latencyMs": 0,
+      "fixture": {
+        "books": 2,
+        "sentencesPerBook": 100,
+        "chapterSize": 50,
+        "sentences": 200,
+        "reviews": 1000,
+        "seedCommitMs": 401
+      },
+      "timings": {
+        "document": [
+          1153,
+          788,
+          780,
+          688,
+          626
+        ],
+        "warm": [
+          219,
+          324,
+          208,
+          317,
+          185
+        ],
+        "offline": [
+          168,
+          204,
+          267,
+          326,
+          291
+        ]
+      },
+      "externalRequests": 0
+    },
+    {
+      "screen": "Review",
+      "library": "small",
+      "project": "webkit-phone",
+      "browserVersion": "26.5",
+      "latencyMs": 0,
+      "fixture": {
+        "books": 2,
+        "sentencesPerBook": 100,
+        "chapterSize": 50,
+        "sentences": 200,
+        "reviews": 1000,
+        "seedCommitMs": 469
+      },
+      "timings": {
+        "document": [
+          1886,
+          1155,
+          1207,
+          1213,
+          1163
+        ],
+        "warm": [
+          872,
+          859,
+          879,
+          875,
+          882
+        ],
+        "offline": [
+          870,
+          904,
+          864,
+          860,
+          859
+        ]
+      },
+      "externalRequests": 0
+    },
+    {
+      "screen": "Home",
+      "library": "large",
+      "project": "webkit-phone",
+      "browserVersion": "26.5",
+      "latencyMs": 0,
+      "fixture": {
+        "books": 20,
+        "sentencesPerBook": 200,
+        "chapterSize": 200,
+        "sentences": 4000,
+        "reviews": 20000,
+        "seedCommitMs": 9483
+      },
+      "timings": {
+        "document": [
+          2351,
+          2197,
+          2171,
+          2232,
+          2644
+        ],
+        "warm": [
+          1422,
+          1722,
+          1545,
+          1932,
+          1653
+        ],
+        "offline": [
+          1451,
+          1640,
+          1947,
+          1580,
+          1466
+        ]
+      },
+      "externalRequests": 0
+    },
+    {
+      "screen": "Books",
+      "library": "large",
+      "project": "webkit-phone",
+      "browserVersion": "26.5",
+      "latencyMs": 0,
+      "fixture": {
+        "books": 20,
+        "sentencesPerBook": 200,
+        "chapterSize": 200,
+        "sentences": 4000,
+        "reviews": 20000,
+        "seedCommitMs": 9541
+      },
+      "timings": {
+        "document": [
+          1427,
+          1128,
+          1161,
+          1518,
+          1150
+        ],
+        "warm": [
+          237,
+          234,
+          220,
+          358,
+          360
+        ],
+        "offline": [
+          249,
+          312,
+          290,
+          222,
+          359
+        ]
+      },
+      "externalRequests": 0
+    },
+    {
+      "screen": "Reader",
+      "library": "large",
+      "project": "webkit-phone",
+      "browserVersion": "26.5",
+      "latencyMs": 0,
+      "fixture": {
+        "books": 20,
+        "sentencesPerBook": 200,
+        "chapterSize": 200,
+        "sentences": 4000,
+        "reviews": 20000,
+        "seedCommitMs": 9120
+      },
+      "timings": {
+        "document": [
+          1612,
+          605,
+          737,
+          696,
+          873
+        ],
+        "warm": [
+          198,
+          323,
+          377,
+          260,
+          309
+        ],
+        "offline": [
+          283,
+          325,
+          316,
+          206,
+          282
+        ]
+      },
+      "externalRequests": 0
+    },
+    {
+      "screen": "Review",
+      "library": "large",
+      "project": "webkit-phone",
+      "browserVersion": "26.5",
+      "latencyMs": 0,
+      "fixture": {
+        "books": 20,
+        "sentencesPerBook": 200,
+        "chapterSize": 200,
+        "sentences": 4000,
+        "reviews": 20000,
+        "seedCommitMs": 8833
+      },
+      "timings": {
+        "document": [
+          8851,
+          8687,
+          7888,
+          8656,
+          8261
+        ],
+        "warm": [
+          7188,
+          9490,
+          10059,
+          7953,
+          7962
+        ],
+        "offline": [
+          6473,
+          8472,
+          7451,
+          7964,
+          7024
+        ]
+      },
+      "externalRequests": 0
+    }
+  ]
+}

@@ -1,0 +1,65 @@
+[
+  {
+    "scenario": "sync-first-pull-120-books",
+    "unit": "decoded HTTP body bytes (not billed egress)",
+    "requests": 4,
+    "requestBodyBytes": 0,
+    "responseBodyBytes": 72040
+  },
+  {
+    "scenario": "sync-unchanged",
+    "unit": "decoded HTTP body bytes (not billed egress)",
+    "requests": 1,
+    "requestBodyBytes": 0,
+    "responseBodyBytes": 2
+  },
+  {
+    "scenario": "sync-one-remote-edit",
+    "unit": "decoded HTTP body bytes (not billed egress)",
+    "requests": 2,
+    "requestBodyBytes": 0,
+    "responseBodyBytes": 602
+  },
+  {
+    "scenario": "sync-reconnect-120-books",
+    "unit": "decoded HTTP body bytes (not billed egress)",
+    "requests": 4,
+    "requestBodyBytes": 0,
+    "responseBodyBytes": 72028
+  },
+  {
+    "scenario": "sync-import-120-books",
+    "unit": "decoded HTTP body bytes (not billed egress)",
+    "requests": 8,
+    "requestBodyBytes": 43703,
+    "responseBodyBytes": 21384
+  },
+  {
+    "scenario": "audio-restore-four-clips",
+    "unit": "decoded HTTP body bytes (not billed egress)",
+    "requests": 5,
+    "requestBodyBytes": 0,
+    "responseBodyBytes": 131353
+  },
+  {
+    "scenario": "audio-warm-cache",
+    "unit": "decoded HTTP body bytes (not billed egress)",
+    "requests": 0,
+    "requestBodyBytes": 0,
+    "responseBodyBytes": 0
+  },
+  {
+    "scenario": "audio-retry-one-clip",
+    "unit": "decoded HTTP body bytes (not billed egress)",
+    "requests": 2,
+    "requestBodyBytes": 0,
+    "responseBodyBytes": 32839
+  },
+  {
+    "scenario": "source-episode-two-reads",
+    "unit": "decoded HTTP body bytes (not billed egress)",
+    "requests": 1,
+    "requestBodyBytes": 0,
+    "responseBodyBytes": 32768
+  }
+]

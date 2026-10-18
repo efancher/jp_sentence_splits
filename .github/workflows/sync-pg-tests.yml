@@ -13,6 +13,8 @@ on:
       - 'src/domain/**'
       - 'supabase/migrations/**'
       - 'tests/pgIntegration/**'
+      - 'tests/helpers/usage*.ts'
+      - 'fixtures/performance/**'
       - 'scripts/pg-test.sh'
       - '.github/workflows/sync-pg-tests.yml'
       - 'package-lock.json'
@@ -24,6 +26,8 @@ on:
       - 'src/domain/**'
       - 'supabase/migrations/**'
       - 'tests/pgIntegration/**'
+      - 'tests/helpers/usage*.ts'
+      - 'fixtures/performance/**'
       - 'scripts/pg-test.sh'
       - '.github/workflows/sync-pg-tests.yml'
       - 'package-lock.json'
@@ -44,3 +48,13 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run test:pg
+        env:
+          PERF_USAGE_REPORT_DIR: test-results/performance/usage
+      - name: Retain sync usage measurements
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sync-usage-baseline
+          path: test-results/performance/usage/
+          retention-days: 14
+          if-no-files-found: warn

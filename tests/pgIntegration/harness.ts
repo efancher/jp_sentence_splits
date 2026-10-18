@@ -10,6 +10,7 @@ import { createHmac } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 
 import { createClient } from '@supabase/supabase-js';
+import { usageMeter, type Usage } from '../helpers/usageMeter';
 
 export const PG_TESTS_ENABLED = Boolean(process.env.SYNC_PG_TEST);
 
@@ -59,28 +60,31 @@ export interface PgClient {
   client: unknown;
   /** Number of HTTP requests made so far. */
   requestCount: () => number;
+  usage: () => Usage;
+  resetUsage: () => void;
 }
 
 /** A supabase-js client acting as `userId`, talking to PostgREST with a real JWT. */
 export function pgClientFor(userId: string): PgClient {
   const token = signJwt(userId);
-  let requests = 0;
+  const meter = usageMeter(fetch);
   const real = createClient(`${REST_URL}/rest/v1`, 'anon-key-unused', {
     auth: { persistSession: false, autoRefreshToken: false },
     global: {
       fetch: (input, init = {}) => {
-        requests += 1;
         if (process.env.SYNC_PG_DEBUG) console.log('[req]', init.method ?? 'GET', String(input instanceof Request ? input.url : input).slice(0, 120));
         // PostgREST serves at the root; supabase-js appends /rest/v1.
         const url = String(input instanceof Request ? input.url : input).replace('/rest/v1/rest/v1', '');
         const headers = new Headers(init.headers);
         headers.set('Authorization', `Bearer ${token}`);
-        return fetch(url, { ...init, headers });
+        return meter.fetch(url, { ...init, headers });
       },
     },
   });
   return {
-    requestCount: () => requests,
+    requestCount: () => meter.totals().requests,
+    usage: () => meter.totals(),
+    resetUsage: meter.reset,
     client: {
       from: (table: string) => real.from(table),
       auth: { getSession: async () => ({ data: { session: { user: { id: userId } } } }) },
