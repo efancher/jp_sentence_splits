@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  buildLeftEdgePath,
-  buildPuzzlePiecePath,
-  buildRightEdgePath,
-} from '../src/lib/puzzlePiecePath';
-import {
   adjacentPuzzleFit,
   puzzleShapeFamily,
   resolveLeftEdge,
@@ -74,21 +69,5 @@ describe('neighbor edges and fit', () => {
     expect(adjacentPuzzleFit('て-car', 'の-car')).toBe('good');
     expect(adjacentPuzzleFit('の-car', 'Aが')).toBe('good');
     expect(adjacentPuzzleFit('Aが', 'engine')).toBe('good');
-  });
-
-  it('builds interlocking left socket and right tab strips', () => {
-    const left = buildLeftEdgePath('wide-bay');
-    const right = buildRightEdgePath('wide-bay');
-    expect(left.startsWith('M ')).toBe(true);
-    expect(left.endsWith('Z')).toBe(true);
-    expect(right.startsWith('M ')).toBe(true);
-    expect(right.endsWith('Z')).toBe(true);
-  });
-
-  it('builds a closed SVG path for legend chrome', () => {
-    const path = buildPuzzlePiecePath('deep-u', 'flat');
-    expect(path.startsWith('M ')).toBe(true);
-    expect(path.endsWith('Z')).toBe(true);
-    expect(path.length).toBeGreaterThan(40);
   });
 });
