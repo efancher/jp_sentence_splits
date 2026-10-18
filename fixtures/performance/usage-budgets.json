@@ -4,6 +4,8 @@
   "sync-one-remote-edit": { "requests": 2, "requestBodyBytes": 0, "responseBodyBytes": 1024 },
   "sync-reconnect-120-books": { "requests": 4, "requestBodyBytes": 0, "responseBodyBytes": 80000 },
   "sync-import-120-books": { "requests": 8, "requestBodyBytes": 50000, "responseBodyBytes": 25000 },
+  "sync-restore-mixed-161-rows": { "requests": 6, "requestBodyBytes": 0, "responseBodyBytes": 125000 },
+  "sync-mixed-one-remote-edit": { "requests": 2, "requestBodyBytes": 0, "responseBodyBytes": 1024 },
   "audio-restore-four-clips": { "requests": 5, "requestBodyBytes": 0, "responseBodyBytes": 131584 },
   "audio-warm-cache": { "requests": 0, "requestBodyBytes": 0, "responseBodyBytes": 0 },
   "audio-retry-one-clip": { "requests": 2, "requestBodyBytes": 0, "responseBodyBytes": 32896 },

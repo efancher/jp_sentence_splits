@@ -71,6 +71,10 @@ CLI smoke checks confirmed an example overrun and an incomplete blank template
 (`--check` exits 2). Next: fill the template with actual dashboard figures;
 broader import/restore workloads and calibrated UI timing gates remain open.
 
+Added a two-device mixed-entity Postgres usage scenario (2026-10-18): restoring
+161 word/kanji/link rows takes 6 requests; see [PERFORMANCE.md](PERFORMANCE.md).
+Timing gates still need repeated comparable CI runs before limits are set.
+
 Review now reads meaning-choice and missed-reading history for the active card
 only, through existing indexes. The question waits for a fixed history snapshot
 and offers a retry on read failure. This removes the two library-wide history

@@ -120,6 +120,9 @@ Real Postgres/PostgREST tests apply production migrations and authenticated RLS:
 - Unchanged sync: one request and the two-byte empty JSON array.
 - One remote edit: two requests, preserving the edited local title.
 - Reconnect backlog: 120 remote edits while the device was not syncing.
+- Mixed-entity restore: a second device with an empty database pulls 40 words,
+  41 kanji and 80 links (161 rows) pushed from another device in six requests,
+  then idles in one request and pulls one remote edit in two.
 - Bulk push: 120 complete book records, followed by a sync with no repeated
   payload. This isolates the batch protocol; it is not a full mining import.
 
@@ -148,8 +151,9 @@ Remaining roadmap work:
 
 - Calibrate timing regression limits with repeated runs on a stable runner;
   add IndexedDB operation counts/profiling to explain slow screens.
-- Add complete import/commit and full-cloud-restore scenarios, mixed entities,
-  conflict/token recovery, delayed downloads and cancellation. The existing
+- Add complete import/commit scenarios, restore of sentences/study items/audio
+  metadata (only words, kanji and links are covered so far), conflict/token
+  recovery, delayed downloads and cancellation. The existing
   timeout races do not cancel the underlying audio request; that behavior is
   not fixed or covered by these immediate-error retry checks.
 - Benchmark server query plans at realistic sizes under the authenticated role.
