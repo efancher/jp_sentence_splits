@@ -7,9 +7,14 @@ async function seedChapterReview(page: Page, dueActivities: string[]) {
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
       });
-      const stores = ['books', 'sentences', 'bookSentences', 'analyses', 'vocabularyItems', 'sentenceVocabulary', 'studyItems'];
+      const stores = ['books', 'sentences', 'bookSentences', 'analyses', 'vocabularyItems', 'sentenceVocabulary', 'studyItems', 'settings'];
       const tx = db.transaction(stores, 'readwrite');
       const now = new Date().toISOString();
+      // These cases exercise the optional word-card flow, which the default
+      // sentence-led mode deliberately pauses.
+      const settings = tx.objectStore('settings');
+      const currentSettings = settings.get('settings');
+      currentSettings.onsuccess = () => settings.put({ ...currentSettings.result, id: 'settings', sentenceLedFlow: false });
       const future = new Date(Date.now() + 86400000).toISOString();
       const fsrs = (due: string) => ({ due, stability: 1, difficulty: 1, elapsedDays: 0,
         scheduledDays: 1, learningSteps: 0, reps: 1, lapses: 0, state: 'review' });

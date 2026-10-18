@@ -1,17 +1,32 @@
 name: Sync tests (real Postgres)
 
 # Runs tests/pgIntegration against the project's real migrations + RLS. Separate
-# from Deploy on purpose: it pulls ~1 GB of images, so it only runs when sync or
-# schema code changes (or on demand) and never gates a deploy.
+# from Deploy: it pulls ~1 GB of images, so relevant pushes/pull requests and
+# manual dispatch run it independently of deployment.
 on:
   push:
     branches: [main]
     paths:
       - 'src/sync/**'
       - 'src/db/repository.ts'
+      - 'src/db/database.ts'
+      - 'src/domain/**'
       - 'supabase/migrations/**'
       - 'tests/pgIntegration/**'
       - 'scripts/pg-test.sh'
+      - '.github/workflows/sync-pg-tests.yml'
+      - 'package-lock.json'
+  pull_request:
+    paths:
+      - 'src/sync/**'
+      - 'src/db/repository.ts'
+      - 'src/db/database.ts'
+      - 'src/domain/**'
+      - 'supabase/migrations/**'
+      - 'tests/pgIntegration/**'
+      - 'scripts/pg-test.sh'
+      - '.github/workflows/sync-pg-tests.yml'
+      - 'package-lock.json'
   workflow_dispatch:
 
 permissions:

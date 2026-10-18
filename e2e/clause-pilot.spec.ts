@@ -65,9 +65,10 @@ for (const width of [390, 1280]) {
     await expect(page.getByText('Reviewed — no upgraded question yet')).toBeVisible();
     await page.goto('/#/books/book/learn/s-3');
     await preview.locator('summary').click();
-    await preview.getByRole('button', { name: 'とても興味深いです', exact: true }).click();
+    await expect(preview.getByText('Which word marks the highlighted clause as the reason for what follows?')).toBeVisible();
+    await preview.getByRole('button', { name: 'あるので', exact: true }).click();
     await preview.getByRole('button', { name: 'Show explanation' }).click();
-    await expect(preview.getByText('Draft answer:', { exact: false })).toContainText('とても興味深いです');
+    await expect(preview.getByText('Draft answer:', { exact: false })).toContainText('あるので');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     expect(await counts()).toEqual(before);
   });

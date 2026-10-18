@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { resetDbForTests } from '../src/db/database';
-import { commitSeriesEpisodeImport, getBookWithExtras, getDb, saveContextWalkthroughsByChapter } from '../src/db/repository';
+import { commitSeriesEpisodeImport, getBookWithExtras, saveContextWalkthroughsByChapter } from '../src/db/repository';
 import {
   formatBookWalkthroughPrompt,
   parseBookWalkthroughReply,

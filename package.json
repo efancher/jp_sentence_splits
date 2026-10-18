@@ -11,6 +11,7 @@
     "lint": "oxlint",
     "typecheck": "tsc -b --pretty false",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "test:pg": "bash scripts/pg-test.sh",
     "test:e2e": "playwright test",

@@ -1757,7 +1757,7 @@ describe('ReviewPage', () => {
     await suppressAudioCards('sent-1', 'sv-hana');
 
     // はな [1] → atamadaka, i.e. the drop is right after mora 1 (は).
-    const { label, correctPosition, halfLabel } = expectedPitchAccentDrop('はな', 1);
+    const { label, correctPosition } = expectedPitchAccentDrop('はな', 1);
 
     const user = userEvent.setup();
     renderReviewPage('/books/book-1/review', 'books/:bookId/review');

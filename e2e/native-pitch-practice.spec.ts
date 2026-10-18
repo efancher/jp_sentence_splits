@@ -5,12 +5,15 @@ import { PITCH_TRACK_VERSION } from '../src/lib/pitch';
 // WebKit's ephemeral contexts cannot persist Blob data in IndexedDB. Use a
 // fresh disk-backed profile to exercise the same audio storage as the app.
 const test = base.extend({
-  context: async ({ playwright, browserName, baseURL, viewport, isMobile, deviceScaleFactor, hasTouch, userAgent }, use, testInfo) => {
+  context: async ({ playwright, browserName, baseURL, viewport, isMobile, deviceScaleFactor, hasTouch, userAgent }, provideContext, testInfo) => {
     const context = await playwright[browserName].launchPersistentContext(testInfo.outputPath('browser-profile'), {
       baseURL, viewport, isMobile, deviceScaleFactor, hasTouch, userAgent,
     });
-    await use(context);
-    await context.close();
+    try {
+      await provideContext(context);
+    } finally {
+      await context.close();
+    }
   },
 });
 

@@ -47,6 +47,9 @@ export function SignedOutGate({ children }: { children: ReactNode }) {
             .then((result) => {
               if (result.error) setError(result.error);
             })
+            .catch((reason: unknown) => {
+              setError(reason instanceof Error ? reason.message : 'Sign-in failed. Please try again.');
+            })
             .finally(() => setBusy(false));
         }}
       >

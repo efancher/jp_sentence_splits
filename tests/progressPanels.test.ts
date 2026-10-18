@@ -17,7 +17,6 @@ import {
   getSkillCoverage,
   getStepUsefulness,
   recordReview,
-  setBookSentenceStatus,
 } from '../src/db/repository';
 import type { PlannerSession, Sentence, VocabularySelection } from '../src/domain/types';
 import { createId } from '../src/lib/ids';

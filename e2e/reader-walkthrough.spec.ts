@@ -56,7 +56,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 
     const panel = page.getByRole('region', { name: 'Sentence walkthrough' });
     await expect(panel).toContainText('Automatic draft');
     await expect(panel).toContainText('Step 1 of');
-    await expect(panel).toContainText('not assessed yet');
+    await expect(panel.getByLabel('Structure check')).toContainText('Worked example');
     await expect(panel).toContainText('Worth noticing here');
     if (audioSeeded) {
       await expect(panel.getByRole('button', { name: 'Adjust' })).toBeVisible();
@@ -66,6 +66,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.screenshot({ path: test.info().outputPath('walkthrough.png'), fullPage: true });
 
+    await panel.getByRole('button', { name: 'Skip the check, just walk through' }).click();
     while (await panel.getByRole('button', { name: /^(Continue|Finish)$/ }).isEnabled()) {
       await panel.getByRole('button', { name: /^(Continue|Finish)$/ }).click();
     }
@@ -78,7 +79,8 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 
     await page.getByRole('button', { name: 'Walk through' }).first().click();
     await expect(page.getByRole('region', { name: 'Sentence walkthrough' }).getByLabel(/Can.t speak right now/)).toBeChecked();
 
-    // Walking through wrote nothing that could schedule or grade.
+    // Completion introduces one sentence card in the default flow, but does
+    // not grade it or seed word/grammar drills.
     const counts = await page.evaluate(async () => {
       const db = await new Promise<IDBDatabase>((resolve, reject) => {
         const request = indexedDB.open('satori-glossbook');
@@ -89,11 +91,17 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 
         const request = db.transaction(store).objectStore(store).count();
         request.onsuccess = () => resolve(request.result);
       });
-      const result = { studyItems: await count('studyItems'), reviews: await count('reviews') };
+      const items = await new Promise<Array<{ activityType: string; subjectId: string }>>((resolve) => {
+        const request = db.transaction('studyItems').objectStore('studyItems').getAll();
+        request.onsuccess = () => resolve(request.result);
+      });
+      const result = { items, reviews: await count('reviews') };
       db.close();
       return result;
     });
-    expect(counts).toEqual({ studyItems: 0, reviews: 0 });
+    expect(counts.reviews).toBe(0);
+    expect(counts.items).toHaveLength(1);
+    expect(counts.items[0]).toMatchObject({ subjectId: 's-0', activityType: 'reading_in_context' });
 
     // A sentence without native audio says so instead of offering a fallback voice.
     await page.getByRole('button', { name: 'Back to reading' }).click();
@@ -145,6 +153,6 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 
     await expect(page.getByRole('region', { name: 'Sentence walkthrough' })).toContainText('Step 1 of');
     await page.getByLabel('Layout').selectOption('original');
     await expect(page.getByRole('toolbar', { name: 'Sentence tools' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Walk through' })).toHaveCount(3);
+    await expect(page.getByRole('button', { name: 'Walk through', exact: true })).toHaveCount(3);
   });
 }
