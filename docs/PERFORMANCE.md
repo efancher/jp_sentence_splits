@@ -174,6 +174,17 @@ Remaining roadmap work:
   (3) moving clips to Cloudflare R2 or similar only if still needed (would
   change `src/sync/audioSync.ts`, uploads and per-user access; not scoped).
   Nothing has been changed or deleted.
+  **Trial result (2026-10-19, 20 clips sampled across the library, local files
+  only; originals are stereo 48 kHz at about 197 kbps):** re-encoded sizes
+  were 34% of the original at 64k (stereo or mono), 42% at mono 80k and 51% at
+  stereo 96k. Decoded start offset was 0 ms for every variant. Using the app's
+  real `extractPitch`, mono 64k gave median clip mean pitch difference 0.02
+  semitones (worst clip 0.16 st, at most 1.2% of frames off by more than 3 st);
+  stereo 64k was worse (worst clip 0.76 st, 6.3% of frames off) and stereo 96k
+  and mono 80k both stayed under 0.13 st. Recommended: mono AAC at 64-80k (about
+  450 MB saved). Not yet checked: forced alignment on re-encoded clips, listening
+  by ear, other devices' cached copies, and the 4 MB of wav clips. The full run
+  would overwrite about 2,800 stored files and needs your explicit go-ahead.
   Extend workload estimates for study, imports, cache losses and multiple
   devices, avoiding double counting observed activity. Include other
   consumers/projects sharing the organization. Reconcile independently metered
