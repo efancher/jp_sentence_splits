@@ -2,9 +2,30 @@
 
 Proposal updated 2026-10-19. The user has created an R2 bucket and requires
 storage monitoring and overage protection as part of the migration. The account
-has not been connected to this agent, and no R2 integration, monitor or upload
-limit is implemented or deployed. Confirm the account and bucket identifiers
+has not been connected to this agent. Confirm the account and bucket identifiers
 when connecting; do not assume an empty bucket or zero account usage.
+
+**Decision (2026-10-19): a Cloudflare Worker gateway, not presigned URLs.** A
+Worker bound to the bucket verifies the Supabase login and proxies every read,
+write and delete, so size checks and the ledger limits below apply to each
+request. Workers Free is sufficient for this use.
+
+**Implemented in the repository, behind a flag, not deployed:**
+[the Worker](../cloudflare/r2-gateway/README.md) (auth, owner/book-reader
+rules, type and size checks, Durable Object ledger with atomic reservations,
+Class A/B counters, seeding, emergency switch, admin usage endpoint) and the
+client adapter `src/sync/audioStorage.ts` used by `src/sync/audioSync.ts`,
+enabled only when `VITE_R2_GATEWAY_URL` is set. With the flag set, uploads go to
+R2 only; reads try R2 first and fall back to Supabase only on 404 or an
+unreachable/5xx gateway, never on a refusal. Covered by unit tests with fakes
+(`tests/r2Gateway.test.ts`, `tests/audioStorage.test.ts`); no real R2, Durable
+Object or deployed-Worker behavior has been exercised.
+
+**Still open:** deployment and secrets; the migration copy script with
+verification; moving the maintenance scripts and the source-episode and drill-take
+paths onto the adapter; the Cloudflare analytics monitor and the settings
+display; the budget alert; and the acceptance tests listed below that need a
+real Worker.
 
 ## Scope and migration
 

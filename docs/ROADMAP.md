@@ -99,14 +99,13 @@ Unfinished work and optional extensions; completed behavior is in `AI_OVERVIEW.m
   mostly `reference_audio` clips at roughly 192 kbps AAC. Lower-bitrate trials
   remain an option; see PERFORMANCE.md "Storage headroom". The user has created
   an R2 bucket and requires usage monitoring and overage protection alongside
-  the migration. Integration and controls are not implemented. The
+  the migration. The Worker gateway and a flagged client adapter are written and
+  unit-tested but not deployed (see the plan's status); the monitor, copy script
+  and script migration are not. The
   [R2 plan](CLOUDFLARE_R2_PLAN.md) covers account-wide storage/operation monitoring,
   proposed server-enforced thresholds and the limits of provider alerts and
-  reusable signed URLs. Start with reference-audio clips. Needs scoped storage
-  credentials held as server secrets and read-only analytics access; a server endpoint
-  that checks the login and issues short-lived signed upload/download URLs to
-  replace the owner/book-member Storage RLS; a shared storage helper for the
-  ~14 maintenance scripts; changes to `src/sync/audioSync.ts`,
+  reusable signed URLs. Start with reference-audio clips. Needs read-only analytics
+  access; a shared storage helper for the ~14 maintenance scripts; changes to
   `src/lib/sourceEpisodeCache.ts` and `src/sync/drillTakeRemote.ts`; and copying
   about 2,800 existing clips, with a read-R2-then-fall-back-to-Supabase period.
   Inventory writers and verify monitoring, admission controls and copied data
