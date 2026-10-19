@@ -3,8 +3,8 @@
 The browser/HTTP suite measures local screen readiness and enforces repeatable
 request/body budgets. A separate [Supabase budget report](SUPABASE_BUDGET.md)
 forecasts configured resources from a dated dashboard snapshot, with a blank
-template and an explicitly synthetic example. A real account snapshot has not
-yet been supplied. UI timing limits remain uncalibrated. Tests need no production
+template and an explicitly synthetic example. A first real snapshot was
+assessed on 2026-10-19 (all resources OK; storage is the one to watch). UI timing limits remain uncalibrated. Tests need no production
 account.
 
 The [2026-10-18 baseline](PERFORMANCE_BASELINE.md) records the first complete
@@ -158,8 +158,9 @@ Remaining roadmap work:
   not fixed or covered by these immediate-error retry checks.
 - Benchmark server query plans at realistic sizes under the authenticated role.
 - Test a genuinely cold offline PWA start and physical-device performance.
-- Populate and review the snapshot-based budget report with actual account
-  usage, plan allowances and reset dates; automatic retrieval remains open.
+- Refresh the snapshot-based budget report each cycle (first populated
+  2026-10-19); automatic retrieval remains open, and storage growth needs
+  investigating before the next cycle.
   Extend workload estimates for study, imports, cache losses and multiple
   devices, avoiding double counting observed activity. Include other
   consumers/projects sharing the organization. Reconcile independently metered

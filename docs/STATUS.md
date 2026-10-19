@@ -61,8 +61,9 @@ large synthetic local libraries; Postgres uses the disposable migration/RLS
 harness. Timings remain report-only. The new snapshot-based
 [Supabase budget report](SUPABASE_BUDGET.md) projects cumulative usage,
 time-weighted storage/disk and database capacity, with headroom/data-quality
-warnings. A blank template is provided; actual account figures are still
-needed, and automatic retrieval is unimplemented. See
+warnings. A first manual snapshot (2026-10-19, Free plan) found every resource
+within allowance; average storage is rising toward its 1 GB allowance.
+Automatic retrieval is unimplemented. See
 [PERFORMANCE.md](PERFORMANCE.md) for scope and reproduction.
 
 Snapshot-report validation (2026-10-18): all 34 usage tests, application and

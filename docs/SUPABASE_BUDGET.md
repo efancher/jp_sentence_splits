@@ -4,8 +4,19 @@
 used/remaining allowance, period-end projections and reserved-headroom warnings.
 It writes no cloud data and makes no network requests. It is a usage forecast
 for the configured resources, not a price estimate or a change to Supabase's
-limits/spend cap. No actual account assessment has been made yet: the user
-requested a template because a current snapshot is not available.
+limits/spend cap.
+
+**First manual assessment (2026-10-19, Free plan, cycle 23 Sep - 23 Oct):** all
+five configured resources were OK. Uncached egress 2.3 of 5 GB (about 2.9 GB
+projected), cached egress 1.2 of 5 GB, function invocations 635 of 500,000,
+database 92 MB of 500 MB (growth assumed 0, no history on the page), and average
+storage 0.51 of 1 GB. Storage is the one to watch: its daily average climbed
+from under 250 MB to about 893 MB over the cycle (the current size, read from a
+chart axis), so the next cycle's average will approach the allowance. Log
+ingestion (1.34 of 1 GB, marked "Upcoming") is outside this tool. Egress daily
+rates and 40 MB/day storage growth are estimates read from charts. The snapshot
+and reports are private and stay in ignored `test-results/`. Re-run with fresh
+figures to refresh; automatic retrieval remains open.
 
 ## Run
 

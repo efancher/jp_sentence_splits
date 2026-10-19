@@ -59,8 +59,9 @@ Unfinished work and optional extensions; completed behavior is in `AI_OVERVIEW.m
   measurements with small/large synthetic libraries in Chromium and WebKit.
   Real-Postgres sync and synthetic-transport audio tests enforce configurable
   request/body-byte ceilings. A [snapshot budget report](SUPABASE_BUDGET.md)
-  now projects usage with configurable headroom; actual account figures and
-  automatic retrieval remain outstanding. Timing gates are unfinished.
+  now projects usage with configurable headroom; a first manual snapshot
+  (2026-10-19) was within allowance, with storage growth to investigate, and
+  automatic retrieval remains outstanding. Timing gates are unfinished.
   The first measured Review bottleneck is addressed by
   loading history per active card; see [the comparison](PERFORMANCE_REVIEW_FOLLOWUP.md).
   Commands, measurement boundaries and follow-ups:

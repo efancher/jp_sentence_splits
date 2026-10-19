@@ -95,8 +95,8 @@ collaborators as editor/viewer).
   synthetic sync/audio request/body-byte budgets (`docs/PERFORMANCE.md`).
   The separate `report:supabase-budget` command forecasts configured resources
   from a dated dashboard snapshot, with missing/stale-data and headroom warnings
-  (`docs/SUPABASE_BUDGET.md`). Actual account inputs and automatic retrieval
-  remain outstanding; UI timings are not gated yet.
+  (`docs/SUPABASE_BUDGET.md`). A first manual snapshot was assessed
+  2026-10-19; automatic retrieval remains outstanding; UI timings are not gated yet.
 - **Hosting/CI**: `.github/workflows/deploy.yml` — on push to `main`, runs
   TypeScript checks, lint and the full unit suite with coverage, then `npm run build:pages`
   and publishes `dist/` to GitHub Pages. Several other workflows
