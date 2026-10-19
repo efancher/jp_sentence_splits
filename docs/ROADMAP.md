@@ -95,7 +95,8 @@ Unfinished work and optional extensions; completed behavior is in `AI_OVERVIEW.m
     real consumption so the tests themselves do not burn the production budget.
 
 - [ ] **Learned practice routing above FSRS.** (2026-10-18 research;
-  implementation not started.) Keep FSRS for review timing; learn which
+  stage 0 evidence audit run 2026-10-19 — thin data, see the research note;
+  no routing implemented.) Keep FSRS for review timing; learn which
   exercise, easier variant, or helper improves later independent performance.
   Start with the sentence-led flow and existing review/gloss evidence.
   First audit and connect attempt → help → delayed check data, then introduce

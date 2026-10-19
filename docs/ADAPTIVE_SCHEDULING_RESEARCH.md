@@ -142,7 +142,8 @@ should retain source provenance and avoid counting one interaction twice.
 
 ## Staged implementation and acceptance criteria
 
-- [ ] **0. Audit actual evidence and establish the baseline.** Produce a read-only
+- [~] **0. Audit actual evidence and establish the baseline.** (Report tool and first
+  findings below; sync/UI-path verification and reference-reliability review remain.) Produce a read-only
   report of counts, missing fields, join coverage, reference reliability, helper
   usage, and delayed/fresh-example opportunities by active task family. Separate
   historical legacy drills from current sentence-led activity. Verify sync and
@@ -180,6 +181,41 @@ Implement slices with focused tests for event semantics, joins, sync, unchanged
 rating authority, and eligible candidate coverage. Browser-test the actual
 attempt/help/revisit flow when UI changes begin. A documentation-only research
 entry does not require application tests or migrations.
+
+## Stage 0 findings (2026-10-19)
+
+Tool: `npm run diagnose:routing-evidence` (`scripts/diagnose-routing-evidence.ts`,
+pure logic in `scripts/lib/routingEvidenceAudit.ts`; read-only, `--json`,
+`--since=`). It counts follow-up *opportunities*; it does not estimate effects.
+First run against the cloud copy (3,464 reviews, 274 gloss decisions, 466
+learning events; the cloud copy lags unsynced local data):
+
+- **Review timing is absent:** `elapsed_ms` is null on every review. Effort
+  cost per helper cannot be measured until the rating path supplies it.
+- **Review assistance is unusable for sentence cards:** `reading_in_context`
+  (the only current sentence card, 304 reviews since 2026-10-02) records
+  `assistance` on 0%. Only listening (43%) and dictation (78%) record it.
+  Meaning-pick/context-check coverage is 85%, predicted retrievability 73%.
+- **Review misses rarely give a delayed check:** of 87 recent `again` ratings,
+  72 were next seen within a day (relearning steps, so same-session repeats),
+  only 12 after 1+ days. Neither assisted/unassisted nor skill is recorded.
+- **Gloss decisions are the best-linked source** but small: 227 gradable
+  attempts, only 18 first-attempt misses (17 particle, 1 attachment, 0
+  predicate), 2 with a recorded blocker, 2 with help recorded. 8 have a later
+  same-sentence attempt in another visit, 14 a later same-rule attempt on
+  another sentence, 3 neither. Roughly 20 miss episodes is too few for any
+  helper comparison, so near-term value is instrumentation, not modelling.
+- **Learning events** (`target_practice`, recheck, held-back) barely exist
+  yet: 2 practices, 1 `needed_help`, no follow-up.
+- 523 reviews belong to soft-deleted/missing study items (legacy drills);
+  exclude them from baselines.
+- No disputed gloss decisions yet, so reference reliability by rule is
+  untested.
+
+Implication: the first experiment cannot run on history. Stage 1 should
+instrument gloss decisions (offered/used help, link to a delayed same-sentence
+and same-rule check) and wait for volume; sentence-card assistance and
+`elapsedMs` need wiring before reviews can contribute.
 
 ## First experiment
 
