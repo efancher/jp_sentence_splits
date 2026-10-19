@@ -85,6 +85,33 @@ describe('GlossDecisionPanel', () => {
     expect(recorded.retryOfId).toBeUndefined();
   });
 
+  it('records the help on offer, and whether Try unaided was taken', async () => {
+    const assisted = () => [settled({ skill: 'predicate', outcome: 'assisted_correct' }), settled({ skill: 'predicate', outcome: 'assisted_correct' }), settled({ skill: 'predicate', outcome: 'assisted_correct' })];
+    const { onRecord } = setup(assisted());
+    await userEvent.click(screen.getByRole('button', { name: 'Try unaided' }));
+    await userEvent.click(screen.getByRole('button', { name: '食べた。' }));
+    const recorded = onRecord.mock.calls[0]![0];
+    expect(recorded.helpOffered).toEqual(expect.arrayContaining(['try_unaided', 'hints']));
+    expect(recorded.helpOffered).not.toContain('word_glosses');
+    expect(recorded.unaidedChosen).toBe(true);
+    expect(recorded.glossesAutoOpened).toBeUndefined();
+  });
+
+  it('offers word glosses only when they are not already showing, and leaves unaided unset when not taken', async () => {
+    const independent = [settled({ skill: 'predicate' }), settled({ skill: 'predicate' }), settled({ skill: 'predicate' }), settled({}), settled({ outcome: 'assisted_correct' }), settled({ outcome: 'assisted_correct' })];
+    const { onRecord } = setup(independent);
+    await userEvent.click(screen.getByRole('button', { name: '食べた。' }));
+    const recorded = onRecord.mock.calls[0]![0];
+    expect(recorded.helpOffered).toEqual(['word_glosses', 'hints']);
+    expect(recorded.unaidedChosen).toBeUndefined();
+  });
+
+  it('records nothing on offer for a worked example', async () => {
+    const { onRecord } = setup([]);
+    await userEvent.click(screen.getByRole('button', { name: 'Got it' }));
+    expect(onRecord.mock.calls[0]![0].helpOffered).toEqual([]);
+  });
+
   it('a parked return visit links the new attempt to the unresolved one', async () => {
     const parked = settled({ sentenceId: 's', skill: 'predicate', ruleKey: 'predicate:last-engine', targetText: '食べた。', outcome: 'unresolved', firstCorrect: false, timestamp: '2026-08-30T00:00:00Z' });
     const { onRecord } = setup([parked, settled({ skill: 'predicate', outcome: 'assisted_correct' }), settled({ skill: 'predicate', outcome: 'assisted_correct' })]);

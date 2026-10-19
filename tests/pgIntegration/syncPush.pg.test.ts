@@ -155,6 +155,7 @@ describe.skipIf(!PG_TESTS_ENABLED)('push against real Postgres + RLS', () => {
       referenceConfidence: 'settled', hintMaxStep: 2, explanationOpened: false, vocabHelped: true, translationLevel: 0,
       outcome: 'assisted_correct', blocker: 'word', retryOfId: 'gloss_prev', helpSequence: ['word', 'structure'],
       helpBeforeFirstResponse: 0, contentRevision: 'abcd1234', firstResponseMs: 3100,
+      helpOffered: ['word_glosses', 'hints'], unaidedChosen: false, glossesAutoOpened: false,
     });
     await logGlossDecision({
       visitId: 'v0', bookId: 'b1', sentenceId: 'sent_1', skill: 'predicate', subskill: 'predicate', ruleKey: 'predicate:last-engine',
@@ -167,7 +168,11 @@ describe.skipIf(!PG_TESTS_ENABLED)('push against real Postgres + RLS', () => {
     expect(scalar(`select retry_of_id || '|' || help_sequence::text || '|' || help_before_first_response || '|' || content_revision || '|' || first_response_ms from gloss_decisions where skill = 'particle'`))
       .toBe('gloss_prev|{word,structure}|0|abcd1234|3100');
     expect(scalar(`select count(*) from gloss_decisions where skill = 'predicate' and retry_of_id is null and help_sequence is null and first_response_ms is null`)).toBe('1');
+    expect(scalar(`select help_offered::text || '|' || unaided_chosen || '|' || glosses_auto_opened from gloss_decisions where skill = 'particle'`))
+      .toBe('{word_glosses,hints}|false|false');
+    expect(scalar(`select count(*) from gloss_decisions where skill = 'predicate' and help_offered is null and unaided_chosen is null`)).toBe('1');
     expect(() => sql(`update gloss_decisions set help_sequence = array['telepathy'] where skill = 'particle'`)).toThrow();
+    expect(() => sql(`update gloss_decisions set help_offered = array['telepathy'] where skill = 'particle'`)).toThrow();
   });
 
   it('a link to a pattern that exists nowhere is dropped without blocking the rest of the queue', async () => {

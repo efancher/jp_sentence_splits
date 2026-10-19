@@ -1164,6 +1164,9 @@ export function glossDecisionToRemote(d: GlossDecision, ownerId: string, version
     help_before_first_response: d.helpBeforeFirstResponse ?? null,
     content_revision: d.contentRevision ?? null,
     first_response_ms: d.firstResponseMs ?? null,
+    help_offered: d.helpOffered ?? null,
+    unaided_chosen: d.unaidedChosen ?? null,
+    glosses_auto_opened: d.glossesAutoOpened ?? null,
     created_at: d.timestamp,
     updated_at: d.timestamp,
     deleted_at: null,
@@ -1199,6 +1202,9 @@ export function remoteToGlossDecision(row: Record<string, unknown>): GlossDecisi
     helpBeforeFirstResponse: (row.help_before_first_response as number | null) ?? undefined,
     contentRevision: (row.content_revision as string | null) ?? undefined,
     firstResponseMs: (row.first_response_ms as number | null) ?? undefined,
+    helpOffered: (row.help_offered as GlossDecision['helpOffered'] | null) ?? undefined,
+    unaidedChosen: (row.unaided_chosen as boolean | null) ?? undefined,
+    glossesAutoOpened: (row.glosses_auto_opened as boolean | null) ?? undefined,
   };
 }
 

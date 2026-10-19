@@ -96,6 +96,21 @@ describe('summariseGloss', () => {
   });
 });
 
+describe('offered versus used help', () => {
+  it('counts offered, used, and missed-while-unused per support, ignoring rows without a snapshot', () => {
+    const summary = summariseGloss([
+      gloss({ id: 'a', helpOffered: ['word_glosses', 'try_unaided', 'hints'], firstCorrect: false, outcome: 'assisted_correct' }),
+      gloss({ id: 'b', helpOffered: ['word_glosses', 'hints'], vocabHelped: true, hintMaxStep: 1, outcome: 'assisted_correct' }),
+      gloss({ id: 'c', helpOffered: ['try_unaided', 'hints'], unaidedChosen: true }),
+      gloss({ id: 'd' }), // recorded before the snapshot existed
+    ]);
+    expect(summary.linkCoverage.helpOffered).toBe(3);
+    expect(summary.offeredVsUsed.word_glosses).toEqual({ offered: 2, used: 1, missesOfferedUnused: 1 });
+    expect(summary.offeredVsUsed.try_unaided).toEqual({ offered: 2, used: 1, missesOfferedUnused: 1 });
+    expect(summary.offeredVsUsed.hints).toEqual({ offered: 3, used: 1, missesOfferedUnused: 1 });
+  });
+});
+
 describe('review summaries', () => {
   it('treats an empty assistance array as recorded but not as help used', () => {
     const rows = [

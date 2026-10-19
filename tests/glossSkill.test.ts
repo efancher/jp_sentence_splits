@@ -171,10 +171,11 @@ describe('disputes and mapping', () => {
     const linked = rec({
       retryOfId: 'g0', helpSequence: ['word', 'structure', 'word'], helpBeforeFirstResponse: 1,
       contentRevision: 'abcd1234', firstResponseMs: 4200,
+      helpOffered: ['word_glosses', 'hints'], unaidedChosen: true, glossesAutoOpened: false,
     });
     expect(remoteToGlossDecision(glossDecisionToRemote(linked, 'owner', 1))).toEqual(linked);
     const remote = glossDecisionToRemote(rec({}), 'owner', 1);
-    expect(remote).toMatchObject({ retry_of_id: null, help_sequence: null, content_revision: null, first_response_ms: null });
+    expect(remote).toMatchObject({ retry_of_id: null, help_sequence: null, content_revision: null, first_response_ms: null, help_offered: null, unaided_chosen: null, glosses_auto_opened: null });
     expect(remoteToGlossDecision(remote).retryOfId).toBeUndefined();
   });
 });

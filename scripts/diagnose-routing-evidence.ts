@@ -76,7 +76,7 @@ async function main() {
     fetchAll<GlossRow>(
       supabase,
       'gloss_decisions',
-      'id,timestamp,visit_id,sentence_id,skill,subskill,rule_key,level_shown,first_correct,reference_confidence,hint_max_step,explanation_opened,blocker,vocab_helped,translation_level,outcome,retry_of_id,help_sequence,content_revision,first_response_ms',
+      'id,timestamp,visit_id,sentence_id,skill,subskill,rule_key,level_shown,first_correct,reference_confidence,hint_max_step,explanation_opened,blocker,vocab_helped,translation_level,outcome,retry_of_id,help_sequence,content_revision,first_response_ms,help_offered,unaided_chosen',
       user.id,
       (r) => ({
         id: str(r.id),
@@ -99,6 +99,8 @@ async function main() {
         helpSequence: (r.help_sequence as string[] | null) ?? null,
         contentRevision: optStr(r.content_revision),
         firstResponseMs: optNum(r.first_response_ms),
+        helpOffered: (r.help_offered as string[] | null) ?? null,
+        unaidedChosen: optBool(r.unaided_chosen),
       }),
     ),
     fetchAll<EventRow>(

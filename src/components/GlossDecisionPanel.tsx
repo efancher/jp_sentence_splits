@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 
-import type { GlossDecision, ParticleCheck } from '../domain/types';
+import type { GlossDecision, GlossHelpOffer, ParticleCheck } from '../domain/types';
 import {
   LEVEL_NAMES,
   buildDecisions,
@@ -174,6 +174,18 @@ function DecisionCard({
   const contentRevision = useMemo(() => chunkRevision(chunks), [chunks]);
   const [glossesOpen, setGlossesOpen] = useState(thin);
   const [unaided, setUnaided] = useState(false);
+  // Snapshot of what the check made available when it appeared, so a later
+  // "was the help offered but unused?" question needs no reconstruction.
+  const [helpOffered] = useState<GlossHelpOffer[]>(() => {
+    if (baseLevel === 1) return [];
+    const offered: GlossHelpOffer[] = [];
+    const translationAtStart = translationLevelFor(baseLevel);
+    const glossesVisibleAtStart = thin || translationAtStart >= 1;
+    if (!glossesVisibleAtStart && words.length > 0) offered.push('word_glosses');
+    if (baseLevel === 2 || baseLevel === 3) offered.push('try_unaided');
+    offered.push('hints');
+    return offered;
+  });
   const [feltSent, setFeltSent] = useState(false);
   const level: SupportLevel = unaided ? 4 : baseLevel;
   const ladder = useMemo(() => hintLadder(spec, attempt.blocker), [spec, attempt.blocker]);
@@ -203,6 +215,9 @@ function DecisionCard({
       explanationOpened: next.explanationOpened, blocker: next.blocker, vocabHelped: next.vocabHelped,
       translationLevel: effectiveTranslationLevel, outcome,
       contentRevision, ...(retryOfId ? { retryOfId } : {}),
+      helpOffered,
+      ...(unaided ? { unaidedChosen: true } : {}),
+      ...(thin && words.length > 0 ? { glossesAutoOpened: true } : {}),
       ...(next.helpSequence.length > 0 ? { helpSequence: next.helpSequence } : {}),
       ...(next.firstResponseMs !== undefined ? { firstResponseMs: next.firstResponseMs, helpBeforeFirstResponse: next.helpBeforeFirst } : {}),
     };

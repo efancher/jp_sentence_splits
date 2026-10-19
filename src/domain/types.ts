@@ -1739,6 +1739,8 @@ export interface SentenceLearningEvent {
 }
 
 export type GlossSkill = 'predicate' | 'particle' | 'attachment';
+/** Optional supports a check could offer before the first answer (`GlossDecision.helpOffered`). */
+export type GlossHelpOffer = 'word_glosses' | 'try_unaided' | 'hints';
 export type GlossOutcome =
   | 'independent_correct'
   | 'assisted_correct'
@@ -1802,6 +1804,18 @@ export interface GlossDecision {
   contentRevision?: string;
   /** Milliseconds from the check appearing to the first answer (foreground-agnostic wall clock; capped at 10 min). Absent when never answered. */
   firstResponseMs?: number;
+  /**
+   * Offered-versus-used evidence (stage 1, added 2026-10-19; absent on earlier
+   * rows). `helpOffered` is what the check made available when it appeared:
+   * a "Show word glosses" button (not already open), "Try unaided", and the
+   * "What would help?" hint ladder. Used help is `helpSequence` plus
+   * `unaidedChosen`; offered-but-unused is the difference.
+   */
+  helpOffered?: GlossHelpOffer[];
+  /** The learner took "Try unaided" (dropping to level 4) rather than the level they were given. */
+  unaidedChosen?: boolean;
+  /** Word glosses were open from the start because known-word coverage was thin, not because the learner asked. */
+  glossesAutoOpened?: boolean;
 }
 
 /**

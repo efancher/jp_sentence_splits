@@ -48,6 +48,8 @@ export interface GlossRow {
   helpSequence?: string[] | null;
   contentRevision?: string | null;
   firstResponseMs?: number | null;
+  helpOffered?: string[] | null;
+  unaidedChosen?: boolean | null;
 }
 
 export interface EventRow {
@@ -151,10 +153,49 @@ export interface GlossSummary {
   disputedByRule: Record<string, number>;
   bySkill: Record<string, { decisions: number; misses: number }>;
   /** Gradable attempts carrying each stage 1 link (rows before 2026-10-19 never will). */
-  linkCoverage: { retryOfId: number; helpSequence: number; contentRevision: number; firstResponseMs: number };
+  linkCoverage: {
+    retryOfId: number;
+    helpSequence: number;
+    contentRevision: number;
+    firstResponseMs: number;
+    helpOffered: number;
+  };
+  /** Per optional support, over attempts that recorded `helpOffered` (earlier rows never did). */
+  offeredVsUsed: Record<OfferedHelp, OfferedUsage>;
   followUp: FollowUpSummary;
   /** Same, restricted to follow-ups shown at support level 4 (independent). */
   independentFollowUp: FollowUpSummary;
+}
+
+export type OfferedHelp = 'word_glosses' | 'try_unaided' | 'hints';
+
+export interface OfferedUsage {
+  offered: number;
+  used: number;
+  /** First-attempt misses where this help was offered and not used. */
+  missesOfferedUnused: number;
+}
+
+const OFFERED_HELP: OfferedHelp[] = ['word_glosses', 'try_unaided', 'hints'];
+
+/** Whether the learner used a given offered support on this attempt. */
+export const offeredHelpUsed = (row: GlossRow, help: OfferedHelp): boolean =>
+  help === 'word_glosses' ? row.vocabHelped : help === 'try_unaided' ? row.unaidedChosen === true : row.hintMaxStep > 0;
+
+function summariseOfferedVsUsed(attempts: GlossRow[]): Record<OfferedHelp, OfferedUsage> {
+  const out = Object.fromEntries(
+    OFFERED_HELP.map((h) => [h, { offered: 0, used: 0, missesOfferedUnused: 0 }]),
+  ) as Record<OfferedHelp, OfferedUsage>;
+  for (const row of attempts) {
+    for (const help of OFFERED_HELP) {
+      if (!row.helpOffered?.includes(help)) continue;
+      const entry = out[help];
+      entry.offered += 1;
+      if (offeredHelpUsed(row, help)) entry.used += 1;
+      else if (row.firstCorrect === false) entry.missesOfferedUnused += 1;
+    }
+  }
+  return out;
 }
 
 const isAttempt = (row: GlossRow): boolean =>
@@ -223,7 +264,9 @@ export function summariseGloss(rows: GlossRow[]): GlossSummary {
       helpSequence: attempts.filter((r) => r.helpSequence && r.helpSequence.length > 0).length,
       contentRevision: attempts.filter((r) => r.contentRevision).length,
       firstResponseMs: attempts.filter((r) => r.firstResponseMs != null).length,
+      helpOffered: attempts.filter((r) => r.helpOffered).length,
     },
+    offeredVsUsed: summariseOfferedVsUsed(attempts),
     followUp: glossFollowUps(rows, false),
     independentFollowUp: glossFollowUps(rows, true),
   };
