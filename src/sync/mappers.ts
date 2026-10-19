@@ -1159,6 +1159,11 @@ export function glossDecisionToRemote(d: GlossDecision, ownerId: string, version
     translation_level: d.translationLevel,
     outcome: d.outcome,
     felt: d.felt ?? null,
+    retry_of_id: d.retryOfId ?? null,
+    help_sequence: d.helpSequence ?? null,
+    help_before_first_response: d.helpBeforeFirstResponse ?? null,
+    content_revision: d.contentRevision ?? null,
+    first_response_ms: d.firstResponseMs ?? null,
     created_at: d.timestamp,
     updated_at: d.timestamp,
     deleted_at: null,
@@ -1189,6 +1194,11 @@ export function remoteToGlossDecision(row: Record<string, unknown>): GlossDecisi
     translationLevel: Number(row.translation_level) as GlossDecision['translationLevel'],
     outcome: row.outcome as GlossDecision['outcome'],
     felt: (row.felt as GlossDecision['felt'] | null) ?? undefined,
+    retryOfId: (row.retry_of_id as string | null) ?? undefined,
+    helpSequence: (row.help_sequence as GlossDecision['helpSequence'] | null) ?? undefined,
+    helpBeforeFirstResponse: (row.help_before_first_response as number | null) ?? undefined,
+    contentRevision: (row.content_revision as string | null) ?? undefined,
+    firstResponseMs: (row.first_response_ms as number | null) ?? undefined,
   };
 }
 

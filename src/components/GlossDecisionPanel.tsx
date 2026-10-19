@@ -9,7 +9,9 @@ import {
   inferSkillState,
   outcomeFor,
   glossReadinessTier,
+  chunkRevision,
   parkedDecisionKeys,
+  parkedDecisionRecords,
   partialTranslation,
   translationLevelFor,
   type Blocker,
@@ -53,10 +55,14 @@ export function planGlossDecisions(chunks: GlossChunk[], records: GlossDecision[
     particle: inferSkillState(records, 'particle', now),
     attachment: inferSkillState(records, 'attachment', now),
   };
+  const parkedRecords = parkedDecisionRecords(records);
   return ordered.map((spec) => {
     const state = states[spec.skill]!;
     const level: SupportLevel = state.needsIntro ? 1 : state.level;
-    return { spec, state, level, parked: parkedSpecs.length > 0 };
+    const retryOfId = parkedSpecs.length > 0 && sentenceId
+      ? parkedRecords.get(`${sentenceId}|${spec.ruleKey}|${spec.targetText}`)?.id
+      : undefined;
+    return { spec, state, level, parked: parkedSpecs.length > 0, retryOfId };
   });
 }
 
@@ -69,10 +75,14 @@ interface Attempt {
   vocabHelped: boolean;
   resolved: boolean;
   wrongTries: string[];
+  /** Help requests in the order made (one entry per press, repeats kept). */
+  helpSequence: Blocker[];
+  firstResponseMs?: number;
+  helpBeforeFirst?: number;
   finished?: GlossDecision['outcome'];
 }
 
-const freshAttempt = (): Attempt => ({ firstCorrect: null, hintStep: 0, explanationOpened: false, vocabHelped: false, resolved: false, wrongTries: [] });
+const freshAttempt = (): Attempt => ({ firstCorrect: null, hintStep: 0, explanationOpened: false, vocabHelped: false, resolved: false, wrongTries: [], helpSequence: [] });
 
 export function GlossDecisionPanel({
   sentenceId,
@@ -124,6 +134,7 @@ export function GlossDecisionPanel({
       words={words}
       thin={glossReadinessTier(knownRatio) === 'thin'}
       parked={current.parked}
+      retryOfId={current.retryOfId}
       position={`${index + 1} of ${plan.length}`}
       isLast={index === plan.length - 1}
       onRecord={onRecord}
@@ -133,7 +144,7 @@ export function GlossDecisionPanel({
 }
 
 function DecisionCard({
-  sentenceId, visitId, spec, level: baseLevel, state, chunks, translation, words, thin, parked, position, isLast, onRecord, onNext,
+  sentenceId, visitId, spec, level: baseLevel, state, chunks, translation, words, thin, parked, retryOfId, position, isLast, onRecord, onNext,
 }: {
   sentenceId: string;
   visitId: string;
@@ -145,6 +156,7 @@ function DecisionCard({
   words: CompareAids['words'];
   thin: boolean;
   parked: boolean;
+  retryOfId?: string;
   position: string;
   isLast: boolean;
   onRecord: (decision: GlossDecisionInput) => void;
@@ -158,6 +170,8 @@ function DecisionCard({
     });
   }
   const [attempt, setAttempt] = useState<Attempt>(freshAttempt);
+  const [shownAt] = useState(() => Date.now());
+  const contentRevision = useMemo(() => chunkRevision(chunks), [chunks]);
   const [glossesOpen, setGlossesOpen] = useState(thin);
   const [unaided, setUnaided] = useState(false);
   const [feltSent, setFeltSent] = useState(false);
@@ -188,6 +202,9 @@ function DecisionCard({
       referenceValue: spec.referenceValue, referenceConfidence: spec.confidence, hintMaxStep: next.hintStep,
       explanationOpened: next.explanationOpened, blocker: next.blocker, vocabHelped: next.vocabHelped,
       translationLevel: effectiveTranslationLevel, outcome,
+      contentRevision, ...(retryOfId ? { retryOfId } : {}),
+      ...(next.helpSequence.length > 0 ? { helpSequence: next.helpSequence } : {}),
+      ...(next.firstResponseMs !== undefined ? { firstResponseMs: next.firstResponseMs, helpBeforeFirstResponse: next.helpBeforeFirst } : {}),
     };
     onRecord(record);
     setAttempt({ ...next, finished: outcome });
@@ -197,7 +214,7 @@ function DecisionCard({
     if (done) return;
     if (attempt.first === undefined) {
       const graded = gradeResponse(spec, optionId);
-      const next = { ...attempt, first: optionId, firstCorrect: graded };
+      const next = { ...attempt, first: optionId, firstCorrect: graded, firstResponseMs: Math.min(Date.now() - shownAt, 600_000), helpBeforeFirst: attempt.helpSequence.length };
       if (graded === null) return finish({ ...next, resolved: true }, 'ungraded');
       if (graded) return finish({ ...next, resolved: true }, outcomeFor({ graded, hintMaxStep: next.hintStep, resolved: true }));
       setAttempt({ ...next, wrongTries: [optionId] });
@@ -216,6 +233,7 @@ function DecisionCard({
     setAttempt({
       ...attempt,
       blocker: attempt.blocker ?? blocker,
+      helpSequence: [...attempt.helpSequence, blocker],
       hintStep,
       explanationOpened: attempt.explanationOpened || blocker === 'form',
       vocabHelped: attempt.vocabHelped || blocker === 'word',
@@ -246,7 +264,7 @@ function DecisionCard({
       {partial && !showTranslation ? <div aria-label="Partial translation">{partial}</div> : null}
       {showGlosses && words.length > 0 ? <WordGlossList words={words} /> : null}
       {!showGlosses && words.length > 0 ? (
-        <button type="button" onClick={() => { setGlossesOpen(true); setAttempt({ ...attempt, vocabHelped: true }); }}>Show word glosses</button>
+        <button type="button" onClick={() => { setGlossesOpen(true); setAttempt({ ...attempt, vocabHelped: true, helpSequence: [...attempt.helpSequence, 'word'] }); }}>Show word glosses</button>
       ) : null}
       <div>{question}</div>
       {canTryUnaided && !isWorkedExample ? (

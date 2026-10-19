@@ -1785,6 +1785,23 @@ export interface GlossDecision {
   outcome: GlossOutcome;
   /** Only on `self_report` rows. */
   felt?: 'too_easy' | 'right' | 'too_hard';
+  /**
+   * Routing-evidence links (ADAPTIVE_SCHEDULING_RESEARCH stage 1). All optional:
+   * absent on rows recorded before 2026-10-19, and never invented for them.
+   * Observations only — none of them changes support level or FSRS.
+   *
+   * The earlier `unresolved` decision this one retries (the parked return
+   * visit), so a miss → help → delayed check chain needs no inference.
+   */
+  retryOfId?: string;
+  /** Help the learner asked for, in the order requested (`Blocker` values, repeats kept). */
+  helpSequence?: Array<NonNullable<GlossDecision['blocker']>>;
+  /** How many leading `helpSequence` entries were requested before the first answer (so a "first response" after help is distinguishable). */
+  helpBeforeFirstResponse?: number;
+  /** Short hash of the sentence's chunk analysis shown, so later chunk edits don't silently change what an old row meant. */
+  contentRevision?: string;
+  /** Milliseconds from the check appearing to the first answer (foreground-agnostic wall clock; capped at 10 min). Absent when never answered. */
+  firstResponseMs?: number;
 }
 
 /**

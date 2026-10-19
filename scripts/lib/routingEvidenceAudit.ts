@@ -44,6 +44,10 @@ export interface GlossRow {
   vocabHelped: boolean;
   translationLevel: number;
   outcome: string;
+  retryOfId?: string | null;
+  helpSequence?: string[] | null;
+  contentRevision?: string | null;
+  firstResponseMs?: number | null;
 }
 
 export interface EventRow {
@@ -146,6 +150,8 @@ export interface GlossSummary {
   missBlockers: Record<string, number>;
   disputedByRule: Record<string, number>;
   bySkill: Record<string, { decisions: number; misses: number }>;
+  /** Gradable attempts carrying each stage 1 link (rows before 2026-10-19 never will). */
+  linkCoverage: { retryOfId: number; helpSequence: number; contentRevision: number; firstResponseMs: number };
   followUp: FollowUpSummary;
   /** Same, restricted to follow-ups shown at support level 4 (independent). */
   independentFollowUp: FollowUpSummary;
@@ -212,6 +218,12 @@ export function summariseGloss(rows: GlossRow[]): GlossSummary {
       (r) => r.ruleKey,
     ),
     bySkill,
+    linkCoverage: {
+      retryOfId: attempts.filter((r) => r.retryOfId).length,
+      helpSequence: attempts.filter((r) => r.helpSequence && r.helpSequence.length > 0).length,
+      contentRevision: attempts.filter((r) => r.contentRevision).length,
+      firstResponseMs: attempts.filter((r) => r.firstResponseMs != null).length,
+    },
     followUp: glossFollowUps(rows, false),
     independentFollowUp: glossFollowUps(rows, true),
   };

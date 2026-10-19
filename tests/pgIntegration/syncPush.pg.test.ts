@@ -14,6 +14,7 @@ import {
   ensureKanji,
   ensureSentenceGrammar,
   ensureVocabularyItem,
+  logGlossDecision,
 } from '../../src/db/repository';
 import { createId } from '../../src/lib/ids';
 import { pushMutations } from '../../src/sync/engine';
@@ -144,6 +145,29 @@ describe.skipIf(!PG_TESTS_ENABLED)('push against real Postgres + RLS', () => {
     expect(await drain()).toEqual([undefined]);
 
     expect(scalar(`select count(*) from vocabulary_items where id = '${first.id}' and deleted_at is null`)).toBe('1');
+  });
+
+  it('pushes gloss decisions with routing-evidence links and enforces the help-sequence domain', async () => {
+    await device(USER_A);
+    await logGlossDecision({
+      visitId: 'v1', bookId: 'b1', sentenceId: 'sent_1', skill: 'particle', subskill: 'case', ruleKey: 'particle:を',
+      targetText: 'ケーキを', levelShown: 4, firstResponse: 'subject', firstCorrect: false, referenceValue: 'object',
+      referenceConfidence: 'settled', hintMaxStep: 2, explanationOpened: false, vocabHelped: true, translationLevel: 0,
+      outcome: 'assisted_correct', blocker: 'word', retryOfId: 'gloss_prev', helpSequence: ['word', 'structure'],
+      helpBeforeFirstResponse: 0, contentRevision: 'abcd1234', firstResponseMs: 3100,
+    });
+    await logGlossDecision({
+      visitId: 'v0', bookId: 'b1', sentenceId: 'sent_1', skill: 'predicate', subskill: 'predicate', ruleKey: 'predicate:last-engine',
+      targetText: '食べた。', levelShown: 1, firstCorrect: null, referenceValue: 'c1', referenceConfidence: 'settled',
+      hintMaxStep: 0, explanationOpened: false, vocabHelped: false, translationLevel: 3, outcome: 'ungraded',
+    });
+
+    expect(await pushOnce()).toBeUndefined();
+
+    expect(scalar(`select retry_of_id || '|' || help_sequence::text || '|' || help_before_first_response || '|' || content_revision || '|' || first_response_ms from gloss_decisions where skill = 'particle'`))
+      .toBe('gloss_prev|{word,structure}|0|abcd1234|3100');
+    expect(scalar(`select count(*) from gloss_decisions where skill = 'predicate' and retry_of_id is null and help_sequence is null and first_response_ms is null`)).toBe('1');
+    expect(() => sql(`update gloss_decisions set help_sequence = array['telepathy'] where skill = 'particle'`)).toThrow();
   });
 
   it('a link to a pattern that exists nowhere is dropped without blocking the rest of the queue', async () => {

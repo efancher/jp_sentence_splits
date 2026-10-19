@@ -213,6 +213,15 @@ export interface Hint {
 
 export type Blocker = NonNullable<GlossDecision['blocker']>;
 
+/** Short FNV-1a fingerprint of the chunk analysis a check was shown against (`GlossDecision.contentRevision`). */
+export function chunkRevision(chunks: readonly GlossChunk[]): string {
+  let hash = 0x811c9dc5;
+  for (const char of chunks.map((c) => `${c.id}|${c.japanese}|${c.role}`).join('\n')) {
+    hash = Math.imul(hash ^ char.charCodeAt(0), 0x01000193) >>> 0;
+  }
+  return hash.toString(16).padStart(8, '0');
+}
+
 export function hintLadder(spec: GlossDecisionSpec, blocker: Blocker = 'unsure'): Hint[] {
   const wrong = spec.options.find((o) => o.id !== spec.referenceValue)?.id;
   const narrowed = [spec.referenceValue, ...(wrong ? [wrong] : [])];
@@ -364,16 +373,20 @@ export function glossReadinessTier(knownRatio: number | undefined): GlossReadine
 
 const isDecisionRow = (record: GlossDecision) => record.outcome !== 'self_report';
 
-/** Sentences with a decision whose latest attempt stayed unresolved, excluding ones touched today. */
-export function parkedDecisionKeys(records: GlossDecision[]): Map<string, Set<string>> {
+/** Latest unresolved attempt per `sentenceId|ruleKey|targetText`; a later settled attempt clears it. */
+export function parkedDecisionRecords(records: GlossDecision[]): Map<string, GlossDecision> {
   const latest = new Map<string, GlossDecision>();
   for (const record of [...records].filter(isDecisionRow).sort((a, b) => a.timestamp.localeCompare(b.timestamp))) {
     if (record.outcome === 'skipped' || record.outcome === 'disputed') continue;
     latest.set(`${record.sentenceId}|${record.ruleKey}|${record.targetText}`, record);
   }
+  return new Map([...latest].filter(([, record]) => record.outcome === 'unresolved'));
+}
+
+/** Sentences with a decision whose latest attempt stayed unresolved, excluding ones touched today. */
+export function parkedDecisionKeys(records: GlossDecision[]): Map<string, Set<string>> {
   const parked = new Map<string, Set<string>>();
-  for (const record of latest.values()) {
-    if (record.outcome !== 'unresolved') continue;
+  for (const record of parkedDecisionRecords(records).values()) {
     const keys = parked.get(record.sentenceId) ?? new Set<string>();
     keys.add(`${record.ruleKey}|${record.targetText}`);
     parked.set(record.sentenceId, keys);

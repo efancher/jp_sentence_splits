@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { GlossDecision } from '../src/domain/types';
 import { previewHeuristicChunks } from '../src/lib/analysisHelpers';
-import { buildDecisions, gradeResponse, hintLadder, inferSkillState, outcomeFor, disputeCounts, type GlossChunk } from '../src/lib/glossSkill';
+import { buildDecisions, chunkRevision, gradeResponse, parkedDecisionRecords, hintLadder, inferSkillState, outcomeFor, disputeCounts, type GlossChunk } from '../src/lib/glossSkill';
 import { glossDecisionToRemote, remoteToGlossDecision } from '../src/sync/mappers';
 
 function chunksOf(japanese: string): GlossChunk[] {
@@ -165,5 +165,32 @@ describe('disputes and mapping', () => {
     expect(remoteToGlossDecision(glossDecisionToRemote(full, 'owner', 1))).toEqual(full);
     const ungraded = rec({ firstCorrect: null, firstResponse: undefined, outcome: 'ungraded' });
     expect(remoteToGlossDecision(glossDecisionToRemote(ungraded, 'owner', 1))).toEqual(ungraded);
+  });
+
+  it('round-trips the routing-evidence links, and leaves them absent on older rows', () => {
+    const linked = rec({
+      retryOfId: 'g0', helpSequence: ['word', 'structure', 'word'], helpBeforeFirstResponse: 1,
+      contentRevision: 'abcd1234', firstResponseMs: 4200,
+    });
+    expect(remoteToGlossDecision(glossDecisionToRemote(linked, 'owner', 1))).toEqual(linked);
+    const remote = glossDecisionToRemote(rec({}), 'owner', 1);
+    expect(remote).toMatchObject({ retry_of_id: null, help_sequence: null, content_revision: null, first_response_ms: null });
+    expect(remoteToGlossDecision(remote).retryOfId).toBeUndefined();
+  });
+});
+
+describe('routing-evidence helpers', () => {
+  it('parkedDecisionRecords returns the latest unresolved record until a later attempt settles it', () => {
+    const parked = rec({ sentenceId: 'sp', outcome: 'unresolved', firstCorrect: false });
+    expect([...parkedDecisionRecords([parked]).values()].map((r) => r.id)).toEqual([parked.id]);
+    const retried = rec({ sentenceId: 'sp' });
+    expect(parkedDecisionRecords([parked, retried]).size).toBe(0);
+  });
+
+  it('chunkRevision is stable and changes when the analysis changes', () => {
+    const a = chunksOf('私がケーキを食べた。');
+    expect(chunkRevision(a)).toBe(chunkRevision(chunksOf('私がケーキを食べた。')));
+    expect(chunkRevision(a)).toMatch(/^[0-9a-f]{8}$/);
+    expect(chunkRevision(a)).not.toBe(chunkRevision(a.map((c, i) => (i === 0 ? { ...c, role: 'other' } : c))));
   });
 });

@@ -69,6 +69,29 @@ describe('GlossDecisionPanel', () => {
     expect(onRecord).toHaveBeenCalledWith(expect.objectContaining({ blocker: 'word', vocabHelped: true, outcome: 'assisted_correct', hintMaxStep: 1 }));
   });
 
+  it('records the help order, whether help came before the first answer, and content/timing links', async () => {
+    const records = [settled({ skill: 'predicate', outcome: 'assisted_correct' }), settled({ skill: 'predicate', outcome: 'assisted_correct' }), settled({ skill: 'predicate', outcome: 'assisted_correct' })];
+    const { onRecord } = setup(records);
+    await userEvent.click(screen.getByRole('button', { name: 'A word' }));
+    vi.setSystemTime(new Date('2026-09-02T00:00:07Z'));
+    await userEvent.click(screen.getByRole('button', { name: 'ケーキを' }));
+    await userEvent.click(screen.getByRole('button', { name: 'How the pieces connect' }));
+    await userEvent.click(screen.getByRole('button', { name: '食べた。' }));
+    const recorded = onRecord.mock.calls[0]![0];
+    expect(recorded.helpSequence).toEqual(['word', 'structure']);
+    expect(recorded.helpBeforeFirstResponse).toBe(1);
+    expect(recorded.firstResponseMs).toBe(7000);
+    expect(recorded.contentRevision).toMatch(/^[0-9a-f]{8}$/);
+    expect(recorded.retryOfId).toBeUndefined();
+  });
+
+  it('a parked return visit links the new attempt to the unresolved one', async () => {
+    const parked = settled({ sentenceId: 's', skill: 'predicate', ruleKey: 'predicate:last-engine', targetText: '食べた。', outcome: 'unresolved', firstCorrect: false, timestamp: '2026-08-30T00:00:00Z' });
+    const { onRecord } = setup([parked, settled({ skill: 'predicate', outcome: 'assisted_correct' }), settled({ skill: 'predicate', outcome: 'assisted_correct' })]);
+    await userEvent.click(screen.getByRole('button', { name: '食べた。' }));
+    expect(onRecord).toHaveBeenCalledWith(expect.objectContaining({ retryOfId: parked.id }));
+  });
+
   it('records a dispute as disputed, not a failure', async () => {
     const records = [settled({ skill: 'predicate', outcome: 'assisted_correct' }), settled({ skill: 'predicate', outcome: 'assisted_correct' }), settled({ skill: 'predicate', outcome: 'assisted_correct' })];
     const { onRecord } = setup(records);
