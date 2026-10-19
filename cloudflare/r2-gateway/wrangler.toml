@@ -1,0 +1,32 @@
+# Cloudflare Worker gateway for the reference-audio R2 bucket.
+# Not deployed. See README.md and docs/CLOUDFLARE_R2_PLAN.md before deploying.
+# Secrets (never commit): SUPABASE_ANON_KEY, ADMIN_TOKEN. Set with `wrangler secret put`.
+name = "satori-r2-gateway"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+
+[[r2_buckets]]
+binding = "AUDIO"
+bucket_name = "satori-reference-audio"
+
+[[durable_objects.bindings]]
+name = "LEDGER"
+class_name = "UsageLedgerDO"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["UsageLedgerDO"]
+
+[vars]
+# Fill in your project URL and the browser origin(s) of the deployed app.
+SUPABASE_URL = "https://YOUR-PROJECT.supabase.co"
+ALLOWED_ORIGINS = "https://YOUR-APP-ORIGIN"
+# Admission limits (defaults shown; see docs/CLOUDFLARE_R2_PLAN.md).
+STORAGE_WARN_BYTES = "8000000000"
+STORAGE_STOP_BYTES = "9000000000"
+CLASS_A_WARN = "500000"
+CLASS_A_STOP = "800000"
+CLASS_B_WARN = "5000000"
+CLASS_B_STOP = "8000000"
+# Emergency switch: set to "1" and redeploy to refuse all non-admin requests.
+GATEWAY_DISABLED = "0"
