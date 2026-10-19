@@ -94,19 +94,23 @@ Unfinished work and optional extensions; completed behavior is in `AI_OVERVIEW.m
     local/disposable services; use a separate read-only account-usage check for
     real consumption so the tests themselves do not burn the production budget.
 
-- [ ] **Clip-audio storage headroom and a possible Cloudflare R2 move.**
+- [~] **Clip-audio storage headroom and Cloudflare R2 migration.**
   (2026-10-19.) Supabase Storage was about 893 MB of the 1 GB Free allowance,
-  mostly `reference_audio` clips at roughly 192 kbps AAC. First try a lower clip
-  bitrate; see PERFORMANCE.md "Storage headroom". **Future option, not started:**
-  move clips (the `reference-audio` bucket first) to Cloudflare R2, which has a
-  generous free tier and no egress fees (verify current terms). Needs an R2
-  bucket and API token held as an Edge Function secret; a Supabase Edge Function
+  mostly `reference_audio` clips at roughly 192 kbps AAC. Lower-bitrate trials
+  remain an option; see PERFORMANCE.md "Storage headroom". The user has created
+  an R2 bucket and requires usage monitoring and overage protection alongside
+  the migration. Integration and controls are not implemented. The
+  [R2 plan](CLOUDFLARE_R2_PLAN.md) covers account-wide storage/operation monitoring,
+  proposed server-enforced thresholds and the limits of provider alerts and
+  reusable signed URLs. Start with reference-audio clips. Needs scoped storage
+  credentials held as server secrets and read-only analytics access; a server endpoint
   that checks the login and issues short-lived signed upload/download URLs to
   replace the owner/book-member Storage RLS; a shared storage helper for the
   ~14 maintenance scripts; changes to `src/sync/audioSync.ts`,
   `src/lib/sourceEpisodeCache.ts` and `src/sync/drillTakeRemote.ts`; and copying
   about 2,800 existing clips, with a read-R2-then-fall-back-to-Supabase period.
-  Scope the call sites before creating any Cloudflare resources or secrets.
+  Inventory writers and verify monitoring, admission controls and copied data
+  before switching routine uploads or deleting Supabase copies.
 
 - [ ] **Learned practice routing above FSRS.** (2026-10-18 research;
   stage 0 evidence audit run 2026-10-19 — thin data, see the research note;

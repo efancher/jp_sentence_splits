@@ -164,16 +164,18 @@ Remaining roadmap work:
   23 Oct).** Storage is about 893 MB of the 1 GB Free allowance. The Oct 4-17
   growth (461 MB) was newly imported podcast episodes, clipped at roughly
   25 KB/s (about 192 kbps AAC; `scripts/lib/audioClipHelpers.ts` uses 128k,
-  several recut/remine scripts 192k). Candidate levers, in recommended order:
+  several recut/remine scripts 192k). Candidate levers:
   (1) re-encode live clips at a lower bitrate (64k would save about 450 MB) after
   checking whether pitch scoring, alignment or shadowing analysis read clip
   audio; trial a small batch, listen, then ask before the full run;
   (2) older duplicate clips, 201 across 144 sentences (37 MB), and 56 MB of
   soft-deleted rows whose bucket files may remain (unchecked; the orphan
   cleanup script finds nothing and its `--delete-blobs` option is destructive);
-  (3) moving clips to Cloudflare R2 or similar only if still needed (would
-  change `src/sync/audioSync.ts`, uploads and per-user access; not scoped).
-  Nothing has been changed or deleted.
+  (3) moving reference clips to Cloudflare R2. The user has now created a bucket
+  and requested storage monitoring and overage protection as part of this move;
+  see the [R2 migration and usage-control plan](CLOUDFLARE_R2_PLAN.md).
+  Integration, monitoring and admission limits remain unimplemented. No
+  production audio has been changed or deleted by this work.
   **Trial result (2026-10-19, 20 clips sampled across the library, local files
   only; originals are stereo 48 kHz at about 197 kbps):** re-encoded sizes
   were 34% of the original at 64k (stereo or mono), 42% at mono 80k and 51% at
