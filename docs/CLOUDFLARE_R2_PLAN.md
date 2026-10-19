@@ -32,8 +32,17 @@ Not yet exercised live: book-member reads, limit refusals, and the ledger under
 load. Deploy with the real `SUPABASE_URL` and `ALLOWED_ORIGINS`; deploying the
 committed template overwrites them with placeholders (use `--var`).
 
-**Still open:** the migration copy script with
-verification; moving the maintenance scripts and the source-episode and drill-take
+**Migration script** `scripts/migrate-reference-audio-to-r2.ts` (dry run by
+default; `--apply`, `--limit`, `--no-readback`; rules in `scripts/lib/r2Migration.ts`,
+tested with fakes in `tests/r2Migration.test.ts`): skips existing objects, never
+overwrites an R2 object whose size differs, never touches Supabase, verifies size
+and a SHA-256 read-back, and stops on any gateway refusal. A live dry run on
+2026-10-19 found all 2,847 live clips (693.5 MB) valid and absent; a 20-clip batch
+copied and verified (6.7 MB) and a re-run saw them as present. The remaining
+2,827 clips are not yet copied, and the app flag is still off.
+
+**Still open:** the full copy run, then enabling the app flag and reconciling
+any clips added to Supabase in the meantime; moving the maintenance scripts and the source-episode and drill-take
 paths onto the adapter; the Cloudflare analytics monitor and the settings
 display; the budget alert; and the acceptance tests listed below that need a
 real Worker.
