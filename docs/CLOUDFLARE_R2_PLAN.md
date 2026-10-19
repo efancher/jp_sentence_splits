@@ -21,7 +21,18 @@ unreachable/5xx gateway, never on a refusal. Covered by unit tests with fakes
 (`tests/r2Gateway.test.ts`, `tests/audioStorage.test.ts`); no real R2, Durable
 Object or deployed-Worker behavior has been exercised.
 
-**Still open:** deployment and secrets; the migration copy script with
+**Deployed 2026-10-19** at `satori-r2-gateway.edwardfancher.workers.dev`
+(secrets set, ledger seeded at 0 bytes for the empty bucket, app flag still
+off). A live smoke test with one 1 KiB object passed: 401 without a token, 400 for
+a malformed key, 415 for a wrong type, 403 writing another owner's path, CORS
+limited to the app origin, then upload, byte-identical read-back, delete and 404.
+The first deploy exposed a bug the fake-`fetch` tests missed (the global `fetch`
+was passed as an object property, which Workers reject), now covered by a test.
+Not yet exercised live: book-member reads, limit refusals, and the ledger under
+load. Deploy with the real `SUPABASE_URL` and `ALLOWED_ORIGINS`; deploying the
+committed template overwrites them with placeholders (use `--var`).
+
+**Still open:** the migration copy script with
 verification; moving the maintenance scripts and the source-episode and drill-take
 paths onto the adapter; the Cloudflare analytics monitor and the settings
 display; the budget alert; and the acceptance tests listed below that need a
