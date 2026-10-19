@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { handleRequest, MAX_OBJECT_BYTES, type Deps, type HandlerEnv, type LedgerPort } from '../cloudflare/r2-gateway/src/handler';
 import { DEFAULT_LIMITS, monthOf, UsageLedger, type Limits } from '../cloudflare/r2-gateway/src/ledger';
@@ -305,5 +305,31 @@ describe('R2 gateway admin routes', () => {
     expect(seeded.status).toBe(200);
     expect(await seeded.json()).toMatchObject({ seeded: true, storageBytes: 1234 });
     expect((await call('/v1/admin/seed', 'admin-secret', { method: 'POST', body: '{}' })).status).toBe(400);
+  });
+});
+
+describe('R2 gateway Worker entry', () => {
+  it('calls the global fetch unbound, as the Workers runtime requires', async () => {
+    const { default: worker } = await import('../cloudflare/r2-gateway/src/index');
+    const bucket = new FakeBucket();
+    bucket.objects.set(KEY, { bytes: new TextEncoder().encode('clip'), contentType: 'audio/mp4' });
+    // Mimics Workers: invoking fetch with any receiver other than the global scope throws.
+    vi.stubGlobal('fetch', function (this: unknown, input: RequestInfo | URL) {
+      if (this !== undefined && this !== globalThis) throw new TypeError('Illegal invocation');
+      const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
+      return Promise.resolve(url.pathname === '/auth/v1/user' ? Response.json({ id: OWNER }) : new Response('{}', { status: 404 }));
+    });
+    try {
+      const ledgerStub = { fetch: async () => Response.json({ ok: true, warning: false }) };
+      const entryEnv = { ...env, AUDIO: bucket, LEDGER: { idFromName: () => 'global', get: () => ledgerStub } };
+      const res = await worker.fetch(
+        new Request(`https://gw.example/v1/objects/${KEY}`, { headers: { Authorization: 'Bearer t' } }),
+        entryEnv as never,
+      );
+      expect(res.status).toBe(200);
+      expect(await res.text()).toBe('clip');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

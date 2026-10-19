@@ -31,7 +31,10 @@ function ledgerPort(env: Env): LedgerPort {
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     try {
-      return await handleRequest(request, env, { bucket: env.AUDIO, ledger: ledgerPort(env), fetch });
+      // Wrapped, not passed bare: the Workers runtime throws "Illegal invocation"
+      // when the global fetch is called as a method of another object.
+      const callFetch: typeof fetch = (input, init) => fetch(input, init);
+      return await handleRequest(request, env, { bucket: env.AUDIO, ledger: ledgerPort(env), fetch: callFetch });
     } catch {
       // Fail closed. Details stay out of the response; Workers logs hold the stack.
       return new Response(JSON.stringify({ error: 'internal_error' }), {
