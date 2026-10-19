@@ -1594,8 +1594,22 @@ export async function applyRemoteUpsert(
       const meta = remoteToReferenceAudio(remote);
       const existing = await db.sentenceAudio.get(meta.id);
       if (existing) {
+        // A re-cut/replaced clip keeps its id (the cloud row's version bumps and
+        // its file is overwritten), so a device holding the old blob would keep
+        // playing the stale audio. A size that differs from the cloud row's —
+        // with no local upload still queued — means the blob is stale: blank it
+        // so hydrateMissingReferenceAudio refetches the current file.
+        const staleBlob =
+          meta.sizeBytes! > 0 &&
+          existing.blob.size > 0 &&
+          existing.blob.size !== meta.sizeBytes &&
+          (await db.syncQueue
+            .where('[entity+recordId]')
+            .equals(['reference_audio', meta.id])
+            .count()) === 0;
         await db.sentenceAudio.put({
           ...existing,
+          ...(staleBlob ? { blob: new Blob([], { type: meta.mimeType }) } : {}),
           sentenceId: meta.sentenceId,
           sourceId: meta.sourceId,
           sourceSentenceId: meta.sourceSentenceId,

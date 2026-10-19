@@ -394,6 +394,81 @@ describe('sync queue and local-first mutations', () => {
     expect(row?.importedAt).toBe('2026-07-19T00:00:00.000Z'); // original, not overwritten
   });
 
+  describe('re-cut reference audio keeps its id', () => {
+    // jsdom Blobs lose `.size` through fake-indexeddb's structured clone, so
+    // seed a size-bearing stand-in (a plain object survives the clone).
+    const sizedBlob = (size: number) => ({ size, type: 'audio/mp4' }) as unknown as Blob;
+    const putLocalAudio = (id: string, blob: Blob) =>
+      getDb().sentenceAudio.put({
+        id,
+        sentenceId: 'sent_old',
+        sourceId: 'source-VID',
+        sourceSentenceId: 'x',
+        sourceTitle: 'After Work',
+        mimeType: 'audio/mp4',
+        durationMs: 1500,
+        startMs: 1000,
+        endMs: 2500,
+        blob,
+        importedAt: '2026-07-19T00:00:00.000Z',
+      });
+
+    it('blanks a local blob whose size differs from the cloud row so it re-hydrates', async () => {
+      await updateSyncMeta({ syncReferenceAudio: true });
+      await putLocalAudio('audio_stale', sizedBlob(15));
+
+      const { applyRemoteUpsert } = await import('../src/sync/engine');
+      await applyRemoteUpsert(
+        'reference_audio',
+        { ...remoteAudioRow('audio_stale', 'sent_old'), size_bytes: 4 },
+        2,
+      );
+
+      const row = await getDb().sentenceAudio.get('audio_stale');
+      expect(row?.blob.size ?? 0).toBe(0); // placeholder: hydrateMissingReferenceAudio refetches
+      expect(row?.importedAt).toBe('2026-07-19T00:00:00.000Z');
+    });
+
+    it('keeps a local blob whose size matches the cloud row', async () => {
+      await updateSyncMeta({ syncReferenceAudio: true });
+      const blob = sizedBlob(4);
+      await putLocalAudio('audio_same', blob);
+
+      const { applyRemoteUpsert } = await import('../src/sync/engine');
+      await applyRemoteUpsert(
+        'reference_audio',
+        { ...remoteAudioRow('audio_same', 'sent_old'), size_bytes: blob.size },
+        2,
+      );
+
+      expect((await getDb().sentenceAudio.get('audio_same'))?.blob.size).toBe(blob.size);
+    });
+
+    it('keeps a differing local blob while its own upload is still queued', async () => {
+      await updateSyncMeta({ syncReferenceAudio: true });
+      const blob = sizedBlob(19);
+      await putLocalAudio('audio_pending', blob);
+      await getDb().syncQueue.put({
+        id: 'q_audio_pending',
+        entity: 'reference_audio',
+        recordId: 'audio_pending',
+        operation: 'upsert',
+        payload: {},
+        createdAt: '2026-10-19T00:00:00.000Z',
+        retryCount: 0,
+      } as never);
+
+      const { applyRemoteUpsert } = await import('../src/sync/engine');
+      await applyRemoteUpsert(
+        'reference_audio',
+        { ...remoteAudioRow('audio_pending', 'sent_old'), size_bytes: 4 },
+        2,
+      );
+
+      expect((await getDb().sentenceAudio.get('audio_pending'))?.blob.size).toBe(blob.size);
+    });
+  });
+
   it('two logical devices can edit different records without conflict rows', async () => {
     await saveAnalysis('sent_a', [
       {
