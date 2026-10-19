@@ -8,6 +8,8 @@ interface ImportMetaEnv {
   readonly VITE_SUPABASE_URL?: string;
   readonly VITE_SUPABASE_ANON_KEY?: string;
   readonly VITE_DEPLOY?: string;
+  /** Base URL of the R2 gateway Worker. Unset keeps reference audio on Supabase Storage. */
+  readonly VITE_R2_GATEWAY_URL?: string;
 }
 
 interface ImportMeta {

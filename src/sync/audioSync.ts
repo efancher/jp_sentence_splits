@@ -1,6 +1,7 @@
 import { getDb } from '../db/database';
 import { ensureSyncMeta } from './queue';
 import { getSupabase } from './supabaseClient';
+import { getAudioObject, putAudioObject } from './audioStorage';
 import { syncLog } from './logger';
 import { setAudioProgress } from './progress';
 import { trackLocalMutation } from './track';
@@ -66,15 +67,12 @@ export async function uploadReferenceAudio(input: {
   const bookPart = input.bookId ?? 'unassigned';
   const path = `${input.ownerId}/${bookPart}/${input.audio.id}.${ext}`;
 
-  const { error: uploadError } = await supabase.storage
-    .from('reference-audio')
-    .upload(path, input.audio.blob, {
-      contentType: input.audio.mimeType,
-      upsert: true,
-    });
-  if (uploadError) {
-    syncLog('error', uploadError.message, 'AUDIO_UPLOAD');
-    throw new Error(uploadError.message);
+  try {
+    await putAudioObject(supabase, path, input.audio.blob, input.audio.mimeType);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    syncLog('error', message, 'AUDIO_UPLOAD');
+    throw new Error(message);
   }
 
   const payload = {
@@ -103,20 +101,20 @@ async function fetchFromStorage(storagePath: string): Promise<Blob | null> {
 
   // A stalled download must not wedge whoever is waiting on it (the hydrate
   // pass) — supabase-js has no request timeout of its own.
-  const { data, error } = await Promise.race([
-    supabase.storage.from('reference-audio').download(storagePath),
-    new Promise<{ data: null; error: { message: string } }>((resolve) =>
+  const { blob, error } = await Promise.race([
+    getAudioObject(supabase, storagePath),
+    new Promise<{ blob: null; error: string }>((resolve) =>
       setTimeout(
-        () => resolve({ data: null, error: { message: `download timed out: ${storagePath}` } }),
+        () => resolve({ blob: null, error: `download timed out: ${storagePath}` }),
         DOWNLOAD_TIMEOUT_MS,
       ),
     ),
   ]);
-  if (error || !data) {
-    syncLog('error', error?.message ?? 'download failed', 'AUDIO_DOWNLOAD');
+  if (!blob) {
+    syncLog('error', error ?? 'download failed', 'AUDIO_DOWNLOAD');
     return null;
   }
-  return data;
+  return blob;
 }
 
 export async function downloadReferenceAudio(
