@@ -21,6 +21,7 @@ import { SentencePitchAccentText } from '../components/SentencePitchAccentText';
 import { SpeedControl } from '../components/SpeedControl';
 import { ReadingHelpPanel } from '../components/ReadingHelpPanel';
 import { VocabChips } from '../components/VocabChips';
+import { createActiveTimer } from '../lib/activeTimer';
 import { buildCardReportDiagnostics } from '../lib/cardReportDiagnostics';
 import { FuriganaText } from '../lib/furigana';
 import { parseInlineReadings } from '../lib/parseInlineReadings';
@@ -1233,6 +1234,8 @@ export function ReviewPage() {
   );
   /** Set only by reading_production's Check step; recorded as Review.responseRaw on rate. */
   const [typedResponse, setTypedResponse] = useState('');
+  /** Active time on the current card (hidden-page time excluded); recorded as `Review.elapsedMs`. */
+  const cardTimerRef = useRef(createActiveTimer(typeof document === 'undefined' || !document.hidden));
   /**
    * The reading `reading_production`'s Check step actually graded the typed
    * answer against — the dictionary reading, or the in-context inflected
@@ -1929,6 +1932,13 @@ export function ReviewPage() {
   }, [currentSentenceId]);
 
   useEffect(() => {
+    const onVisibility = () => cardTimerRef.current.setVisible(!document.hidden);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, []);
+
+  useEffect(() => {
+    cardTimerRef.current.reset();
     setRevealed(false);
     setAssistanceUsed(new Set());
     setTypedResponse('');
@@ -1979,6 +1989,7 @@ export function ReviewPage() {
       await recordReview({
         studyItemId: current.studyItem.id,
         rating,
+        elapsedMs: cardTimerRef.current.elapsed(),
         assistance: assistanceUsed.size > 0 ? [...assistanceUsed] : undefined,
         responseRaw: typedResponse || undefined,
         expectedAnswer: typedResponse ? expectedAnswerValue : undefined,

@@ -151,7 +151,7 @@ should retain source provenance and avoid counting one interaction twice.
   FSRS recall calibration from objective task accuracy; they are different labels.
   Deliverable: usable cohorts and explicit gaps, without claiming intervention
   effects from correlations.
-- [~] **1. Connect attempt → help → follow-up.** (Gloss-decision slice built 2026-10-19: `retryOfId`, `helpSequence`, `helpBeforeFirstResponse`, `contentRevision`, `firstResponseMs`; still open: offered-versus-used help, delayed same-rule transfer checks, and sentence-card assistance/`elapsedMs` — review wiring.) Choose one well-covered sentence
+- [~] **1. Connect attempt → help → follow-up.** (Gloss-decision slice built 2026-10-19: `retryOfId`, `helpSequence`, `helpBeforeFirstResponse`, `contentRevision`, `firstResponseMs`; still open: offered-versus-used help, delayed same-rule transfer checks, and sentence-card assistance. Review `elapsedMs` wired 2026-10-19: active time per card, hidden-page time excluded, recorded on every card rated via ReviewPage; rows before then stay null.) Choose one well-covered sentence
   task and helper. Add stable episode/decision links, content versions, event order,
   and offered-versus-used evidence. Accept when a real episode is reconstructible
   after reload/sync, incomplete attempts remain visible, and review writes occur
@@ -213,6 +213,8 @@ learning events; the cloud copy lags unsynced local data):
   untested.
 
 Stage 1 gloss slice: re-run `npm run diagnose:routing-evidence` after use; `linkCoverage` shows how many new attempts carry each link. Rows before 2026-10-19 never will.
+
+Note on assistance: `reading_in_context` offers no pre-answer helper (self-rating happens after Reveal; the only help before it is a link out to the guided gloss), so its 0% assistance is mostly accurate rather than a recording gap. Help used after Reveal (`ReadingHelpPanel`, gloss link) is not yet captured; add it only if the experiment needs it.
 
 Implication: the first experiment cannot run on history. Stage 1 should
 instrument gloss decisions (offered/used help, link to a delayed same-sentence
