@@ -12,7 +12,12 @@ projected), cached egress 1.2 of 5 GB, function invocations 635 of 500,000,
 database 92 MB of 500 MB (growth assumed 0, no history on the page), and average
 storage 0.51 of 1 GB. Storage is the one to watch: its daily average climbed
 from under 250 MB to about 893 MB over the cycle (the current size, read from a
-chart axis), so the next cycle's average will approach the allowance. Log
+chart axis), so the next cycle's average will approach the allowance. A read-only sum of
+`reference_audio.size_bytes` the same day gave 749 MB over 3,524 rows (693 MB
+not soft-deleted), 461 MB of it created 4-17 Oct, which accounts for most of the
+growth; the remaining ~140 MB is probably source-audio mirrors, shadowing takes
+and other files not in that table (unverified). Whether soft-deleted clips'
+blobs still occupy the bucket was not checked. Log
 ingestion (1.34 of 1 GB, marked "Upcoming") is outside this tool. Egress daily
 rates and 40 MB/day storage growth are estimates read from charts. The snapshot
 and reports are private and stay in ignored `test-results/`. Re-run with fresh
