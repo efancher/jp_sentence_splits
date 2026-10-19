@@ -159,8 +159,21 @@ Remaining roadmap work:
 - Benchmark server query plans at realistic sizes under the authenticated role.
 - Test a genuinely cold offline PWA start and physical-device performance.
 - Refresh the snapshot-based budget report each cycle (first populated
-  2026-10-19); automatic retrieval remains open, and storage growth needs
-  investigating before the next cycle.
+  2026-10-19); automatic retrieval remains open.
+- **Storage headroom (open, decide before heavy imports; next cycle starts
+  23 Oct).** Storage is about 893 MB of the 1 GB Free allowance. The Oct 4-17
+  growth (461 MB) was newly imported podcast episodes, clipped at roughly
+  25 KB/s (about 192 kbps AAC; `scripts/lib/audioClipHelpers.ts` uses 128k,
+  several recut/remine scripts 192k). Candidate levers, in recommended order:
+  (1) re-encode live clips at a lower bitrate (64k would save about 450 MB) after
+  checking whether pitch scoring, alignment or shadowing analysis read clip
+  audio; trial a small batch, listen, then ask before the full run;
+  (2) older duplicate clips, 201 across 144 sentences (37 MB), and 56 MB of
+  soft-deleted rows whose bucket files may remain (unchecked; the orphan
+  cleanup script finds nothing and its `--delete-blobs` option is destructive);
+  (3) moving clips to Cloudflare R2 or similar only if still needed (would
+  change `src/sync/audioSync.ts`, uploads and per-user access; not scoped).
+  Nothing has been changed or deleted.
   Extend workload estimates for study, imports, cache losses and multiple
   devices, avoiding double counting observed activity. Include other
   consumers/projects sharing the organization. Reconcile independently metered
