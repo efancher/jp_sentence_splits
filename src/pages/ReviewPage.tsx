@@ -1671,7 +1671,12 @@ export function ReviewPage() {
             ]),
           ]),
         ]),
-        listeningReadiness: await getSentenceListeningReadiness(sentenceIds),
+        // Sentence-led flow pauses word_listening (no candidates), so the tier-2
+        // gate on proficient word_listening items could never open and would hide
+        // every audio card (ear_tiles, dictation_tile:N). An empty map means ready.
+        listeningReadiness: ledFlow
+          ? new Map<string, boolean>()
+          : await getSentenceListeningReadiness(sentenceIds),
         sentenceReadiness,
         grammarRecognitionProficientPatternIds: await getProficientGrammarRecognitionPatternIds(
           scope.grammarCandidates.map((candidate) => candidate.pattern.id),
