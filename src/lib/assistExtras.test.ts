@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   buildExtraPrompt,
+  MAX_REPAIR_ROUNDS,
   mergeExtraReplies,
   planExtraTasks,
   runExtraTasks,
@@ -87,13 +88,15 @@ describe('runExtraTasks', () => {
       .mockResolvedValueOnce({ reply: 'S3 | a | b | c', backend: 'codex' })
       .mockRejectedValue(new Error('rate limited'));
     const first = await runExtraTasks({ ...base, tasks, run });
-    expect(run).toHaveBeenCalledTimes(1 + MAX_ATTEMPTS_PER_CHUNK);
+    // First piece, one failed fix-up ask for its unusable sentences, then the capped attempts on the second piece.
+    expect(run).toHaveBeenCalledTimes(1 + 1 + MAX_ATTEMPTS_PER_CHUNK);
     expect(first.failure?.task.id).toBe('structure:4-6');
     expect(Object.keys(first.replies)).toEqual(['structure:1-3']);
 
     const run2 = vi.fn().mockResolvedValue({ reply: 'S6 | a | b | c', backend: 'claude' });
     const second = await runExtraTasks({ ...base, tasks, replies: first.replies, run: run2 });
-    expect(run2).toHaveBeenCalledTimes(1);
+    // The piece itself, then the fix-up rounds for the sentences its reply left unusable.
+    expect(run2).toHaveBeenCalledTimes(1 + MAX_REPAIR_ROUNDS);
     expect(second.failure).toBeNull();
   });
 });
@@ -120,6 +123,6 @@ describe('runExtraTasks activity notes', () => {
     });
     expect(result.failure).toBeNull();
     expect(notes[0]).toMatch(/reply rejected/);
-    expect(notes[1]).toMatch(/saved \(claude\)/);
+    expect(notes[1]).toMatch(/received \(claude\)/);
   });
 });
