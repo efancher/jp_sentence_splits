@@ -2308,8 +2308,9 @@ export async function mergeBookIntoChapter(options: {
   let promotedTargets: BookSentence[] = [];
   let collisions: BookSentence[] = [];
   let reusedChapter = false;
+  let repointedExtras: SentenceExtras[] = [];
 
-  await db.transaction('rw', db.books, db.bookSentences, async () => {
+  await db.transaction('rw', db.books, db.bookSentences, db.sentenceExtras, async () => {
     const [source, target] = await Promise.all([
       db.books.get(sourceBookId),
       db.books.get(targetBookId),
@@ -2390,6 +2391,22 @@ export async function mergeBookIntoChapter(options: {
       await db.bookSentences.bulkDelete(collisions.map((item) => item.id));
     }
 
+    // AI chunk/walkthrough drafts live in sentence_extras stamped with the book
+    // and chapter they were made for; without repointing, they'd be orphaned
+    // under the deleted source book and the target would show them as missing.
+    const chapterBySentenceId = new Map<string, string | undefined>([
+      ...collisions.map((item) => [item.sentenceId, targetBySentenceId.get(item.sentenceId)?.chapterId] as const),
+      ...movedMemberships.map((item) => [item.sentenceId, item.chapterId] as const),
+    ]);
+    const sourceExtras = await db.sentenceExtras.where('bookId').equals(sourceBookId).toArray();
+    repointedExtras = sourceExtras.map((row) => ({
+      ...row,
+      bookId: targetBookId,
+      chapterId: chapterBySentenceId.get(row.id) ?? chapter!.id,
+      updatedAt: timestamp,
+    }));
+    if (repointedExtras.length) await db.sentenceExtras.bulkPut(repointedExtras);
+
     updatedTarget = {
       ...target,
       chapters: reusedChapter ? targetChapters : [...targetChapters, chapter],
@@ -2417,6 +2434,7 @@ export async function mergeBookIntoChapter(options: {
       operation: 'delete' as const,
     })),
   ]);
+  for (const row of repointedExtras) notifySync('sentence_extras', row.id, row);
   if (updatedTarget) notifySync('books', targetBookId, updatedTarget);
   notifySync('books', sourceBookId, { id: sourceBookId }, 'delete');
 

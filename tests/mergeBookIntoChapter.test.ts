@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { resetDbForTests } from '../src/db/database';
-import { findReusableChapter, getDb, mergeBookIntoChapter } from '../src/db/repository';
+import { findReusableChapter, getBookWithExtras, getDb, mergeBookIntoChapter } from '../src/db/repository';
 import type { Book, BookChapter, BookSentence } from '../src/domain/types';
 import { createId } from '../src/lib/ids';
 
@@ -64,6 +64,24 @@ describe('mergeBookIntoChapter', () => {
     const moved = await db.bookSentences.where('bookId').equals('series').toArray();
     expect(moved.filter((m) => m.chapterId === 'c-45').map((m) => m.sentenceId).sort()).toEqual(['sB', 'sC']);
     expect(moved.find((m) => m.sentenceId === 'sB')?.status).toBe('in_progress');
+  });
+
+  it('repoints the source book\'s AI extras so the target still sees chunks and walkthroughs', async () => {
+    await seed([chapter('c-other', 'Episode 44', 0), chapter('c-45', 'Episode 45', 1)]);
+    const db = getDb();
+    const chunk = { japanese: 'あ', role: 'x', gloss: 'y' } as never;
+    await db.sentenceExtras.bulkPut([
+      { id: 'sB', bookId: 'standalone', chapterId: 'old-ch', structureDraft: [chunk], createdAt: T, updatedAt: T },
+      { id: 'sC', bookId: 'standalone', chapterId: 'old-ch', structureDraft: [chunk], createdAt: T, updatedAt: T },
+      { id: 'sA', bookId: 'series', chapterId: 'c-other', structureDraft: [chunk], createdAt: T, updatedAt: T },
+    ]);
+    await mergeBookIntoChapter({ sourceBookId: 'standalone', targetBookId: 'series' });
+
+    const rows = await db.sentenceExtras.where('bookId').equals('series').toArray();
+    expect(rows.map((r) => [r.id, r.chapterId]).sort()).toEqual([['sA', 'c-other'], ['sB', 'c-45'], ['sC', 'c-45']]);
+    expect(await db.sentenceExtras.where('bookId').equals('standalone').count()).toBe(0);
+    const overlaid = await getBookWithExtras('series');
+    expect(Object.keys(overlaid!.chapters.find((c) => c.id === 'c-45')!.structureDrafts ?? {}).sort()).toEqual(['sB', 'sC']);
   });
 
   it('adds a new chapter when no empty chapter matches', async () => {
