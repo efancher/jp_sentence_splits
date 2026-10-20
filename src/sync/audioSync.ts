@@ -12,6 +12,7 @@ const MAX_AUDIO_BYTES = 50 * 1024 * 1024;
 const DOWNLOAD_TIMEOUT_MS = 30_000;
 const HYDRATE_CONCURRENCY = 4;
 const HYDRATE_LOG_EVERY = 100;
+const METADATA_PAGE_SIZE = 1000;
 const ALLOWED_MIME = new Set([
   'audio/ogg',
   'audio/opus',
@@ -21,6 +22,32 @@ const ALLOWED_MIME = new Set([
   'audio/webm',
   'audio/wav',
 ]);
+
+/**
+ * Page through the account's live `reference_audio` rows. PostgREST caps a
+ * single response (1000 rows by default), so an unpaged select silently drops
+ * every clip past the first page.
+ */
+async function fetchReferenceAudioRows(
+  supabase: NonNullable<ReturnType<typeof getSupabase>>,
+  userId: string,
+  columns: string,
+): Promise<{ data: Record<string, unknown>[]; error: { message: string } | null }> {
+  const rows: Record<string, unknown>[] = [];
+  for (let from = 0; ; from += METADATA_PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from('reference_audio')
+      .select(columns)
+      .eq('owner_id', userId)
+      .is('deleted_at', null)
+      .order('id', { ascending: true })
+      .range(from, from + METADATA_PAGE_SIZE - 1);
+    if (error) return { data: rows, error };
+    const page = (data ?? []) as unknown as Record<string, unknown>[];
+    rows.push(...page);
+    if (page.length < METADATA_PAGE_SIZE) return { data: rows, error: null };
+  }
+}
 
 function isWifiConnection(): boolean {
   const connection = (
@@ -187,7 +214,7 @@ export async function pushMissingReferenceAudio(): Promise<{ uploaded: number; f
   const db = getDb();
   const [localAudio, remoteRows] = await Promise.all([
     db.sentenceAudio.toArray(),
-    supabase.from('reference_audio').select('id').eq('owner_id', userId).is('deleted_at', null),
+    fetchReferenceAudioRows(supabase, userId, 'id'),
   ]);
   if (remoteRows.error) {
     syncLog('warn', remoteRows.error.message, 'AUDIO_PUSH');
@@ -250,13 +277,11 @@ export async function resyncReferenceAudio(): Promise<number> {
   const userId = session?.user?.id;
   if (!userId) return 0;
 
-  const { data, error } = await supabase
-    .from('reference_audio')
-    .select(
-      'id, sentence_id, source_id, source_sentence_id, source_title, source_url, mime_type, duration_ms, source_start_ms, source_end_ms, created_at',
-    )
-    .eq('owner_id', userId)
-    .is('deleted_at', null);
+  const { data, error } = await fetchReferenceAudioRows(
+    supabase,
+    userId,
+    'id, sentence_id, source_id, source_sentence_id, source_title, source_url, mime_type, duration_ms, source_start_ms, source_end_ms, created_at',
+  );
   if (error) {
     syncLog('warn', error.message, 'AUDIO_RESYNC');
     return 0;
