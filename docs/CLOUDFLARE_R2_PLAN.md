@@ -56,10 +56,28 @@ a clip from a second account that is a book member, and the limit refusals.
 
 **Still open:** removing the Supabase copies (needs explicit approval, and an
 exact list first); maintenance scripts that still write clips straight to
-Supabase (they diverge from R2 until moved); moving the maintenance scripts and the source-episode and drill-take
-paths onto the adapter; the Cloudflare analytics monitor and the settings
-display; the budget alert; and the acceptance tests listed below that need a
-real Worker.
+Supabase (they diverge from R2 until moved); moving the source-episode and
+drill-take paths onto the adapter; showing monitor results in the app's storage
+settings; the Cloudflare budget alert (a billing setting only the account owner
+can create); running the monitor with a real analytics token; and the acceptance
+tests listed below that need a real Worker.
+
+**Usage monitor (written 2026-10-20, not yet run against a real account):**
+`npm run report:r2-usage` (`scripts/report-r2-usage.ts`, logic in
+`scripts/lib/r2Usage.ts`, tested with fake GraphQL responses in
+`tests/r2Usage.test.ts`). It reads the account's R2 operations and the bucket's
+storage from Cloudflare's GraphQL Analytics API, classifies operations per the
+published Class A/B/free lists, averages daily storage peaks (R2's billing basis)
+and reports ok/warning/exceeded/unknown against the free allowances, with the
+gateway's own ledger compared when `R2_GATEWAY_URL` and `R2_ADMIN_TOKEN` are set.
+Truncated, stale, missing or failed data is unknown, never zero; `--check` exits 2
+unless everything is ok. To run it you need `CLOUDFLARE_ACCOUNT_ID` and an
+analytics token limited to **Account Analytics: Read** (create it in the Cloudflare
+dashboard under My Profile, API Tokens, Custom token), kept in `.env` or the shell
+and never committed or shared. The default period starts on the first of the UTC
+month; pass `--period-start` to match the dashboard's billing cycle. The GraphQL
+field names follow Cloudflare's published R2 analytics examples and have not been
+exercised against the live API yet.
 
 ## Scope and migration
 
