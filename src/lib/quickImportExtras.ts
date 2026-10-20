@@ -153,3 +153,25 @@ export async function applyQuickImportExtras(
   }
   return result;
 }
+
+const noticeKey = (bookId: string) => `importExtrasNotice:${bookId}`;
+
+/** Remember that part of a quick import's extras was not saved, for the book page to show once. */
+export function writeImportExtrasNotice(bookId: string, message: string): void {
+  try {
+    localStorage.setItem(noticeKey(bookId), message);
+  } catch {
+    // Storage unavailable: the notice is best-effort.
+  }
+}
+
+/** Returns and clears the pending notice for a book. */
+export function takeImportExtrasNotice(bookId: string): string | null {
+  try {
+    const message = localStorage.getItem(noticeKey(bookId));
+    if (message) localStorage.removeItem(noticeKey(bookId));
+    return message;
+  } catch {
+    return null;
+  }
+}

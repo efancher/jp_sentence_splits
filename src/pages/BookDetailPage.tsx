@@ -69,6 +69,7 @@ import { emptyStageCounts, sentenceStage, type StageCounts } from '../lib/senten
 import { curatedVocabForSourceKey } from '../lib/curatedVocabulary';
 import { downloadText, formatWorksheetCollection } from '../lib/worksheet';
 import { downloadBlob } from '../lib/miningExport';
+import { takeImportExtrasNotice } from '../lib/quickImportExtras';
 import { computeGraduatedSubjectIds } from '../lib/scheduling';
 import type { Book, Sentence } from '../domain/types';
 import type { PasteOrderResult } from '../lib/pasteOrder';
@@ -359,6 +360,15 @@ export function BookDetailPage() {
       { replace: true },
     );
   }, [searchParams, setSearchParams, bookId]);
+
+  // A quick import whose extras were only partly saved (e.g. no chapter to attach chunking to) says so here, once.
+  useEffect(() => {
+    if (!bookId) return;
+    const notice = takeImportExtrasNotice(bookId);
+    if (notice) {
+      setSnack({ message: `Some assistant extras were not saved: ${notice} Use "Generate extras with the assistant" on this page to fill them in.` });
+    }
+  }, [bookId]);
 
   const [loadError, setLoadError] = useState<string | null>(null);
   const data = useLiveQuery(async () => {

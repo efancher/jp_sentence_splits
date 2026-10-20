@@ -49,7 +49,7 @@ import { MAX_ATTEMPTS_PER_CHUNK, NO_EXTRAS } from '../lib/assistChunks';
 import { parseAiCombinedReply } from '../lib/miningQuickImport';
 import type { WizardTranscriptSeg } from '../lib/miningTranscript';
 import { downloadTextFile } from '../lib/particleChecks';
-import { applyQuickImportExtras, hasQuickImportExtras } from '../lib/quickImportExtras';
+import { applyQuickImportExtras, hasQuickImportExtras, writeImportExtrasNotice } from '../lib/quickImportExtras';
 import { extractYouTubeId } from '../lib/youtubeUrl';
 import {
   buildShadowingPreview,
@@ -1541,11 +1541,16 @@ export function QuickMinePage() {
               if (extras) {
                 const maxHandle = rows.reduce((max, row) => Math.max(max, row.handle), 0);
                 const byNumber = Array.from({ length: maxHandle }, (_, i) => sentenceIdByHandle.get(i + 1));
+                let notice: string | undefined;
                 try {
-                  await applyQuickImportExtras(result.bookId, result.chapterId, extras, byNumber);
+                  const applied = await applyQuickImportExtras(result.bookId, result.chapterId, extras, byNumber);
+                  if (applied.problems.length > 0) notice = applied.problems.join(' ');
                 } catch (err) {
                   console.error('Quick import extras failed', err);
+                  notice = `The assistant's extras could not be saved (${err instanceof Error ? err.message : String(err)}).`;
                 }
+                // Landing page shows this once; otherwise a dropped chunking/walkthrough part goes unnoticed.
+                if (notice) writeImportExtrasNotice(result.bookId, notice);
               }
               if (jobId) {
                 void deleteAssistRun(jobId);
