@@ -19,6 +19,7 @@ import {
   getSentenceMasteryOverview,
   getSkillCoverage,
   getStepUsefulness,
+  getReviewTroubleReport,
 } from '../db/repository';
 import { EPISODE_STAGE_LABELS, EPISODE_STAGE_ORDER } from '../lib/episodeProgress';
 import type { ErrorCategory } from '../lib/errorMix';
@@ -179,6 +180,7 @@ export function ProgressPage() {
   const skillCoverage = useLiveQuery(() => getSkillCoverage(), []);
   const fsrsConfidence = useLiveQuery(() => getFsrsConfidenceSnapshot(), []);
   const stepUsefulness = useLiveQuery(() => getStepUsefulness(), []);
+  const troubleReport = useLiveQuery(() => getReviewTroubleReport(), []);
   const gateFunnel = useLiveQuery(() => getGateFunnelSnapshot(), []);
   const lessonReport = useLiveQuery(() => getSentenceLessonReport(), []);
   const episodeProgress = useLiveQuery(() => getEpisodeProgress(), []);
@@ -769,6 +771,51 @@ export function ProgressPage() {
             <p className="muted" style={{ margin: 0, fontSize: '0.8rem' }}>
               Last {stepUsefulness.windowDays} days — which planner step kinds actually get done
               vs. quietly skipped every time.
+            </p>
+          </>
+        )}
+      </section>
+
+      <section className="panel stack">
+        <h3 style={{ margin: 0 }}>Review trouble tags</h3>
+        {troubleReport === undefined ? (
+          <p className="muted">Loading…</p>
+        ) : !troubleReport.hasData ? (
+          <p className="muted">
+            No tags yet. Tap “Trouble with” on a review card to start (this device only).
+          </p>
+        ) : (
+          <>
+            <StatRow
+              label="Misses you tagged"
+              value={`${troubleReport.taggedMisses} of ${troubleReport.missReviews}`}
+              hint="Hard/Again reviews since your first tag"
+            />
+            {troubleReport.tags.map((row) => (
+              <StatRow key={row.tag} label={row.label} value={String(row.count)} />
+            ))}
+            <StatRow
+              label="Fresh tries done"
+              value={`${troubleReport.freshTry.done} of ${troubleReport.freshTry.queued}`}
+              hint="queued from Reading/Meaning/Kanji"
+            />
+            <StatRow
+              label="Shadowing done"
+              value={`${troubleReport.shadow.done} of ${troubleReport.shadow.queued}`}
+              hint="queued from Sound"
+            />
+            <StatRow
+              label="Next review good/easy, follow-up done first"
+              value={`${troubleReport.followedUp.nextGoodOrEasy} of ${troubleReport.followedUp.n}`}
+            />
+            <StatRow
+              label="Next review good/easy, follow-up not done"
+              value={`${troubleReport.notFollowedUp.nextGoodOrEasy} of ${troubleReport.notFollowedUp.n}`}
+            />
+            <p className="muted" style={{ margin: 0, fontSize: '0.8rem' }}>
+              Small numbers, and not a controlled comparison: cards you got to follow up may simply
+              have been the easier ones. Use it to see whether you use the tags and finish the
+              follow-ups, not to prove they work. Tags are logged on this device only.
             </p>
           </>
         )}

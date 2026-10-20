@@ -22,7 +22,10 @@ and possible extensions. This snapshot does not certify a live deployment.
   lesson); Sound puts the sentence first in shadow candidates until a shadowing
   attempt is saved after the flag (`settings.shadowRequests`). Tag use is logged
   in the local-only `reviewTroubleLogs` table (not synced or backed up), so
-  tags are per-device evidence. The soft gate (surface remediation shortly after
+  tags are per-device evidence. The `/progress` "Review trouble tags" panel
+  summarises that log: tag counts, share of misses tagged, follow-ups done, and
+  the next review's good/easy split with vs without the follow-up first (counts
+  only, uncontrolled). The soft gate (surface remediation shortly after
   the review) and word-level tags are not built; remediation just leads the next plan.
 - Audio reviews offer `ear_tiles`, then `dictation_tile:N` after Ear Tiles has
   two reviews and is out of learning/relearning. Whole-sentence dictation is

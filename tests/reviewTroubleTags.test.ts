@@ -8,9 +8,11 @@ import {
   ensureSettings,
   ensureStudyItem,
   getDb,
+  getReviewTroubleReport,
   getSessionPlannerInput,
   listSentenceLearningEvents,
   logSentenceLearningEvent,
+  recordReview,
   recordReviewTroubleTags,
   saveAttempt,
   setBookSentenceStatus,
@@ -160,5 +162,25 @@ describe('recordReviewTroubleTags', () => {
     await saveAttempt({ sentenceId: flagged.id, blob, mimeType: 'audio/webm', durationMs: 100 });
     const cleared = await getSessionPlannerInput(60);
     expect(cleared.shadowCandidates[0]?.sentenceId).toBe(first.id);
+  });
+
+  it('reports tags, queued follow-ups and the next review from stored data', async () => {
+    const book = await createBook({ title: 'Report' });
+    const sentence = makeSentence('猫が寝ています。');
+    await getDb().sentences.put(sentence);
+    await addSentencesToBook(book.id, [sentence.id]);
+    await logSentenceLearningEvent({ sentenceId: sentence.id, bookId: book.id, action: 'walkthrough_completed' });
+    const item = await ensureStudyItem('sentence', sentence.id, 'reading_in_context');
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await recordReviewTroubleTags({ studyItemId: item.id, sentenceId: sentence.id, rating: 'hard', tags: ['reading'] });
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await logSentenceLearningEvent({ sentenceId: sentence.id, bookId: book.id, action: 'expression_attempt' });
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await recordReview({ studyItemId: item.id, rating: 'good', contextSentenceId: sentence.id });
+
+    const report = await getReviewTroubleReport();
+    expect(report.taggedReviews).toBe(1);
+    expect(report.freshTry).toEqual({ queued: 1, done: 1 });
+    expect(report.followedUp).toEqual({ n: 1, nextGoodOrEasy: 1 });
   });
 });

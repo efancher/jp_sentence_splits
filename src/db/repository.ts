@@ -280,6 +280,7 @@ import {
   type SelfRatingCalibration,
 } from '../lib/selfRatingCalibration';
 import { buildSkillCoverage, type SkillCoverage } from '../lib/skillCoverage';
+import { buildReviewTroubleReport, type ReviewTroubleReport } from '../lib/reviewTroubleReport';
 import { buildStepUsefulness, type StepUsefulnessReport } from '../lib/stepUsefulness';
 import {
   parseShadowingPackage,
@@ -10289,6 +10290,36 @@ export async function recordReviewTroubleTags(input: {
   };
   await getDb().reviewTroubleLogs.put(log);
   return log;
+}
+
+/**
+ * Progress notes for the review trouble tags (`buildReviewTroubleReport`).
+ * Read-only; gathers the tag log plus the reviews, Fresh try attempts and
+ * shadowing attempts that followed it.
+ */
+export async function getReviewTroubleReport(): Promise<ReviewTroubleReport> {
+  const db = getDb();
+  const logs = await db.reviewTroubleLogs.toArray();
+  if (logs.length === 0) return buildReviewTroubleReport({ logs, reviews: [], expressionAttempts: [], shadowAttempts: [] });
+  const firstLog = logs.map((log) => log.timestamp).sort()[0]!;
+  const sentenceIds = [...new Set(logs.map((log) => log.sentenceId))];
+  const [reviews, events, attempts] = await Promise.all([
+    db.reviews.where('timestamp').aboveOrEqual(firstLog).toArray(),
+    db.sentenceLearningEvents.where('sentenceId').anyOf(sentenceIds).toArray(),
+    db.attempts.where('sentenceId').anyOf(sentenceIds).toArray(),
+  ]);
+  return buildReviewTroubleReport({
+    logs,
+    reviews: reviews.map((review) => ({
+      studyItemId: review.studyItemId,
+      timestamp: review.timestamp,
+      rating: review.rating,
+    })),
+    expressionAttempts: events
+      .filter((event) => event.action === 'expression_attempt')
+      .map((event) => ({ sentenceId: event.sentenceId, timestamp: event.timestamp })),
+    shadowAttempts: attempts.map((attempt) => ({ sentenceId: attempt.sentenceId, timestamp: attempt.createdAt })),
+  });
 }
 
 /** Requested sentences still waiting: no expression attempt since the request. */

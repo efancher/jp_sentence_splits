@@ -156,8 +156,8 @@ Unfinished work and optional extensions; completed behavior is in `AI_OVERVIEW.m
   `reviewTroubleLogs` table. Details and limits: STATUS.md. Not yet checked in a
   browser on phone or desktop.
   **Next, in order:**
-  1. **Progress notes from the tag log (do first).** A read-only summary, either
-     a diagnostic script or a `/progress` panel: tag counts, how often each
+  1. **Progress notes from the tag log (panel shipped 2026-10-21; now use it
+     for about a week).** A read-only `/progress` panel: tag counts, how often each
      queued follow-up was actually done, and whether tagged sentences' later
      ratings improved. Use about a week of real use to judge whether tags are
      accurate enough to build on. Judge the evidence honestly: a sentence's next
