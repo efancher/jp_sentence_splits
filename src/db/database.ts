@@ -11,6 +11,7 @@ import type {
   BookSentence,
   CardIssueReport,
   GameRound,
+  ReviewTroubleLog,
   WordBoundaryLabel,
   SentenceLearningEvent,
   ClauseQuestionFeedback,
@@ -143,6 +144,7 @@ export class GlossbookDatabase extends Dexie {
   // one row per scored target word per take on PitchAccentDrillPage.
   pitchDrillAttempts!: EntityTable<PitchDrillAttempt, 'id'>;
   gameRounds!: EntityTable<GameRound, 'id'>;
+  reviewTroubleLogs!: EntityTable<ReviewTroubleLog, 'id'>;
   // Hand-labelled word-boundary checks (docs/ROADMAP.md "Word-audio ground truth") —
   // device-local; exported to a file with the labelling page's "Save labels" button, never synced.
   wordBoundaryLabels!: EntityTable<WordBoundaryLabel, 'id'>;
@@ -732,6 +734,11 @@ export class GlossbookDatabase extends Dexie {
     // Clause-question preview reactions — purely additive.
     this.version(27).stores({
       clauseQuestionFeedback: 'id, timestamp, sentenceId, referenceId',
+    });
+
+    // Review trouble-tag log — local-only and purely additive.
+    this.version(28).stores({
+      reviewTroubleLogs: 'id, timestamp, sentenceId',
     });
   }
 }

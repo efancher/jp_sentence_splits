@@ -15,6 +15,15 @@ and possible extensions. This snapshot does not certify a live deployment.
   at `EXPLORE_REVISITS_PER_BOOK` per book per plan; ones requested via the review
   card's "Fresh try this sentence" button are exempt from that cap and drafted
   first. The glossing time budget still bounds the total.
+- Review "Trouble with" chips (Reading, Meaning, Kanji, Sound; prototype,
+  2026-10-20): optional, tapped before rating, never choosing the FSRS rating
+  or crediting cards. Reading/Meaning/Kanji queue a Fresh try (walked-through
+  sentences only; otherwise nothing is queued, the sentence is still a first
+  lesson); Sound puts the sentence first in shadow candidates until a shadowing
+  attempt is saved after the flag (`settings.shadowRequests`). Tag use is logged
+  in the local-only `reviewTroubleLogs` table (not synced or backed up), so
+  tags are per-device evidence. The soft gate (surface remediation shortly after
+  the review) and word-level tags are not built; remediation just leads the next plan.
 - Audio reviews offer `ear_tiles`, then `dictation_tile:N` after Ear Tiles has
   two reviews and is out of learning/relearning. Whole-sentence dictation is
   retired. Typed-match feedback never chooses the FSRS rating.

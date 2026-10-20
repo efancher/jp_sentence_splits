@@ -144,8 +144,11 @@ Unfinished work and optional extensions; completed behavior is in `AI_OVERVIEW.m
   implementation pointers, open questions, and primary research sources:
   [Adaptive scheduling research](ADAPTIVE_SCHEDULING_RESEARCH.md).
 
-- [ ] **Review trouble tags and remediation queue.** (2026-10-20 brainstorm,
-  not started; preferred over the graph/learned-routing approach above because
+- [~] **Review trouble tags and remediation queue.** (2026-10-20 brainstorm;
+  prototype shipped same day: chips, Fresh try / shadow routing, local log, see
+  STATUS. Left: the soft gate, word-level tags, syncing the log and
+  `shadowRequests` across devices, and a week of real use to judge tag accuracy.
+  Preferred over the graph/learned-routing approach above because
   the learner names the weakness instead of the system inferring it.)
   Motivation: shadowing and walkthroughs are what make readings and meanings
   stick, but doing them right before a review defeats FSRS spacing (the review

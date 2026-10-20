@@ -741,6 +741,12 @@ export interface AppSettings {
    */
   freshTryRequests?: Record<string, string>;
   /**
+   * Sentences the learner flagged "sound" trouble on a review card, sentenceId
+   * → request time. The shadow-candidate ranking puts them first until a
+   * shadowing attempt is saved after the request (review trouble tags).
+   */
+  shadowRequests?: Record<string, string>;
+  /**
    * Sentence-first planning (Phase 5): the daily plan's glossing bucket drafts
    * `sentence_learning` lesson steps (eligible with zero confirmed vocabulary)
    * instead of vocabulary_review/continue_book. Existing in-progress sessions
@@ -1198,6 +1204,25 @@ export interface PitchDrillAttempt {
  */
 export type GameSignal = 'weak' | 'stale' | 'strong';
 export type EffectiveGameSignal = GameSignal | 'any';
+
+/** What the learner says was hard on a review card (see `src/lib/reviewTroubleTags.ts`). */
+export type ReviewTroubleTag = 'reading' | 'meaning' | 'kanji' | 'sound';
+
+/**
+ * One review's trouble tags. Local-only append-only log (like `GameRound`; no
+ * Supabase table), kept so tag usefulness can be judged before wiring sync.
+ * Never read by FSRS: the rating stays the learner's explicit choice.
+ */
+export interface ReviewTroubleLog {
+  id: string;
+  timestamp: string;
+  studyItemId: string;
+  sentenceId: string;
+  rating: ReviewRating;
+  tags: ReviewTroubleTag[];
+  /** Follow-ups actually queued (a fresh try needs a completed walkthrough first). */
+  queued: { freshTry: boolean; shadow: boolean };
+}
 
 export interface GameRoundItem {
   /** The game's own item reference (Word Detective: a vocabularyItem id). */

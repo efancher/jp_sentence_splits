@@ -56,6 +56,7 @@ import {
   pickContextSentenceForGrammarPattern,
   readSettings,
   recordReview,
+  recordReviewTroubleTags,
   reportCardIssue,
   settleSessionStep,
   updatePlannerSessionStep,
@@ -84,6 +85,7 @@ import type {
   GrammarPattern,
   ReviewAssistance,
   ReviewRating,
+  ReviewTroubleTag,
   Sentence,
   SentenceAudio,
   SentenceGrammar,
@@ -137,6 +139,7 @@ import {
   type TileDictation,
 } from '../lib/earTiles';
 import { createId } from '../lib/ids';
+import { REVIEW_TROUBLE_TAGS } from '../lib/reviewTroubleTags';
 import { EarTilesCheck } from '../components/EarTilesCheck';
 import { isReadingAnswerCorrect, surfaceReadingFromInline } from '../lib/readingAnswer';
 import { MAX_RECORDING_DURATION_MS, PLAYBACK_SPEEDS, type TimeRangeMs } from '../lib/recording';
@@ -1251,6 +1254,8 @@ export function ReviewPage() {
   >(null);
   /** `reading_in_context`'s "Missed reading" taps for this card; recorded on rate, never affects the rating. */
   const [missedReadings, setMissedReadings] = useState<string[]>([]);
+  /** Optional "what was hard?" chips; queue a follow-up after the review, never affect the rating. */
+  const [troubleTags, setTroubleTags] = useState<ReviewTroubleTag[]>([]);
   /** `pitch_accent_production`'s completed take, once scored; recorded as supplementary Review evidence on rate. */
   const [pitchProductionEvidence, setPitchProductionEvidence] = useState<
     { measuredCount: number; mismatchCount: number } | null
@@ -1957,6 +1962,7 @@ export function ReviewPage() {
     setTypedResponseExpected(null);
     setComprehensionCheckAnswer(null);
     setMissedReadings([]);
+    setTroubleTags([]);
     setPitchProductionEvidence(null);
     setReportingIssue(false);
     setIssueNote('');
@@ -2031,6 +2037,15 @@ export function ReviewPage() {
             }
           : undefined,
       });
+      if (troubleTags.length > 0) {
+        // Supplementary: a failure here must not undo the review just recorded.
+        await recordReviewTroubleTags({
+          studyItemId: current.studyItem.id,
+          sentenceId: current.sentence.id,
+          rating,
+          tags: troubleTags,
+        }).catch(() => undefined);
+      }
       setQueue((q) => q.slice(1));
 
       // Session-aware auto-advance (2026-08-26 follow-up): once this
@@ -2518,6 +2533,30 @@ export function ReviewPage() {
                   sentenceId={current.sentence.id}
                 />
               </>
+            ) : null}
+            {revealed ? (
+              <div className="row" role="group" aria-label="What was hard? (optional)">
+                <span className="muted">Trouble with:</span>
+                {REVIEW_TROUBLE_TAGS.map((tag) => (
+                  <button
+                    key={tag.value}
+                    type="button"
+                    title={tag.hint}
+                    aria-pressed={troubleTags.includes(tag.value)}
+                    disabled={submitting}
+                    onClick={() =>
+                      setTroubleTags((tags) =>
+                        tags.includes(tag.value)
+                          ? tags.filter((value) => value !== tag.value)
+                          : [...tags, tag.value],
+                      )
+                    }
+                  >
+                    {troubleTags.includes(tag.value) ? '✓ ' : ''}
+                    {tag.label}
+                  </button>
+                ))}
+              </div>
             ) : null}
             {revealed ? (
               <div className="row">
