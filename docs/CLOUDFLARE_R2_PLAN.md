@@ -54,13 +54,27 @@ still running the previous build keep writing to Supabase until they reload, so
 re-run the copy script once more after a few days. Not yet exercised live: reading
 a clip from a second account that is a book member, and the limit refusals.
 
+**Maintenance scripts moved (2026-10-20):** the 13 scripts that read, wrote or
+deleted reference-audio objects now go through `scripts/lib/referenceAudioStorage.ts`
+(shared rules in `src/sync/audioStorageCore.ts`): reads try R2 first, writes go to
+R2 only, and deletes clear both stores so a stale Supabase copy cannot be read
+back. The gateway address comes from `R2_GATEWAY_URL` in `.env` (added; without it
+scripts warn and use Supabase only). Checked live with one throwaway object
+(R2-only upload, identical read-back, delete from both). Typecheck passes; the
+scripts themselves were not run end to end. The source-episode and drill-take
+buckets are separate and unchanged.
+
+**Monitor scheduling:** systemd user units are in
+`cloudflare/r2-gateway/deploy/` with install steps in the gateway README. They are
+not installed: the main checkout needs a pull first.
+
 **Still open:** removing the Supabase copies (needs explicit approval, and an
-exact list first); maintenance scripts that still write clips straight to
-Supabase (they diverge from R2 until moved); moving the source-episode and
-drill-take paths onto the adapter; showing monitor results in the app's storage
-settings; the Cloudflare budget alert (a billing setting only the account owner
-can create); scheduling the monitor; and the acceptance
-tests listed below that need a real Worker.
+exact list first); installing the monitor timer; the Cloudflare budget alert (a
+billing setting only the account owner can create); showing monitor results in the
+app's storage settings (not started; analytics would need a server-side feed, not
+the admin token in the browser); moving the source-episode and drill-take buckets
+onto the gateway (optional, they hold about 200 MB); and the acceptance tests
+listed below that need a real Worker or a second account.
 
 **Usage monitor (written 2026-10-20; first live run the same day returned OK):**
 storage 693,556,176 bytes across 2,847 objects (matching the migration), 2,963

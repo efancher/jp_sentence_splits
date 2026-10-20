@@ -1,0 +1,12 @@
+[Unit]
+Description=Report Cloudflare R2 storage and operation usage against the free tier
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/projects/jp_sentence_splits
+# Node is installed with nvm; adjust the version directory if it changes.
+Environment=PATH=%h/.nvm/versions/node/v24.19.0/bin:/usr/local/bin:/usr/bin:/bin
+# Reads CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_ANALYTICS_TOKEN from .env in the
+# working directory. --check exits 2 unless every metric is ok, which makes this
+# unit show as failed in `systemctl --user --failed` and `systemctl --user status`.
+ExecStart=%h/projects/jp_sentence_splits/node_modules/.bin/tsx scripts/report-r2-usage.ts --check --output test-results/performance/account/r2

@@ -37,3 +37,27 @@ alert configured.
 Verify CORS, an owner upload/download, a book-member download and a refused
 stranger on a deployed Worker; the unit tests use fakes and do not prove
 Cloudflare behavior (`tests/r2Gateway.test.ts`).
+
+Deploy with the real `SUPABASE_URL` and `ALLOWED_ORIGINS`. Deploying this
+template as committed replaces them with placeholders; pass
+`--var SUPABASE_URL:... --var ALLOWED_ORIGINS:...` or edit a local copy first.
+
+## Daily usage report (optional)
+
+`deploy/r2-usage-report.{service,timer}` run `npm run report:r2-usage` daily on
+the box as systemd user units, in the same style as the mining service's
+`box-metrics` timer. With `--check`, a warning, exceeded or unknown result makes
+the unit fail, which shows in `systemctl --user --failed`. Install, after pulling
+this repository into `~/projects/jp_sentence_splits` and setting
+`CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_ANALYTICS_TOKEN` in its `.env`:
+
+```bash
+mkdir -p ~/.config/systemd/user
+cp cloudflare/r2-gateway/deploy/r2-usage-report.* ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user start r2-usage-report.service   # run once now
+systemctl --user status r2-usage-report.service  # "exited 0" means everything is ok
+systemctl --user enable --now r2-usage-report.timer
+```
+
+The latest report is written to `test-results/performance/account/r2/`.
