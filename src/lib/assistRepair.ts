@@ -11,7 +11,7 @@ import { parseBatchComprehensionCheckReply } from './comprehensionCheck';
 import { extractJson, type PreparationContext } from './episodePreparation';
 import { parseStructureLines } from './episodeStructure';
 import { parseConstructions } from './phraseConstruction';
-import { parseBookParticleReply } from './particleChecks';
+import { parseBookParticleReply } from './particleReply';
 import { parseWalkthroughs } from './contextWalkthrough';
 
 export interface RepairTask {
