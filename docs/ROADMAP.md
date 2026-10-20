@@ -144,6 +144,35 @@ Unfinished work and optional extensions; completed behavior is in `AI_OVERVIEW.m
   implementation pointers, open questions, and primary research sources:
   [Adaptive scheduling research](ADAPTIVE_SCHEDULING_RESEARCH.md).
 
+- [ ] **Review trouble tags and remediation queue.** (2026-10-20 brainstorm,
+  not started; preferred over the graph/learned-routing approach above because
+  the learner names the weakness instead of the system inferring it.)
+  Motivation: shadowing and walkthroughs are what make readings and meanings
+  stick, but doing them right before a review defeats FSRS spacing (the review
+  then tests short-term memory). Run remediation *after* a failed retrieval.
+  - **Tags:** after Hard/Again on a review, offer optional chips (reading,
+    meaning, kanji form), ideally tapped on the problem word in the sentence
+    (`reading_in_context` is sentence-level). Skipped on Good/Easy so the fast
+    path stays one tap. Keep the explicit FSRS rating: tags are supplementary
+    evidence, never an auto-derived rating (house rule). Replacing the four
+    buttons with checkboxes alone would be a deliberate change to that rule.
+  - **Remediation queue, not FSRS cards:** shadowing and walkthroughs have no
+    recall grade, so scheduling them as FSRS items would pollute stability.
+    Use per-sentence flags (e.g. needs-walkthrough, needs-shadow) set by the
+    tag and cleared when the activity is done. Reading/meaning trouble routes
+    to a walkthrough; fluency/sound trouble routes to shadowing. Doing them
+    gives no FSRS credit to the review card or related cards.
+  - **Soft gate:** surface pending remediation in the session shortly after
+    the review (same day or next). If still undone when the card falls due,
+    show the card anyway; a hard gate risks the starvation failure seen with
+    other readiness gates, so check eligibility against real data first.
+  - **Shadow coverage:** independently, order shadowing by fewest prior
+    shadows; flagged sentences come first, then lowest shadow count.
+  - **Prototype:** tag chips + per-sentence flags + session ordering, no FSRS
+    changes; use a week of real use to judge tag accuracy. Ends with a short
+    manual test plan. Open: whether to drop the four rating buttons later, and
+    whether word-level tags should feed per-word weakness analytics.
+
 - [ ] **Deterministic-id and sync-test follow-ups.** Existing get-or-create
   entities use deterministic ids. Optional extensions: `study_items` (whose
   FSRS state needs care) and `sentence_vocabulary` still use random ids.
