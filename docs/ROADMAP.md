@@ -97,19 +97,35 @@ Unfinished work and optional extensions; completed behavior is in `AI_OVERVIEW.m
 - [~] **Clip-audio storage headroom and Cloudflare R2 migration.**
   (2026-10-19.) Supabase Storage was about 893 MB of the 1 GB Free allowance,
   mostly `reference_audio` clips at roughly 192 kbps AAC. Lower-bitrate trials
-  remain an option; see PERFORMANCE.md "Storage headroom". The user has created
-  an R2 bucket and requires usage monitoring and overage protection alongside
-  the migration. The Worker gateway and a flagged client adapter are written and
-  unit-tested but not deployed (see the plan's status); the monitor, copy script
-  and script migration are not. The
-  [R2 plan](CLOUDFLARE_R2_PLAN.md) covers account-wide storage/operation monitoring,
-  proposed server-enforced thresholds and the limits of provider alerts and
-  reusable signed URLs. Start with reference-audio clips. Needs read-only analytics
-  access; a shared storage helper for the ~14 maintenance scripts; changes to
-  `src/lib/sourceEpisodeCache.ts` and `src/sync/drillTakeRemote.ts`; and copying
-  about 2,800 existing clips, with a read-R2-then-fall-back-to-Supabase period.
-  Inventory writers and verify monitoring, admission controls and copied data
-  before switching routine uploads or deleting Supabase copies.
+  remain an option; see PERFORMANCE.md "Storage headroom". **Done 2026-10-20:**
+  the Worker gateway is deployed with a usage ledger and limits, all 2,847
+  reference-audio clips are copied and verified in R2, the deployed app writes new
+  clips to R2 and reads R2 first, the maintenance scripts use the same helper, and
+  `npm run report:r2-usage` reads Cloudflare analytics (details and the live
+  results in the [R2 plan](CLOUDFLARE_R2_PLAN.md)). **Remaining, in order:**
+  - Delete the Supabase copies of reference audio (frees about 690 MB of the
+    1 GB allowance). Irreversible, so list the exact objects, keep them for a few
+    days after the switch, and re-run `scripts/migrate-reference-audio-to-r2.ts`
+    first to catch clips written by browsers still on the old build. Needs the
+    user's explicit approval.
+  - Create the Cloudflare budget alert (Manage Account, Billing, Billable Usage;
+    the user's account setting). It only notifies; it cannot cap spending.
+  - Install the daily usage-report timer on the box: pull the main checkout, then
+    follow `cloudflare/r2-gateway/README.md`. Optionally set `R2_ADMIN_TOKEN` in
+    `.env` so the report also compares the gateway ledger with Cloudflare.
+  - Show R2 and Supabase usage in the app's storage settings. Needs a server-side
+    feed; never put the gateway admin token or analytics token in the browser.
+  - Optionally move the drill-take and source-episode buckets (about 200 MB)
+    onto the gateway; they use separate paths
+    (`src/sync/drillTakeRemote.ts`, `src/lib/sourceEpisodeCache.ts`, the box's
+    source-audio mirror) and would need their own key rules and copy runs.
+  - Optional live checks of a book member reading another user's clip and of the
+    limit refusals at their ceilings. Low priority while there is a single user
+    and no shared books; the unit tests cover both.
+  - Re-run the usage report after the Supabase delete to confirm Supabase storage
+    dropped, and refresh the Supabase budget snapshot (docs/SUPABASE_BUDGET.md).
+  - Lower-bitrate re-encoding (mono 64k trial results in PERFORMANCE.md) is now
+    only a way to shrink R2 storage, which has 10 GB free; not needed soon.
 
 - [ ] **Learned practice routing above FSRS.** (2026-10-18 research;
   stage 0 evidence audit run 2026-10-19 — thin data, see the research note;
