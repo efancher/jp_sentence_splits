@@ -75,8 +75,14 @@ broader import/restore workloads and calibrated UI timing gates remain open.
 Added a two-device mixed-entity Postgres usage scenario (2026-10-18): restoring
 161 word/kanji/link rows takes 6 requests; see [PERFORMANCE.md](PERFORMANCE.md).
 Timing gates still need repeated comparable CI runs before limits are set.
-Next: decide on the clip-audio storage headroom plan (see PERFORMANCE.md,
-"Storage headroom"), then restore coverage for sentences/study items.
+Reference-audio storage moved toward Cloudflare R2 (2026-10-20): all 2,847 live
+clips were copied and verified, the gateway Worker is deployed, and new uploads
+from the deployed app go to R2 (reads try R2 first, then Supabase). Supabase still
+holds its copies, so its storage use has not dropped yet; deleting them needs
+approval. Open items (usage monitor, budget alert, scripts still writing to
+Supabase, second-account and limit checks) are in
+[CLOUDFLARE_R2_PLAN.md](CLOUDFLARE_R2_PLAN.md). After that: restore coverage for
+sentences/study items.
 
 Review now reads meaning-choice and missed-reading history for the active card
 only, through existing indexes. The question waits for a fixed history snapshot

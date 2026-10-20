@@ -2854,9 +2854,16 @@ sessions.
 
 ## External services & dependencies
 
+- **Cloudflare R2 gateway** (2026-10-20, optional) — a Worker
+  (`cloudflare/r2-gateway/`) fronting the private `satori-reference-audio` bucket.
+  When the build sets `VITE_R2_GATEWAY_URL`, `src/sync/audioStorage.ts` sends new
+  reference-audio uploads to R2 only and reads R2 first, falling back to Supabase
+  Storage on a 404 or failing gateway. Supabase still holds the pre-switch copies.
+  Design, limits and what remains: `docs/CLOUDFLARE_R2_PLAN.md`.
 - **Supabase** — Postgres (all synced tables + RLS via `owner_id =
   auth.uid()`), Auth, and Storage (`reference-audio` bucket for opt-in
-  native/reference audio cloud sync). Shared with the now-mostly-retired
+  native/reference audio cloud sync; new uploads go to R2 when the gateway
+  flag is set, see above). Shared with the now-mostly-retired
   `shadowing` repo via table-prefix isolation (`shadowing_*` tables
   coexist, unused going forward). Entirely optional — the app is fully
   functional local-only without it. Also hosts `supabase/functions/

@@ -43,12 +43,20 @@ copied and verified (6.7 MB) and a re-run saw them as present. The full run
 final dry run reported all 2,847 live clips present in R2 with matching sizes
 (about 693.5 MB; each copy was also hash-verified by read-back). The ledger
 counts only traffic through the gateway, so its figures should match the
-seeded 0 plus these uploads. Supabase still holds its copies, and the app flag is
-still off.
+seeded 0 plus these uploads. Supabase still holds its copies.
 
-**Still open:** enabling the app flag and reconciling any clips added to
-Supabase after the copy (re-run the script); removing the Supabase copies only
-after approval; moving the maintenance scripts and the source-episode and drill-take
+**Flag enabled 2026-10-20:** the repository variable `VITE_R2_GATEWAY_URL` is set
+and `.github/workflows/deploy.yml` passes it to the Pages build; the deployed
+bundle contains the gateway address, and the app's own storage code passed a live
+check (R2-only upload, R2-first read matching the Supabase original, clean
+failure for a missing path). A catch-up dry run found nothing new to copy. Browsers
+still running the previous build keep writing to Supabase until they reload, so
+re-run the copy script once more after a few days. Not yet exercised live: reading
+a clip from a second account that is a book member, and the limit refusals.
+
+**Still open:** removing the Supabase copies (needs explicit approval, and an
+exact list first); maintenance scripts that still write clips straight to
+Supabase (they diverge from R2 until moved); moving the maintenance scripts and the source-episode and drill-take
 paths onto the adapter; the Cloudflare analytics monitor and the settings
 display; the budget alert; and the acceptance tests listed below that need a
 real Worker.
