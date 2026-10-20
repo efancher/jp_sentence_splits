@@ -59,10 +59,18 @@ exact list first); maintenance scripts that still write clips straight to
 Supabase (they diverge from R2 until moved); moving the source-episode and
 drill-take paths onto the adapter; showing monitor results in the app's storage
 settings; the Cloudflare budget alert (a billing setting only the account owner
-can create); running the monitor with a real analytics token; and the acceptance
+can create); scheduling the monitor; and the acceptance
 tests listed below that need a real Worker.
 
-**Usage monitor (written 2026-10-20, not yet run against a real account):**
+**Usage monitor (written 2026-10-20; first live run the same day returned OK):**
+storage 693,556,176 bytes across 2,847 objects (matching the migration), 2,963
+Class A and 28,184 Class B operations month to date, 0 pending multipart uploads,
+against the 10 GB / 1M / 10M free tier. Two dashboard-style operation names
+(`GetBucketNotificationConfiguration`, `GetBucketSippyConfiguration`) are not on
+Cloudflare's published class lists, so they are reported as unclassified rather
+than counted. An account-owned token verifies at
+`/accounts/{id}/tokens/verify`; `/user/tokens/verify` rejects it. The gateway
+ledger comparison has not been run (it needs `R2_ADMIN_TOKEN`).
 `npm run report:r2-usage` (`scripts/report-r2-usage.ts`, logic in
 `scripts/lib/r2Usage.ts`, tested with fake GraphQL responses in
 `tests/r2Usage.test.ts`). It reads the account's R2 operations and the bucket's
@@ -76,8 +84,8 @@ analytics token limited to **Account Analytics: Read** (create it in the Cloudfl
 dashboard under My Profile, API Tokens, Custom token), kept in `.env` or the shell
 and never committed or shared. The default period starts on the first of the UTC
 month; pass `--period-start` to match the dashboard's billing cycle. The GraphQL
-field names follow Cloudflare's published R2 analytics examples and have not been
-exercised against the live API yet.
+queries follow Cloudflare's published R2 analytics examples and worked against the
+live API.
 
 ## Scope and migration
 
