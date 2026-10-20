@@ -38,11 +38,17 @@ tested with fakes in `tests/r2Migration.test.ts`): skips existing objects, never
 overwrites an R2 object whose size differs, never touches Supabase, verifies size
 and a SHA-256 read-back, and stops on any gateway refusal. A live dry run on
 2026-10-19 found all 2,847 live clips (693.5 MB) valid and absent; a 20-clip batch
-copied and verified (6.7 MB) and a re-run saw them as present. The remaining
-2,827 clips are not yet copied, and the app flag is still off.
+copied and verified (6.7 MB) and a re-run saw them as present. The full run
+(interrupted once by a background time limit, then resumed) copied the rest, and a
+final dry run reported all 2,847 live clips present in R2 with matching sizes
+(about 693.5 MB; each copy was also hash-verified by read-back). The ledger
+counts only traffic through the gateway, so its figures should match the
+seeded 0 plus these uploads. Supabase still holds its copies, and the app flag is
+still off.
 
-**Still open:** the full copy run, then enabling the app flag and reconciling
-any clips added to Supabase in the meantime; moving the maintenance scripts and the source-episode and drill-take
+**Still open:** enabling the app flag and reconciling any clips added to
+Supabase after the copy (re-run the script); removing the Supabase copies only
+after approval; moving the maintenance scripts and the source-episode and drill-take
 paths onto the adapter; the Cloudflare analytics monitor and the settings
 display; the budget alert; and the acceptance tests listed below that need a
 real Worker.
