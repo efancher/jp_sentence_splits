@@ -19,6 +19,12 @@ from app.models import PodcastEpisode, PodcastFeed
 
 FETCH_TIMEOUT_SECONDS = 15.0
 
+# Some feed hosts (Buzzsprout) 403 httpx's default `python-httpx/x` UA.
+FETCH_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (compatible; SatoriGlossbook/1.0; +podcast-feed-fetch)",
+    "Accept": "application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.8",
+}
+
 _ITUNES_DURATION_TAG = "{http://www.itunes.com/dtds/podcast-1.0.dtd}duration"
 
 
@@ -73,7 +79,7 @@ def _parse_itunes_duration(item: ET.Element) -> int | None:
 async def fetch_podcast_feed(url: str) -> PodcastFeed:
     """Download and parse a podcast's RSS feed. Raises on network/parse errors."""
     async with httpx.AsyncClient(
-        timeout=FETCH_TIMEOUT_SECONDS, follow_redirects=True
+        timeout=FETCH_TIMEOUT_SECONDS, follow_redirects=True, headers=FETCH_HEADERS
     ) as client:
         response = await client.get(url)
         response.raise_for_status()

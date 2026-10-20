@@ -76,3 +76,33 @@ def test_parse_podcast_feed_captures_description_html() -> None:
     </channel></rss>"""
     feed = parse_podcast_feed(xml)
     assert feed.episodes[0].descriptionHtml == "<p><ruby>日<rt>にち</rt></ruby>です。</p>"
+
+
+def test_fetch_podcast_feed_sends_browser_like_user_agent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Buzzsprout 403s httpx's default UA, so the fetch must override it."""
+    import asyncio
+
+    import httpx
+
+    from app import podcasts
+
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["ua"] = request.headers["user-agent"]
+        if seen["ua"].startswith("python-httpx"):
+            return httpx.Response(403)
+        return httpx.Response(200, text="<rss><channel><title>Show</title></channel></rss>")
+
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        podcasts.httpx,
+        "AsyncClient",
+        lambda **kw: real_client(transport=httpx.MockTransport(handler), **kw),
+    )
+
+    feed = asyncio.run(podcasts.fetch_podcast_feed("https://feeds.example.com/1.rss"))
+    assert feed.title == "Show"
+    assert not seen["ua"].startswith("python-httpx")
