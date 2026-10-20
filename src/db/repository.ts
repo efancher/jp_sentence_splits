@@ -2909,7 +2909,7 @@ export async function previewShadowingPackageFile(
  */
 export async function commitShadowingPackageImport(
   preview: ShadowingImportPreview,
-): Promise<{ batchId: string; bookId: string; refreshed: boolean }> {
+): Promise<{ batchId: string; bookId: string; chapterId?: string; refreshed: boolean }> {
   const db = getDb();
   const sourceKey = `shadowing:${preview.source.id}`;
   const existingBook = await db.books
@@ -2925,6 +2925,9 @@ export async function commitShadowingPackageImport(
     bookId: existingBook?.id,
     newBookTitle: preview.source.title,
     orderMode: 'first_occurrence',
+    // A new book gets one chapter: per-sentence AI extras (chunking, walkthroughs) are
+    // stored per chapter, so a chapterless book silently drops them.
+    ...(existingBook ? {} : { newChapterTitle: preview.source.title }),
   });
   if (!result.bookId) throw new Error('Shadowing import did not create a book.');
 
@@ -2951,6 +2954,7 @@ export async function commitShadowingPackageImport(
   return {
     batchId: result.batchId,
     bookId: result.bookId,
+    ...(result.chapterId ? { chapterId: result.chapterId } : {}),
     refreshed: Boolean(existingBook),
   };
 }

@@ -163,6 +163,10 @@ describe('shadowing project import', () => {
       '暖かい春がやって来ました。',
       '桜も咲いています。',
     ]);
+    // One chapter holds every sentence, so per-chapter AI extras have somewhere to attach.
+    expect(result.chapterId).toBeTruthy();
+    expect(book?.chapters.map((chapter) => chapter.id)).toEqual([result.chapterId]);
+    expect(memberships.every((item) => item.chapterId === result.chapterId)).toBe(true);
     expect(audio).toHaveLength(2);
     // fake-indexeddb/jsdom does not structured-clone Blob internals, but the
     // record and MIME metadata still prove the audio association was stored.
