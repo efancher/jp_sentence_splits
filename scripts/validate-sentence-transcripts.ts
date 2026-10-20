@@ -28,8 +28,8 @@ import { YOUTUBE_MINING_API_BASE } from '../src/appConfig';
 
 import { fetchAll, requireAuthedUser } from './lib/scriptHelpers';
 import { createScriptSupabaseClient } from './lib/scriptSupabaseClient';
+import { downloadReferenceClip } from './lib/referenceAudioStorage';
 
-const AUDIO_BUCKET = 'reference-audio';
 const DEFAULT_LIMIT = 50;
 const DEFAULT_THRESHOLD = 0.6;
 
@@ -129,9 +129,7 @@ async function main() {
   for (const sentence of candidates) {
     const audio = audioBySentence.get(sentence.id);
     if (!audio?.storagePath) continue;
-    const { data: blob, error } = await supabase.storage
-      .from(AUDIO_BUCKET)
-      .download(audio.storagePath);
+    const { data: blob, error } = await downloadReferenceClip(supabase, audio.storagePath);
     if (error || !blob) {
       console.log(`  [skip] ${sentence.id}: couldn't download audio (${error?.message})`);
       continue;

@@ -22,10 +22,10 @@
  */
 import { parseApplyFlag, requireAuthedUser } from './lib/scriptHelpers';
 import { createScriptSupabaseClient } from './lib/scriptSupabaseClient';
+import { removeReferenceClips } from './lib/referenceAudioStorage';
 
 type Row = Record<string, any>;
 
-const STORAGE_BUCKET = 'reference-audio';
 
 async function fetchAllRows(
   supabase: any,
@@ -106,7 +106,7 @@ async function main() {
   let blobs = 0;
   for (const r of orphans) {
     if (deleteBlobs && r.storage_path) {
-      const { error } = await supabase.storage.from(STORAGE_BUCKET).remove([r.storage_path]);
+      const { error } = await removeReferenceClips(supabase, [r.storage_path]);
       if (error) console.log(`  blob remove failed for ${r.id}: ${error.message}`);
       else blobs += 1;
     }

@@ -48,8 +48,8 @@ import { isolatedWordRange, isolatedWordRangeUnpadded } from '../src/lib/isolate
 import { alignAudio, ffmpegTrimToM4a, ffprobeDurationMs } from './lib/audioClipHelpers';
 import { fetchAll, parseApplyFlag, requireAuthedUser } from './lib/scriptHelpers';
 import { createScriptSupabaseClient } from './lib/scriptSupabaseClient';
+import { downloadReferenceClip } from './lib/referenceAudioStorage';
 
-const AUDIO_BUCKET = 'reference-audio';
 const DEFAULT_LIMIT = 50;
 const MFA_PYTHON = process.env.MFA_PYTHON ?? '/home/ed/miniforge3/envs/mfa/bin/python3.14';
 const SCORER_SCRIPT = join(dirname(fileURLToPath(import.meta.url)), 'score-word-audio-candidates.py');
@@ -202,7 +202,7 @@ async function main() {
         sentenceAudioCache.set(sentenceId, null);
         return null;
       }
-      const { data: blob, error } = await supabase.storage.from(AUDIO_BUCKET).download(audio.storagePath);
+      const { data: blob, error } = await downloadReferenceClip(supabase, audio.storagePath);
       if (error || !blob) {
         console.log(`  [skip sentence ${sentenceId}] couldn't download audio (${error?.message})`);
         sentenceAudioCache.set(sentenceId, null);

@@ -39,8 +39,8 @@ import { join } from 'node:path';
 import { concatCut } from '../src/lib/resegmentPlan';
 import { parseApplyFlag, requireAuthedUser } from './lib/scriptHelpers';
 import { createScriptSupabaseClient } from './lib/scriptSupabaseClient';
+import { downloadReferenceClip, uploadReferenceClip } from './lib/referenceAudioStorage';
 
-const AUDIO_BUCKET = 'reference-audio';
 const RESEG_PREFIX = 'audio_reseg_';
 const REMINE_PREFIX = 'audio_remine_';
 const DEFAULT_BOOK_ID = 'book_30cac126-7197-4dd8-934f-53a0798c2326'; // After Work
@@ -153,8 +153,7 @@ async function main() {
     async function localCopy(fr: AudioRow): Promise<string> {
       const cached = blobCache.get(fr.id);
       if (cached) return cached;
-      const { data: blob, error } = await supabase.storage
-        .from(AUDIO_BUCKET).download(fr.storage_path!);
+      const { data: blob, error } = await downloadReferenceClip(supabase, fr.storage_path!);
       if (error || !blob) throw new Error(`download ${fr.storage_path}: ${error?.message}`);
       const p = join(scratch, `${fr.id}.m4a`);
       writeFileSync(p, Buffer.from(await blob.arrayBuffer()));
@@ -256,8 +255,7 @@ async function main() {
 
       const audioId = `${REMINE_PREFIX}${randomUUID().replace(/-/g, '').slice(0, 20)}`;
       const path = `${user.id}/${bookId}/${audioId}.m4a`;
-      const { error: upErr } = await supabase.storage
-        .from(AUDIO_BUCKET).upload(path, bytes, { contentType: 'audio/mp4', upsert: true });
+      const { error: upErr } = await uploadReferenceClip(supabase, path, bytes, { contentType: 'audio/mp4', upsert: true });
       if (upErr) throw new Error(`upload ${path}: ${upErr.message}`);
 
       const { error: insErr } = await supabase.from('reference_audio').insert({

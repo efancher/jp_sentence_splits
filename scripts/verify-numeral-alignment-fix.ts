@@ -7,8 +7,8 @@
 import { alignAudio } from './lib/audioClipHelpers';
 import { fetchAll, requireAuthedUser } from './lib/scriptHelpers';
 import { createScriptSupabaseClient } from './lib/scriptSupabaseClient';
+import { downloadReferenceClip } from './lib/referenceAudioStorage';
 
-const AUDIO_BUCKET = 'reference-audio';
 const TARGET_SENTENCES = [
   '気象庁によると、16日まで、とても強く降る所がありそうです。',
   '11日は、関東地方などで、気温が低くなりました。',
@@ -48,7 +48,7 @@ async function main() {
       console.log(`[no audio] ${japanese}`);
       continue;
     }
-    const { data: blob, error } = await supabase.storage.from(AUDIO_BUCKET).download(audio.storagePath);
+    const { data: blob, error } = await downloadReferenceClip(supabase, audio.storagePath);
     if (error || !blob) {
       console.log(`[download failed] ${japanese}: ${error?.message}`);
       continue;

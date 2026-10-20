@@ -52,10 +52,10 @@ import { detectSilences, type SilenceSpan } from '../src/lib/waveform';
 import { alignAudio, ffmpegTrimToM4a, ffprobeDurationMs } from './lib/audioClipHelpers';
 import { fetchAll, requireAuthedUser } from './lib/scriptHelpers';
 import { createScriptSupabaseClient } from './lib/scriptSupabaseClient';
+import { downloadReferenceClip } from './lib/referenceAudioStorage';
 
 const execFileAsync = promisify(execFile);
 
-const AUDIO_BUCKET = 'reference-audio';
 const DEFAULT_LIMIT = 20;
 const DECODE_SAMPLE_RATE = 16000;
 const SILENCE_SEARCH_WINDOW_MS = 200;
@@ -268,7 +268,7 @@ async function main() {
         sentenceContextCache.set(sentenceId, null);
         return null;
       }
-      const { data: blob, error } = await supabase.storage.from(AUDIO_BUCKET).download(audio.storagePath);
+      const { data: blob, error } = await downloadReferenceClip(supabase, audio.storagePath);
       if (error || !blob) {
         console.log(`  [skip sentence ${sentenceId}] couldn't download audio (${error?.message})`);
         sentenceContextCache.set(sentenceId, null);

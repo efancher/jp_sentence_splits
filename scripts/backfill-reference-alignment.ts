@@ -28,6 +28,7 @@ import type { AlignmentResult } from '../src/domain/types';
 
 import { fetchAll, parseApplyFlag, requireAuthedUser } from './lib/scriptHelpers';
 import { createScriptSupabaseClient } from './lib/scriptSupabaseClient';
+import { downloadReferenceClip } from './lib/referenceAudioStorage';
 
 const ALIGN_API_BASE = (
   process.env.ANALYSIS_ALIGN_API_BASE ??
@@ -35,7 +36,6 @@ const ALIGN_API_BASE = (
   'http://127.0.0.1:8002'
 ).replace(/\/$/, '');
 
-const STORAGE_BUCKET = 'reference-audio';
 
 interface AudioRow {
   id: string;
@@ -156,9 +156,7 @@ async function main() {
     const transcript = japaneseById.get(row.sentenceId)!;
     process.stdout.write(`[${i + 1}/${candidates.length}] ${row.id} … `);
     try {
-      const { data: blob, error: dlErr } = await supabase.storage
-        .from(STORAGE_BUCKET)
-        .download(row.storagePath!);
+      const { data: blob, error: dlErr } = await downloadReferenceClip(supabase, row.storagePath!);
       if (dlErr || !blob) throw new Error(`download: ${dlErr?.message ?? 'no data'}`);
 
       const result = await align(blob, transcript);

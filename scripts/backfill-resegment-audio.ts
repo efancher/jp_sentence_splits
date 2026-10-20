@@ -27,11 +27,11 @@ import { normalizeSentenceKey } from '../src/lib/normalize';
 import { concatCut } from '../src/lib/resegmentPlan';
 import { parseApplyFlag, requireAuthedUser } from './lib/scriptHelpers';
 import { createScriptSupabaseClient } from './lib/scriptSupabaseClient';
+import { downloadReferenceClip, removeReferenceClips, uploadReferenceClip } from './lib/referenceAudioStorage';
 
 const DEFAULT_BOOK_ID = 'book_30cac126-7197-4dd8-934f-53a0798c2326';
 const API_BASE = (process.env.MINING_API_BASE ??
   'https://codex-dev.tailfbd89c.ts.net/youtube-mining').replace(/\/$/, '');
-const AUDIO_BUCKET = 'reference-audio';
 
 interface AudioRow {
   deleted_at?: string | null;
@@ -108,7 +108,7 @@ async function main() {
     console.log(`--redo: clearing ${priorRows.length} prior backfill row(s).`);
     if (apply && priorRows.length) {
       const paths = priorRows.map((r) => r.storage_path).filter(Boolean) as string[];
-      if (paths.length) await supabase.storage.from(AUDIO_BUCKET).remove(paths);
+      if (paths.length) await removeReferenceClips(supabase, paths);
       const { error } = await supabase
         .from('reference_audio')
         .delete()
@@ -240,9 +240,7 @@ async function main() {
     const clipsBase64: string[] = [];
     for (const p of parents) {
       if (!p.storage_path) throw new Error(`Clip ${p.id} has no storage_path`);
-      const { data: blob, error } = await supabase.storage
-        .from(AUDIO_BUCKET)
-        .download(p.storage_path);
+      const { data: blob, error } = await downloadReferenceClip(supabase, p.storage_path);
       if (error || !blob) throw new Error(`Download ${p.storage_path}: ${error?.message}`);
       clipsBase64.push(Buffer.from(await blob.arrayBuffer()).toString('base64'));
     }
@@ -263,9 +261,7 @@ async function main() {
       const audioId = `audio_reseg_${randomUUID().replace(/-/g, '').slice(0, 20)}`;
       const path = `${user.id}/${bookId}/${audioId}.m4a`;
 
-      const { error: upErr } = await supabase.storage
-        .from(AUDIO_BUCKET)
-        .upload(path, bytes, { contentType: 'audio/mp4', upsert: true });
+      const { error: upErr } = await uploadReferenceClip(supabase, path, bytes, { contentType: 'audio/mp4', upsert: true });
       if (upErr) throw new Error(`Upload ${path}: ${upErr.message}`);
 
       const { error: insErr } = await supabase.from('reference_audio').insert({

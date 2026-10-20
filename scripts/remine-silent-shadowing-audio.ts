@@ -46,10 +46,10 @@ import { basename, join } from 'node:path';
 
 import { parseApplyFlag, requireAuthedUser } from './lib/scriptHelpers';
 import { createScriptSupabaseClient } from './lib/scriptSupabaseClient';
+import { downloadReferenceClip, removeReferenceClips, uploadReferenceClip } from './lib/referenceAudioStorage';
 
 const API_BASE = (process.env.MINING_API_BASE ??
   'https://codex-dev.tailfbd89c.ts.net/youtube-mining').replace(/\/$/, '');
-const AUDIO_BUCKET = 'reference-audio';
 const REMINE_ID_PREFIX = 'audio_remine_';
 
 /** Books to sweep when --book isn't given. */
@@ -308,7 +308,7 @@ async function remineBook(
     );
     if (opts.apply && prior?.length) {
       const paths = prior.map((r) => r.storage_path).filter(Boolean) as string[];
-      if (paths.length) await supabase.storage.from(AUDIO_BUCKET).remove(paths);
+      if (paths.length) await removeReferenceClips(supabase, paths);
       // Soft-delete, never raw DELETE — a hard delete emits no sync_event,
       // so any device that already pulled these rows keeps them (and their
       // silent blobs) forever. See feedback_supabase_hard_delete_bypasses_sync.
@@ -357,9 +357,7 @@ async function remineBook(
   const silent: AudioRow[] = [];
   for (const r of suspects) {
     if (!r.storage_path) continue;
-    const { data: blob } = await supabase.storage
-      .from(AUDIO_BUCKET)
-      .download(r.storage_path);
+    const { data: blob } = await downloadReferenceClip(supabase, r.storage_path);
     if (!blob) continue;
     const db = maxVolumeDb(Buffer.from(await blob.arrayBuffer()), opts.scratch);
     if (db < opts.maxSilentDb) silent.push(r);
@@ -437,9 +435,7 @@ async function remineBook(
       const template = j.row;
       const audioId = `${REMINE_ID_PREFIX}${randomUUID().replace(/-/g, '').slice(0, 20)}`;
       const path = `${userId}/${bookId}/${audioId}.m4a`;
-      const { error: upErr } = await supabase.storage
-        .from(AUDIO_BUCKET)
-        .upload(path, bytes, { contentType: 'audio/mp4', upsert: true });
+      const { error: upErr } = await uploadReferenceClip(supabase, path, bytes, { contentType: 'audio/mp4', upsert: true });
       if (upErr) throw new Error(`upload ${path}: ${upErr.message}`);
 
       const { error: insErr } = await supabase.from('reference_audio').insert({

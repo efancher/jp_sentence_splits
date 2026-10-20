@@ -38,8 +38,8 @@ import { isPlausibleClipSpan } from '../src/lib/oddEarOut';
 import { extractPitch, type PitchAnalysisPayload } from '../src/lib/pitch';
 import { fetchAll, parseApplyFlag, requireAuthedUser } from './lib/scriptHelpers';
 import { createScriptSupabaseClient } from './lib/scriptSupabaseClient';
+import { downloadReferenceClip } from './lib/referenceAudioStorage';
 
-const STORAGE_BUCKET = 'reference-audio';
 const CACHE_DIR = '/tmp/pitch-audit-cache';
 const SAMPLE_RATE = 16_000;
 
@@ -158,7 +158,7 @@ async function main() {
       pitchByAudio.set(audio.id, cached);
       return cached;
     }
-    const { data: blob, error } = await supabase.storage.from(STORAGE_BUCKET).download(audio.storagePath!);
+    const { data: blob, error } = await downloadReferenceClip(supabase, audio.storagePath!);
     if (error || !blob) return null;
     try {
       const samples = await decodeToSamples(Buffer.from(await blob.arrayBuffer()));

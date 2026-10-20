@@ -26,6 +26,7 @@ import { isolatedWordMatchRange, padSpan, type PadConfig } from '../src/lib/isol
 import { ffmpegTrimToM4a, ffprobeDurationMs } from './lib/audioClipHelpers';
 import { fetchAll, requireAuthedUser } from './lib/scriptHelpers';
 import { createScriptSupabaseClient } from './lib/scriptSupabaseClient';
+import { downloadReferenceClip } from './lib/referenceAudioStorage';
 
 const MFA_PYTHON = process.env.MFA_PYTHON ?? '/home/ed/miniforge3/envs/mfa/bin/python3.14';
 const SCORER = join(dirname(fileURLToPath(import.meta.url)), 'score-pad-variants.py');
@@ -142,7 +143,7 @@ async function main() {
   for (const [i, c] of candidates.entries()) {
     let cached = audioCache.get(c.audio.id);
     if (!cached) {
-      const { data: blob, error } = await supabase.storage.from('reference-audio').download(c.audio.storagePath!);
+      const { data: blob, error } = await downloadReferenceClip(supabase, c.audio.storagePath!);
       if (error || !blob) continue;
       const path = join(workDir, `${c.audio.id}.m4a`);
       await writeFile(path, Buffer.from(await blob.arrayBuffer()));
