@@ -20,7 +20,8 @@ import { formatBatchMeaningBankPromptForAI, parseBatchMeaningBankReply } from '.
  * 3-option checks). The copy/paste round-trip matches the other bulk AI
  * prompts; "Generate with AI now" does the same through the `meaning-assist`
  * Edge Function when it is deployed and you are signed in. The correct
- * meaning is the sentence's own stored translation whenever it has one.
+ * meaning is the sentence's own stored translation whenever it has one. A third mode
+ * regenerates AI-written banks that lack key-word-swap distractors (replacing them).
  * Candidates drop out of the list as they are filled (live query), so
  * repeated clicks work through the backlog.
  */
@@ -34,15 +35,16 @@ export function BookComprehensionCheckBatch({ bookId }: { bookId: string }) {
   const [busy, setBusy] = useState(false);
 
   const counts = useLiveQuery(async () => {
-    const [missing, topup] = await Promise.all([
+    const [missing, topup, refresh] = await Promise.all([
       findMeaningBankCandidates({ mode: 'missing', limit: 100000, bookId }),
       findMeaningBankCandidates({ mode: 'topup', limit: 100000, bookId }),
+      findMeaningBankCandidates({ mode: 'refresh', limit: 100000, bookId }),
     ]);
-    return { missing: missing.length, topup: topup.length };
+    return { missing: missing.length, topup: topup.length, refresh: refresh.length };
   }, [bookId]);
 
   if (!counts) return null;
-  const eligible = mode === 'missing' ? counts.missing : counts.topup;
+  const eligible = counts[mode];
 
   async function generateBatch() {
     setBatch(await findMeaningBankCandidates({ mode, limit: batchSize, bookId }));
@@ -78,14 +80,16 @@ export function BookComprehensionCheckBatch({ bookId }: { bookId: string }) {
           readingFlags.push({ sentenceId: item.sentenceId, chunks: [], note: `Reading check — ${flag}` });
         }
       }
-      if (!entry || entry.wrong.length === 0) {
+      if (!entry || entry.wrong.length + (entry.swaps?.length ?? 0) === 0) {
         failed.push(`${index + 1} (no "- " lines under its header)`);
       } else if (!(await applyMeaningBankResult(item.sentenceId, mode, entry, 'ai_suggested'))) {
         const reason =
           mode === 'missing' && !item.request.correct && !entry.correct
             ? 'no correct meaning given — the reply needs a "CORRECT: ..." line'
-            : entry.wrong.length < 3
-              ? `only ${entry.wrong.length} wrong meaning${entry.wrong.length === 1 ? '' : 's'}, need at least 3`
+            : mode === 'refresh' && !entry.swaps?.length
+              ? 'no "+ " key-word-swap lines'
+              : entry.wrong.length + (entry.swaps?.length ?? 0) < 3
+              ? `only ${entry.wrong.length + (entry.swaps?.length ?? 0)} wrong meanings, need at least 3`
               : 'fewer than 3 survived validation, or a check already exists';
         failed.push(`${index + 1} (${reason})`);
       } else {
@@ -128,7 +132,8 @@ export function BookComprehensionCheckBatch({ bookId }: { bookId: string }) {
   return (
     <details className="panel">
       <summary>
-        Meaning choices: bulk generate ({counts.missing} without choices, {counts.topup} with a thin bank)
+        Meaning choices: bulk generate ({counts.missing} without choices, {counts.topup} with a thin bank,{' '}
+        {counts.refresh} without word swaps)
       </summary>
       <div className="stack" style={{ marginTop: '0.75rem' }}>
         <p className="muted" style={{ margin: 0 }}>
@@ -143,6 +148,7 @@ export function BookComprehensionCheckBatch({ bookId }: { bookId: string }) {
             <select value={mode} onChange={(event) => setMode(event.target.value as MeaningBankMode)}>
               <option value="missing">with no choices yet</option>
               <option value="topup">with a thin bank (add more)</option>
+              <option value="refresh">without word-swap choices (replaces their wrong answers)</option>
             </select>
           </label>
           <label>

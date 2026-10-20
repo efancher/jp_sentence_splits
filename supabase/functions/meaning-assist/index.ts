@@ -45,13 +45,19 @@ const TOOL = {
               description:
                 'The correct natural English meaning in context. Copy the supplied correct meaning unchanged when one was given.',
             },
+            swaps: {
+              type: 'array',
+              items: { type: 'string' },
+              description:
+                'Up to 6 wrong meanings that swap the key content word(s) for a different plausible one.',
+            },
             wrong: {
               type: 'array',
               items: { type: 'string' },
-              description: 'Up to 10 plausible but clearly wrong English meanings.',
+              description: 'Up to 4 wrong meanings built on one specific grammar misunderstanding.',
             },
           },
-          required: ['id', 'correct', 'wrong'],
+          required: ['id', 'correct', 'swaps', 'wrong'],
           additionalProperties: false,
         },
       },
@@ -67,12 +73,13 @@ const SYSTEM =
   'sentence is the meaning of this Japanese sentence?"). For each sentence write up to 10 ' +
   'plausible but WRONG English meanings. The learner can often guess the sentence\'s topic from ' +
   'the context, so a wrong meaning must be wrong because of the Japanese sentence itself, never ' +
-  'because the context rules it out, and must not keep the topic as a tell. AT LEAST HALF must ' +
-  'swap the key content word(s) (the noun, verb or adjective carrying the sentence; e.g. for a ' +
-  'sentence about 趣味, wrong meanings about travel, work, food or the weekend) for a different ' +
-  'word that would fit the episode just as well, so the learner must know the Japanese word to ' +
-  'answer. The rest may reflect one specific grammar misunderstanding: actor/object reversal, ' +
-  'negation, tense, intention/desire/obligation. Each must match the correct meaning in length, ' +
+  'because the context rules it out, and must not keep the topic as a tell. Return them in two ' +
+  'lists. `swaps` (aim for 5-6): wrong meanings that swap the key content word(s) (the noun, verb ' +
+  'or adjective carrying the sentence; e.g. for a sentence about 趣味, wrong meanings about ' +
+  'travel, work, food or the weekend) for a different word that would fit the episode just as ' +
+  'well, so the learner must know the Japanese word to answer. `wrong` (aim for 3-4): wrong ' +
+  'meanings reflecting one specific grammar misunderstanding: actor/object reversal, negation, ' +
+  'tense, intention/desire/obligation. Each must match the correct meaning in length, ' +
   'specificity and style, not duplicate another wrong meaning, not merely paraphrase the correct ' +
   'meaning, and not be nonsense. Never change the Japanese. Quality beats quantity: return fewer ' +
   'than 10 if you cannot find good ones. Do not repeat wrong meanings listed as already ' +

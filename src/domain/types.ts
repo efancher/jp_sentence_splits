@@ -623,6 +623,13 @@ export interface ComprehensionCheck {
   extraDistractors?: string[];
   /** When the extra distractors were last authored/edited. */
   distractorsUpdatedAt?: string;
+  /**
+   * The subset of `options` (wrong ones) / `extraDistractors` texts that swap
+   * the sentence's key content word for another plausible one, as opposed to
+   * a grammar misunderstanding. Review questions always include some of these
+   * (they can't be guessed from the episode topic). Absent on older checks.
+   */
+  wordSwapDistractors?: string[];
 }
 
 export interface ImportBatchCounts {

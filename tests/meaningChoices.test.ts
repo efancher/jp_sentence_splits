@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { ComprehensionCheck } from '../src/domain/types';
 import {
+  buildCheckFromMeaningBank,
   distractorHistoryFromRecords,
   getMeaningBank,
   mergeDistractors,
   meaningChoiceId,
+  parseBatchMeaningBankReply,
   parseDistractorBankReply,
   removeDistractor,
   sampleMeaningQuestion,
@@ -142,5 +144,46 @@ describe('authoring', () => {
     expect(removeDistractor(legacy, legacy.options[1]!)).toEqual(legacy);
     const swapped = removeDistractor({ ...legacy, extraDistractors: [extras[0]!] }, legacy.options[1]!);
     expect(swapped.options[1]).toBe(extras[0]);
+  });
+});
+
+describe('word-swap distractors', () => {
+  const swaps = ['Today, I talk about travel.', 'Today, I talk about my job.', 'Today, I talk about food.'];
+  const swapCheck: ComprehensionCheck = {
+    options: ['Today, I talk about hobbies.', swaps[0]!, 'Today, I heard about hobbies.', 'Today, I already talked about hobbies.'],
+    correctIndex: 0,
+    extraDistractors: [swaps[1]!, swaps[2]!, 'Today, I cannot talk about hobbies.', 'Today, I do not talk about hobbies.'],
+    wordSwapDistractors: swaps,
+    provenance: 'ai_suggested',
+    createdAt: '2026-01-01T00:00:00Z',
+  };
+
+  it('tags swaps in the bank', () => {
+    expect(getMeaningBank(swapCheck)!.wordSwaps).toEqual(swaps);
+    expect(getMeaningBank(legacy)!.wordSwaps).toEqual([]);
+  });
+
+  it('every sampled question carries at least two swaps', () => {
+    for (let seed = 1; seed < 60; seed += 1) {
+      const q = sampleMeaningQuestion(swapCheck, [], seeded(seed))!;
+      expect(q.choices).toHaveLength(4);
+      expect(q.distractorTexts.filter((text) => swaps.includes(text)).length).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  it('parses "+ " swap lines in the batch reply', () => {
+    const [entry] = parseBatchMeaningBankReply('=== Sentence 1 ===\n+ Swap one\n- Grammar one\n+ Swap two', 1);
+    expect(entry).toEqual({ wrong: ['Grammar one'], swaps: ['Swap one', 'Swap two'] });
+  });
+
+  it('builds a check that tags the accepted swaps', () => {
+    const { check } = buildCheckFromMeaningBank(
+      'Today, I talk about hobbies.',
+      ['Today, I heard about hobbies.', 'Today, I do not talk about hobbies.'],
+      'ai_suggested',
+      swaps,
+    );
+    expect(check!.wordSwapDistractors).toEqual(swaps);
+    expect(getMeaningBank(check!)!.wordSwaps).toEqual(swaps);
   });
 });

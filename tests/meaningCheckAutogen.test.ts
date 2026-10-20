@@ -195,4 +195,42 @@ describe('meaning check auto-generation', () => {
     const bank = getMeaningBank((await getDb().analyses.get(ids[0]!))!.comprehensionCheck)!;
     expect(bank.distractors).toHaveLength(5);
   });
+
+  it('refresh replaces an AI bank that has no word swaps, keeping the correct meaning', async () => {
+    const { ids } = await seed(['The cat is sleeping.']);
+    await setSentenceComprehensionCheck(ids[0]!, {
+      options: ['The cat is sleeping.', 'The cat is not sleeping.', 'The cat slept all day.', 'The cat wants to sleep.'],
+      correctIndex: 0,
+      provenance: 'ai_suggested',
+      createdAt: '2026-01-01T00:00:00Z',
+    });
+    const [candidate] = await findMeaningBankCandidates({ mode: 'refresh', limit: 5 });
+    expect(candidate!.request.existing).toBeUndefined();
+    expect(await applyMeaningBankResult(ids[0]!, 'refresh', { wrong: [], swaps: [] })).toBe(false);
+    expect(
+      await applyMeaningBankResult(ids[0]!, 'refresh', {
+        swaps: ['The dog is sleeping.', 'The bird is sleeping.', 'The baby is sleeping.'],
+        wrong: ['The cat is not sleeping.'],
+      }),
+    ).toBe(true);
+    const check = (await getDb().analyses.get(ids[0]!))!.comprehensionCheck!;
+    expect(check.options[check.correctIndex]).toBe('The cat is sleeping.');
+    expect(check.createdAt).toBe('2026-01-01T00:00:00Z');
+    expect(getMeaningBank(check)!.wordSwaps).toHaveLength(3);
+    expect(await findMeaningBankCandidates({ mode: 'refresh', limit: 5 })).toHaveLength(0);
+  });
+
+  it('refresh leaves hand-authored banks alone', async () => {
+    const { ids } = await seed(['The cat is sleeping.']);
+    await setSentenceComprehensionCheck(ids[0]!, {
+      options: ['The cat is sleeping.', 'The cat is not sleeping.', 'The dog is sleeping.', 'The cat slept all day.'],
+      correctIndex: 0,
+      provenance: 'manual',
+      createdAt: new Date().toISOString(),
+    });
+    expect(await findMeaningBankCandidates({ mode: 'refresh', limit: 5 })).toHaveLength(0);
+    expect(
+      await applyMeaningBankResult(ids[0]!, 'refresh', { swaps: ['A b.', 'C d.', 'E f.'], wrong: [] }),
+    ).toBe(false);
+  });
 });

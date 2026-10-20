@@ -33,9 +33,10 @@ import type { SpanReadings } from './readingConsensus';
  *
  * `missing`: sentences with no comprehension check at all (every imported
  * sentence starts here). `topup`: sentences whose bank has fewer usable wrong
- * meanings than a full bank (legacy 3-option checks).
+ * meanings than a full bank (legacy 3-option checks). `refresh`: AI-authored
+ * checks with no key-word-swap distractors; the whole bank is replaced.
  */
-export type MeaningBankMode = 'missing' | 'topup';
+export type MeaningBankMode = 'missing' | 'topup' | 'refresh';
 
 /** A bank with at least this many usable wrong meanings is considered full enough. */
 export const TOPUP_BELOW = 7;
@@ -93,6 +94,10 @@ export async function findMeaningBankCandidates(options: {
     if (options.mode === 'topup') {
       if (!check || !bank || bank.distractors.length >= TOPUP_BELOW) continue;
     }
+    if (options.mode === 'refresh') {
+      // Hand-authored banks are left alone.
+      if (!check || !bank || check.provenance === 'manual' || bank.wordSwaps.length > 0) continue;
+    }
     candidates.push({
       sentenceId: item.sentenceId,
       request: {
@@ -102,7 +107,7 @@ export async function findMeaningBankCandidates(options: {
           return text ? [text] : [];
         }),
         correct: bank?.correct ?? (sentence.translation?.trim() || undefined),
-        existing: bank?.entries.map((entry) => entry.text),
+        existing: options.mode === 'refresh' ? undefined : bank?.entries.map((entry) => entry.text),
       },
     });
   }
@@ -113,7 +118,7 @@ export async function findMeaningBankCandidates(options: {
 export async function applyMeaningBankResult(
   sentenceId: string,
   mode: MeaningBankMode,
-  result: { correct?: string; wrong: readonly string[] },
+  result: { correct?: string; wrong: readonly string[]; swaps?: readonly string[] },
   provenance: 'ai_suggested' | 'manual' = 'ai_suggested',
 ): Promise<boolean> {
   const db = getDb();
@@ -124,15 +129,34 @@ export async function applyMeaningBankResult(
     const sentence = await db.sentences.get(sentenceId);
     const correct = sentence?.translation?.trim() || result.correct?.trim();
     if (!correct) return false;
-    const { check } = buildCheckFromMeaningBank(correct, result.wrong, provenance);
+    const { check } = buildCheckFromMeaningBank(correct, result.wrong, provenance, result.swaps);
     if (!check) return false;
     await setSentenceComprehensionCheck(sentenceId, check);
     return true;
   }
   if (!existing) return false;
-  const merged = mergeDistractors(existing, result.wrong);
+  if (mode === 'refresh') {
+    if (existing.provenance === 'manual') return false;
+    const correct = getMeaningBank(existing)?.correct;
+    if (!correct || !result.swaps?.length) return false;
+    const { check } = buildCheckFromMeaningBank(correct, result.wrong, provenance, result.swaps);
+    if (!check?.wordSwapDistractors?.length) return false;
+    await setSentenceComprehensionCheck(sentenceId, { ...check, createdAt: existing.createdAt });
+    return true;
+  }
+  const merged = mergeDistractors(existing, [...(result.swaps ?? []), ...result.wrong]);
   if (merged.added.length === 0) return false;
-  await setSentenceComprehensionCheck(sentenceId, merged.check);
+  const swapKeys = new Set((result.swaps ?? []).map((text) => text.trim().toLowerCase()));
+  const addedSwaps = merged.added.filter((text) => swapKeys.has(text.toLowerCase()));
+  await setSentenceComprehensionCheck(
+    sentenceId,
+    addedSwaps.length
+      ? {
+          ...merged.check,
+          wordSwapDistractors: [...(existing.wordSwapDistractors ?? []), ...addedSwaps],
+        }
+      : merged.check,
+  );
   return true;
 }
 

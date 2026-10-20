@@ -21,6 +21,8 @@ export interface MeaningAssistResult {
   id: string;
   correct: string;
   wrong: string[];
+  /** Wrong meanings that swap the key content word (tagged separately, not in `wrong`). */
+  swaps?: string[];
 }
 
 export type MeaningAssistResponse =
@@ -57,7 +59,8 @@ export async function generateMeaningBanks(items: MeaningAssistItem[]): Promise<
       const e = entry as Partial<MeaningAssistResult>;
       if (typeof e.id !== 'string' || !sent.has(e.id) || typeof e.correct !== 'string') return [];
       const wrong = Array.isArray(e.wrong) ? e.wrong.filter((w): w is string => typeof w === 'string') : [];
-      return [{ id: e.id, correct: e.correct, wrong }];
+      const swaps = Array.isArray(e.swaps) ? e.swaps.filter((w): w is string => typeof w === 'string') : [];
+      return [{ id: e.id, correct: e.correct, wrong, ...(swaps.length ? { swaps } : {}) }];
     });
     return { ok: true, items: clean };
   } catch (err) {

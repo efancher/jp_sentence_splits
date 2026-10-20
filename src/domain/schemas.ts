@@ -181,6 +181,7 @@ export const comprehensionCheckSchema = z.object({
   createdAt: z.string(),
   extraDistractors: z.array(z.string()).optional(),
   distractorsUpdatedAt: z.string().optional(),
+  wordSwapDistractors: z.array(z.string()).optional(),
 });
 
 export const particleCheckSchema = z.object({
