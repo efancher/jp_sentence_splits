@@ -15,7 +15,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { Snackbar } from '../components/Snackbar';
@@ -27,7 +27,12 @@ import { BookChunkingBatch } from '../components/BookChunkingBatch';
 import { BookWalkthroughBatch } from '../components/BookWalkthroughBatch';
 import { BookParticleCheckBatch } from '../components/BookParticleCheckBatch';
 import { BookAssistExtras } from '../components/BookAssistExtras';
-import { autoGenerateMeaningChecks, findMeaningBankCandidates } from '../lib/meaningCheckAutogen';
+import {
+  autoGenerateMeaningChecks,
+  findMeaningBankCandidates,
+  getMeaningJob,
+  subscribeMeaningJob,
+} from '../lib/meaningCheckAutogen';
 import {
   assignBookSentencesToChapter,
   createBookChapter,
@@ -296,8 +301,6 @@ export function BookDetailPage() {
   } | null>(null);
   const [alignmentJobId, setAlignmentJobId] = useState<string | null>(null);
   const [alignmentStatus, setAlignmentStatus] = useState<AlignmentBackfillStatus | null>(null);
-  const [meaningRefreshStatus, setMeaningRefreshStatus] = useState<string | null>(null);
-  const [meaningRefreshBusy, setMeaningRefreshBusy] = useState(false);
   const meaningRefreshCount = useLiveQuery(
     async () =>
       bookId
@@ -305,24 +308,23 @@ export function BookDetailPage() {
         : 0,
     [bookId],
   );
+  // Module-level job: keeps running (and reporting) when the user leaves this page.
+  const meaningJob = useSyncExternalStore(subscribeMeaningJob, getMeaningJob);
+  const refreshJob =
+    meaningJob && meaningJob.mode === 'refresh' && meaningJob.bookId === bookId ? meaningJob : null;
+  const meaningRefreshBusy = meaningJob?.running === true;
+  const meaningRefreshStatus = refreshJob
+    ? refreshJob.running
+      ? `Regenerating… ${refreshJob.attempted}/${refreshJob.total} done, ${refreshJob.saved} updated. Keeps going if you leave this page; stops if you close the app.`
+      : refreshJob.unavailableReason
+        ? `${refreshJob.unavailableReason} Updated ${refreshJob.saved}. Use the "Meaning choices: bulk generate" panel below for the copy/paste route.`
+        : `Updated ${refreshJob.saved} of ${refreshJob.attempted}.`
+    : null;
 
-  async function handleRefreshMeaningChoices() {
+  function handleRefreshMeaningChoices() {
     const total = meaningRefreshCount ?? 0;
-    if (total === 0) return;
-    setMeaningRefreshBusy(true);
-    setMeaningRefreshStatus(`Regenerating ${total} sentences… (this can take a while)`);
-    const summary = await autoGenerateMeaningChecks({
-      mode: 'refresh',
-      bookId,
-      limit: total,
-      ignoreBackoff: true,
-    });
-    setMeaningRefreshBusy(false);
-    setMeaningRefreshStatus(
-      summary.unavailableReason
-        ? `${summary.unavailableReason} Use the "Meaning choices: bulk generate" panel below for the copy/paste route.`
-        : `Updated ${summary.saved} of ${summary.attempted}.`,
-    );
+    if (total === 0 || meaningRefreshBusy) return;
+    void autoGenerateMeaningChecks({ mode: 'refresh', bookId, limit: total, ignoreBackoff: true });
   }
 
   useEffect(() => {
@@ -654,7 +656,7 @@ export function BookDetailPage() {
             <button
               type="button"
               className="secondary"
-              onClick={() => void handleRefreshMeaningChoices()}
+              onClick={handleRefreshMeaningChoices}
               disabled={meaningRefreshBusy || !meaningRefreshCount}
               title="Rewrites the wrong answers on this book's AI-written meaning questions so they swap the key word (e.g. hobbies → travel), not just the grammar. Hand-written ones are skipped."
             >

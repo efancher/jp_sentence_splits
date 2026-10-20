@@ -233,6 +233,41 @@ export interface AutogenSummary {
 
 let inFlight = false;
 let blockedUntil = 0;
+
+/**
+ * Progress of the current/most recent run, readable from any screen
+ * (`useSyncExternalStore`-compatible) so a run keeps showing its progress
+ * after the user navigates away from the page that started it.
+ */
+export interface MeaningJobState {
+  running: boolean;
+  mode: MeaningBankMode;
+  bookId?: string;
+  total: number;
+  attempted: number;
+  saved: number;
+  unavailableReason?: string;
+}
+
+let jobState: MeaningJobState | null = null;
+const jobListeners = new Set<() => void>();
+
+function setJobState(next: MeaningJobState | null): void {
+  jobState = next;
+  for (const listener of jobListeners) listener();
+}
+
+export function subscribeMeaningJob(listener: () => void): () => void {
+  jobListeners.add(listener);
+  return () => {
+    jobListeners.delete(listener);
+  };
+}
+
+export function getMeaningJob(): MeaningJobState | null {
+  return jobState;
+}
+
 const FAILURE_BACKOFF_MS = 60 * 60 * 1000;
 
 /**
@@ -265,6 +300,14 @@ export async function autoGenerateMeaningChecks(
       chapterId: options.chapterId,
     });
     const generate = options.generate ?? generateMeaningBanks;
+    setJobState({
+      running: true,
+      mode,
+      bookId: options.bookId,
+      total: candidates.length,
+      attempted: 0,
+      saved: 0,
+    });
     for (let start = 0; start < candidates.length; start += MEANING_ASSIST_MAX_ITEMS_PER_CALL) {
       const chunk = candidates.slice(start, start + MEANING_ASSIST_MAX_ITEMS_PER_CALL);
       const response = await generate(
@@ -279,8 +322,19 @@ export async function autoGenerateMeaningChecks(
       for (const item of response.items) {
         if (await applyMeaningBankResult(item.id, mode, item)) summary.saved += 1;
       }
+      setJobState({ ...jobState!, attempted: summary.attempted, saved: summary.saved });
     }
+    setJobState({
+      ...jobState!,
+      running: false,
+      attempted: summary.attempted,
+      saved: summary.saved,
+      unavailableReason: summary.unavailableReason,
+    });
     return summary;
+  } catch (error) {
+    if (jobState?.running) setJobState({ ...jobState, running: false });
+    throw error;
   } finally {
     inFlight = false;
   }
