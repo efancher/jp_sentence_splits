@@ -7,7 +7,7 @@
  * finished piece, so a stopped/failed/interrupted run resumes without
  * repeating work.
  */
-import { chunkTranscript, describeStop, mergeChunkReplies, runSegmentChunks } from './assistChunks';
+import { chunkTranscript, describeStop, mergeChunkReplies, otherFailures, runSegmentChunks } from './assistChunks';
 import {
   mergeExtraReplies,
   planExtraTasks,
@@ -191,7 +191,7 @@ export async function runAssistPipeline(input: {
       failure: describeStop(
         `${result.failure.task.heading.toLowerCase()} S${result.failure.task.from}–S${result.failure.task.to}`,
         result.failure.error,
-        `${done} of ${tasks.length} extra parts saved`,
+        `${done} of ${tasks.length} extra parts saved${otherFailures(result.failures)}`,
       ),
     });
     return state;

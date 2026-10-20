@@ -905,8 +905,13 @@ Targets are constants; no settings UI.
   — Auto/Codex/Claude, remembered in localStorage — puts the chosen CLI first and
   keeps the other as backup, sent as `backend` in the `/assist-runs` spec). Every piece is validated (cut-off
   checks) and saved to the run's `state.json` on the box as it lands; a piece
-  gets two attempts, then the run stops as `failed` and the button becomes
-  "Resume", so a misbehaving assistant never loops unattended. While a call is
+  gets two attempts (the second prompt names what was wrong with the first).
+  Extras are also run through the importer's own parsers
+  (`src/lib/assistRepair.ts`) and the run re-asks, up to twice, for only the
+  sentences that would be dropped at save, splicing the answers in. A piece
+  that fails twice no longer halts the run: later pieces still run, then the
+  run ends `failed` and "Resume" redoes only the failed pieces (out-of-credits
+  still stops at once), so a misbehaving assistant never loops unattended. While a call is
   in flight the run state carries `live` (backend, start time, timeout) and a
   short `log` (finished calls, rejected replies, failovers), shown by
   `AssistRunActivity` as a ticking "codex is working 4:12 of 10:00" line plus an

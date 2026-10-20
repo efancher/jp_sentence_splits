@@ -7,7 +7,7 @@
  * Handles are book-wide S-numbers (position in the whole book + 1), so pieces
  * from different ranges merge without remapping.
  */
-import { describeStop } from './assistChunks';
+import { describeStop, otherFailures } from './assistChunks';
 import { EXTRA_RANGE_SENTENCES, describeTaskRange, mergeExtraReplies, runExtraTasks, type ExtraTask, type ExtrasSentence } from './assistExtras';
 import { singleExtraBlock, type CombinedReplySections, type ExtraKind } from './combinedImportPrompt';
 import { logPatch, type AssistBackend, type AssistRunState } from './assistRun';
@@ -135,7 +135,7 @@ export async function runBookExtrasPipeline(input: {
       failure: describeStop(
         `${result.failure.task.heading.toLowerCase()} ${describeTaskRange(result.failure.task)}`,
         result.failure.error,
-        `${done} of ${tasks.length} parts saved`,
+        `${done} of ${tasks.length} parts saved${otherFailures(result.failures)}`,
       ),
     });
     return state;

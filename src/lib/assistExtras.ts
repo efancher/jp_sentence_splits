@@ -15,7 +15,15 @@ import {
   type CombinedReplySections,
   type ExtraKind,
 } from './combinedImportPrompt';
-import { EPISODE_PREPARATION_VERSION, extractJson } from './episodePreparation';
+import { EPISODE_PREPARATION_VERSION } from './episodePreparation';
+import {
+  describeBad,
+  findBadHandles,
+  jsonObject,
+  mergeRepair,
+  stripFences,
+  type BadHandle,
+} from './assistRepair';
 
 export const EXTRA_RANGE_SENTENCES = 25;
 const CONTEXT_BEFORE = 3;
@@ -83,7 +91,7 @@ export function planExtraTasks(
   return tasks;
 }
 
-export function buildExtraPrompt(task: ExtraTask, sentences: ExtrasSentence[]): string {
+export function buildExtraPrompt(task: ExtraTask, sentences: ExtrasSentence[], feedback: string[] = []): string {
   const block = singleExtraBlock(task.kind);
   const lines = block.lines.map((line) =>
     line
@@ -129,28 +137,14 @@ export function buildExtraPrompt(task: ExtraTask, sentences: ExtrasSentence[]): 
     '',
     range,
     'Reply with the result as plain text in your message — no attachment, no code fence, no files written, and no commentary.',
+    ...(feedback.length > 0
+      ? ['', 'A previous answer for this could not be used. Fix these problems this time:', ...feedback.map((line) => `- ${line}`)]
+      : []),
     '',
     '--- sentences ---',
     ...shown,
     '',
   ].join('\n');
-}
-
-function stripFences(reply: string): string {
-  return reply
-    .split(/\r?\n/)
-    .filter((line) => !/^\s*```/.test(line))
-    .join('\n')
-    .trim();
-}
-
-function jsonObject(reply: string): Record<string, unknown> | null {
-  try {
-    const raw = extractJson(reply);
-    return raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : null;
-  } catch {
-    return null;
-  }
 }
 
 /** Returns an error message when `reply` can't be used for `task`, else null. */
@@ -226,9 +220,15 @@ export interface ExtraProgress {
 
 export interface ExtraRunResult {
   replies: Record<string, string>;
+  /** First piece that could not be completed. */
   failure: { task: ExtraTask; error: string } | null;
+  /** Every piece that could not be completed; the run carries on past a failed piece. */
+  failures: { task: ExtraTask; error: string }[];
   cancelled: boolean;
 }
+
+/** Extra asks, per finished piece, for just the sentences the importer would drop. */
+export const MAX_REPAIR_ROUNDS = 2;
 
 export async function runExtraTasks(input: {
   tasks: ExtraTask[];
@@ -243,6 +243,8 @@ export async function runExtraTasks(input: {
   isCancelled: () => boolean;
 }): Promise<ExtraRunResult> {
   const replies: Record<string, string> = {};
+  const failures: ExtraRunResult['failures'] = [];
+  const result = (cancelled = false): ExtraRunResult => ({ replies, failure: failures[0] ?? null, failures, cancelled });
   for (const task of input.tasks) {
     const kept = input.replies[task.id];
     if (kept) replies[task.id] = kept;
@@ -250,12 +252,14 @@ export async function runExtraTasks(input: {
   for (const [position, task] of input.tasks.entries()) {
     if (replies[task.id]) continue;
     let lastError = '';
+    let outOfCredits = false;
+    let accepted: string | null = null;
     const label = `${task.heading.toLowerCase()} ${describeTaskRange(task)}`;
     for (let attempt = 1; attempt <= MAX_ATTEMPTS_PER_CHUNK; attempt++) {
-      if (input.isCancelled()) return { replies, failure: null, cancelled: true };
+      if (input.isCancelled()) return result(true);
       input.onProgress({ task, position, total: input.tasks.length, attempt, backend: null });
       try {
-        const { reply, backend } = await input.run(buildExtraPrompt(task, input.sentences));
+        const { reply, backend } = await input.run(buildExtraPrompt(task, input.sentences, lastError ? [lastError] : []));
         input.onProgress({ task, position, total: input.tasks.length, attempt, backend });
         const problem = validateExtraReply(task, reply);
         if (problem) {
@@ -263,18 +267,57 @@ export async function runExtraTasks(input: {
           input.onNote?.(`${label}: reply rejected (${problem}) — attempt ${attempt} of ${MAX_ATTEMPTS_PER_CHUNK}`);
           continue;
         }
-        replies[task.id] = reply;
-        input.onTaskDone(task.id, reply);
-        input.onNote?.(`${label}: saved (${backend ?? 'assistant'})`);
+        accepted = reply;
+        input.onNote?.(`${label}: received (${backend ?? 'assistant'})`);
         break;
       } catch (err) {
-        if (input.isCancelled()) return { replies, failure: null, cancelled: true };
+        if (input.isCancelled()) return result(true);
         lastError = err instanceof Error ? err.message : 'Assistant failed';
         input.onNote?.(`${label}: call failed (${lastError}) — attempt ${attempt} of ${MAX_ATTEMPTS_PER_CHUNK}`);
-        if (isOutOfCreditsError(lastError)) break;
+        if (isOutOfCreditsError(lastError)) {
+          outOfCredits = true;
+          break;
+        }
       }
     }
-    if (!replies[task.id]) return { replies, failure: { task, error: lastError }, cancelled: false };
+    if (accepted === null) {
+      failures.push({ task, error: lastError });
+      // Out of credits fails every later piece too; anything else may still succeed on the next piece.
+      if (outOfCredits) return result();
+      continue;
+    }
+
+    // Ask again for only the sentences the importer would discard, then keep what landed.
+    for (let round = 1; round <= MAX_REPAIR_ROUNDS; round++) {
+      const bad = findBadHandles(task, accepted, input.sentences);
+      if (bad.length === 0) break;
+      if (input.isCancelled()) return result(true);
+      const handles = bad.map((item) => item.handle);
+      const repairTask: ExtraTask = { ...task, handles, from: Math.min(...handles), to: Math.max(...handles) };
+      input.onProgress({ task: repairTask, position, total: input.tasks.length, attempt: round + 1, backend: null });
+      try {
+        const { reply } = await input.run(buildExtraPrompt(repairTask, input.sentences, describeBad(bad)));
+        const problem = validateExtraReply(repairTask, reply);
+        if (problem) {
+          input.onNote?.(`${label}: fix-up for ${handles.length} sentence${handles.length === 1 ? '' : 's'} rejected (${problem})`);
+          continue;
+        }
+        accepted = mergeRepair(task.kind, accepted, reply, new Set(handles));
+        input.onNote?.(`${label}: re-asked for ${handles.length} sentence${handles.length === 1 ? '' : 's'}`);
+      } catch (err) {
+        if (input.isCancelled()) return result(true);
+        input.onNote?.(`${label}: fix-up call failed (${err instanceof Error ? err.message : 'Assistant failed'})`);
+        break;
+      }
+    }
+    const left: BadHandle[] = findBadHandles(task, accepted, input.sentences);
+    replies[task.id] = accepted;
+    input.onTaskDone(task.id, accepted);
+    input.onNote?.(
+      left.length > 0
+        ? `${label}: saved, but ${left.length} sentence${left.length === 1 ? '' : 's'} still unusable (${left.slice(0, 5).map((item) => `S${item.handle}`).join(', ')}${left.length > 5 ? '…' : ''})`
+        : `${label}: saved`,
+    );
   }
-  return { replies, failure: null, cancelled: false };
+  return result();
 }

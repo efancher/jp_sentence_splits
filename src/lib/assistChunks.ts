@@ -41,6 +41,12 @@ export function describeStop(where: string, error: string, saved: string): strin
   return `Stopped at ${where} after ${MAX_ATTEMPTS_PER_CHUNK} tries: ${error} ${saved} — resume to continue.`;
 }
 
+/** " (and N other parts also failed)" for the pieces after the first that the run could not finish. */
+export function otherFailures(failures: readonly unknown[]): string {
+  const others = failures.length - 1;
+  return others > 0 ? `; ${others} other part${others === 1 ? '' : 's'} also failed` : '';
+}
+
 export const NO_EXTRAS: Required<CombinedPromptOptions> = {
   targets: false,
   constructions: false,
