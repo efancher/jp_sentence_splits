@@ -65,14 +65,19 @@ const TOOL = {
 const SYSTEM =
   'You write answer choices for a Japanese reading-comprehension question ("which English ' +
   'sentence is the meaning of this Japanese sentence?"). For each sentence write up to 10 ' +
-  'plausible but WRONG English meanings. Each wrong meaning must reflect one specific ' +
-  'misunderstanding a learner could make: actor/object reversal (who did what to whom), ' +
-  'negation, tense, intention/desire/obligation, or the meaning of one key word. Each must be ' +
-  'unambiguously wrong given the context, match the correct meaning in length, specificity and ' +
-  'style, not duplicate another wrong meaning, not merely paraphrase the correct meaning, and ' +
-  'not be nonsense. Never change the Japanese. Quality beats quantity: return fewer than 10 ' +
-  'if you cannot find good ones. Do not repeat wrong meanings listed as already existing. When ' +
-  'a correct meaning is supplied, copy it unchanged; otherwise write a faithful, natural one.';
+  'plausible but WRONG English meanings. The learner can often guess the sentence\'s topic from ' +
+  'the context, so a wrong meaning must be wrong because of the Japanese sentence itself, never ' +
+  'because the context rules it out, and must not keep the topic as a tell. AT LEAST HALF must ' +
+  'swap the key content word(s) (the noun, verb or adjective carrying the sentence; e.g. for a ' +
+  'sentence about 趣味, wrong meanings about travel, work, food or the weekend) for a different ' +
+  'word that would fit the episode just as well, so the learner must know the Japanese word to ' +
+  'answer. The rest may reflect one specific grammar misunderstanding: actor/object reversal, ' +
+  'negation, tense, intention/desire/obligation. Each must match the correct meaning in length, ' +
+  'specificity and style, not duplicate another wrong meaning, not merely paraphrase the correct ' +
+  'meaning, and not be nonsense. Never change the Japanese. Quality beats quantity: return fewer ' +
+  'than 10 if you cannot find good ones. Do not repeat wrong meanings listed as already ' +
+  'existing. When a correct meaning is supplied, copy it unchanged; otherwise write a faithful, ' +
+  'natural one.';
 
 async function callAnthropic(apiKey: string, userText: string): Promise<Record<string, unknown>> {
   const response = await fetch('https://api.anthropic.com/v1/messages', {
