@@ -27,6 +27,7 @@ import { BookChunkingBatch } from '../components/BookChunkingBatch';
 import { BookWalkthroughBatch } from '../components/BookWalkthroughBatch';
 import { BookParticleCheckBatch } from '../components/BookParticleCheckBatch';
 import { BookAssistExtras } from '../components/BookAssistExtras';
+import { autoGenerateMeaningChecks, findMeaningBankCandidates } from '../lib/meaningCheckAutogen';
 import {
   assignBookSentencesToChapter,
   createBookChapter,
@@ -295,6 +296,34 @@ export function BookDetailPage() {
   } | null>(null);
   const [alignmentJobId, setAlignmentJobId] = useState<string | null>(null);
   const [alignmentStatus, setAlignmentStatus] = useState<AlignmentBackfillStatus | null>(null);
+  const [meaningRefreshStatus, setMeaningRefreshStatus] = useState<string | null>(null);
+  const [meaningRefreshBusy, setMeaningRefreshBusy] = useState(false);
+  const meaningRefreshCount = useLiveQuery(
+    async () =>
+      bookId
+        ? (await findMeaningBankCandidates({ mode: 'refresh', limit: 100000, bookId })).length
+        : 0,
+    [bookId],
+  );
+
+  async function handleRefreshMeaningChoices() {
+    const total = meaningRefreshCount ?? 0;
+    if (total === 0) return;
+    setMeaningRefreshBusy(true);
+    setMeaningRefreshStatus(`Regenerating ${total} sentences… (this can take a while)`);
+    const summary = await autoGenerateMeaningChecks({
+      mode: 'refresh',
+      bookId,
+      limit: total,
+      ignoreBackoff: true,
+    });
+    setMeaningRefreshBusy(false);
+    setMeaningRefreshStatus(
+      summary.unavailableReason
+        ? `${summary.unavailableReason} Use the "Meaning choices: bulk generate" panel below for the copy/paste route.`
+        : `Updated ${summary.saved} of ${summary.attempted}.`,
+    );
+  }
 
   useEffect(() => {
     if (!bookId) return;
@@ -622,6 +651,21 @@ export function BookDetailPage() {
             >
               Precompute word audio alignment
             </button>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => void handleRefreshMeaningChoices()}
+              disabled={meaningRefreshBusy || !meaningRefreshCount}
+              title="Rewrites the wrong answers on this book's AI-written meaning questions so they swap the key word (e.g. hobbies → travel), not just the grammar. Hand-written ones are skipped."
+            >
+              Regenerate meaning choices
+              {meaningRefreshCount ? ` (${meaningRefreshCount})` : ''}
+            </button>
+            {meaningRefreshStatus ? (
+              <span className="muted" style={{ fontSize: '0.85rem' }}>
+                {meaningRefreshStatus}
+              </span>
+            ) : null}
             {alignmentStatus ? (
               <span
                 className="muted"
