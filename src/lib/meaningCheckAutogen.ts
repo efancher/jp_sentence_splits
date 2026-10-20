@@ -50,6 +50,8 @@ export async function findMeaningBankCandidates(options: {
   mode: MeaningBankMode;
   limit: number;
   bookId?: string;
+  /** With `bookId`: only this chapter/episode's sentences. */
+  chapterId?: string;
 }): Promise<MeaningBankCandidate[]> {
   const db = getDb();
   const memberships = options.bookId
@@ -66,6 +68,8 @@ export async function findMeaningBankCandidates(options: {
   for (const list of byBook.values()) {
     list.sort((a, b) => a.position - b.position);
     list.forEach((membership, index) => {
+      // Context (precedingIds) still comes from the whole book order.
+      if (options.chapterId && membership.chapterId !== options.chapterId) return;
       if (seen.has(membership.sentenceId)) return;
       seen.add(membership.sentenceId);
       ordered.push({
@@ -242,6 +246,7 @@ export async function autoGenerateMeaningChecks(
     limit?: number;
     mode?: MeaningBankMode;
     bookId?: string;
+    chapterId?: string;
     ignoreBackoff?: boolean;
     generate?: (items: Parameters<typeof generateMeaningBanks>[0]) => Promise<MeaningAssistResponse>;
   } = {},
@@ -257,6 +262,7 @@ export async function autoGenerateMeaningChecks(
       mode,
       limit: options.limit ?? 20,
       bookId: options.bookId,
+      chapterId: options.chapterId,
     });
     const generate = options.generate ?? generateMeaningBanks;
     for (let start = 0; start < candidates.length; start += MEANING_ASSIST_MAX_ITEMS_PER_CALL) {

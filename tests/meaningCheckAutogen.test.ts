@@ -220,6 +220,17 @@ describe('meaning check auto-generation', () => {
     expect(await findMeaningBankCandidates({ mode: 'refresh', limit: 5 })).toHaveLength(0);
   });
 
+  it('chapterId scopes candidates to one episode', async () => {
+    const { book, ids } = await seed(['One.', 'Two.', 'Three.']);
+    const memberships = await getDb().bookSentences.where('bookId').equals(book.id).toArray();
+    for (const m of memberships) {
+      await getDb().bookSentences.update(m.id, { chapterId: m.sentenceId === ids[2] ? 'ch_b' : 'ch_a' });
+    }
+    const found = await findMeaningBankCandidates({ mode: 'missing', limit: 10, bookId: book.id, chapterId: 'ch_a' });
+    expect(found.map((c) => c.sentenceId).sort()).toEqual([ids[0]!, ids[1]!].sort());
+    expect(await findMeaningBankCandidates({ mode: 'missing', limit: 10, bookId: book.id })).toHaveLength(3);
+  });
+
   it('refresh leaves hand-authored banks alone', async () => {
     const { ids } = await seed(['The cat is sleeping.']);
     await setSentenceComprehensionCheck(ids[0]!, {

@@ -25,7 +25,16 @@ import { formatBatchMeaningBankPromptForAI, parseBatchMeaningBankReply } from '.
  * Candidates drop out of the list as they are filled (live query), so
  * repeated clicks work through the backlog.
  */
-export function BookComprehensionCheckBatch({ bookId }: { bookId: string }) {
+export function BookComprehensionCheckBatch({
+  bookId,
+  chapters = [],
+}: {
+  bookId: string;
+  /** The book's chapters/episodes, for the scope selector. */
+  chapters?: { id: string; title: string }[];
+}) {
+  const [chapterId, setChapterId] = useState('');
+  const scope = chapterId || undefined;
   const [mode, setMode] = useState<MeaningBankMode>('missing');
   const [batchSize, setBatchSize] = useState(15);
   const [batch, setBatch] = useState<MeaningBankCandidate[] | null>(null);
@@ -36,18 +45,18 @@ export function BookComprehensionCheckBatch({ bookId }: { bookId: string }) {
 
   const counts = useLiveQuery(async () => {
     const [missing, topup, refresh] = await Promise.all([
-      findMeaningBankCandidates({ mode: 'missing', limit: 100000, bookId }),
-      findMeaningBankCandidates({ mode: 'topup', limit: 100000, bookId }),
-      findMeaningBankCandidates({ mode: 'refresh', limit: 100000, bookId }),
+      findMeaningBankCandidates({ mode: 'missing', limit: 100000, bookId, chapterId: scope }),
+      findMeaningBankCandidates({ mode: 'topup', limit: 100000, bookId, chapterId: scope }),
+      findMeaningBankCandidates({ mode: 'refresh', limit: 100000, bookId, chapterId: scope }),
     ]);
     return { missing: missing.length, topup: topup.length, refresh: refresh.length };
-  }, [bookId]);
+  }, [bookId, scope]);
 
   if (!counts) return null;
   const eligible = counts[mode];
 
   async function generateBatch() {
-    setBatch(await findMeaningBankCandidates({ mode, limit: batchSize, bookId }));
+    setBatch(await findMeaningBankCandidates({ mode, limit: batchSize, bookId, chapterId: scope }));
     setPasted('');
     setStatus(null);
   }
@@ -118,6 +127,7 @@ export function BookComprehensionCheckBatch({ bookId }: { bookId: string }) {
     const summary = await autoGenerateMeaningChecks({
       mode,
       bookId,
+      chapterId: scope,
       limit: wholeBook ? Math.max(eligible, 1) : batchSize,
       ignoreBackoff: true,
     });
@@ -143,6 +153,26 @@ export function BookComprehensionCheckBatch({ bookId }: { bookId: string }) {
           meanings.
         </p>
         <div className="row" style={{ alignItems: 'center' }}>
+          {chapters.length > 0 ? (
+            <label>
+              Scope{' '}
+              <select
+                value={chapterId}
+                onChange={(event) => {
+                  setChapterId(event.target.value);
+                  setBatch(null);
+                  setStatus(null);
+                }}
+              >
+                <option value="">whole book</option>
+                {chapters.map((chapter) => (
+                  <option key={chapter.id} value={chapter.id}>
+                    {chapter.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           <label>
             Sentences{' '}
             <select value={mode} onChange={(event) => setMode(event.target.value as MeaningBankMode)}>

@@ -639,7 +639,13 @@ export function BookDetailPage() {
           <BookSharingPanel bookId={bookId} />
         </section>
         <BookAssistExtras bookId={bookId} />
-        <BookComprehensionCheckBatch bookId={bookId} />
+        <BookComprehensionCheckBatch
+          bookId={bookId}
+          chapters={(data.book.chapters ?? [])
+            .slice()
+            .sort((a, b) => a.position - b.position)
+            .map((chapter) => ({ id: chapter.id, title: chapter.title }))}
+        />
         <BookChunkingBatch bookId={bookId} />
         <BookWalkthroughBatch bookId={bookId} />
         <BookParticleCheckBatch bookId={bookId} />
