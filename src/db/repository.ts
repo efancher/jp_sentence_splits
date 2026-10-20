@@ -3059,9 +3059,15 @@ export async function commitSeriesEpisodeImport(options: {
   /** Stable id for the whole series (e.g. a hash of the podcast feed URL,
    * or a fixed constant for NHK Easy) — every episode/article with the same
    * seriesId lands in the same book. */
-  seriesId: string;
-  seriesTitle: string;
+  seriesId?: string;
+  seriesTitle?: string;
   seriesUrl?: string;
+  /**
+   * Add the episode to this existing book instead of finding/creating the
+   * series book by `seriesId`. The book's own key, title and URL are left
+   * as they are (it may be hand-made, with no `sourceKey` at all).
+   */
+  targetBookId?: string;
   episodeTitle: string;
   /**
    * The episode/article's identity within the series — the caller's own
@@ -3079,8 +3085,14 @@ export async function commitSeriesEpisodeImport(options: {
   preview: ShadowingImportPreview;
 }): Promise<{ bookId: string; chapterId: string }> {
   const db = getDb();
+  if (!options.targetBookId && !(options.seriesId && options.seriesTitle)) {
+    throw new Error('Series episode import needs a target book or a series id and title.');
+  }
   const sourceKey = `shadowing:${options.seriesId}`;
-  const existingBook = await db.books.where('sourceKey').equals(sourceKey).first();
+  const existingBook = options.targetBookId
+    ? await db.books.get(options.targetBookId)
+    : await db.books.where('sourceKey').equals(sourceKey).first();
+  if (options.targetBookId && !existingBook) throw new Error('Target book not found.');
   // Match by the episode/article's own source id, not title — a title can
   // be edited upstream or, rarely, collide between two different episodes;
   // sourceId is what actually identifies "this is the same episode again."
@@ -3096,7 +3108,7 @@ export async function commitSeriesEpisodeImport(options: {
     selectedIds,
     destination: existingBook ? 'existing_book' : 'new_book',
     bookId: existingBook?.id,
-    newBookTitle: options.seriesTitle,
+    newBookTitle: options.seriesTitle ?? '',
     orderMode: 'first_occurrence',
     ...(existingChapter
       ? { chapterId: existingChapter.id }
@@ -3106,11 +3118,13 @@ export async function commitSeriesEpisodeImport(options: {
     throw new Error('Series episode import did not create a book/chapter.');
   }
 
-  await updateBook(result.bookId, {
-    sourceKey,
-    title: options.seriesTitle,
-    ...(options.seriesUrl ? { sourceUrl: options.seriesUrl } : {}),
-  });
+  if (!options.targetBookId) {
+    await updateBook(result.bookId, {
+      sourceKey,
+      title: options.seriesTitle!,
+      ...(options.seriesUrl ? { sourceUrl: options.seriesUrl } : {}),
+    });
+  }
   const parsedDate = new Date(options.sourceDate);
   const sourceDate = Number.isNaN(parsedDate.getTime())
     ? nowIso()
@@ -3149,7 +3163,12 @@ export async function commitSeriesEpisodeImport(options: {
   // attachSentencesToChapterForImport), so an unscoped reorder could grab
   // the wrong one.
   await reorderBookSentences(result.bookId, selectedIds, { chapterId: result.chapterId });
-  await reorderChaptersChronologically(result.bookId);
+  // A hand-made target may hold undated chapters, which the date sort would push
+  // behind the new episode; leave its order alone unless every chapter is dated.
+  const targetChapters = (await db.books.get(result.bookId))?.chapters ?? [];
+  if (!options.targetBookId || targetChapters.every((chapter) => chapter.sourceDate)) {
+    await reorderChaptersChronologically(result.bookId);
+  }
   await applySentenceAudioForPreview(result.bookId, options.preview);
 
   return { bookId: result.bookId, chapterId: result.chapterId };

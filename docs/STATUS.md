@@ -95,6 +95,16 @@ repair tooling, research materials and future roadmap ideas remain available.
 
 ## Open limitations and follow-ups
 
+- **Imports and extras (2026-10-20):** chunk/walkthrough drafts are stored per
+  chapter in `sentence_extras`. New standalone shadowing imports now get a
+  chapter, a quick import that cannot save its extras says so on the book page,
+  merging a book into another carries its extras, and Quick import has an "Add to
+  book" selector (a new chapter of any non-archived book). Standalone books
+  imported earlier have no chapter and no drafts; run "Generate extras with the
+  assistant" after moving them. `repair:orphaned-sentence-extras` (dry-run by
+  default) repoints drafts left on a deleted book; its first production dry run
+  found none.
+
 - **Game supply:** the 2026-10-17 production probe found only 30 qualifying Growth
   sentences (none introduced) and one introduced audio-backed Remix skeleton.
   These are dated observations, not a fresh inventory. Other games' individual

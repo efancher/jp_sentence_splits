@@ -49,6 +49,44 @@ describe('commitSeriesEpisodeImport', () => {
     resetDbForTests(`series-import-${createId('db')}`);
   });
 
+  it('adds an episode to a chosen hand-made book without touching its title or key, and keeps undated chapters in place', async () => {
+    const db = getDb();
+    const now = new Date().toISOString();
+    await db.books.put({
+      id: 'hand-made',
+      title: 'My Easy Japanese',
+      archived: false,
+      createdAt: now,
+      updatedAt: now,
+      chapters: [{ id: 'old-ch', title: 'Old episode', position: 0 }],
+      collapsedChapterIds: [],
+    });
+    const result = await commitSeriesEpisodeImport({
+      targetBookId: 'hand-made',
+      episodeTitle: 'Episode 9',
+      sourceId: 'https://example.com/ep-9.mp3',
+      sourceDate: '2026-09-09T00:00:00Z',
+      preview: episodePreview('ep-9', 'Episode 9', ['クラブハウスをやってみました。']),
+    });
+
+    expect(result.bookId).toBe('hand-made');
+    const book = await db.books.get('hand-made');
+    expect(book?.title).toBe('My Easy Japanese');
+    expect(book?.sourceKey).toBeUndefined();
+    expect(book?.chapters.map((c) => c.id)).toEqual(['old-ch', result.chapterId]);
+    const memberships = await db.bookSentences.where('bookId').equals('hand-made').toArray();
+    expect(memberships.every((m) => m.chapterId === result.chapterId)).toBe(true);
+    await expect(
+      commitSeriesEpisodeImport({
+        targetBookId: 'missing',
+        episodeTitle: 'x',
+        sourceId: 'y',
+        sourceDate: now,
+        preview: episodePreview('ep-x', 'x', ['あ。']),
+      }),
+    ).rejects.toThrow('Target book not found');
+  });
+
   it('puts two different episodes of the same series into one shared book, each as its own chapter', async () => {
     const first = await commitSeriesEpisodeImport({
       seriesId: 'podcast-series-abc',

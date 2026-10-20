@@ -67,6 +67,7 @@ const PODCAST_PAGE_SIZE = 30;
  * which wizard stage) a job has reached. */
 const ACTIVE_JOB_KEY = 'quickmine.activeJob';
 const ASSIST_BACKEND_KEY = 'quickmine.assistBackend';
+const TARGET_BOOK_KEY = 'quickmine.targetBook';
 const ASSIST_RUN_POLL_MS = 3000;
 const ASSIST_EXTRAS_KEY_PREFIX = 'quickmine.assistExtras.';
 const ACTIVE_JOB_MAX_AGE_MS = 48 * 60 * 60 * 1000;
@@ -256,6 +257,32 @@ export function QuickMinePage() {
   const [sentenceIdByHandle, setSentenceIdByHandle] = useState<Map<number, string>>(new Map());
   const [preview, setPreview] = useState<ShadowingImportPreview | null>(null);
 
+  // Book every import from this page is added to as a new chapter ('' = the default flow).
+  const [targetBookId, setTargetBookIdState] = useState(() => {
+    try {
+      return localStorage.getItem(TARGET_BOOK_KEY) ?? '';
+    } catch {
+      return '';
+    }
+  });
+  const setTargetBookId = (id: string) => {
+    setTargetBookIdState(id);
+    try {
+      if (id) localStorage.setItem(TARGET_BOOK_KEY, id);
+      else localStorage.removeItem(TARGET_BOOK_KEY);
+    } catch {
+      // Private mode / storage disabled — the choice just won't survive a reload.
+    }
+  };
+  const targetBooks = useLiveQuery(
+    async () =>
+      (await getDb().books.toArray())
+        .filter((book) => !book.archived)
+        .sort((a, b) => a.title.localeCompare(b.title, 'ja')),
+    [],
+    [],
+  );
+  const targetBook = targetBooks?.find((book) => book.id === targetBookId);
   const [podcastFeedUrl, setPodcastFeedUrl] = useState('');
   const [podcastFeed, setPodcastFeed] = useState<PodcastFeed | null>(null);
   const [podcastFeedSort, setPodcastFeedSort] = useState<'newest' | 'oldest'>('newest');
@@ -997,6 +1024,21 @@ export function QuickMinePage() {
           <div className="muted">Reconnecting to your last mining job…</div>
         ) : null}
         {!resuming && stage === 'idle' ? (
+          <label className="stack" style={{ gap: '0.25rem' }}>
+            <span className="muted" style={{ fontSize: '0.85rem' }}>
+              Add to book (as a new chapter)
+            </span>
+            <select value={targetBook ? targetBookId : ''} onChange={(event) => setTargetBookId(event.target.value)}>
+              <option value="">Default — a podcast feed's own book, otherwise a new book</option>
+              {targetBooks?.map((book) => (
+                <option key={book.id} value={book.id}>
+                  {book.title}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+        {!resuming && stage === 'idle' ? (
           <div className="stack" style={{ gap: '0.4rem' }}>
             <div className="row">
               <input
@@ -1522,7 +1564,19 @@ export function QuickMinePage() {
           <ShadowingPreviewCard
             preview={preview}
             retentionNote="Native clips are not included in Glossbook JSON backups. Re-mine this video to restore them if needed."
-            {...(source?.type === 'podcast' && podcastFeedUrl.trim()
+            {...(targetBook && source
+              ? {
+                  commitLabel: `Add as a new chapter of “${targetBook.title}”`,
+                  onCommit: (p: ShadowingImportPreview) =>
+                    commitSeriesEpisodeImport({
+                      targetBookId: targetBook.id,
+                      episodeTitle: source.title,
+                      sourceId: podcastEpisodeSourceUrl || source.url,
+                      sourceDate: podcastEpisodeDate ?? new Date().toISOString(),
+                      preview: p,
+                    }),
+                }
+              : source?.type === 'podcast' && podcastFeedUrl.trim()
               ? {
                   commitLabel: 'Add as a new chapter',
                   onCommit: (p: ShadowingImportPreview) =>
