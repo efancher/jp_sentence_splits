@@ -241,6 +241,27 @@ async function main() {
     if (error) throw new Error(`Failed to delete redundant book_sentence ${row.id}: ${error.message}`);
   }
 
+  // Carry AI extras (chunk drafts, walkthroughs) along; they're read by book_id.
+  const chapterBySentenceId = new Map<string, string | null>([
+    ...collisions.map((row) => [row.sentenceId, null] as const),
+    ...toMove.map((row) => [row.sentenceId, chapter.id] as const),
+  ]);
+  const { data: extrasRows, error: extrasError } = await supabase
+    .from('sentence_extras')
+    .select('id')
+    .eq('owner_id', user.id)
+    .eq('book_id', source.id)
+    .is('deleted_at', null);
+  if (extrasError) throw new Error(`Failed to fetch sentence_extras for ${source.id}: ${extrasError.message}`);
+  for (const row of extrasRows ?? []) {
+    const id = String(row.id);
+    const { error } = await supabase
+      .from('sentence_extras')
+      .update({ book_id: target.id, chapter_id: chapterBySentenceId.get(id) ?? chapter.id })
+      .eq('id', id);
+    if (error) throw new Error(`Failed to repoint sentence_extras ${id}: ${error.message}`);
+  }
+
   const { error: deleteError } = await supabase
     .from('books')
     .update({ deleted_at: new Date().toISOString() })
