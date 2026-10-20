@@ -1,7 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { downloadReferenceClip, uploadReferenceClip } from '../scripts/lib/referenceAudioStorage';
 import { getAudioObject, putAudioObject, r2GatewayUrl } from '../src/sync/audioStorage';
+import { deleteObjects } from '../src/sync/audioStorageCore';
 
 const PATH = '11111111-1111-1111-1111-111111111111/book 1/audio_1.m4a';
 
@@ -10,15 +12,16 @@ function fakeSupabase(opts: { signedIn?: boolean; supabaseCopy?: Blob | null } =
   const download = vi.fn(async () =>
     opts.supabaseCopy ? { data: opts.supabaseCopy, error: null } : { data: null, error: { message: 'Object not found' } },
   );
+  const remove = vi.fn(async () => ({ error: null as { message: string } | null }));
   const client = {
     auth: {
       getSession: async () => ({
         data: { session: opts.signedIn === false ? null : { access_token: 'jwt-123' } },
       }),
     },
-    storage: { from: () => ({ upload, download }) },
+    storage: { from: () => ({ upload, download, remove }) },
   } as unknown as SupabaseClient;
-  return { client, upload, download };
+  return { client, upload, download, remove };
 }
 
 afterEach(() => {
@@ -97,5 +100,57 @@ describe('reference audio storage adapter', () => {
       expect(result.error).toContain(String(status));
       expect(download).not.toHaveBeenCalled();
     }
+  });
+});
+
+describe('deleting reference audio', () => {
+  it('removes from both R2 and Supabase so a stale Supabase copy cannot be read back', async () => {
+    const fetchSpy = vi.fn(async () => new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchSpy);
+    const { client, remove } = fakeSupabase();
+    const result = await deleteObjects('https://gw.example', client, [PATH, 'x/y/z.m4a']);
+    expect(result).toEqual({});
+    expect(fetchSpy.mock.calls.map(([url, init]) => `${(init as RequestInit).method} ${String(url).split('/v1/objects/')[1]}`)).toEqual([
+      'DELETE 11111111-1111-1111-1111-111111111111/book%201/audio_1.m4a',
+      'DELETE x/y/z.m4a',
+    ]);
+    expect(remove).toHaveBeenCalledWith([PATH, 'x/y/z.m4a']);
+  });
+
+  it('touches only Supabase without a gateway, and reports the first failure while still trying both', async () => {
+    const fetchSpy = vi.fn(async () => new Response('{}', { status: 500 }));
+    vi.stubGlobal('fetch', fetchSpy);
+    const plain = fakeSupabase();
+    expect(await deleteObjects(null, plain.client, [PATH])).toEqual({});
+    expect(fetchSpy).not.toHaveBeenCalled();
+    const failing = fakeSupabase();
+    const out = await deleteObjects('https://gw.example', failing.client, [PATH]);
+    expect(out.error).toMatch(/R2 delete failed \(500\)/);
+    expect(failing.remove).toHaveBeenCalledOnce();
+    expect(await deleteObjects('https://gw.example', failing.client, [])).toEqual({});
+  });
+});
+
+describe('script storage helper', () => {
+  it('keeps the { data, error } shape and routes through the gateway when R2_GATEWAY_URL is set', async () => {
+    vi.stubEnv('R2_GATEWAY_URL', 'https://gw.example/');
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) =>
+      init.method === 'PUT' ? new Response('{}', { status: 200 }) : new Response('clip-bytes', { status: 200 })));
+    const { client, upload, download } = fakeSupabase();
+    const got = await downloadReferenceClip(client, PATH);
+    expect(got.error).toBeNull();
+    expect(await got.data?.text()).toBe('clip-bytes');
+    expect(await uploadReferenceClip(client, PATH, new Uint8Array([1, 2, 3]), { contentType: 'audio/mp4', upsert: true })).toEqual({ error: null });
+    expect(upload).not.toHaveBeenCalled();
+    expect(download).not.toHaveBeenCalled();
+  });
+
+  it('reports a failed download or upload as an error value, not an exception', async () => {
+    vi.stubEnv('R2_GATEWAY_URL', 'https://gw.example');
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 403 })));
+    const { client } = fakeSupabase();
+    expect((await downloadReferenceClip(client, PATH)).data).toBeNull();
+    const up = await uploadReferenceClip(client, PATH, new Uint8Array([1]), { contentType: 'audio/mp4' });
+    expect(up.error?.message).toMatch(/403/);
   });
 });
