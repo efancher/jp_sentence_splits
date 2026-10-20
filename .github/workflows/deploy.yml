@@ -44,6 +44,9 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          # Public gateway address, a repository variable (not a secret). Unset
+          # keeps reference audio on Supabase Storage.
+          VITE_R2_GATEWAY_URL: ${{ vars.VITE_R2_GATEWAY_URL }}
         run: npm run build:pages
       - name: Upload Pages artifact
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
