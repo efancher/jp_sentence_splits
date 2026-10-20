@@ -145,11 +145,33 @@ Unfinished work and optional extensions; completed behavior is in `AI_OVERVIEW.m
   [Adaptive scheduling research](ADAPTIVE_SCHEDULING_RESEARCH.md).
 
 - [~] **Review trouble tags and remediation queue.** (2026-10-20 brainstorm;
-  prototype shipped same day: chips, Fresh try / shadow routing, local log, see
-  STATUS. Left: the soft gate, word-level tags, syncing the log and
-  `shadowRequests` across devices, and a week of real use to judge tag accuracy.
-  Preferred over the graph/learned-routing approach above because
-  the learner names the weakness instead of the system inferring it.)
+  prototype shipped and CI-green the same day, `3285d3a`. Preferred over the
+  graph/learned-routing approach above because the learner names the weakness
+  instead of the system inferring it.)
+  **Where it stands:** optional Reading/Meaning/Kanji/Sound chips on the review
+  card (shown after reveal, before rating, never affecting the rating).
+  Reading/Meaning/Kanji queue a Fresh try (walked-through sentences only);
+  Sound puts the sentence first in shadow candidates until a later attempt is
+  saved (`settings.shadowRequests`). Tag use is logged in the local-only
+  `reviewTroubleLogs` table. Details and limits: STATUS.md. Not yet checked in a
+  browser on phone or desktop.
+  **Next, in order:**
+  1. **Progress notes from the tag log (do first).** A read-only summary, either
+     a diagnostic script or a `/progress` panel: tag counts, how often each
+     queued follow-up was actually done, and whether tagged sentences' later
+     ratings improved. Use about a week of real use to judge whether tags are
+     accurate enough to build on. Judge the evidence honestly: a sentence's next
+     rating is not proof the follow-up caused the gain.
+  2. **Soft gate.** Surface pending remediation shortly after the review (same
+     day or next); if undone when the card falls due, show the card anyway.
+     Check against real data that it cannot starve a gate before shipping.
+  3. **Sync** `reviewTroubleLogs` (needs a Supabase migration, RLS and the sync
+     mappers) once step 1 shows the tags are worth keeping. `shadowRequests`
+     lives in settings and should follow the same path as `freshTryRequests`;
+     confirm that.
+  4. **Word-level tags.** Tap the problem word. `reading_in_context` already
+     records "Missed reading" word taps, so check whether those can double as
+     the Reading tag before adding a second mechanism.
   Motivation: shadowing and walkthroughs are what make readings and meanings
   stick, but doing them right before a review defeats FSRS spacing (the review
   then tests short-term memory). Run remediation *after* a failed retrieval.
@@ -171,10 +193,8 @@ Unfinished work and optional extensions; completed behavior is in `AI_OVERVIEW.m
     other readiness gates, so check eligibility against real data first.
   - **Shadow coverage:** independently, order shadowing by fewest prior
     shadows; flagged sentences come first, then lowest shadow count.
-  - **Prototype:** tag chips + per-sentence flags + session ordering, no FSRS
-    changes; use a week of real use to judge tag accuracy. Ends with a short
-    manual test plan. Open: whether to drop the four rating buttons later, and
-    whether word-level tags should feed per-word weakness analytics.
+  - **Open:** whether to drop the four rating buttons later, and whether
+    word-level tags should feed per-word weakness analytics.
 
 - [ ] **Deterministic-id and sync-test follow-ups.** Existing get-or-create
   entities use deterministic ids. Optional extensions: `study_items` (whose
