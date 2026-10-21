@@ -103,11 +103,11 @@ Unfinished work and optional extensions; completed behavior is in `AI_OVERVIEW.m
   clips to R2 and reads R2 first, the maintenance scripts use the same helper, and
   `npm run report:r2-usage` reads Cloudflare analytics (details and the live
   results in the [R2 plan](CLOUDFLARE_R2_PLAN.md)). **Remaining, in order:**
-  - Delete the Supabase copies of reference audio (frees about 690 MB of the
-    1 GB allowance). Irreversible, so list the exact objects, keep them for a few
-    days after the switch, and re-run `scripts/migrate-reference-audio-to-r2.ts`
-    first to catch clips written by browsers still on the old build. Needs the
-    user's explicit approval.
+  - Done 2026-10-21: the Supabase copies of reference audio were deleted (about
+    690 MB; R2 is now the only copy of live clips). Still to do: confirm the
+    Supabase dashboard storage figure has dropped and refresh the budget
+    snapshot; consider an offsite backup of the R2 bucket, since there is no
+    longer a second copy.
   - Create the Cloudflare budget alert (Manage Account, Billing, Billable Usage;
     the user's account setting). It only notifies; it cannot cap spending.
   - Install the daily usage-report timer on the box: pull the main checkout, then

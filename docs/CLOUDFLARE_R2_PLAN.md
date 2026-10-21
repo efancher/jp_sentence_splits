@@ -61,7 +61,12 @@ R2 objects. A full "clear audio cache" and re-sync on a device played without
 issues and the usage report showed the downloads as R2 reads: 35,434 to 38,342
 Class B operations (about +2,900) with no new writes.
 
-**Supabase copy cleanup (prepared 2026-10-21, not yet applied):**
+**Supabase copy cleanup (applied by the user 2026-10-21):** a follow-up dry run
+found 0 eligible objects, 294 objects left in the Supabase bucket (the soft-deleted
+and other files never copied), and all 3,126 live clips present in R2 (733.9 MB,
+usage report OK). R2 is now the only copy of the live reference clips, so there is
+no second store to fall back to; the Supabase dashboard figure should drop as its
+hourly usage data catches up. Details of the script and its safeguards:
 `scripts/delete-supabase-reference-audio-copies.ts` (decision rules in
 `scripts/lib/supabaseCopyCleanup.ts`, tested in `tests/supabaseCopyCleanup.test.ts`)
 deletes from Supabase Storage only, and only objects whose live row is valid,
@@ -70,9 +75,8 @@ hash-compares a sample first and refuses to delete if any differ. Dry run on
 2026-10-21: 3,126 live rows; 2,847 objects (693.5 MB) eligible; 279 post-switch clips
 correctly kept (R2 only); sample 30/30 byte-identical; about 294 other Supabase
 objects (mostly soft-deleted clips never copied to R2) are left alone. The
-`--apply` run was blocked by the session's permission classifier as a bulk storage
-delete and has not been run. It must be run by the user or after adding a
-permission rule. Irreversible.
+assistant's `--apply` attempt was blocked by the session's permission classifier as
+a bulk storage delete; the user ran it. It is irreversible.
 
 **Maintenance scripts moved (2026-10-20):** the 13 scripts that read, wrote or
 deleted reference-audio objects now go through `scripts/lib/referenceAudioStorage.ts`
