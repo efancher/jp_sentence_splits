@@ -17,7 +17,7 @@ import {
 } from '../db/repository';
 import { buildComprehensionCheck, parseBatchComprehensionCheckReply, parseBatchExtraSwaps, parseBatchExtraWrong, parseBatchReadings } from './comprehensionCheck';
 import { checkSentenceReading } from './meaningCheckAutogen';
-import { mergeDistractors } from './meaningChoices';
+import { mergeDistractorsWithSwaps } from './meaningChoices';
 import { remapSentenceHandles, type CombinedReplySections } from './combinedImportPrompt';
 import { parseBookParticleReply } from './particleChecks';
 
@@ -96,12 +96,7 @@ export async function applyQuickImportExtras(
         let check = buildComprehensionCheck(parsed, 'ai_suggested');
         const swaps = extraSwaps[index] ?? [];
         const wrong = extraWrong[index] ?? [];
-        if (swaps.length + wrong.length > 0) {
-          const merged = mergeDistractors(check, [...swaps, ...wrong]);
-          const swapKeys = new Set(swaps.map((text) => text.toLowerCase()));
-          const addedSwaps = merged.added.filter((text) => swapKeys.has(text.toLowerCase()));
-          check = addedSwaps.length ? { ...merged.check, wordSwapDistractors: addedSwaps } : merged.check;
-        }
+        if (swaps.length + wrong.length > 0) check = mergeDistractorsWithSwaps(check, swaps, wrong).check;
         await setSentenceComprehensionCheck(sentenceId, check);
         result.comprehension += 1;
       }

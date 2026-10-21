@@ -8,6 +8,7 @@ import {
   parseBatchExtraWrong,
   parseBatchReadings,
   parseComprehensionCheckReply,
+  parseReplyExtras,
 } from '../src/lib/comprehensionCheck';
 import type { Sentence } from '../src/domain/types';
 
@@ -194,5 +195,12 @@ describe('parseBatchComprehensionCheckReply', () => {
     const results = parseBatchComprehensionCheckReply(reply, 2);
     expect(results[0]).not.toBeNull();
     expect(results[1]).not.toBeNull();
+  });
+});
+
+describe('parseReplyExtras', () => {
+  it('splits a single-sentence reply into "+ " swaps and "- " wrongs, ignoring the numbered options', () => {
+    const reply = [GOOD_SECTION, '+ swap one', '- grammar one', '+ "swap two"'].join('\n');
+    expect(parseReplyExtras(reply)).toEqual({ swaps: ['swap one', 'swap two'], wrong: ['grammar one'] });
   });
 });

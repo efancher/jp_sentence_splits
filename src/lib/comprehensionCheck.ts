@@ -37,12 +37,24 @@ const AI_PROMPT_HEADER = [
   "- Three incorrect options: plausible mistranslations a cold (no-context)",
   '  reading could produce — near-misses, not random sentences.',
   '',
-  'Output only the 4 options, one per line, numbered 1-4, with the correct',
+  'Output the 4 options, one per line, numbered 1-4, with the correct',
   'one marked by a leading asterisk. Example:',
   '1. Some incorrect option',
   '*2. The correct, in-context option',
   '3. Some incorrect option',
   '4. Some incorrect option',
+  '',
+  'Then add MORE wrong meanings (a bank the app rotates through). The learner can',
+  'often guess the topic from the context, so a wrong meaning must be wrong because',
+  'of the Japanese sentence itself, never because the context rules it out, and must',
+  'not keep the topic as a tell. Write 5-6 KEY-WORD SWAPS, each on a line starting',
+  'with "+ ": a wrong meaning that swaps the key content word(s) (the noun, verb or',
+  'adjective carrying the sentence; e.g. for a sentence about 趣味, wrong meanings',
+  'about travel, work, food or the weekend) for a different word that would fit just',
+  'as well, so the learner must know the Japanese word to answer. Then write 2-3',
+  'lines starting with "- ": wrong meanings built on one specific grammar',
+  'misunderstanding (actor/object reversal, negation, tense, wanting vs. being',
+  'able). Keep every wrong meaning similar in length and style to the correct one.',
   '',
   '--- context (preceding sentences) ---',
 ].join('\n');
@@ -217,6 +229,20 @@ export function parseBatchExtraWrong(reply: string, expectedCount: number): stri
       return match ? [match[1]!.replace(/^["“]|["”]$/g, '').trim()] : [];
     }),
   );
+}
+
+/** Key-word swaps (`+ ` lines) and grammar wrongs (`- ` lines) after a single-sentence reply's 4 options. */
+export function parseReplyExtras(reply: string): { swaps: string[]; wrong: string[] } {
+  const clean = (text: string) => text.replace(/^["“]|["”]$/g, '').trim();
+  const swaps: string[] = [];
+  const wrong: string[] = [];
+  for (const line of reply.split('\n')) {
+    const swap = /^\s*\+\s+(.+?)\s*$/.exec(line);
+    const bullet = /^\s*-\s+(.+?)\s*$/.exec(line);
+    if (swap) swaps.push(clean(swap[1]!));
+    else if (bullet) wrong.push(clean(bullet[1]!));
+  }
+  return { swaps, wrong };
 }
 
 /** One list per `1..expectedCount` of the section's key-content-word swaps (`+ ` lines). */

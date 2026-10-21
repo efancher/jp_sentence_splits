@@ -7,12 +7,13 @@ import {
   buildComprehensionCheck,
   formatComprehensionPromptForAI,
   parseComprehensionCheckReply,
+  parseReplyExtras,
 } from '../lib/comprehensionCheck';
 import {
   MEANING_BANK_TARGET_SIZE,
   formatDistractorBankPromptForAI,
   getMeaningBank,
-  mergeDistractors,
+  mergeDistractorsWithSwaps,
   parseDistractorBankReply,
   removeDistractor,
 } from '../lib/meaningChoices';
@@ -91,7 +92,12 @@ export function ComprehensionCheckPicker({ sentenceId }: { sentenceId: string })
       );
       return;
     }
-    await setSentenceComprehensionCheck(sentenceId, buildComprehensionCheck(parsed, 'ai_suggested'));
+    let saved = buildComprehensionCheck(parsed, 'ai_suggested');
+    const extras = parseReplyExtras(pasted);
+    if (extras.swaps.length + extras.wrong.length > 0) {
+      saved = mergeDistractorsWithSwaps(saved, extras.swaps, extras.wrong).check;
+    }
+    await setSentenceComprehensionCheck(sentenceId, saved);
     setStatus('Saved comprehension check.');
     setPasted('');
   }
@@ -135,12 +141,14 @@ export function ComprehensionCheckPicker({ sentenceId }: { sentenceId: string })
 
   async function applyBankReply() {
     if (!check) return;
-    const incoming = parseDistractorBankReply(bankPasted);
-    if (incoming.length === 0) {
-      setStatus('No "- " lines found in the pasted reply.');
+    const incoming = parseReplyExtras(bankPasted);
+    // Plain numbered lists (older replies) count as grammar wrongs.
+    const wrong = incoming.wrong.length || incoming.swaps.length ? incoming.wrong : parseDistractorBankReply(bankPasted);
+    if (incoming.swaps.length + wrong.length === 0) {
+      setStatus('No "+ " or "- " lines found in the pasted reply.');
       return;
     }
-    const result = mergeDistractors(check, incoming);
+    const result = mergeDistractorsWithSwaps(check, incoming.swaps, wrong);
     if (result.added.length > 0) await setSentenceComprehensionCheck(sentenceId, result.check);
     const skipped = result.rejected.map((r) => `"${r.text}" (${r.issues.join(', ')})`).join('; ');
     setStatus(`Added ${result.added.length}.${skipped ? ` Rejected: ${skipped}` : ''}`);

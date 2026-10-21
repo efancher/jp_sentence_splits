@@ -11,7 +11,7 @@ import {
   MEANING_BANK_TARGET_SIZE,
   buildCheckFromMeaningBank,
   getMeaningBank,
-  mergeDistractors,
+  mergeDistractorsWithSwaps,
 } from './meaningChoices';
 import type { MeaningBankRequest } from './meaningChoices';
 import { parseInlineReadings } from './parseInlineReadings';
@@ -148,19 +148,9 @@ export async function applyMeaningBankResult(
     await setSentenceComprehensionCheck(sentenceId, { ...check, createdAt: existing.createdAt });
     return true;
   }
-  const merged = mergeDistractors(existing, [...(result.swaps ?? []), ...result.wrong]);
+  const merged = mergeDistractorsWithSwaps(existing, result.swaps ?? [], result.wrong);
   if (merged.added.length === 0) return false;
-  const swapKeys = new Set((result.swaps ?? []).map((text) => text.trim().toLowerCase()));
-  const addedSwaps = merged.added.filter((text) => swapKeys.has(text.toLowerCase()));
-  await setSentenceComprehensionCheck(
-    sentenceId,
-    addedSwaps.length
-      ? {
-          ...merged.check,
-          wordSwapDistractors: [...(existing.wordSwapDistractors ?? []), ...addedSwaps],
-        }
-      : merged.check,
-  );
+  await setSentenceComprehensionCheck(sentenceId, merged.check);
   return true;
 }
 

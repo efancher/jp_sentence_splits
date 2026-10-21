@@ -5,6 +5,7 @@ import {
   distractorHistoryFromRecords,
   getMeaningBank,
   mergeDistractors,
+  mergeDistractorsWithSwaps,
   meaningChoiceId,
   parseBatchMeaningBankReply,
   parseDistractorBankReply,
@@ -185,5 +186,16 @@ describe('word-swap distractors', () => {
     );
     expect(check!.wordSwapDistractors).toEqual(swaps);
     expect(getMeaningBank(check!)!.wordSwaps).toEqual(swaps);
+  });
+
+  it('mergeDistractorsWithSwaps merges both lists and tags only the accepted swaps', () => {
+    const { check, added } = mergeDistractorsWithSwaps(
+      legacy,
+      ['He gave the pen to her yesterday.', 'He gave the book to her yesterday.'],
+      ['She was given the book by him yesterday.'],
+    );
+    expect(added).toEqual(['He gave the pen to her yesterday.', 'She was given the book by him yesterday.']);
+    expect(check.wordSwapDistractors).toEqual(['He gave the pen to her yesterday.']);
+    expect(getMeaningBank(check)!.wordSwaps).toEqual(['He gave the pen to her yesterday.']);
   });
 });
