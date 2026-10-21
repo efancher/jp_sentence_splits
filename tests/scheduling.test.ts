@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   classifyReviewError,
+  countDueByActivityType,
   computeGraduatedSubjectIds,
   createInitialFsrsState,
   isGraduated,
@@ -440,5 +441,26 @@ describe('computeGraduatedSubjectIds', () => {
   it('excludes a subject with no study items (never appears in the input)', () => {
     const graduated = computeGraduatedSubjectIds([studyItem('si-1', 'word-a')], 180);
     expect(graduated.has('word-b')).toBe(false);
+  });
+});
+
+describe('countDueByActivityType', () => {
+  it('counts due vs total per activity type, busiest first', () => {
+    const now = new Date('2026-01-10T00:00:00Z');
+    const mk = (activityType: string, due: string) =>
+      ({ activityType, fsrsState: { due } }) as unknown as StudyItem;
+    const rows = countDueByActivityType(
+      [
+        mk('cloze', '2026-01-09T00:00:00Z'),
+        mk('cloze', '2026-01-11T00:00:00Z'),
+        mk('dictation', '2026-01-01T00:00:00Z'),
+        mk('dictation', '2026-01-02T00:00:00Z'),
+      ],
+      now,
+    );
+    expect(rows).toEqual([
+      { activityType: 'dictation', due: 2, total: 2 },
+      { activityType: 'cloze', due: 1, total: 2 },
+    ]);
   });
 });

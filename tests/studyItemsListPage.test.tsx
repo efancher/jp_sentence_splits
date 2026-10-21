@@ -54,9 +54,25 @@ describe('StudyItemsListPage', () => {
     renderPage();
 
     expect(await screen.findByText('本を読みます。')).toBeInTheDocument();
-    expect(screen.getByText('comprehension')).toBeInTheDocument();
+    // Each type also appears once in the "Due now by card type" table.
+    expect(screen.getAllByText('comprehension')).toHaveLength(2);
     expect(screen.getByText('表す (あらわす)')).toBeInTheDocument();
-    expect(screen.getByText('reading_retrieval')).toBeInTheDocument();
+    expect(screen.getAllByText('reading_retrieval')).toHaveLength(2);
+  });
+
+  it('summarises due and total counts per card type', async () => {
+    await ensureStudyItem('sentence', 'sent-a', 'comprehension');
+    await ensureStudyItem('sentence', 'sent-b', 'comprehension');
+    const later = await ensureStudyItem('sentence', 'sent-c', 'comprehension');
+    await getDb().studyItems.update(later.id, {
+      fsrsState: { ...later.fsrsState, due: new Date(Date.now() + 86_400_000).toISOString() },
+    });
+
+    renderPage();
+
+    expect(await screen.findByText('Due now by card type')).toBeInTheDocument();
+    const row = screen.getAllByText('comprehension')[0].closest('tr')!;
+    expect(row).toHaveTextContent(/comprehension\s*2\s*3/);
   });
 
   it('links each row to its study-item debug page', async () => {

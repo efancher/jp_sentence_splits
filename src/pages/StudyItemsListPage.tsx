@@ -2,6 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { Link } from 'react-router-dom';
 
 import { listStudyItemSummaries } from '../db/repository';
+import { countDueByActivityType } from '../lib/scheduling';
 
 /**
  * Top-level browsable list of every study item, linking to
@@ -20,8 +21,36 @@ export function StudyItemsListPage() {
       )
     : undefined;
 
+  const dueCounts = items ? countDueByActivityType(items.map(({ studyItem }) => studyItem)) : [];
+
   return (
     <div className="stack">
+      {dueCounts.length > 0 ? (
+        <section className="panel stack">
+          <h2 style={{ margin: 0 }}>Due now by card type</h2>
+          <p className="muted" style={{ margin: 0 }}>
+            Raw due dates only; Review may serve fewer after its gates and daily caps.
+          </p>
+          <table>
+            <thead>
+              <tr>
+                <th align="left">Card type</th>
+                <th align="right">Due</th>
+                <th align="right">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {dueCounts.map((row) => (
+                <tr key={row.activityType}>
+                  <td>{row.activityType}</td>
+                  <td align="right">{row.due}</td>
+                  <td align="right">{row.total}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      ) : null}
       <section className="panel stack">
         <h2 style={{ margin: 0 }}>Study items</h2>
         {sorted === undefined ? (

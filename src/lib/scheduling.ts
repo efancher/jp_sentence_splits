@@ -118,6 +118,39 @@ export function isGraduated(fsrsState: FsrsState, minScheduledDays: number): boo
   return fsrsState.state === 'review' && fsrsState.scheduledDays >= minScheduledDays;
 }
 
+export interface DueCountByActivity {
+  activityType: StudyActivityType;
+  /** Items whose FSRS due time has arrived (never-reviewed `new` items included). */
+  due: number;
+  total: number;
+}
+
+/**
+ * Raw per-card-type due counts for the /study-items summary. Only compares
+ * due dates: it does not apply Review's gating (introduced sentences, daily
+ * caps, sibling spacing), so it is an upper bound on what Review will serve.
+ */
+export function countDueByActivityType(
+  items: StudyItem[],
+  now: Date = new Date(),
+): DueCountByActivity[] {
+  const nowIso = now.toISOString();
+  const byType = new Map<StudyActivityType, DueCountByActivity>();
+  for (const item of items) {
+    const row = byType.get(item.activityType) ?? {
+      activityType: item.activityType,
+      due: 0,
+      total: 0,
+    };
+    row.total += 1;
+    if (item.fsrsState.due <= nowIso) row.due += 1;
+    byType.set(item.activityType, row);
+  }
+  return [...byType.values()].sort(
+    (a, b) => b.due - a.due || a.activityType.localeCompare(b.activityType),
+  );
+}
+
 /**
  * Which subjects (sentence ids, vocabulary item ids, ...) count as fully
  * graduated — every study item that subject actually has (whichever
