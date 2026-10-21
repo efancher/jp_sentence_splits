@@ -144,7 +144,9 @@ function extraBlocks(opts: Required<CombinedPromptOptions>): { heading: string; 
         'learner must know the Japanese word to answer. Then write 2-3 more lines starting with "- ": wrong meanings built on one',
         'specific grammar misunderstanding (actor/object reversal, negation, tense, wanting vs. being able). Every wrong meaning must',
         'be similar in length and style to the correct one and clearly different from it and from each other. Fewer is fine if you',
-        'cannot think of good ones; never pad with obvious nonsense.',
+        'cannot think of good ones; never pad with obvious nonsense. Every wrong meaning must be something a real speaker could',
+        'sensibly say: no impossible or inanimate subjects (e.g. "hobbies want to talk about me"); reverse who does what only when',
+        'both parties could plausibly do it.',
       ],
     });
   }

@@ -54,7 +54,10 @@ const AI_PROMPT_HEADER = [
   'as well, so the learner must know the Japanese word to answer. Then write 2-3',
   'lines starting with "- ": wrong meanings built on one specific grammar',
   'misunderstanding (actor/object reversal, negation, tense, wanting vs. being',
-  'able). Keep every wrong meaning similar in length and style to the correct one.',
+  'able). Keep every wrong meaning similar in length and style to the correct one, and',
+  'something a real speaker could sensibly say: no impossible or inanimate subjects (e.g.',
+  '"hobbies want to talk about me"); reverse who does what only when both parties could',
+  'plausibly do it.',
   '',
   '--- context (preceding sentences) ---',
 ].join('\n');

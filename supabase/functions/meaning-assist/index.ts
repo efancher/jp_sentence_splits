@@ -81,7 +81,9 @@ const SYSTEM =
   'meanings reflecting one specific grammar misunderstanding: actor/object reversal, negation, ' +
   'tense, intention/desire/obligation. Each must match the correct meaning in length, ' +
   'specificity and style, not duplicate another wrong meaning, not merely paraphrase the correct ' +
-  'meaning, and not be nonsense. Never change the Japanese. Quality beats quantity: return fewer ' +
+  'meaning, and not be nonsense: each must be something a real speaker could sensibly say, ' +
+  'with no impossible or inanimate subjects (e.g. "hobbies want to talk about me"); reverse who ' +
+  'did what only when both parties could plausibly do it. Never change the Japanese. Quality beats quantity: return fewer ' +
   'than 10 if you cannot find good ones. Do not repeat wrong meanings listed as already ' +
   'existing. When a correct meaning is supplied, copy it unchanged; otherwise write a faithful, ' +
   'natural one.';
