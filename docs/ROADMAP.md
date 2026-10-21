@@ -106,8 +106,12 @@ Unfinished work and optional extensions; completed behavior is in `AI_OVERVIEW.m
   - Done 2026-10-21: the Supabase copies of reference audio were deleted (about
     690 MB; R2 is now the only copy of live clips). Still to do: confirm the
     Supabase dashboard storage figure has dropped and refresh the budget
-    snapshot; consider an offsite backup of the R2 bucket, since there is no
-    longer a second copy.
+    snapshot. R2 has no second copy: `npm run backup:r2-audio` now mirrors the
+    clips to the box (first full run 2026-10-21, 3,126 clips). Still to do:
+    schedule it daily (a systemd user timer like the usage report's; not
+    installed), write a restore script and rehearse a restore, and decide
+    whether a truly offsite copy (another provider or another machine) is
+    needed, since the mirror shares the box with the services.
   - Create the Cloudflare budget alert (Manage Account, Billing, Billable Usage;
     the user's account setting). It only notifies; it cannot cap spending.
   - Install the daily usage-report timer on the box: pull the main checkout, then

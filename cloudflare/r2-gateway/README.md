@@ -61,3 +61,22 @@ systemctl --user enable --now r2-usage-report.timer
 ```
 
 The latest report is written to `test-results/performance/account/r2/`.
+
+## Local backup of the clips
+
+R2 holds the only copy of live reference-audio clips, so
+`npm run backup:r2-audio` mirrors them to `~/backups/r2-reference-audio`
+(`--dir` or `R2_BACKUP_DIR` to change it). It signs in as the script user, lists
+live `reference_audio` rows, and downloads each clip through the gateway,
+checking the size against the row and writing atomically. A dry run is the
+default; add `--apply` to download. It is resumable and additive: files of the
+right size are skipped and nothing is ever deleted from the mirror, so a clip
+removed or lost in R2 stays recoverable. It exits 1 if any clip failed or is
+missing in R2. Reads count as Class B operations in the gateway ledger.
+
+Restore is the reverse: PUT each file back to
+`/v1/objects/<owner>/<book>/<clip>.<ext>` (the mirror keeps the key paths).
+No restore script exists yet; the first full mirror was taken 2026-10-21 (3,126
+clips, about 707 MB). The mirror is on the same box as the services, so it
+guards against R2 or account loss, not loss of the box itself. A daily timer is
+not installed yet.
