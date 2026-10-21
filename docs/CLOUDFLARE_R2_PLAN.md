@@ -52,7 +52,14 @@ check (R2-only upload, R2-first read matching the Supabase original, clean
 failure for a missing path). A catch-up dry run found nothing new to copy. Browsers
 still running the previous build keep writing to Supabase until they reload, so
 re-run the copy script once more after a few days. Not yet exercised live: reading
-a clip from a second account that is a book member, and the limit refusals.
+a clip from a second account that is a book member (a single-user library today),
+and the limit refusals.
+
+**Live user checks (2026-10-21):** an import of 279 new clips (40.3 MB) landed in R2
+only (a 12-clip sample was absent from Supabase), and all 3,126 live clips matched
+R2 objects. A full "clear audio cache" and re-sync on a device played without
+issues and the usage report showed the downloads as R2 reads: 35,434 to 38,342
+Class B operations (about +2,900) with no new writes.
 
 **Maintenance scripts moved (2026-10-20):** the 13 scripts that read, wrote or
 deleted reference-audio objects now go through `scripts/lib/referenceAudioStorage.ts`
