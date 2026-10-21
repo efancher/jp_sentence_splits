@@ -1,8 +1,10 @@
 import { useLiveQuery } from 'dexie-react-hooks';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
-import { listStudyItemSummaries } from '../db/repository';
+import { listStudyItemSummaries, readSettings } from '../db/repository';
 import { countDueByActivityType } from '../lib/scheduling';
+import { isActivityTypeInUse } from '../lib/sentenceLed';
 
 /**
  * Top-level browsable list of every study item, linking to
@@ -21,16 +23,29 @@ export function StudyItemsListPage() {
       )
     : undefined;
 
-  const dueCounts = items ? countDueByActivityType(items.map(({ studyItem }) => studyItem)) : [];
+  const settings = useLiveQuery(() => readSettings(), []);
+  const [inUseOnly, setInUseOnly] = useState(true);
+  const allCounts = items ? countDueByActivityType(items.map(({ studyItem }) => studyItem)) : [];
+  const dueCounts = inUseOnly
+    ? allCounts.filter((row) => isActivityTypeInUse(row.activityType, settings))
+    : allCounts;
 
   return (
     <div className="stack">
-      {dueCounts.length > 0 ? (
+      {allCounts.length > 0 ? (
         <section className="panel stack">
           <h2 style={{ margin: 0 }}>Due now by card type</h2>
           <p className="muted" style={{ margin: 0 }}>
             Raw due dates only; Review may serve fewer after its gates and daily caps.
           </p>
+          <label className="row" style={{ gap: '0.5rem' }}>
+            <input
+              type="checkbox"
+              checked={inUseOnly}
+              onChange={(event) => setInUseOnly(event.target.checked)}
+            />
+            Only card types Review is using (hide paused ones)
+          </label>
           <table>
             <thead>
               <tr>

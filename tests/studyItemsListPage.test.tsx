@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
@@ -54,10 +55,28 @@ describe('StudyItemsListPage', () => {
     renderPage();
 
     expect(await screen.findByText('本を読みます。')).toBeInTheDocument();
-    // Each type also appears once in the "Due now by card type" table.
+    // comprehension also appears in the "Due now by card type" table;
+    // reading_retrieval is a paused word drill, hidden there by default.
     expect(screen.getAllByText('comprehension')).toHaveLength(2);
     expect(screen.getByText('表す (あらわす)')).toBeInTheDocument();
-    expect(screen.getAllByText('reading_retrieval')).toHaveLength(2);
+    expect(screen.getAllByText('reading_retrieval')).toHaveLength(1);
+  });
+
+  it('hides paused card types from the due table until the filter is turned off', async () => {
+    const vocabItem = await ensureVocabularyItem('表す', 'あらわす');
+    await ensureVocabularyStudyItem(vocabItem.id, 'reading_retrieval');
+    await ensureStudyItem('sentence', 'sent-d', 'comprehension');
+
+    renderPage();
+
+    await screen.findByText('Due now by card type');
+    expect(screen.getAllByText('reading_retrieval').every((el) => !el.closest('tr'))).toBe(true);
+
+    await userEvent.click(screen.getByRole('checkbox', { name: /only card types review is using/i }));
+
+    expect(
+      screen.getAllByText('reading_retrieval').some((el) => el.closest('tr')),
+    ).toBe(true);
   });
 
   it('summarises due and total counts per card type', async () => {
