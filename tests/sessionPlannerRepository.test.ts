@@ -841,16 +841,15 @@ describe('Learning Orchestrator repository layer', () => {
     expect(shadowAttemptSummary(0)).toBe('Not shadowed yet');
   });
 
-  it('under the sentence-led flow, shadowing readiness needs confirmed vocabulary plus the sentence being introduced — no vocabulary-card reviews required', async () => {
+  it('under the sentence-led flow, shadowing readiness needs only the sentence being introduced — no confirmed vocabulary or vocabulary-card reviews required', async () => {
     await updateSettings({ sentenceLedFlow: true });
     const book = await createBook({ title: 'Led Shadow' });
     const db = getDb();
     const sentence = makeSentence();
     await db.sentences.put(sentence);
     await addSentencesToBook(book.id, [sentence.id]);
-    await confirmSentenceVocabulary(sentence.id, [makeSelection()]);
 
-    // Confirmed, never reviewed on a word card, but not introduced (unstarted, no walkthrough, no card).
+    // Not introduced (unstarted, no walkthrough, no card).
     expect((await getSentenceShadowingReadiness([sentence.id])).get(sentence.id)).toBe(false);
 
     // A completed walkthrough introduces it.
@@ -862,7 +861,8 @@ describe('Learning Orchestrator repository layer', () => {
     });
     expect((await getSentenceShadowingReadiness([sentence.id])).get(sentence.id)).toBe(true);
 
-    // Flow off: the word-introduced ratio applies again, and no word has been reviewed.
+    // Flow off: confirmed vocabulary and the word-introduced ratio apply again.
+    await confirmSentenceVocabulary(sentence.id, [makeSelection()]);
     await updateSettings({ sentenceLedFlow: false });
     expect((await getSentenceShadowingReadiness([sentence.id])).get(sentence.id)).toBe(false);
   });

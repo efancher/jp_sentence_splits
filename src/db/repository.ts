@@ -4817,12 +4817,13 @@ export async function filterToIntroducedSentenceIds(sentenceIds: string[]): Prom
  * pitch_accent reps was passing as "known" for gates that meant reading
  * recall).
  *
- * **Sentence-led flow (default, 2026-10-14):** vocabulary cards aren't shown
- * or seeded, so words from new sentences can never be introduced on a card.
- * Under the flow the word check is replaced by the review queue's own rule
- * (ReviewPage's `introducedSentenceIds`): the sentence was walked through,
- * started in a book, or already has a card. The ratio above applies only with
- * the flow off.
+ * **Sentence-led flow (default, 2026-10-14; confirmed-vocabulary requirement
+ * dropped 2026-10-21):** vocabulary cards aren't shown or seeded, so words from
+ * new sentences can never be introduced on a card. Under the flow the only
+ * gate is the review queue's own rule (ReviewPage's `introducedSentenceIds`):
+ * the sentence was walked through, started in a book, or already has a card.
+ * The confirmed-vocabulary check and the ratio above apply only with the flow
+ * off.
  *
  * **No pitch-accent requirement.** A pitch-proficiency requirement was added
  * 2026-09-16 and removed 2026-09-28 (user reflection: shadowing should be
@@ -4863,7 +4864,9 @@ export async function getSentenceShadowingReadiness(
       : vocabularyItemIds.length === 0 ||
         vocabularyItemIds.filter((id) => readingIntroducedIds.has(id)).length / vocabularyItemIds.length >=
           SHADOWING_MIN_INTRODUCED_RATIO;
-    readiness.set(sentenceId, vocabularyReviewStatus === 'confirmed' && wordsReady);
+    // Led flow: only the sentence having been seen gates shadowing (2026-10-21);
+    // vocabulary confirmation is still required with the flow off.
+    readiness.set(sentenceId, ledFlow ? wordsReady : vocabularyReviewStatus === 'confirmed' && wordsReady);
   }
   return readiness;
 }
