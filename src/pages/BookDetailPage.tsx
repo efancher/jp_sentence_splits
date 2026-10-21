@@ -256,6 +256,12 @@ function SortableRow({
           <Link to={`/books/${bookId}/vocabulary/${sentence.id}`}>
             <button type="button">Vocabulary</button>
           </Link>
+          <Link
+            to={`/review?sentenceId=${sentence.id}`}
+            title="Opens this sentence's review card now, even if it isn't due. Rating it counts as a real review."
+          >
+            <button type="button">Preview card</button>
+          </Link>
         </div>
       )}
     </article>
