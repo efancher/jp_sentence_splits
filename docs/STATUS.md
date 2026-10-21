@@ -14,7 +14,11 @@ and possible extensions. This snapshot does not certify a live deployment.
 - "Fresh try" revisits: automatic ones (parked checks, spaced schedule) are capped
   at `EXPLORE_REVISITS_PER_BOOK` per book per plan; ones requested via the review
   card's "Fresh try this sentence" button are exempt from that cap and drafted
-  first. The glossing time budget still bounds the total.
+  first. The glossing time budget still bounds the total. A Fresh try counts as
+  done (spacing advances, a pending request clears) once its walkthrough is
+  finished on a later day than the first; a "say it" attempt is optional.
+  Previously only `expression_attempt` counted, so the same sentences were
+  re-drafted daily and crowded out new lessons (2026-10-21).
 - Review "Trouble with" chips (Reading, Meaning, Kanji, Sound; prototype,
   2026-10-20): optional, tapped before rating, never choosing the FSRS rating
   or crediting cards. Reading/Meaning/Kanji queue a Fresh try (walked-through

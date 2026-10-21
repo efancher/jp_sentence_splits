@@ -29,6 +29,19 @@ describe('sentencesDueForFreshTry', () => {
     expect(sentencesDueForFreshTry(spaced, now)).toEqual(['a']);
   });
 
+  it('counts a walkthrough finished on a later day as a fresh try, with no attempt logged', () => {
+    const base = [walk('a', '2026-10-01T10:00:00')];
+    expect(sentencesDueForFreshTry([...base, walk('a', '2026-10-19T10:00:00')], now)).toEqual([]);
+    expect(sentencesDueForFreshTry([...base, walk('a', '2026-10-17T10:00:00')], now)).toEqual(['a']);
+    const twoDays = [...base, walk('a', '2026-10-05T10:00:00'), walk('a', '2026-10-15T10:00:00')];
+    expect(sentencesDueForFreshTry(twoDays, now)).toEqual([]);
+  });
+
+  it('does not count extra walkthroughs on the first day as fresh tries', () => {
+    const sameDay = [walk('a', '2026-10-01T10:00:00'), walk('a', '2026-10-01T18:00:00')];
+    expect(sentencesDueForFreshTry(sameDay, now)).toEqual(['a']);
+  });
+
   it('drops a sentence once said without cues', () => {
     const done = ev('a', 'expression_attempt', '2026-10-05T10:00:00', { outcome: 'got_it', scaffold: 'none', unitsExpressed: 2, unitsTotal: 2 });
     expect(sentencesDueForFreshTry([walk('a', '2026-10-01T10:00:00'), done], now)).toEqual([]);

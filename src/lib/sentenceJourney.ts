@@ -155,30 +155,37 @@ function daysBetween(fromIso: string, now: Date): number {
 
 /**
  * `sentencesReadyToRevisit` narrowed to sentences whose spacing has elapsed: the
- * wait grows with each day you've already attempted saying it (1, 3, 7, 14, 30
- * days), measured from the last attempt (or the first walkthrough if none).
+ * wait grows with each day you've already had a fresh try (1, 3, 7, 14, 30
+ * days), measured from the latest one (or the first walkthrough if none). A
+ * fresh try is a "say it" attempt or a walkthrough finished on a later day than
+ * the first, so completing the step is enough: no attempt has to be logged.
  * Used for planning only; the Reader's list still shows every candidate.
  */
 export function sentencesDueForFreshTry(events: SentenceLearningEvent[], now: Date = new Date()): string[] {
-  const attemptDays = new Map<string, Set<string>>();
-  const lastAttempt = new Map<string, string>();
   const firstWalk = new Map<string, string>();
   for (const event of events) {
-    if (event.action === 'expression_attempt') {
-      const days = attemptDays.get(event.sentenceId) ?? new Set<string>();
-      days.add(day(event.timestamp));
-      attemptDays.set(event.sentenceId, days);
-      const last = lastAttempt.get(event.sentenceId);
-      if (last === undefined || event.timestamp > last) lastAttempt.set(event.sentenceId, event.timestamp);
-    } else if (event.action === 'walkthrough_completed') {
-      const seen = firstWalk.get(event.sentenceId);
-      if (seen === undefined || event.timestamp < seen) firstWalk.set(event.sentenceId, event.timestamp);
-    }
+    if (event.action !== 'walkthrough_completed') continue;
+    const seen = firstWalk.get(event.sentenceId);
+    if (seen === undefined || event.timestamp < seen) firstWalk.set(event.sentenceId, event.timestamp);
+  }
+  const tryDays = new Map<string, Set<string>>();
+  const lastTry = new Map<string, string>();
+  for (const event of events) {
+    const first = firstWalk.get(event.sentenceId);
+    const isTry =
+      event.action === 'expression_attempt' ||
+      (event.action === 'walkthrough_completed' && first !== undefined && day(event.timestamp) !== day(first));
+    if (!isTry) continue;
+    const days = tryDays.get(event.sentenceId) ?? new Set<string>();
+    days.add(day(event.timestamp));
+    tryDays.set(event.sentenceId, days);
+    const last = lastTry.get(event.sentenceId);
+    if (last === undefined || event.timestamp > last) lastTry.set(event.sentenceId, event.timestamp);
   }
   return sentencesReadyToRevisit(events, now).filter((id) => {
-    const since = lastAttempt.get(id) ?? firstWalk.get(id);
+    const since = lastTry.get(id) ?? firstWalk.get(id);
     if (since === undefined) return false;
-    const tries = attemptDays.get(id)?.size ?? 0;
+    const tries = tryDays.get(id)?.size ?? 0;
     const gap = FRESH_TRY_GAP_DAYS[Math.min(tries, FRESH_TRY_GAP_DAYS.length - 1)]!;
     return daysBetween(since, now) >= gap;
   });

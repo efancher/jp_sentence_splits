@@ -10322,14 +10322,22 @@ export async function getReviewTroubleReport(): Promise<ReviewTroubleReport> {
   });
 }
 
-/** Requested sentences still waiting: no expression attempt since the request. */
+/** Requested sentences still waiting: no attempt or finished walkthrough since the request. */
 function pendingFreshTryRequestIds(
   requests: Record<string, string> | undefined,
   events: SentenceLearningEvent[],
 ): string[] {
   if (!requests) return [];
   return Object.entries(requests)
-    .filter(([id, at]) => !events.some((e) => e.sentenceId === id && e.action === 'expression_attempt' && e.timestamp > at))
+    .filter(
+      ([id, at]) =>
+        !events.some(
+          (e) =>
+            e.sentenceId === id &&
+            (e.action === 'expression_attempt' || e.action === 'walkthrough_completed') &&
+            e.timestamp > at,
+        ),
+    )
     .map(([id]) => id);
 }
 
