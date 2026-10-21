@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { pickAudioQuotaSubjects, pickQuotaSubjects, quotaRemaining } from '../src/lib/newWordQuota';
+import { pickAudioQuotaSubjects, pickQuotaSubjects, pickSentenceQuotaSubjects, quotaRemaining } from '../src/lib/newWordQuota';
 
 const seed = (descriptorKey: string, subjectId: string) => ({ descriptorKey, subjectId });
 
@@ -32,6 +32,22 @@ describe('quotaRemaining', () => {
     expect(quotaRemaining(12, 20)).toBe(0);
     expect(quotaRemaining(0, 0)).toBe(0);
     expect(quotaRemaining(2.9, 1)).toBe(1);
+  });
+});
+
+describe('pickSentenceQuotaSubjects', () => {
+  const pool = [
+    seed('vocabulary', 'w1'),
+    seed('sentence', 's1'),
+    seed('listening', 's1'),
+    seed('sentence', 's2'),
+    seed('sentence', 's3'),
+  ];
+
+  it('picks distinct sentence-descriptor subjects in pool order', () => {
+    expect(pickSentenceQuotaSubjects(pool, 2)).toEqual(['s1', 's2']);
+    expect(pickSentenceQuotaSubjects(pool, 9)).toEqual(['s1', 's2', 's3']);
+    expect(pickSentenceQuotaSubjects(pool, 0)).toEqual([]);
   });
 });
 

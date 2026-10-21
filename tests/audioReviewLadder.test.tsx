@@ -143,6 +143,23 @@ describe('sentence-led audio review ladder', () => {
       await waitFor(async () => expect(await earTiles()).toHaveLength(1));
     });
 
+    it('introduces an introduced sentence’s reading_in_context card while the queue is busy, unless switched off', async () => {
+      await seedBusyQueue();
+      const reading = () =>
+        getDb().studyItems.where('subjectId').equals('s').and((row) => row.activityType === 'reading_in_context').toArray();
+      await getDb().studyItems.bulkDelete((await reading()).map((row) => row.id));
+      await updateSettings({ dailyNewSentenceCardQuota: 0 });
+      const first = openReview();
+      await screen.findByRole('button', { name: 'Reveal text' });
+      expect(await reading()).toHaveLength(0);
+      first.unmount();
+
+      await updateSettings({ dailyNewSentenceCardQuota: 1 });
+      openReview();
+      await screen.findByRole('button', { name: 'Reveal text' });
+      await waitFor(async () => expect(await reading()).toHaveLength(1));
+    });
+
     it('introduces nothing while the queue is busy when switched off', async () => {
       await seedBusyQueue();
       await updateSettings({ dailyNewAudioCardQuota: 0 });

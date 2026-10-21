@@ -254,6 +254,7 @@ export const settingsSchema = z.object({
   dailyNewWordQuota: z.number().int().nonnegative().default(12),
   // Additive (2026-10-21): absent in older backups.
   dailyNewAudioCardQuota: z.number().int().nonnegative().default(3),
+  dailyNewSentenceCardQuota: z.number().int().nonnegative().default(5),
   // Additive (Phase 7.10): absent in older backups.
   graduationMinScheduledDays: z.number().int().nonnegative().default(180),
   // Additive (Learning Orchestrator settings): absent in older backups.

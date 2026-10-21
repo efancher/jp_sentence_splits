@@ -36,7 +36,10 @@ and possible extensions. This snapshot does not certify a live deployment.
   pending audio cards) for up to that many sentences per day, even while cards
   are due. Lazy seeding only runs on an empty queue, which never happened, so
   no `ear_tiles` (and hence no dictation) card had been created. Counted from
-  the database; 0 turns it off. Sentence cards other than audio still seed lazily.
+  the database; 0 turns it off. The same floor applies to the first
+  `reading_in_context` card of introduced sentences
+  (`settings.dailyNewSentenceCardQuota`, default 5): none had been created after
+  2026-10-18 for the same reason.
 - Audio reviews offer `ear_tiles`, then `dictation_tile:N` after Ear Tiles has
   two reviews and is out of learning/relearning. Whole-sentence dictation is
   retired. Typed-match feedback never chooses the FSRS rating.

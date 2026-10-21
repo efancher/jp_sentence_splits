@@ -700,6 +700,13 @@ export interface AppSettings {
    */
   dailyNewAudioCardQuota: number;
   /**
+   * How many introduced sentences get their first `reading_in_context` card
+   * each local day when Review opens, whether or not the due queue is empty
+   * (2026-10-21). The lazy path only seeds on an empty queue, so none were
+   * created after 2026-10-18. `0` turns the top-up off.
+   */
+  dailyNewSentenceCardQuota: number;
+  /**
    * Graduation (Phase 7.10, docs/STATUS.md): a study item stops being
    * treated as due once its FSRS interval (`scheduledDays`) grows past
    * this many days while in the stable `review` state — see

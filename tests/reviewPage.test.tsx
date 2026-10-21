@@ -3274,7 +3274,8 @@ describe('ReviewPage', () => {
   it('stops introducing new subjects once the session planner\'s new-card cap is reached (Phase 7.10)', async () => {
     const db = getDb();
     const now = new Date().toISOString();
-    await updateSettings({ newCardsPerSessionLimit: 1 });
+    // The lazy-seeding cap is the subject here; the daily top-ups deliberately sit outside it.
+    await updateSettings({ newCardsPerSessionLimit: 1, dailyNewSentenceCardQuota: 0, dailyNewAudioCardQuota: 0 });
     await db.books.add({
       id: 'book-1',
       title: 'Test Book',
