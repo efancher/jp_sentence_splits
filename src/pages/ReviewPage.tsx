@@ -38,6 +38,7 @@ import {
   getConfusionPairCandidates,
   getDb,
   logGlossDecision,
+  countEarTilesSentencesSeededSince,
   countVocabularyWordsSeededSince,
   getDueStudyItems,
   getSentenceReviewHistory,
@@ -113,7 +114,13 @@ import { reviewSpans } from '../lib/reviewDocument';
 import { AMBIGUITY_PRONE_ROLES } from '../lib/roleGuide';
 import { sentenceIsSuspendedOnly } from '../lib/suspendedBooks';
 import { startOfLocalDayIso } from '../lib/dailyPractice';
-import { pickQuotaSubjects, quotaRemaining, VOCABULARY_DESCRIPTOR_KEY } from '../lib/newWordQuota';
+import {
+  AUDIO_DESCRIPTOR_KEY,
+  pickAudioQuotaSubjects,
+  pickQuotaSubjects,
+  quotaRemaining,
+  VOCABULARY_DESCRIPTOR_KEY,
+} from '../lib/newWordQuota';
 import { segmentIntoMorae } from '../lib/mora';
 import type { PitchAnalysisPayload } from '../lib/pitch';
 import { explainPitchAccent } from '../lib/pitchAccentRules';
@@ -1858,11 +1865,46 @@ export function ReviewPage() {
         );
       }
 
+      // Daily audio top-up (settings.dailyNewAudioCardQuota): the same floor for
+      // sentences' first `ear_tiles` card, which starts the Ear Tiles → dictation
+      // ladder. Each picked sentence is seeded as its whole pending audio batch.
+      const audioDescriptor = descriptors.find((descriptor) => descriptor.key === AUDIO_DESCRIPTOR_KEY);
+      const audioQuotaSubjects = audioDescriptor
+        ? pickAudioQuotaSubjects(
+            spacedPendingSeeds,
+            quotaRemaining(
+              settings.dailyNewAudioCardQuota ?? 0,
+              await countEarTilesSentencesSeededSince(startOfLocalDayIso(new Date())),
+            ),
+          )
+        : [];
+      if (audioDescriptor && !cancelled) {
+        for (const subjectId of audioQuotaSubjects) {
+          const batch = spacedPendingSeeds.filter(
+            (item) => item.descriptorKey === AUDIO_DESCRIPTOR_KEY && item.subjectId === subjectId,
+          );
+          topUpCards.push(
+            ...(await Promise.all(
+              batch.map(async (item) =>
+                audioDescriptor.buildCard(
+                  await audioDescriptor.ensure(item.candidate, item.activityType),
+                  item.candidate,
+                ),
+              ),
+            )),
+          );
+        }
+        const seededAudio = new Set(audioQuotaSubjects);
+        spacedPendingSeeds = spacedPendingSeeds.filter(
+          (item) => !(item.descriptorKey === AUDIO_DESCRIPTOR_KEY && seededAudio.has(item.subjectId)),
+        );
+      }
+
       if (cancelled) return;
       setQueue([...spaced, ...topUpCards]);
       setPool(spacedPendingSeeds);
-      // The top-up counts toward this sitting's new-card cap like any other new subject.
-      setNewCardsIntroduced(quotaSubjects.length);
+      // The top-ups count toward this sitting's new-card cap like any other new subject.
+      setNewCardsIntroduced(quotaSubjects.length + audioQuotaSubjects.length);
       setInitialized(true);
     })();
     return () => {

@@ -692,6 +692,14 @@ export interface AppSettings {
    */
   dailyNewWordQuota: number;
   /**
+   * How many sentences get their first `ear_tiles` card (plus a first
+   * `listening` card for new ones) each local day when Review opens, whether or
+   * not the due queue is empty (2026-10-21). Without it the lazy seeding path
+   * never reached these cards, so the Ear Tiles → dictation ladder never
+   * started. `0` turns the top-up off.
+   */
+  dailyNewAudioCardQuota: number;
+  /**
    * Graduation (Phase 7.10, docs/STATUS.md): a study item stops being
    * treated as due once its FSRS interval (`scheduledDays`) grows past
    * this many days while in the stable `review` state — see

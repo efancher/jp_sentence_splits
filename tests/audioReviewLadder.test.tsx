@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 import { ensureSettings, resetDbForTests } from '../src/db/database';
-import { ensureStudyItem, getDb, logSentenceLearningEvent } from '../src/db/repository';
+import { ensureStudyItem, getDb, logSentenceLearningEvent, updateSettings } from '../src/db/repository';
 import type { Sentence, StudyItem, VocabularySuggestion } from '../src/domain/types';
 import { ReviewPage } from '../src/pages/ReviewPage';
 import { withAppProviders } from '../src/test/providers';
@@ -122,6 +122,34 @@ describe('sentence-led audio review ladder', () => {
     expect((await getDb().studyItems.get(review.studyItemId))?.activityType).toBe('dictation_tile:0');
     expect((await getDb().studyItems.toArray()).filter((row) => row.activityType.startsWith('dictation'))
       .every((row) => /^dictation_tile:[012]$/.test(row.activityType))).toBe(true);
+  });
+
+  describe('daily audio top-up', () => {
+    // A due listening card keeps the queue busy, so only the top-up can introduce Ear Tiles.
+    async function seedBusyQueue() {
+      await seed();
+      const listening = await ensureStudyItem('sentence', 's', 'listening');
+      await getDb().studyItems.update(listening.id, {
+        fsrsState: { ...listening.fsrsState, state: 'review', due: '2026-01-02T00:00:00.000Z' },
+      });
+    }
+    const earTiles = () =>
+      getDb().studyItems.where('subjectId').equals('s').and((row) => row.activityType === 'ear_tiles').toArray();
+
+    it('introduces Ear Tiles at open even while another card is due', async () => {
+      await seedBusyQueue();
+      openReview();
+      await screen.findByRole('button', { name: 'Reveal text' });
+      await waitFor(async () => expect(await earTiles()).toHaveLength(1));
+    });
+
+    it('introduces nothing while the queue is busy when switched off', async () => {
+      await seedBusyQueue();
+      await updateSettings({ dailyNewAudioCardQuota: 0 });
+      openReview();
+      await screen.findByRole('button', { name: 'Reveal text' });
+      expect(await earTiles()).toHaveLength(0);
+    });
   });
 
   it('withholds an existing due dictation card while Ear Tiles is relearning', async () => {

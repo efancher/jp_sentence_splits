@@ -31,6 +31,12 @@ and possible extensions. This snapshot does not certify a live deployment.
   the next review's good/easy split with vs without the follow-up first (counts
   only, uncontrolled). The soft gate (surface remediation shortly after
   the review) and word-level tags are not built; remediation just leads the next plan.
+- Daily audio top-up (`settings.dailyNewAudioCardQuota`, default 3, 2026-10-21):
+  Review opens by seeding the first `ear_tiles` card (with the sentence's other
+  pending audio cards) for up to that many sentences per day, even while cards
+  are due. Lazy seeding only runs on an empty queue, which never happened, so
+  no `ear_tiles` (and hence no dictation) card had been created. Counted from
+  the database; 0 turns it off. Sentence cards other than audio still seed lazily.
 - Audio reviews offer `ear_tiles`, then `dictation_tile:N` after Ear Tiles has
   two reviews and is out of learning/relearning. Whole-sentence dictation is
   retired. Typed-match feedback never chooses the FSRS rating.

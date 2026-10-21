@@ -224,6 +224,25 @@ export function SettingsPage() {
           many per day, even while reviews are still due. 0 turns it off.
         </p>
         <label>
+          New listening sentences topped up per day
+          <input
+            type="number"
+            min={0}
+            step={1}
+            value={settings.dailyNewAudioCardQuota}
+            onChange={(event) => {
+              const parsed = Number.parseInt(event.target.value, 10);
+              if (Number.isNaN(parsed) || parsed < 0) return;
+              void updateSettings({ dailyNewAudioCardQuota: parsed });
+            }}
+          />
+        </label>
+        <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+          Sentences with audio get their first Ear Tiles card when Review opens,
+          up to this many per day, even while reviews are still due. Dictation
+          cards follow once Ear Tiles is known well. 0 turns it off.
+        </p>
+        <label>
           Graduate after this many days between reviews
           <input
             type="number"

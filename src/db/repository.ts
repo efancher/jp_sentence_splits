@@ -10826,6 +10826,20 @@ export async function countVocabularyWordsSeededSince(sinceIso: string): Promise
   return count;
 }
 
+/**
+ * How many distinct sentences were first given an `ear_tiles` card since
+ * `sinceIso`. Counts what's in the database, so reopening Review can't exceed
+ * the daily audio top-up quota.
+ */
+export async function countEarTilesSentencesSeededSince(sinceIso: string): Promise<number> {
+  const items = await getDb().studyItems.where('subjectType').equals('sentence').toArray();
+  const subjects = new Set<string>();
+  for (const item of items) {
+    if (item.activityType === 'ear_tiles' && item.createdAt >= sinceIso) subjects.add(item.subjectId);
+  }
+  return subjects.size;
+}
+
 async function getRecentActivityEvents(now: Date): Promise<RecentActivityEvent[]> {
   const db = getDb();
   const cutoffIso = new Date(now.getTime() - NEGLECT_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();

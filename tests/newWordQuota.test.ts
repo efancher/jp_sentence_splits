@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { pickQuotaSubjects, quotaRemaining } from '../src/lib/newWordQuota';
+import { pickAudioQuotaSubjects, pickQuotaSubjects, quotaRemaining } from '../src/lib/newWordQuota';
 
 const seed = (descriptorKey: string, subjectId: string) => ({ descriptorKey, subjectId });
 
@@ -32,5 +32,27 @@ describe('quotaRemaining', () => {
     expect(quotaRemaining(12, 20)).toBe(0);
     expect(quotaRemaining(0, 0)).toBe(0);
     expect(quotaRemaining(2.9, 1)).toBe(1);
+  });
+});
+
+describe('pickAudioQuotaSubjects', () => {
+  const audio = (subjectId: string, activityType: string) => ({ descriptorKey: 'listening', subjectId, activityType });
+  const pool = [
+    audio('a', 'listening'), // a new sentence also needs ear_tiles, which is what gets it picked
+    audio('a', 'ear_tiles'),
+    audio('b', 'dictation_tile:1'), // follow-up tiles alone never consume the quota
+    audio('c', 'ear_tiles'),
+    { descriptorKey: 'vocabulary', subjectId: 'w1', activityType: 'cloze' },
+    audio('d', 'ear_tiles'),
+  ];
+
+  it('picks distinct sentences that still need an ear_tiles card, in pool order', () => {
+    expect(pickAudioQuotaSubjects(pool, 2)).toEqual(['a', 'c']);
+    expect(pickAudioQuotaSubjects(pool, 10)).toEqual(['a', 'c', 'd']);
+  });
+
+  it('picks nothing when the quota is used up or off', () => {
+    expect(pickAudioQuotaSubjects(pool, 0)).toEqual([]);
+    expect(pickAudioQuotaSubjects(pool, Number.NaN)).toEqual([]);
   });
 });

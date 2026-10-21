@@ -11,6 +11,7 @@
 export interface PoolSeed {
   descriptorKey: string;
   subjectId: string;
+  activityType?: string;
 }
 
 /** The descriptor whose subjects are vocabulary words. */
@@ -27,6 +28,30 @@ export function pickQuotaSubjects(pool: readonly PoolSeed[], remaining: number):
   const seen = new Set<string>();
   for (const seed of pool) {
     if (seed.descriptorKey !== VOCABULARY_DESCRIPTOR_KEY || seen.has(seed.subjectId)) continue;
+    seen.add(seed.subjectId);
+    picked.push(seed.subjectId);
+    if (picked.length >= remaining) break;
+  }
+  return picked;
+}
+
+/** The descriptor whose subjects are audio-gated sentences (`listening`, `ear_tiles`, `dictation_tile:N`). */
+export const AUDIO_DESCRIPTOR_KEY = 'listening';
+
+/**
+ * The daily audio top-up (`settings.dailyNewAudioCardQuota`): the same idea as
+ * the word top-up, for the Ear Tiles → dictation ladder. The lazy seeding path
+ * only runs when the due queue is empty, which it never was (2026-10-21: 74
+ * sentence cards due, no `ear_tiles` card ever created, so no dictation).
+ * Picks up to `remaining` distinct sentences that still need an `ear_tiles` card.
+ */
+export function pickAudioQuotaSubjects(pool: readonly PoolSeed[], remaining: number): string[] {
+  if (!(remaining > 0)) return [];
+  const picked: string[] = [];
+  const seen = new Set<string>();
+  for (const seed of pool) {
+    if (seed.descriptorKey !== AUDIO_DESCRIPTOR_KEY || seed.activityType !== 'ear_tiles') continue;
+    if (seen.has(seed.subjectId)) continue;
     seen.add(seed.subjectId);
     picked.push(seed.subjectId);
     if (picked.length >= remaining) break;
