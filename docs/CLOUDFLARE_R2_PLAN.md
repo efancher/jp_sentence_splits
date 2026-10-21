@@ -61,6 +61,19 @@ R2 objects. A full "clear audio cache" and re-sync on a device played without
 issues and the usage report showed the downloads as R2 reads: 35,434 to 38,342
 Class B operations (about +2,900) with no new writes.
 
+**Supabase copy cleanup (prepared 2026-10-21, not yet applied):**
+`scripts/delete-supabase-reference-audio-copies.ts` (decision rules in
+`scripts/lib/supabaseCopyCleanup.ts`, tested in `tests/supabaseCopyCleanup.test.ts`)
+deletes from Supabase Storage only, and only objects whose live row is valid,
+whose Supabase object exists and whose R2 twin has the identical size; it
+hash-compares a sample first and refuses to delete if any differ. Dry run on
+2026-10-21: 3,126 live rows; 2,847 objects (693.5 MB) eligible; 279 post-switch clips
+correctly kept (R2 only); sample 30/30 byte-identical; about 294 other Supabase
+objects (mostly soft-deleted clips never copied to R2) are left alone. The
+`--apply` run was blocked by the session's permission classifier as a bulk storage
+delete and has not been run. It must be run by the user or after adding a
+permission rule. Irreversible.
+
 **Maintenance scripts moved (2026-10-20):** the 13 scripts that read, wrote or
 deleted reference-audio objects now go through `scripts/lib/referenceAudioStorage.ts`
 (shared rules in `src/sync/audioStorageCore.ts`): reads try R2 first, writes go to
