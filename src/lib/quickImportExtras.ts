@@ -15,7 +15,7 @@ import {
   reportChunkIssues,
   setSentenceParticleChecks,
 } from '../db/repository';
-import { buildComprehensionCheck, parseBatchComprehensionCheckReply, parseBatchExtraWrong, parseBatchReadings } from './comprehensionCheck';
+import { buildComprehensionCheck, parseBatchComprehensionCheckReply, parseBatchExtraSwaps, parseBatchExtraWrong, parseBatchReadings } from './comprehensionCheck';
 import { checkSentenceReading } from './meaningCheckAutogen';
 import { mergeDistractors } from './meaningChoices';
 import { remapSentenceHandles, type CombinedReplySections } from './combinedImportPrompt';
@@ -83,6 +83,7 @@ export async function applyQuickImportExtras(
   if (sections.comprehension) {
     const comprehension = parseBatchComprehensionCheckReply(sections.comprehension, sentenceIdByNumber.length);
     const extraWrong = parseBatchExtraWrong(sections.comprehension, sentenceIdByNumber.length);
+    const extraSwaps = parseBatchExtraSwaps(sections.comprehension, sentenceIdByNumber.length);
     const readings = parseBatchReadings(sections.comprehension, sentenceIdByNumber.length);
     const flags: { sentenceId: string; chunks: string[]; note: string }[] = [];
     for (const [index, parsed] of comprehension.entries()) {
@@ -93,8 +94,14 @@ export async function applyQuickImportExtras(
         !options.replaceCheckSentenceIds?.has(sentenceId) && Boolean((await getDb().analyses.get(sentenceId))?.comprehensionCheck);
       if (parsed && !hasCheck) {
         let check = buildComprehensionCheck(parsed, 'ai_suggested');
+        const swaps = extraSwaps[index] ?? [];
         const wrong = extraWrong[index] ?? [];
-        if (wrong.length > 0) check = mergeDistractors(check, wrong).check;
+        if (swaps.length + wrong.length > 0) {
+          const merged = mergeDistractors(check, [...swaps, ...wrong]);
+          const swapKeys = new Set(swaps.map((text) => text.toLowerCase()));
+          const addedSwaps = merged.added.filter((text) => swapKeys.has(text.toLowerCase()));
+          check = addedSwaps.length ? { ...merged.check, wordSwapDistractors: addedSwaps } : merged.check;
+        }
         await setSentenceComprehensionCheck(sentenceId, check);
         result.comprehension += 1;
       }

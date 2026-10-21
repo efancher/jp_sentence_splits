@@ -219,6 +219,16 @@ export function parseBatchExtraWrong(reply: string, expectedCount: number): stri
   );
 }
 
+/** One list per `1..expectedCount` of the section's key-content-word swaps (`+ ` lines). */
+export function parseBatchExtraSwaps(reply: string, expectedCount: number): string[][] {
+  return batchSectionLines(reply, expectedCount).map((lines) =>
+    lines.flatMap((line) => {
+      const match = /^\s*\+\s+(.+?)\s*$/.exec(line);
+      return match ? [match[1]!.replace(/^["“]|["”]$/g, '').trim()] : [];
+    }),
+  );
+}
+
 export function buildComprehensionCheck(
   parsed: { options: string[]; correctIndex: number },
   provenance: ComprehensionCheck['provenance'],

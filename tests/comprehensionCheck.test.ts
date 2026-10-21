@@ -4,6 +4,7 @@ import {
   formatBatchComprehensionPromptForAI,
   formatComprehensionPromptForAI,
   parseBatchComprehensionCheckReply,
+  parseBatchExtraSwaps,
   parseBatchExtraWrong,
   parseBatchReadings,
   parseComprehensionCheckReply,
@@ -126,6 +127,14 @@ describe('parseBatchExtraWrong', () => {
   it('collects only "- " bullets per section, ignoring numbered options and READING', () => {
     const reply = ['=== Sentence 1 ===', GOOD_SECTION, 'READING: あ', '- extra one', '- "extra two"', '=== Sentence 2 ===', GOOD_SECTION].join('\n');
     expect(parseBatchExtraWrong(reply, 2)).toEqual([['extra one', 'extra two'], []]);
+  });
+});
+
+describe('parseBatchExtraSwaps', () => {
+  it('collects only "+ " lines per section and leaves "- " bullets to parseBatchExtraWrong', () => {
+    const reply = ['=== Sentence 1 ===', GOOD_SECTION, 'READING: あ', '+ swap one', '- grammar one', '+ "swap two"', '=== Sentence 2 ===', GOOD_SECTION].join('\n');
+    expect(parseBatchExtraSwaps(reply, 2)).toEqual([['swap one', 'swap two'], []]);
+    expect(parseBatchExtraWrong(reply, 2)).toEqual([['grammar one'], []]);
   });
 });
 
