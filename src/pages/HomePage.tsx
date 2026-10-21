@@ -12,7 +12,6 @@ import {
   updateSettings,
 } from '../db/repository';
 import type { PlannerStepStatus, SessionBucket } from '../domain/types';
-import { loadGameBreakCandidates } from '../games/gameBreaks';
 import { ALL_SESSION_BUCKETS } from '../lib/sessionPlanner';
 import { SESSION_STEP_CATEGORY_LABELS, sessionStepCategory } from '../lib/sessionStepCategory';
 import {
@@ -108,8 +107,10 @@ export function HomePage() {
     setAddingMinutes(minutes);
     try {
       const now = new Date();
-      const games = await loadGameBreakCandidates(now);
-      await addMinutesToTodaySession(minutes, now, customSplit ?? undefined, games);
+      // Game breaks are off for now (2026-10-21): omitting the candidates keeps
+      // /play games out of planned sessions and skips every game pool scan.
+      // Re-enable by passing `await loadGameBreakCandidates(now)` (src/games/gameBreaks.ts).
+      await addMinutesToTodaySession(minutes, now, customSplit ?? undefined);
       if (customSplit) await updateSettings({ sessionAllocation: customSplit });
     } finally {
       setAddingMinutes(null);
