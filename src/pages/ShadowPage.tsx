@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { AnalysisPanel } from '../components/AnalysisPanel';
+import { LiveShadowWaveform } from '../components/LiveShadowWaveform';
 import { NativePitchPractice } from '../components/NativePitchPractice';
 import { AttemptPitchGrid } from '../components/AttemptPitchGrid';
 import { attemptsNeedingPhraseSnapshot, backfillPhraseSnapshots } from '../lib/backfillPhraseSnapshots';
@@ -617,6 +618,18 @@ export function ShadowPage() {
             ))}
           </select>
         </label>
+      ) : null}
+      {referenceAudio && isLoopingReps && shadowing.shadowActive ? (
+        <LiveShadowWaveform
+          referenceBlob={referenceAudio.blob}
+          range={loopRange ?? undefined}
+          active={isLoopingReps && shadowing.shadowActive}
+          getMediaTime={shadowing.getShadowMediaTime}
+          analyser={shadowing.getShadowAnalyser()}
+          sampleRate={shadowing.getShadowSampleRate()}
+          showWaveform={false}
+          wrapSeconds={wrapSeconds}
+        />
       ) : null}
       {isLoopingReps && shadowing.error ? <p className="muted">{shadowing.error}</p> : null}
     </div>

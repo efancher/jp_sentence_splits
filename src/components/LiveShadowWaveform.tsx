@@ -50,6 +50,8 @@ export function LiveShadowWaveform({
   analyser,
   sampleRate = 48_000,
   range,
+  showWaveform = true,
+  wrapSeconds,
 }: {
   referenceBlob: Blob;
   active: boolean;
@@ -66,6 +68,10 @@ export function LiveShadowWaveform({
    * original whole-clip behavior (ShadowPage's hands-free loop).
    */
   range?: TimeRangeMs;
+  /** Draw the amplitude waveform above the pitch chart. ShadowPage's loop shows pitch only. */
+  showWaveform?: boolean;
+  /** Wrap the pitch chart into stacked rows of this many seconds; omit for a single row. */
+  wrapSeconds?: number;
 }) {
   const [referencePeaks, setReferencePeaks] = useState<WavePeak[]>([]);
   const [referencePitchBuckets, setReferencePitchBuckets] = useState<Array<number | null>>([]);
@@ -241,33 +247,47 @@ export function LiveShadowWaveform({
       peaksToPolyline(livePeaks, VIEW_WIDTH, WAVE_HEIGHT, active ? playheadIndex : livePeaks.length - 1),
     [active, livePeaks, playheadIndex],
   );
-  const referencePitchLine = useMemo(
-    () =>
-      pitchBucketsToPolyline(
-        referencePitchBuckets,
-        VIEW_WIDTH,
-        PITCH_HEIGHT,
-        LIVE_PITCH_DISPLAY_MIN_SEMITONES,
-        LIVE_PITCH_DISPLAY_MAX_SEMITONES,
-      ),
-    [referencePitchBuckets],
-  );
-  const livePitchLine = useMemo(
-    () =>
-      pitchBucketsToPolyline(
-        livePitchBuckets,
-        VIEW_WIDTH,
-        PITCH_HEIGHT,
-        LIVE_PITCH_DISPLAY_MIN_SEMITONES,
-        LIVE_PITCH_DISPLAY_MAX_SEMITONES,
-        active ? playheadIndex : livePitchBuckets.length - 1,
-      ),
-    [active, livePitchBuckets, playheadIndex],
-  );
   const playheadX =
     referencePeaks.length > 1
       ? (playheadIndex / Math.max(1, referencePeaks.length - 1)) * VIEW_WIDTH
       : 0;
+
+  // Pitch chart rows: equal-time slices of the bucket arrays (one row unless wrapped).
+  const bucketCount = referencePitchBuckets.length;
+  const bucketsPerRow =
+    wrapSeconds && durationSeconds > wrapSeconds && bucketCount > 0
+      ? Math.max(2, Math.round((bucketCount * wrapSeconds) / durationSeconds))
+      : Math.max(1, bucketCount);
+  const rowCount = Math.max(1, Math.ceil(bucketCount / bucketsPerRow));
+  const pitchHeight = rowCount > 1 ? 90 : PITCH_HEIGHT;
+  const pitchRows = Array.from({ length: rowCount }, (_, row) => {
+    const from = row * bucketsPerRow;
+    const to = Math.min(bucketCount, from + bucketsPerRow);
+    const widthFrac = (to - from) / bucketsPerRow;
+    const rowWidth = VIEW_WIDTH * widthFrac;
+    const line = (values: Array<number | null>, upTo?: number) =>
+      pitchBucketsToPolyline(
+        values.slice(from, to),
+        rowWidth,
+        pitchHeight,
+        LIVE_PITCH_DISPLAY_MIN_SEMITONES,
+        LIVE_PITCH_DISPLAY_MAX_SEMITONES,
+        upTo === undefined ? undefined : upTo - from,
+      );
+    const liveUpTo = active ? playheadIndex : livePitchBuckets.length - 1;
+    const playhead =
+      active && playheadIndex >= from && playheadIndex < to
+        ? ((playheadIndex - from) / Math.max(1, to - from - 1)) * rowWidth
+        : null;
+    return {
+      widthFrac,
+      rowWidth,
+      referenceLine: line(referencePitchBuckets),
+      // Rows after the playhead stay empty so a rep redraws top-to-bottom.
+      livePitchLine: liveUpTo >= from ? line(livePitchBuckets, liveUpTo) : '',
+      playhead,
+    };
+  });
 
   if (error) return <p className="muted">{error}</p>;
   if (referencePeaks.length === 0) {
@@ -276,6 +296,7 @@ export function LiveShadowWaveform({
 
   return (
     <div className="stack">
+      {showWaveform ? (
       <div className="stack">
         <span className="muted">Live shadow waveform (your level auto-boosted toward the reference)</span>
         <svg
@@ -300,30 +321,38 @@ export function LiveShadowWaveform({
           )}
         </svg>
       </div>
+      ) : null}
 
       <div className="stack">
         <span className="muted">Live shadow pitch (speaker-normalized)</span>
-        <svg
-          viewBox={`0 0 ${VIEW_WIDTH} ${PITCH_HEIGHT}`}
-          role="img"
-          aria-label="Reference and live pitch contour"
-          style={{ width: '100%', height: PITCH_HEIGHT, color: 'var(--text-muted)' }}
-        >
-          <polyline fill="none" stroke="currentColor" strokeWidth="2" points={referencePitchLine} />
-          {livePitchLine && (
-            <polyline fill="none" stroke="var(--accent)" strokeWidth="2.5" points={livePitchLine} />
-          )}
-          {active && (
-            <line
-              x1={playheadX}
-              x2={playheadX}
-              y1="0"
-              y2={PITCH_HEIGHT}
-              stroke="var(--warning)"
-              strokeWidth="2"
-            />
-          )}
-        </svg>
+        {pitchRows.map((row, index) => (
+          <svg
+            key={index}
+            viewBox={`0 0 ${row.rowWidth} ${pitchHeight}`}
+            role="img"
+            aria-label={
+              pitchRows.length > 1
+                ? `Reference and live pitch contour (part ${index + 1} of ${pitchRows.length})`
+                : 'Reference and live pitch contour'
+            }
+            style={{ width: `${row.widthFrac * 100}%`, height: pitchHeight, color: 'var(--text-muted)' }}
+          >
+            <polyline fill="none" stroke="currentColor" strokeWidth="2" points={row.referenceLine} />
+            {row.livePitchLine && (
+              <polyline fill="none" stroke="var(--accent)" strokeWidth="2.5" points={row.livePitchLine} />
+            )}
+            {row.playhead !== null && (
+              <line
+                x1={row.playhead}
+                x2={row.playhead}
+                y1="0"
+                y2={pitchHeight}
+                stroke="var(--warning)"
+                strokeWidth="2"
+              />
+            )}
+          </svg>
+        ))}
         <p className="muted">
           Gold is your live voice vs the reference contour — each is centred on its
           own median pitch, so match the shape, not the height
