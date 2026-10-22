@@ -32,6 +32,22 @@ describe('MeasuredPitchContour', () => {
     expect(container.querySelector('svg')).toBeNull();
   });
 
+  it('wraps a long contour into rows of wrapSeconds, with the playhead in the right row', () => {
+    // 250 frames = 5s voiced; wrap every 2s -> 3 rows (2s, 2s, 1s).
+    const fr = frames(Array.from({ length: 250 }, (_, i) => Math.sin(i / 10) * 3));
+    const { container } = render(
+      <MeasuredPitchContour payload={payload(fr)} wrapSeconds={2} progress={0.5} />,
+    );
+    const svgs = container.querySelectorAll('svg');
+    expect(svgs).toHaveLength(3);
+    expect(svgs[2]!.getAttribute('style')).toContain('width: 4');
+    // Last row is the ~1s remainder of a 2s row, so roughly half width.
+    // 2.5s playback position lands in row 2 only.
+    expect(svgs[0]!.querySelector('.pitch-contour-playhead')).toBeNull();
+    expect(svgs[1]!.querySelector('.pitch-contour-playhead')).not.toBeNull();
+    expect(svgs[2]!.querySelector('.pitch-contour-playhead')).toBeNull();
+  });
+
   it('draws a single polyline for a continuously voiced contour', () => {
     const { container } = render(
       <MeasuredPitchContour payload={payload(frames([0, 1, 2, 1]))} />,

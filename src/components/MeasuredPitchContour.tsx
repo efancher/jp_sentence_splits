@@ -63,6 +63,7 @@ export function MeasuredPitchContour({
   kana,
   height = 36,
   scaleRange,
+  wrapSeconds,
 }: {
   payload?: PitchAnalysisPayload;
   progress?: number | null;
@@ -78,6 +79,8 @@ export function MeasuredPitchContour({
   height?: number;
   /** Fixed semitone extent to scale against, shared across charts of the same clip — see doc comment above. */
   scaleRange?: { min: number; max: number };
+  /** Wrap the contour into stacked rows of this many seconds (long clips get bunched up on a phone). */
+  wrapSeconds?: number;
 }) {
   const result = useMemo(() => {
     const frames = payload?.frames ?? [];
@@ -103,38 +106,48 @@ export function MeasuredPitchContour({
       min <= 0 && max >= 0 ? height - PAD_Y - ((0 - min) / span) * (height - 2 * PAD_Y) : null;
     const extentSemitones = (scaleRange ? scaleRange.max - scaleRange.min : max - min).toFixed(1);
 
-    const runs: string[] = [];
-    let current: string[] = [];
-    let lastVoicedTime = -Infinity;
-    frames.forEach((frame) => {
-      const inWindow =
-        frame.timeSeconds >= window.start && frame.timeSeconds <= window.end;
-      if (!frame.voiced || frame.relativeSemitones === null || !inWindow) return;
-      if (current.length > 0 && frame.timeSeconds - lastVoicedTime > BRIDGE_SECONDS) {
-        if (current.length >= 2) runs.push(current.join(' '));
-        current = [];
-      }
-      lastVoicedTime = frame.timeSeconds;
-      const x = ((frame.timeSeconds - window.start) / windowSpan) * WIDTH;
-      const y =
-        height - PAD_Y - ((frame.relativeSemitones - min) / span) * (height - 2 * PAD_Y);
-      current.push(`${x.toFixed(1)},${y.toFixed(1)}`);
+    // Equal-time rows of `wrapSeconds` (one row when unset or the clip is
+    // shorter), all on the same vertical scale and horizontal time scale so
+    // the last, shorter row is drawn proportionally narrower.
+    const rowSeconds =
+      wrapSeconds && wrapSeconds > 0 && wrapSeconds < windowSpan ? wrapSeconds : windowSpan;
+    const rowCount = Math.max(1, Math.ceil(windowSpan / rowSeconds - 1e-6));
+    const rows = Array.from({ length: rowCount }, (_, rowIndex) => {
+      const start = window.start + rowIndex * rowSeconds;
+      const end = Math.min(window.end, start + rowSeconds);
+      const widthFrac = (end - start) / rowSeconds;
+      const runs: string[] = [];
+      let current: string[] = [];
+      let lastVoicedTime = -Infinity;
+      frames.forEach((frame) => {
+        const inRow =
+          frame.timeSeconds >= start &&
+          (frame.timeSeconds < end || (rowIndex === rowCount - 1 && frame.timeSeconds <= end));
+        if (!frame.voiced || frame.relativeSemitones === null || !inRow) return;
+        if (current.length > 0 && frame.timeSeconds - lastVoicedTime > BRIDGE_SECONDS) {
+          if (current.length >= 2) runs.push(current.join(' '));
+          current = [];
+        }
+        lastVoicedTime = frame.timeSeconds;
+        const x = ((frame.timeSeconds - start) / rowSeconds) * WIDTH;
+        const y =
+          height - PAD_Y - ((frame.relativeSemitones - min) / span) * (height - 2 * PAD_Y);
+        current.push(`${x.toFixed(1)},${y.toFixed(1)}`);
+      });
+      if (current.length >= 2) runs.push(current.join(' '));
+      return { start, end, widthFrac, runs };
     });
-    if (current.length >= 2) runs.push(current.join(' '));
-    return runs.length ? { runs, window, zeroY, extentSemitones } : null;
-  }, [payload, height, scaleRange]);
+    const hasRuns = rows.some((row) => row.runs.length > 0);
+    return hasRuns ? { rows, rowSeconds, window, zeroY, extentSemitones } : null;
+  }, [payload, height, scaleRange, wrapSeconds]);
 
   if (!result) return null;
-  const { runs: segments, window, zeroY, extentSemitones } = result;
+  const { rows, rowSeconds, zeroY, extentSemitones } = result;
 
   const clipDuration = payload?.durationSeconds ?? 0;
-  const playheadFrac =
+  const playheadTime =
     progress != null && progress >= 0 && progress <= 1 && clipDuration > 0
-      ? (progress * clipDuration - window.start) / Math.max(0.001, window.end - window.start)
-      : null;
-  const playheadX =
-    playheadFrac != null && playheadFrac >= 0 && playheadFrac <= 1
-      ? playheadFrac * WIDTH
+      ? progress * clipDuration
       : null;
 
   return (
@@ -142,46 +155,58 @@ export function MeasuredPitchContour({
       <span className="muted pitch-contour-caption">
         {label} <span className="pitch-contour-extent">(spans {extentSemitones} st)</span>
       </span>
-      <svg
-        viewBox={`0 0 ${WIDTH} ${height}`}
-        preserveAspectRatio="none"
-        role="img"
-        aria-label={ariaLabel}
-        style={{ width: '100%', height }}
-      >
-        {zeroY != null ? (
-          <line className="pitch-contour-zero" x1={0} x2={WIDTH} y1={zeroY} y2={zeroY} />
-        ) : null}
-        {playheadX != null ? (
-          <>
-            <rect
-              className={`pitch-contour-band${pacing ? ' pitch-contour-band-pacing' : ''}`}
-              x={Math.max(0, playheadX - BAND_HALF)}
-              y={0}
-              width={Math.min(WIDTH, playheadX + BAND_HALF) - Math.max(0, playheadX - BAND_HALF)}
-              height={height}
-            />
-            <line
-              className={`pitch-contour-playhead${pacing ? ' pitch-contour-playhead-pacing' : ''}`}
-              x1={playheadX}
-              x2={playheadX}
-              y1={0}
-              y2={height}
-            />
-          </>
-        ) : null}
-        {segments.map((points, index) => (
-          <polyline
-            key={index}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            points={points}
-          />
-        ))}
-      </svg>
+      {rows.map((row, rowIndex) => {
+        const rowWidth = row.widthFrac * WIDTH;
+        const playheadX =
+          playheadTime != null &&
+          playheadTime >= row.start &&
+          (playheadTime < row.end || (rowIndex === rows.length - 1 && playheadTime <= row.end))
+            ? ((playheadTime - row.start) / rowSeconds) * WIDTH
+            : null;
+        return (
+          <svg
+            key={rowIndex}
+            viewBox={`0 0 ${rowWidth} ${height}`}
+            preserveAspectRatio="none"
+            role="img"
+            aria-label={rows.length > 1 ? `${ariaLabel} (part ${rowIndex + 1} of ${rows.length})` : ariaLabel}
+            style={{ width: `${row.widthFrac * 100}%`, height }}
+          >
+            {zeroY != null ? (
+              <line className="pitch-contour-zero" x1={0} x2={rowWidth} y1={zeroY} y2={zeroY} />
+            ) : null}
+            {playheadX != null ? (
+              <>
+                <rect
+                  className={`pitch-contour-band${pacing ? ' pitch-contour-band-pacing' : ''}`}
+                  x={Math.max(0, playheadX - BAND_HALF)}
+                  y={0}
+                  width={Math.min(rowWidth, playheadX + BAND_HALF) - Math.max(0, playheadX - BAND_HALF)}
+                  height={height}
+                />
+                <line
+                  className={`pitch-contour-playhead${pacing ? ' pitch-contour-playhead-pacing' : ''}`}
+                  x1={playheadX}
+                  x2={playheadX}
+                  y1={0}
+                  y2={height}
+                />
+              </>
+            ) : null}
+            {row.runs.map((points, index) => (
+              <polyline
+                key={index}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                points={points}
+              />
+            ))}
+          </svg>
+        );
+      })}
       {kana && kana.length > 0 ? (
         <KanaTimelineRow entries={kana} label={`${label} syllables`} />
       ) : null}

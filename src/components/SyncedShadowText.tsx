@@ -66,6 +66,7 @@ export function SyncedShadowText({
   showDictionaryPitch = true,
   recordingElapsedMs,
   recordingSpeed = 1,
+  wrapSeconds,
 }: {
   audioRef: { current: HTMLAudioElement | null };
   referenceAudio: SentenceAudio | undefined;
@@ -83,6 +84,8 @@ export function SyncedShadowText({
   recordingElapsedMs?: number;
   /** Practice speed applied to `recordingElapsedMs` — see `pitchProgressDuringRecording` below. */
   recordingSpeed?: number;
+  /** Wrap the pitch contour into rows of this many seconds; omit for one row. */
+  wrapSeconds?: number;
 }) {
   const [words, setWords] = useState<AlignedWord[]>([]);
   const [activeIndex, setActiveIndex] = useState(-1);
@@ -233,7 +236,7 @@ export function SyncedShadowText({
     return (
       <div className="stack" style={{ flex: 1, gap: '0.25rem' }}>
         <div className="jp jp-lg">{japanese}</div>
-        <MeasuredPitchContour payload={pitchTrack} progress={contourProgress} pacing={isPacing} height={64} />
+        <MeasuredPitchContour payload={pitchTrack} progress={contourProgress} pacing={isPacing} height={64} wrapSeconds={wrapSeconds} />
         <MoraBreakdown units={moraUnits} />
         {showDictionaryPitch ? <SentencePitchAccentRow japanese={japanese} sentenceId={sentenceId} /> : null}
       </div>
@@ -268,7 +271,7 @@ export function SyncedShadowText({
           japanese
         )}
       </div>
-      <MeasuredPitchContour payload={pitchTrack} progress={contourProgress} pacing={isPacing} height={64} />
+      <MeasuredPitchContour payload={pitchTrack} progress={contourProgress} pacing={isPacing} height={64} wrapSeconds={wrapSeconds} />
       {moraUnits.length > 0 && (
         <div className="row mora-row" aria-label="Mora breakdown">
           {moraUnits.map((unit) => (

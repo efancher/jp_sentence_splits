@@ -7,7 +7,6 @@ import { NativePitchPractice } from '../components/NativePitchPractice';
 import { AttemptPitchGrid } from '../components/AttemptPitchGrid';
 import { attemptsNeedingPhraseSnapshot, backfillPhraseSnapshots } from '../lib/backfillPhraseSnapshots';
 import { ChapterReader } from '../components/ChapterReader';
-import { LiveShadowWaveform } from '../components/LiveShadowWaveform';
 import { SpeedControl } from '../components/SpeedControl';
 import { SentenceAudioAdjuster } from '../components/SentenceAudioAdjuster';
 import { SyncedShadowText } from '../components/SyncedShadowText';
@@ -45,6 +44,24 @@ const RATINGS: { value: AttemptRating; label: string }[] = [
 ];
 
 const SHADOW_LAYOUT_KEY = 'satori-glossbook:shadow-layout';
+/** Per-sentence contour wrap point (seconds per row), device-local: `{ [sentenceId]: seconds }`. */
+const CONTOUR_WRAP_KEY = 'satori-glossbook:shadow-contour-wrap';
+const CONTOUR_WRAP_OPTIONS = [2, 3, 4, 5, 6, 8] as const;
+
+function readContourWrap(sentenceId: string): number | undefined {
+  try {
+    const value = (JSON.parse(localStorage.getItem(CONTOUR_WRAP_KEY) ?? '{}') as Record<string, unknown>)[sentenceId];
+    return typeof value === 'number' && value > 0 ? value : undefined;
+  } catch { return undefined; }
+}
+
+function writeContourWrap(sentenceId: string, seconds: number | undefined) {
+  try {
+    const all = JSON.parse(localStorage.getItem(CONTOUR_WRAP_KEY) ?? '{}') as Record<string, number>;
+    if (seconds) all[sentenceId] = seconds; else delete all[sentenceId];
+    localStorage.setItem(CONTOUR_WRAP_KEY, JSON.stringify(all));
+  } catch { /* storage unavailable */ }
+}
 
 function formatDuration(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`;
@@ -79,6 +96,12 @@ export function ShadowPage() {
     try { localStorage.setItem(SHADOW_LAYOUT_KEY, chapter ? 'chapter' : 'original'); } catch { /* storage unavailable */ }
   }
   const [hideTranscript, setHideTranscript] = useState(false);
+  const [wrapSeconds, setWrapSeconds] = useState<number | undefined>(() => readContourWrap(sentenceId));
+  useEffect(() => { setWrapSeconds(readContourWrap(sentenceId)); }, [sentenceId]);
+  function changeWrapSeconds(seconds: number | undefined) {
+    setWrapSeconds(seconds);
+    writeContourWrap(sentenceId, seconds);
+  }
   const [showMeaningInstead, setShowMeaningInstead] = useState(false);
   const [draftNotes, setDraftNotes] = useState('');
   const [referenceError, setReferenceError] = useState<string | null>(null);
@@ -535,6 +558,7 @@ export function ShadowPage() {
                     isRecording && !isLoopingReps ? shadowing.recordingElapsedMs : undefined
                   }
                   recordingSpeed={speed}
+                  wrapSeconds={wrapSeconds}
                 />
               )
   );
@@ -543,6 +567,11 @@ export function ShadowPage() {
   const canHearTake = Boolean(ephemeralUrl) && !isLoopingReps;
   const practiceBar = (
     <div className="stack" style={{ gap: '0.4rem' }}>
+      {isLoopingReps && !hideTranscript ? (
+        <div className="jp jp-lg" aria-label="Sentence being shadowed">
+          {showMeaningInstead && sentence.translation ? sentence.translation : sentence.japanese}
+        </div>
+      ) : null}
       <div className="gloss-rail" role="toolbar" aria-label="Shadow practice controls">
       {referenceAudio ? (
         <>
@@ -575,15 +604,19 @@ export function ShadowPage() {
         </span>
       ) : null}
       </div>
-      {referenceAudio && isLoopingReps && shadowing.shadowActive ? (
-        <LiveShadowWaveform
-          referenceBlob={referenceAudio.blob}
-          range={loopRange ?? undefined}
-          active={isLoopingReps && shadowing.shadowActive}
-          getMediaTime={shadowing.getShadowMediaTime}
-          analyser={shadowing.getShadowAnalyser()}
-          sampleRate={shadowing.getShadowSampleRate()}
-        />
+      {referenceAudio && !hideTranscript && !showMeaningInstead ? (
+        <label className="muted" style={{ fontSize: '0.85rem' }}>
+          Wrap pitch chart{' '}
+          <select
+            value={wrapSeconds ?? ''}
+            onChange={(event) => changeWrapSeconds(event.target.value ? Number(event.target.value) : undefined)}
+          >
+            <option value="">Off</option>
+            {CONTOUR_WRAP_OPTIONS.map((seconds) => (
+              <option key={seconds} value={seconds}>every {seconds}s</option>
+            ))}
+          </select>
+        </label>
       ) : null}
       {isLoopingReps && shadowing.error ? <p className="muted">{shadowing.error}</p> : null}
     </div>
