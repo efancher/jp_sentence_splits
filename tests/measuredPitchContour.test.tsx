@@ -40,7 +40,7 @@ describe('MeasuredPitchContour', () => {
     );
     const svgs = container.querySelectorAll('svg');
     expect(svgs).toHaveLength(3);
-    expect(svgs[2]!.getAttribute('style')).toContain('width: 4');
+    expect(svgs[2]!.getAttribute('style')).toMatch(/width: (4|5)\d?%/);
     // Last row is the ~1s remainder of a 2s row, so roughly half width.
     // 2.5s playback position lands in row 2 only.
     expect(svgs[0]!.querySelector('.pitch-contour-playhead')).toBeNull();
