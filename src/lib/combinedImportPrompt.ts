@@ -39,6 +39,10 @@ const SENTENCE_RULES = [
   'For each sentence:',
   '- Add sentence-final punctuation (。！？) where it belongs.',
   '- Fix obvious mis-recognitions, but keep the Japanese wording faithful — do not paraphrase it.',
+  '- Never drop or add spoken words. In particular, when a clause ends in a connective such as',
+  '  が, けど, けれど, から, ので, のに, し or ても, keep that word: do not turn "…始めましたが、今は…"',
+  '  into "…始めました。今は…". Prefer keeping such a clause joined to the one after it (within the',
+  '  length limit below); if you must split there, end the first line with the connective, e.g. 始めましたが。',
   '- Begin the line with the [m:ss] timestamp of the fragment where that sentence starts.',
   '- Keep lines short enough to shadow: merge at most 2-3 source fragments into one line.',
   '  Never combine a long run of fragments into one paragraph-length sentence, even if the',
@@ -316,6 +320,34 @@ export function requestedExtraHeadings(options: CombinedPromptOptions = {}): str
   return extraBlocks(withDefaults(options)).map((block) => block.heading);
 }
 
+const CONNECTIVE_TAIL_RE = /(?:けれども|けれど|けど|ですが|ますが|でしたが|ましたが|が|から|ので|のに|ても|し)$/;
+const COMPARE_STRIP_RE = /[\s。、．，！？!?「」『』（）()･・…]/g;
+
+/**
+ * Transcript fragments that end a clause with a connective (…ましたが、) whose
+ * last few characters appear nowhere in the assistant's sentences. The
+ * assistant adds sentence-final punctuation when it splits, and has been seen
+ * turning "…始めましたが、今は…" into "…始めました。今は…" (Episode #24, 2026-10).
+ * A substring test on the whole reply, not an alignment: it only fires when
+ * the tail is gone entirely, so a legitimately reworded fragment elsewhere
+ * can't hide a drop, but a fixed mis-recognition in the tail can raise a
+ * false alarm — hence a warning, not an edit.
+ */
+export function findDroppedConnectives(
+  transcript: { startMs: number; text?: string }[],
+  rows: { japanese: string }[],
+): { startMs: number; tail: string }[] {
+  const joined = rows.map((row) => row.japanese).join('').replace(COMPARE_STRIP_RE, '');
+  const dropped: { startMs: number; tail: string }[] = [];
+  for (const seg of transcript) {
+    const text = (seg.text ?? '').replace(COMPARE_STRIP_RE, '');
+    if (text.length < 4 || !CONNECTIVE_TAIL_RE.test(text)) continue;
+    const tail = text.slice(-4);
+    if (!joined.includes(tail)) dropped.push({ startMs: seg.startMs, tail });
+  }
+  return dropped;
+}
+
 /**
  * Signs a pasted reply was cut off or is incomplete: it stops well before the
  * transcript ends, skips a stretch of it, ends on an implausibly long final
@@ -326,7 +358,7 @@ export function checkCombinedReply(input: {
   reply: string;
   sections: CombinedReplySections;
   rows: { startMs: number; endMs: number; japanese: string }[];
-  transcript: { startMs: number; endMs: number }[];
+  transcript: { startMs: number; endMs: number; text?: string }[];
   options?: CombinedPromptOptions;
 }): string[] {
   const { reply, sections, rows, transcript } = input;
@@ -362,6 +394,13 @@ export function checkCombinedReply(input: {
         `The last sentence's clip is ${Math.round(seconds)}s long for ${lastRow.japanese.length} characters — check its end time.`,
       );
     }
+  }
+  const dropped = findDroppedConnectives(transcript, rows);
+  if (dropped.length > 0) {
+    const shown = dropped.slice(0, 5).map((d) => `${formatMinSec(d.startMs)} …${d.tail}`);
+    warnings.push(
+      `${dropped.length} spot${dropped.length === 1 ? '' : 's'} where the transcript ends a clause with a connective (が, けど, から…) that the sentences don't contain — the assistant may have dropped it: ${shown.join('; ')}${dropped.length > shown.length ? '; …' : ''}. Check those sentence endings against the audio.`,
+    );
   }
   const missing = requestedExtraHeadings(input.options).filter((heading) => {
     const key = EXTRA_SECTION_KEYS[heading];

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   COMBINED_REPLY_FILENAME,
   checkCombinedReply,
+  findDroppedConnectives,
   formatCombinedPromptForAI,
   remapSentenceHandles,
   splitCombinedReply,
@@ -126,5 +127,37 @@ describe('checkCombinedReply', () => {
     });
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain('STRUCTURE');
+  });
+});
+
+describe('findDroppedConnectives', () => {
+  const seg = (startMs: number, text: string) => ({ startMs, text });
+
+  it('flags a clause-final が the assistant turned into a full stop', () => {
+    const transcript = [seg(43_000, '私は去年の9月からこのポッドキャストを始めましたが、'), seg(53_000, '今は200人以上の人が聞いています')];
+    const rows = [{ japanese: '私は去年の9月からこのポッドキャストを始めました。' }, { japanese: '今は200人以上の人が聞いています。' }];
+    expect(findDroppedConnectives(transcript, rows)).toEqual([{ startMs: 43_000, tail: 'ましたが' }]);
+  });
+
+  it('is quiet when the connective is kept, joined or split', () => {
+    const transcript = [seg(0, 'ポッドキャストを始めましたが、')];
+    expect(findDroppedConnectives(transcript, [{ japanese: 'ポッドキャストを始めましたが。' }])).toEqual([]);
+    expect(findDroppedConnectives(transcript, [{ japanese: 'ポッドキャストを始めましたが、今は元気です。' }])).toEqual([]);
+  });
+
+  it('ignores fragments without a connective ending or without text', () => {
+    expect(findDroppedConnectives([seg(0, 'とても楽しかったです。'), { startMs: 5 }], [{ japanese: '別の文。' }])).toEqual([]);
+  });
+
+  it('surfaces through checkCombinedReply', () => {
+    const warnings = checkCombinedReply({
+      reply: '=== END ===',
+      sections: { sentences: 'x', pack: '', structure: '', comprehension: '', particles: '' },
+      rows: [{ startMs: 0, endMs: 5000, japanese: 'ポッドキャストを始めました。' }],
+      transcript: [{ startMs: 0, endMs: 5000, text: 'ポッドキャストを始めましたが、' }],
+      options: { targets: false, constructions: false, walkthroughs: false, structure: false, comprehension: false, particles: false },
+    });
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('0:00 …ましたが');
   });
 });
