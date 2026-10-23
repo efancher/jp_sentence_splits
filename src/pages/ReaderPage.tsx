@@ -74,6 +74,9 @@ export function ReaderPage() {
   const [playbackRate, setPlaybackRate] = useState(1);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [loopSentence, setLoopSentence] = useState(false);
+  const [loopAll, setLoopAll] = useState(false);
+  const loopAllRef = useRef(false);
+  loopAllRef.current = loopAll;
   const singleIndexRef = useRef<number | null>(null);
   const spanRef = useRef<{ start: number; end: number } | null>(null);
   const [contextBefore, setContextBefore] = useState(0);
@@ -311,6 +314,12 @@ export function ReaderPage() {
           return;
         }
         if (next === -1) {
+          // Whole-sequence loop: wrap to the first playable line (the episode, or the book when no chapter is selected).
+          const first = loopAllRef.current ? findNextPlayable(0) : -1;
+          if (first !== -1) {
+            playFrom(first);
+            return;
+          }
           setActiveIndex(-1);
           return;
         }
@@ -490,6 +499,16 @@ export function ReaderPage() {
           onClick={toggleSequence}
         >
           {isSequencePlaying ? '⏸ Stop' : activeIndex >= 0 ? '▶ Resume' : '▶ Play'}
+        </button>
+        <button
+          type="button"
+          className="icon-button"
+          aria-pressed={loopAll}
+          aria-label={loopAll ? `Loop ${chapter ? 'episode' : 'book'}: on` : `Loop ${chapter ? 'episode' : 'book'}: off`}
+          title={`Loop ${chapter ? 'this episode' : 'the whole book'}: ${loopAll ? 'on' : 'off'}`}
+          onClick={() => setLoopAll((value) => !value)}
+        >
+          🔁
         </button>
         <label>
           Speed
