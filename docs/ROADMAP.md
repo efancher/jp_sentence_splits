@@ -581,6 +581,25 @@ Unfinished work and optional extensions; completed behavior is in `AI_OVERVIEW.m
   "chapters ready to read" list, and a second stricter/furigana-off threshold.
   The reader itself stays ungated.
 
+- [ ] **Dropped clause-final connectives in mined sentences (follow-up).**
+  (2026-10-23.) The quick-import AI turned "…始めましたが、今は…" into
+  "…始めました。今は…", silently dropping が (found on Episode #24). The importer
+  prompt now forbids dropping spoken words and `checkCombinedReply` warns in the
+  review stage (`findDroppedConnectives`); source and local tests only, not yet
+  seen on a live import. Unfinished: (1) **Existing data** — 12 confirmed pairs
+  (Slow Japanese Episodes #24 ×2, #21 ×2, #58 ×2, #53, #45, #26 ×2, #46, #23) still
+  need merging with the が restored via the book's Re-segment page; Episode #24 at
+  342 s (なり、そして、) is unresolved. (2) **Wider scan** — the first pass checked
+  only the last ~3 s of each clip against が/から and a strict filter, skipped the
+  YouTube sources (~420 clips) and one 403 podcast source, and did not cover けど/
+  し/ので. (3) **Boundary check from audio + grammar** — a UniDic check that allows
+  a split only after a final verb form or sentence-final particle (not after a
+  connecting particle) unless a long pause backs it, using word timings, to
+  flag or move AI-chosen boundaries; also removes the whole-second `[m:ss]`
+  timing slack. Not started; build only if the prompt/warning proves
+  insufficient. Rejected: swapping the ASR model (SenseVoice/Cotoba) — Whisper's
+  own text kept the が.
+
 - [ ] **Other retained foundation follow-ups.** Finer per-word accent-class
   pronunciation statistics need more persisted attempt detail. Grammar prediction
   and transformation activity types remain unstarted. The older progressive
