@@ -19,12 +19,12 @@ export interface PhraseSnapshotBackfillResult {
   skipped: number;
 }
 
-/** Analysed attempts that predate phrase snapshots — only those with a saved summary are touched. */
+/** Analysed attempts that predate phrase snapshots (or their measured contours) — only those with a saved summary are touched. */
 export function attemptsNeedingPhraseSnapshot(
   attempts: readonly Attempt[],
   summaries: readonly AttemptAnalysisSummary[],
 ): Attempt[] {
-  const missing = new Set(summaries.filter((s) => !s.phraseSnapshot).map((s) => s.id));
+  const missing = new Set(summaries.filter((s) => !s.phraseSnapshot || s.phraseSnapshot.some((row) => !row.nativeContour)).map((s) => s.id));
   return attempts.filter((a) => missing.has(a.id));
 }
 

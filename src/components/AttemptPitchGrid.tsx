@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 
 import type { AttemptAnalysisSummary } from '../domain/types';
-import { buildPitchGrid, layoutSentenceLine, levelsToRuns } from '../lib/attemptPitchGrid';
+import { buildPitchGrid, contourRange, contourToLevels, layoutSentenceLine, levelsToRuns } from '../lib/attemptPitchGrid';
 
 /** The two selected attempts in chronological order (grid rows are oldest-first). */
 function orderedPair(rows: readonly { id: string }[], selected: readonly string[]): [string, string] {
@@ -45,6 +45,13 @@ export function AttemptPitchGrid({
   const OVERLAY_W = 120;
   const OVERLAY_H = 56;
   const STRIP_H = 48;
+  const hasContours = grid.columns.every((c) => c.nativeContour);
+  const contourScale = hasContours
+    ? contourRange([
+        ...grid.columns.map((c) => c.nativeContour),
+        ...selected.flatMap((id) => grid.rows.find((r) => r.id === id)?.cells.map((c) => c?.learnerContour) ?? []),
+      ])
+    : null;
   const strips = [
     { id: 'native', rank: -1 },
     ...selected.flatMap((id) => (grid.rows.some((r) => r.id === id) ? [{ id, rank: selected.indexOf(id) }] : [])),
@@ -102,6 +109,11 @@ export function AttemptPitchGrid({
         ))}
       </div>
       <strong style={{ fontSize: '0.9rem' }}>Whole sentence</strong>
+      {!contourScale ? (
+        <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+          The full measured line needs a fresh analysis of these attempts — use “Add pitch comparison for earlier attempts” above if it’s showing, or analyse them again.
+        </p>
+      ) : (
       <div className="apg-line-scroll">
         <div style={{ width: line.totalWidth }}>
           {strips.map((strip) => {
@@ -120,11 +132,12 @@ export function AttemptPitchGrid({
                 >
                   {grid.columns.map((column, index) => {
                     const seg = line.segments[index]!;
-                    const levels = native ? column.nativeLevels : row!.cells[index]?.learnerLevels;
+                    const contour = native ? column.nativeContour : row!.cells[index]?.learnerContour;
+                    const levels = contour ? contourToLevels(contour, contourScale) : null;
                     return (
                       <g key={index} transform={`translate(${seg.x},0)`}>
                         <rect width={seg.width} height={STRIP_H} className="apg-seg" />
-                        {levels && levels.length === column.nativeLevels.length
+                        {levels && levels.length === column.nativeContour!.length
                           ? levelsToRuns(levels, seg.width, STRIP_H).map((points, i) => (
                               <polyline
                                 key={i}
@@ -150,9 +163,11 @@ export function AttemptPitchGrid({
           </div>
         </div>
       </div>
+      )}
       <p className="muted" style={{ margin: 0, fontSize: '0.8rem' }}>
-        Thick line = native, thin = your attempts. Each phrase is scaled from its lowest to its highest sound, so compare
-        shapes, not absolute pitch.
+        Thick line = native, thin = your attempts. The grid scales each phrase on its own; the whole-sentence lines share
+        one height scale across the sentence and each phrase is stretched to its sounds, so compare shapes and where they
+        rise and fall.
       </p>
     </div>
   );

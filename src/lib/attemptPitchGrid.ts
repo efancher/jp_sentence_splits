@@ -3,6 +3,7 @@ import type { PhraseSnapshotRow } from '../domain/types';
 import type { PhrasePitchResult } from './phrasePitch';
 
 const round2 = (v: number | null) => (v === null ? null : Math.round(v * 100) / 100);
+const round1 = (v: number | null) => (v === null ? null : Math.round(v * 10) / 10);
 
 /** Compact, storable form of a phrase-pitch result; undefined when nothing was shown. */
 export function toPhraseSnapshot(result: PhrasePitchResult): PhraseSnapshotRow[] | undefined {
@@ -12,6 +13,8 @@ export function toPhraseSnapshot(result: PhrasePitchResult): PhraseSnapshotRow[]
     kana: row.kana.join(''),
     nativeLevels: row.nativeLevels.map(round2),
     learnerLevels: row.learnerLevels ? row.learnerLevels.map(round2) : null,
+    nativeContour: row.nativeContour.map(round1),
+    learnerContour: row.learnerContour ? row.learnerContour.map(round1) : null,
   }));
 }
 
@@ -101,4 +104,24 @@ export function layoutSentenceLine(
     return segment;
   });
   return { segments, totalWidth: Math.max(0, x - gap) };
+}
+
+/** Min/max of every voiced value across the given contours, or null when none is voiced. */
+export function contourRange(contours: readonly (readonly (number | null)[] | null | undefined)[]): { min: number; max: number } | null {
+  let min = Infinity;
+  let max = -Infinity;
+  for (const contour of contours) {
+    for (const v of contour ?? []) {
+      if (v === null) continue;
+      if (v < min) min = v;
+      if (v > max) max = v;
+    }
+  }
+  return min <= max ? { min, max } : null;
+}
+
+/** Maps a semitone contour onto 0..1 (high = up) against a range shared by every line being compared. */
+export function contourToLevels(contour: readonly (number | null)[], range: { min: number; max: number }): (number | null)[] {
+  const span = Math.max(1, range.max - range.min);
+  return contour.map((v) => (v === null ? null : (v - range.min) / span));
 }

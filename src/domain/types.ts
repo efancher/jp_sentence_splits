@@ -273,6 +273,9 @@ export interface PhraseSnapshotRow {
   /** Per-mora height 0..1 within the phrase (2 dp); null = unvoiced. */
   nativeLevels: (number | null)[];
   learnerLevels: (number | null)[] | null;
+  /** Measured contour across the phrase (4 samples per mora, semitones 1 dp, null = unvoiced) — for the smooth whole-sentence line. Absent on snapshots saved before it existed. */
+  nativeContour?: (number | null)[];
+  learnerContour?: (number | null)[] | null;
 }
 
 export interface Book {

@@ -102,6 +102,9 @@ export interface PhraseRow {
   /** Each mora's mean pitch as a 0..1 height within this phrase for that speaker (null = unvoiced). */
   nativeLevels: (number | null)[];
   learnerLevels: (number | null)[] | null;
+  /** The measured contour across the phrase: `CONTOUR_POINTS_PER_MORA` samples per mora, speaker-normalized semitones (null = unvoiced). */
+  nativeContour: (number | null)[];
+  learnerContour: (number | null)[] | null;
   /** How many of this phrase's morae had voiced pitch in your recording (null = not lined up). */
   learnerVoicedMorae: number | null;
 }
@@ -180,6 +183,33 @@ function meanSemitones(pitch: PitchAnalysisPayload, from: number, to: number): n
   return count > 0 ? sum / count : null;
 }
 
+/** Samples per mora in a phrase's stored contour — enough to read a smooth line, small enough to keep per attempt. */
+export const CONTOUR_POINTS_PER_MORA = 4;
+
+/**
+ * The measured pitch (speaker-normalized semitones) across a phrase's span, as `count` equal time bins:
+ * each is the mean of the voiced frames inside it, null if none. A single empty bin between two voiced
+ * ones is bridged so a momentary dropout doesn't tear the line.
+ */
+export function sampleContour(pitch: PitchAnalysisPayload, from: number, to: number, count: number): (number | null)[] {
+  if (!(to > from) || count <= 0) return Array.from({ length: Math.max(0, count) }, () => null);
+  const sums = new Array<number>(count).fill(0);
+  const counts = new Array<number>(count).fill(0);
+  const width = (to - from) / count;
+  for (const frame of pitch.frames) {
+    if (!frame.voiced || frame.relativeSemitones === null) continue;
+    if (frame.timeSeconds < from || frame.timeSeconds >= to) continue;
+    const bin = Math.min(count - 1, Math.floor((frame.timeSeconds - from) / width));
+    sums[bin]! += frame.relativeSemitones;
+    counts[bin]! += 1;
+  }
+  const out = sums.map((sum, i) => (counts[i]! > 0 ? sum / counts[i]! : null));
+  for (let i = 1; i < count - 1; i += 1) {
+    if (out[i] === null && out[i - 1] !== null && out[i + 1] !== null) out[i] = (out[i - 1]! + out[i + 1]!) / 2;
+  }
+  return out;
+}
+
 /** Heights 0..1 within the phrase (0 = its lowest voiced mora). All-equal → 0.5. */
 function toLevels(means: readonly (number | null)[]): (number | null)[] {
   const voiced = means.filter((m): m is number => m !== null);
@@ -232,11 +262,25 @@ export function buildPhrasePitch({
     const nativeMeans = timings.flatMap((timing) => timing!.intervals).map((iv) => meanSemitones(reference.pitch, iv.start - refOffset, iv.end - refOffset));
     if (nativeMeans.filter((m) => m !== null).length < 2) continue; // not enough voiced native pitch to draw a contour
 
+    const nativeIntervals = timings.flatMap((timing) => timing!.intervals);
+    const nativeContour = sampleContour(
+      reference.pitch,
+      nativeIntervals[0]!.start - refOffset,
+      nativeIntervals[nativeIntervals.length - 1]!.end - refOffset,
+      kana.length * CONTOUR_POINTS_PER_MORA,
+    );
     let learnerMeans: (number | null)[] | null = null;
+    let learnerContour: (number | null)[] | null = null;
     if (learner && learnerTimings) {
       const intervals = group.flatMap((t) => learnerTimings[t]?.intervals ?? []);
       if (intervals.length === kana.length) {
         learnerMeans = intervals.map((iv) => meanSemitones(learner.pitch, iv.start - learnerOffset, iv.end - learnerOffset));
+        learnerContour = sampleContour(
+          learner.pitch,
+          intervals[0]!.start - learnerOffset,
+          intervals[intervals.length - 1]!.end - learnerOffset,
+          kana.length * CONTOUR_POINTS_PER_MORA,
+        );
       }
     }
 
@@ -245,6 +289,8 @@ export function buildPhrasePitch({
       kana,
       nativeLevels: toLevels(nativeMeans),
       learnerLevels: learnerMeans ? toLevels(learnerMeans) : null,
+      nativeContour,
+      learnerContour,
       learnerVoicedMorae: learnerMeans ? learnerMeans.filter((m) => m !== null).length : null,
     });
   }

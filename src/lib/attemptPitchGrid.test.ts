@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { PhraseSnapshotRow } from '../domain/types';
 
-import { buildPitchGrid, layoutSentenceLine, levelsToRuns } from './attemptPitchGrid';
+import { buildPitchGrid, contourRange, contourToLevels, layoutSentenceLine, levelsToRuns } from './attemptPitchGrid';
 
 const row = (text: string): PhraseSnapshotRow => ({
   text,
@@ -55,5 +55,20 @@ describe('layoutSentenceLine', () => {
 
   it('is empty for no phrases', () => {
     expect(layoutSentenceLine([])).toEqual({ segments: [], totalWidth: 0 });
+  });
+});
+
+describe('contour helpers', () => {
+  it('finds one shared range across lines and ignores unvoiced samples', () => {
+    expect(contourRange([[null, -2, 1], [4, null], null])).toEqual({ min: -2, max: 4 });
+    expect(contourRange([[null], undefined])).toBeNull();
+  });
+
+  it('maps semitones onto 0..1 against the shared range, keeping gaps', () => {
+    expect(contourToLevels([-2, null, 4, 1], { min: -2, max: 4 })).toEqual([0, null, 1, 0.5]);
+  });
+
+  it('never stretches a near-flat range to full height', () => {
+    expect(contourToLevels([0, 0.5], { min: 0, max: 0.5 })).toEqual([0, 0.5]);
   });
 });

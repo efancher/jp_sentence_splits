@@ -2194,7 +2194,13 @@ a self-hosted pronunciation-analysis backend. Capabilities:
   back-to-back playback of two attempts (`lib/attemptPitchGrid.ts`). Older
   attempts appear once re-analysed; snapshots saved before 2026-10-17 carry
   unused `native`/`status` fields that are ignored. The attempt list shows the
-  severity-trend pitch label.
+  severity-trend pitch label. (2026-10-24) Snapshot rows also keep the measured
+  contour (`nativeContour`/`learnerContour`: 4 speaker-normalized-semitone
+  samples per mora, `phrasePitch.sampleContour`); the panel's "Whole sentence"
+  section stacks native + chosen attempts as strips on one shared height scale
+  with the phrase text beneath, each phrase stretched to its own morae so
+  speeds line up. Snapshots without contours are re-derived by the existing
+  "Add pitch comparison" backfill (`attemptsNeedingPhraseSnapshot`).
 - Playback-speed control, Alternate (A/B) and Dual-ear (binaural)
   reference-vs-attempt comparison.
 - **Practice-target isolation**: manual "mark start"/"mark end" loop-point
