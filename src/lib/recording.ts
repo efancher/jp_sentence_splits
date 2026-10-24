@@ -335,6 +335,14 @@ export class ShadowReferencePlayer {
     this.audio.playbackRate = rate;
   }
 
+  /**
+   * Silence/unsilence the reference without pausing it — the between-reps pause of the shadow loop
+   * mutes instead, because a timer can't call `play()` again on iOS Safari.
+   */
+  setMuted(muted: boolean): void {
+    if (this.audio) this.audio.muted = muted;
+  }
+
   /** Seek the reference element — used to wrap a sub-range loop back to its start. */
   seek(seconds: number): void {
     if (this.audio) this.audio.currentTime = Math.max(0, seconds);

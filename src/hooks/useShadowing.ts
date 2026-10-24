@@ -22,13 +22,14 @@ export function useShadowing() {
       opts: {
         playbackRate?: number;
         range?: TimeRangeMs | null;
+        gapMs?: number;
         onRep: (take: { blob: Blob; durationMs: number }) => void;
       },
     ) => shadowingController.startShadowLoop(blob, opts),
     [],
   );
   const updateShadowLoop = useCallback(
-    (opts: { playbackRate?: number; range?: TimeRangeMs | null }) =>
+    (opts: { playbackRate?: number; range?: TimeRangeMs | null; gapMs?: number }) =>
       shadowingController.updateShadowLoop(opts),
     [],
   );

@@ -22,6 +22,7 @@ const FakeShadowReferencePlayer = vi.hoisted(() => {
     duration = vi.fn((): number | undefined => 2);
     getSampleRate = vi.fn(() => 48_000);
     setPlaybackRate = vi.fn();
+    setMuted = vi.fn();
     seek = vi.fn((seconds: number) => {
       this.fakeCurrentTime = seconds;
     });
@@ -347,6 +348,51 @@ describe('ShadowingController shadow mode', () => {
     player.fakeCurrentTime = 5;
     controller.updateShadowLoop({ range: { startMs: 200, endMs: 900 } });
     expect(player.seek).toHaveBeenLastCalledWith(0.2);
+
+    controller.stopShadowLoop();
+    await new Promise((r) => setTimeout(r, 30));
+  });
+
+  it('pauses silently between reps when a gap is set, then restarts the rep', async () => {
+    const controller = new ShadowingController();
+    const takes: Array<{ blob: Blob; durationMs: number }> = [];
+    await controller.startShadowLoop(new Blob(['ref']), {
+      range: { startMs: 500, endMs: 1_500 },
+      gapMs: 400,
+      onRep: (take) => takes.push(take),
+    });
+    const player = FakeShadowReferencePlayer.instances.at(-1)!;
+
+    // Reaching the range end starts the pause: muted, parked at the start, no take yet.
+    player.fakeCurrentTime = 1.6;
+    await new Promise((r) => setTimeout(r, 150));
+    expect(player.setMuted).toHaveBeenLastCalledWith(true);
+    expect(takes).toHaveLength(0);
+
+    // After the gap the rep restarts audibly and one take is cycled.
+    await new Promise((r) => setTimeout(r, 500));
+    expect(player.setMuted).toHaveBeenLastCalledWith(false);
+    expect(player.seek).toHaveBeenLastCalledWith(0.5);
+    expect(takes).toHaveLength(1);
+
+    controller.stopShadowLoop();
+    await new Promise((r) => setTimeout(r, 30));
+  });
+
+  it('shortening the gap live cuts the running pause short', async () => {
+    const controller = new ShadowingController();
+    await controller.startShadowLoop(new Blob(['ref']), {
+      range: { startMs: 0, endMs: 1_000 },
+      gapMs: 5_000,
+      onRep: () => {},
+    });
+    const player = FakeShadowReferencePlayer.instances.at(-1)!;
+    player.fakeCurrentTime = 1.1;
+    await new Promise((r) => setTimeout(r, 150));
+    expect(player.setMuted).toHaveBeenLastCalledWith(true);
+    controller.updateShadowLoop({ gapMs: 0 });
+    await new Promise((r) => setTimeout(r, 200));
+    expect(player.setMuted).toHaveBeenLastCalledWith(false);
 
     controller.stopShadowLoop();
     await new Promise((r) => setTimeout(r, 30));

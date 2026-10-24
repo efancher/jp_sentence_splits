@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { AnalysisPanel } from '../components/AnalysisPanel';
 import { LiveShadowWaveform } from '../components/LiveShadowWaveform';
+import { LoopWindowControls, MAX_LOOP_GAP_MS } from '../components/LoopWindowControls';
 import { NativePitchPractice } from '../components/NativePitchPractice';
 import { AttemptPitchGrid } from '../components/AttemptPitchGrid';
 import { attemptsNeedingPhraseSnapshot, backfillPhraseSnapshots } from '../lib/backfillPhraseSnapshots';
@@ -48,6 +49,15 @@ const SHADOW_LAYOUT_KEY = 'satori-glossbook:shadow-layout';
 /** Per-sentence contour wrap point (seconds per row), device-local: `{ [sentenceId]: seconds }`. */
 const CONTOUR_WRAP_KEY = 'satori-glossbook:shadow-contour-wrap';
 const CONTOUR_WRAP_OPTIONS = [2, 3, 4, 5, 6, 8] as const;
+/** Pause between loop reps (ms), device-local and shared across sentences. */
+const LOOP_GAP_KEY = 'satori-glossbook:shadow-loop-gap-ms';
+
+function readLoopGap(): number {
+  try {
+    const value = Number(localStorage.getItem(LOOP_GAP_KEY));
+    return Number.isFinite(value) ? Math.min(MAX_LOOP_GAP_MS, Math.max(0, value)) : 0;
+  } catch { return 0; }
+}
 
 function readContourWrap(sentenceId: string): number | undefined {
   try {
@@ -112,6 +122,11 @@ export function ShadowPage() {
   // Close-shadow hands-free rep loop.
   const [isLoopingReps, setIsLoopingReps] = useState(false);
   const [repCount, setRepCount] = useState(0);
+  const [loopGapMs, setLoopGapMs] = useState(readLoopGap);
+  function changeLoopGap(ms: number) {
+    setLoopGapMs(ms);
+    try { localStorage.setItem(LOOP_GAP_KEY, String(ms)); } catch { /* storage unavailable */ }
+  }
   const [ephemeralTake, setEphemeralTake] = useState<{ blob: Blob; durationMs: number } | null>(
     null,
   );
@@ -273,6 +288,10 @@ export function ShadowPage() {
   useEffect(() => {
     if (isLoopingReps) updateShadowLoop({ range: loopRange });
   }, [loopRange, isLoopingReps, updateShadowLoop]);
+
+  useEffect(() => {
+    if (isLoopingReps) updateShadowLoop({ gapMs: loopGapMs });
+  }, [loopGapMs, isLoopingReps, updateShadowLoop]);
 
   // If the loop's mic/audio setup fails, drop back out of the loop UI.
   useEffect(() => {
@@ -472,6 +491,7 @@ export function ShadowPage() {
     void shadowing.startShadowLoop(referenceAudio.blob, {
       playbackRate: speed,
       range: loopRange,
+      gapMs: loopGapMs,
       onRep: (take) => {
         setEphemeralTake(take);
         setRepCount((n) => n + 1);
@@ -605,6 +625,16 @@ export function ShadowPage() {
         </span>
       ) : null}
       </div>
+      {referenceAudio && referenceAudio.durationMs > 0 ? (
+        <LoopWindowControls
+          durationMs={referenceAudio.durationMs}
+          range={loopRange ?? { startMs: 0, endMs: referenceAudio.durationMs }}
+          gapMs={loopGapMs}
+          onRangeChange={setTargetRange}
+          onGapChange={changeLoopGap}
+          onReset={handleClearTarget}
+        />
+      ) : null}
       {referenceAudio && !hideTranscript && !showMeaningInstead ? (
         <label className="muted" style={{ fontSize: '0.85rem' }}>
           Wrap pitch chart{' '}

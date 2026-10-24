@@ -66,6 +66,10 @@ export class ShadowingController {
         cycling: boolean;
         /** Sub-range to loop within the clip; undefined loops the whole clip. */
         range?: TimeRangeMs;
+        /** Silent pause between reps (ms). 0 = back-to-back. */
+        gapMs: number;
+        /** While set, the reference is muted and waiting for this wall-clock time before the next rep. */
+        gapUntil?: number;
       }
     | undefined;
 
@@ -152,6 +156,8 @@ export class ShadowingController {
     opts: {
       playbackRate?: number;
       range?: TimeRangeMs | null;
+      /** Silent pause between reps, in ms. */
+      gapMs?: number;
       onRep: (take: { blob: Blob; durationMs: number }) => void;
     },
   ): Promise<void> {
@@ -194,6 +200,7 @@ export class ShadowingController {
       lastCurrentTime: this.shadowPlayer.currentTime(),
       cycling: false,
       range,
+      gapMs: Math.max(0, opts.gapMs ?? 0),
     };
     this.recordingStartedAt = Date.now();
     this.notify({ status: 'recording', recordingElapsedMs: 0, shadowActive: true });
@@ -205,9 +212,14 @@ export class ShadowingController {
    * "Mark start"/"Mark end" target range stay adjustable while looping
    * instead of forcing a stop/restart. No-ops when no loop is running.
    */
-  updateShadowLoop(opts: { playbackRate?: number; range?: TimeRangeMs | null }): void {
+  updateShadowLoop(opts: { playbackRate?: number; range?: TimeRangeMs | null; gapMs?: number }): void {
     const loop = this.shadowLoop;
     if (!loop) return;
+    if (opts.gapMs !== undefined) {
+      loop.gapMs = Math.max(0, opts.gapMs);
+      // Shortening the pause takes effect on the one already running.
+      if (loop.gapUntil !== undefined) loop.gapUntil = Math.min(loop.gapUntil, Date.now() + loop.gapMs);
+    }
     if (opts.playbackRate !== undefined) {
       this.shadowPlayer.setPlaybackRate(opts.playbackRate);
     }
@@ -261,6 +273,32 @@ export class ShadowingController {
 
   private tickShadowLoop(loop: NonNullable<ShadowingController['shadowLoop']>): void {
     const now = this.shadowPlayer.currentTime();
+    if (loop.gapUntil !== undefined) {
+      if (Date.now() < loop.gapUntil) return;
+      // Pause over: restart the rep. The reference kept playing (muted) rather than pausing,
+      // because iOS Safari won't let a timer call play() again — only seek and unmute are allowed.
+      loop.gapUntil = undefined;
+      const startSec = loop.range ? loop.range.startMs / 1000 : 0;
+      this.shadowPlayer.seek(startSec);
+      this.shadowPlayer.setMuted(false);
+      loop.lastCurrentTime = startSec;
+      this.cycleShadowLoopRecorder(loop);
+      return;
+    }
+    if (loop.gapMs > 0) {
+      const startSec = loop.range ? loop.range.startMs / 1000 : 0;
+      const endSec = loop.range ? loop.range.endMs / 1000 : (this.shadowPlayer.duration() ?? loop.clipSeconds);
+      const wrapped = loop.lastCurrentTime - now > 0.5;
+      if (now >= endSec - 0.02 || now < startSec - 0.05 || wrapped) {
+        this.shadowPlayer.setMuted(true);
+        this.shadowPlayer.seek(startSec);
+        loop.lastCurrentTime = startSec;
+        loop.gapUntil = Date.now() + loop.gapMs;
+        return;
+      }
+      loop.lastCurrentTime = now;
+      return;
+    }
     // Sub-range loop: the native <audio loop> only wraps at the clip's real
     // end, so we watch the range boundary ourselves and seek back to start.
     // (`now < startSec` also catches a native wrap-to-0 when the range

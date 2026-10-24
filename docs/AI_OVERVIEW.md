@@ -2597,6 +2597,14 @@ a self-hosted pronunciation-analysis backend. Capabilities:
   captures the final rep and tears down; a dead-mic cycle failure ends the
   loop via `endShadowLoop()`; unmount / sentence change go through
   `cancelRecording()`.
+  - **Loop window sliders + pause (2026-10-24).** A collapsed "Loop window"
+    panel under the rail (`LoopWindowControls`) has Start/End sliders that write
+    the marked target range, so single expressions can be shadowed and the window
+    nudged while looping, plus a 0–3 s "Pause" between reps (`gapMs`, device-local
+    in localStorage). The pause is implemented by muting + parking the element at
+    the window start and unmuting after the delay — never `pause()`/`play()`,
+    which a timer can't do on iOS. A rep's take is cycled when the next rep starts,
+    so it includes the silent gap.
   - **Live speed + range.** `updateShadowLoop({ playbackRate, range })`
     changes the play-along speed and the looped sub-span (the marked target
     range) on an in-flight loop — no stop/restart, so the once-under-the-tap
