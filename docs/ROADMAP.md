@@ -584,7 +584,10 @@ Unfinished work and optional extensions; completed behavior is in `AI_OVERVIEW.m
 - [ ] **Dropped clause-final connectives in mined sentences (follow-up).**
   (2026-10-23.) The quick-import AI turned "…始めましたが、今は…" into
   "…始めました。今は…", silently dropping が (found on Episode #24). The importer
-  prompt now forbids dropping spoken words and `checkCombinedReply` warns in the
+  prompt now forbids dropping spoken words, tells the assistant to keep Whisper's
+  punctuation when the fragments already have it (`looksPunctuated`; podcast
+  sources get their text from Whisper, not a transcript), and
+  `checkCombinedReply` warns in the
   review stage (`findDroppedConnectives`); source and local tests only, not yet
   seen on a live import. Existing data: the 12 confirmed pairs (Slow Japanese
   Episodes #24 ×2, #21 ×2, #58 ×2, #53, #45, #26 ×2, #46, #23) were merged on
