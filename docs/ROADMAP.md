@@ -586,10 +586,15 @@ Unfinished work and optional extensions; completed behavior is in `AI_OVERVIEW.m
   "…始めました。今は…", silently dropping が (found on Episode #24). The importer
   prompt now forbids dropping spoken words and `checkCombinedReply` warns in the
   review stage (`findDroppedConnectives`); source and local tests only, not yet
-  seen on a live import. Unfinished: (1) **Existing data** — 12 confirmed pairs
-  (Slow Japanese Episodes #24 ×2, #21 ×2, #58 ×2, #53, #45, #26 ×2, #46, #23) still
-  need merging with the が restored via the book's Re-segment page; Episode #24 at
-  342 s (なり、そして、) is unresolved. (2) **Wider scan** — the first pass checked
+  seen on a live import. Existing data: the 12 confirmed pairs (Slow Japanese
+  Episodes #24 ×2, #21 ×2, #58 ×2, #53, #45, #26 ×2, #46, #23) were merged on
+  2026-10-23/24 with `scripts/merge-adjacent-sentences.ts` (pairs in
+  `scripts/data/merge-pairs-2026-10-23.json`; the Re-segment page cannot do this —
+  it rebuilds a whole book as one source). Verified by row checks against
+  Supabase, not played in the app. The merged sentences start with no extras
+  (analysis, structure, walkthrough) and no word-alignment, so those need
+  regenerating. Unfinished: (1) Episode #24 at 342 s (なり、そして、) is
+  unresolved; (2) **Wider scan** — the first pass checked
   only the last ~3 s of each clip against が/から and a strict filter, skipped the
   YouTube sources (~420 clips) and one 403 podcast source, and did not cover けど/
   し/ので. (3) **Boundary check from audio + grammar** — a UniDic check that allows
