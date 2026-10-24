@@ -5,6 +5,7 @@ import {
   checkCombinedReply,
   findDroppedConnectives,
   formatCombinedPromptForAI,
+  looksPunctuated,
   remapSentenceHandles,
   splitCombinedReply,
 } from './combinedImportPrompt';
@@ -159,5 +160,33 @@ describe('findDroppedConnectives', () => {
     });
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain('0:00 …ましたが');
+  });
+});
+
+describe('punctuation guidance', () => {
+  const seg = (text: string, i: number) => ({ text, startMs: i * 2000, endMs: i * 2000 + 2000, isAuto: true, lowConfidence: false });
+  const punctuated = [seg('私は去年の9月から始めましたが、', 0), seg('今は200人以上の人が聞いています。', 1), seg('ありがとうございます', 2)];
+  const bare = [seg('私は去年の9月から始めましたが', 0), seg('今は200人以上の人が聞いています', 1)];
+
+  it('detects punctuated vs punctuation-free transcripts', () => {
+    expect(looksPunctuated(punctuated)).toBe(true);
+    expect(looksPunctuated(bare)).toBe(false);
+    expect(looksPunctuated([])).toBe(false);
+  });
+
+  it('tells the assistant to keep a transcriber punctuation when the fragments already have it', () => {
+    const prompt = formatCombinedPromptForAI(punctuated);
+    expect(prompt).toContain("Keep the transcriber's punctuation");
+    expect(prompt).toContain('do not replace a 、 with 。');
+    expect(prompt).not.toContain('may lack punctuation');
+    expect(prompt).not.toContain('- Add sentence-final punctuation (。！？) where it belongs.');
+    expect(prompt).toContain('Never drop or add spoken words');
+  });
+
+  it('still asks for punctuation when the fragments have none', () => {
+    const prompt = formatCombinedPromptForAI(bare);
+    expect(prompt).toContain('may lack punctuation');
+    expect(prompt).toContain('- Add sentence-final punctuation (。！？) where it belongs.');
+    expect(prompt).not.toContain("Keep the transcriber's punctuation");
   });
 });

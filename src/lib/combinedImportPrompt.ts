@@ -27,17 +27,23 @@ export const END_MARKER = '=== END ===';
 export const COMBINED_REPLY_FILENAME = 'quick-import-reply.txt';
 export const COMBINED_PROMPT_FILENAME = 'quick-import-prompt.txt';
 
-const SENTENCE_RULES = [
+/** Whisper and human caption tracks arrive punctuated; YouTube auto-captions and lyrics don't. */
+export function looksPunctuated(segs: readonly { text: string }[]): boolean {
+  if (segs.length === 0) return false;
+  const punctuated = segs.filter((seg) => /[、。！？!?]/.test(seg.text)).length;
+  return punctuated / segs.length >= 0.4;
+}
+
+const SENTENCE_RULES_HEAD = [
   'You are helping prepare a Japanese transcript for shadowing practice. The work has',
   'several parts; PART 1 (SENTENCES) is required and the others are optional extras',
   'listed under "PARTS REQUESTED" at the end of the instructions.',
   '',
-  'Below the instructions are timed fragments from automatic transcription. They often break',
-  'mid-sentence and may lack punctuation or contain small recognition errors.',
+  '@@INTRO@@',
   '',
   'PART 1 — SENTENCES. Segment the transcript into clean sentences AND translate each one.',
   'For each sentence:',
-  '- Add sentence-final punctuation (。！？) where it belongs.',
+  '@@PUNCTUATION@@',
   '- Fix obvious mis-recognitions, but keep the Japanese wording faithful — do not paraphrase it.',
   '- Never drop or add spoken words. In particular, when a clause ends in a connective such as',
   '  が, けど, けれど, から, ので, のに, し or ても, keep that word: do not turn "…始めましたが、今は…"',
@@ -56,6 +62,35 @@ const SENTENCE_RULES = [
   '(each line starts with the [m:ss] timestamp). Every later part refers to sentences ONLY by these counts (S4, or',
   '"Sentence 4"), never by timestamp.',
 ];
+
+const PUNCTUATION_LINES = {
+  unpunctuated: {
+    intro: [
+      'Below the instructions are timed fragments from automatic transcription. They often break',
+      'mid-sentence and may lack punctuation or contain small recognition errors.',
+    ],
+    rule: ['- Add sentence-final punctuation (。！？) where it belongs.'],
+  },
+  punctuated: {
+    intro: [
+      'Below the instructions are timed fragments from automatic transcription. They often break',
+      'mid-sentence and may contain small recognition errors. They already carry the transcriber\'s',
+      'punctuation (、 。 ？), which follows how the speaker actually phrased things.',
+    ],
+    rule: [
+      '- Keep the transcriber\'s punctuation and wording wherever they are right: do not replace a 、 with 。 and',
+      '  do not delete words that come before it. Add 。！？ only where a sentence ends and none is present.',
+    ],
+  },
+};
+
+/** The PART 1 rules; the punctuation wording depends on whether the transcript already has punctuation. */
+function sentenceRules(punctuated: boolean): string[] {
+  const lines = PUNCTUATION_LINES[punctuated ? 'punctuated' : 'unpunctuated'];
+  return SENTENCE_RULES_HEAD.flatMap((line) =>
+    line === '@@INTRO@@' ? lines.intro : line === '@@PUNCTUATION@@' ? lines.rule : [line],
+  );
+}
 
 function withDefaults(options: CombinedPromptOptions): Required<CombinedPromptOptions> {
   return {
@@ -211,7 +246,7 @@ export function formatCombinedPromptForAI(
   const blocks = extraBlocks(withDefaults(options));
   const headings = ['SENTENCES', ...blocks.map((block) => block.heading)];
   const body = segs.map((seg) => `[${formatWizardTimestamp(seg.startMs)}] ${seg.text.trim()}`).join('\n');
-  const out: string[] = [...SENTENCE_RULES];
+  const out: string[] = [...sentenceRules(looksPunctuated(segs))];
   blocks.forEach((block, index) => {
     out.push('', `PART ${index + 2} — ${block.heading}.`, ...block.lines);
   });
