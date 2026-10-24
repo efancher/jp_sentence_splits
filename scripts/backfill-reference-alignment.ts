@@ -16,7 +16,7 @@
  *
  * Usage:
  *   ANALYSIS_ALIGN_API_BASE=http://127.0.0.1:8002 \
- *   npx tsx scripts/backfill-reference-alignment.ts [--apply] [--limit N] [--book ID]
+ *   npx tsx scripts/backfill-reference-alignment.ts [--apply] [--limit N] [--book ID] [--id-prefix audio_merge_]
  *
  * Dry-run by default (lists what it would do). Needs SCRIPT_SUPABASE_EMAIL
  * / SCRIPT_SUPABASE_PASSWORD / VITE_SUPABASE_* like the other scripts, and
@@ -83,7 +83,11 @@ async function main() {
       bookId: (row.book_id as string | null) ?? null,
     }),
   );
-  const audio = bookId ? audioAll.filter((a) => a.bookId === bookId) : audioAll;
+  const prefixArg = argv[argv.indexOf('--id-prefix') + 1];
+  const idPrefix = argv.includes('--id-prefix') && prefixArg ? prefixArg : null;
+  const audio = audioAll
+    .filter((a) => !bookId || a.bookId === bookId)
+    .filter((a) => !idPrefix || a.id.startsWith(idPrefix));
 
   // Alignments already present at the current version — skip these. Paginated:
   // PostgREST caps a single query at 1000 rows, and an unpaginated read here made
