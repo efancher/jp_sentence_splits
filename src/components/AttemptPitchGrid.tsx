@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 
 import type { AttemptAnalysisSummary } from '../domain/types';
-import { buildPitchGrid, levelsToRuns } from '../lib/attemptPitchGrid';
+import { buildPitchGrid, layoutSentenceLine, levelsToRuns } from '../lib/attemptPitchGrid';
 
 /** The two selected attempts in chronological order (grid rows are oldest-first). */
 function orderedPair(rows: readonly { id: string }[], selected: readonly string[]): [string, string] {
@@ -41,8 +41,14 @@ export function AttemptPitchGrid({
   const selected = picked ?? [grid.rows[0]!.id, lastRow.id];
   const toggle = (id: string) =>
     setPicked(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
+  const line = layoutSentenceLine(grid.columns);
   const OVERLAY_W = 120;
   const OVERLAY_H = 56;
+  const STRIP_H = 48;
+  const strips = [
+    { id: 'native', rank: -1 },
+    ...selected.flatMap((id) => (grid.rows.some((r) => r.id === id) ? [{ id, rank: selected.indexOf(id) }] : [])),
+  ];
 
   return (
     <div className="panel stack" aria-label="Pitch across attempts">
@@ -94,6 +100,55 @@ export function AttemptPitchGrid({
             <figcaption className="jp">{column.text}</figcaption>
           </figure>
         ))}
+      </div>
+      <strong style={{ fontSize: '0.9rem' }}>Whole sentence</strong>
+      <div className="apg-line-scroll">
+        <div style={{ width: line.totalWidth }}>
+          {strips.map((strip) => {
+            const row = grid.rows.find((r) => r.id === strip.id);
+            const native = strip.id === 'native';
+            return (
+              <div key={strip.id} className="apg-strip">
+                <span className="apg-strip-label muted">
+                  {native ? 'Native' : `You · ${labelFor(row!.id, row!.createdAt)}`}
+                </span>
+                <svg
+                  width={line.totalWidth}
+                  height={STRIP_H}
+                  role="img"
+                  aria-label={`${native ? 'Native' : 'Your'} pitch across the sentence`}
+                >
+                  {grid.columns.map((column, index) => {
+                    const seg = line.segments[index]!;
+                    const levels = native ? column.nativeLevels : row!.cells[index]?.learnerLevels;
+                    return (
+                      <g key={index} transform={`translate(${seg.x},0)`}>
+                        <rect width={seg.width} height={STRIP_H} className="apg-seg" />
+                        {levels && levels.length === column.nativeLevels.length
+                          ? levelsToRuns(levels, seg.width, STRIP_H).map((points, i) => (
+                              <polyline
+                                key={i}
+                                points={points}
+                                className={native ? 'apg-line apg-line-native' : 'apg-line apg-line-attempt'}
+                                data-rank={native ? undefined : strip.rank % 4}
+                              />
+                            ))
+                          : null}
+                      </g>
+                    );
+                  })}
+                </svg>
+              </div>
+            );
+          })}
+          <div className="apg-text jp">
+            {grid.columns.map((column, index) => (
+              <span key={index} style={{ left: line.segments[index]!.x, width: line.segments[index]!.width }}>
+                {column.text}
+              </span>
+            ))}
+          </div>
+        </div>
       </div>
       <p className="muted" style={{ margin: 0, fontSize: '0.8rem' }}>
         Thick line = native, thin = your attempts. Each phrase is scaled from its lowest to its highest sound, so compare

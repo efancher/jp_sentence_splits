@@ -78,3 +78,27 @@ export function levelsToRuns(levels: readonly (number | null)[], width: number, 
   if (current.length > 0) runs.push(current.join(' '));
   return runs;
 }
+
+export interface SentenceLineSegment {
+  x: number;
+  width: number;
+}
+
+/**
+ * Left-to-right layout of a whole sentence's phrases on one shared axis. A segment is as wide as its
+ * morae need (`moraWidth` each) but never narrower than its written text (`charWidth` per character),
+ * so the Japanese underneath never overlaps the next phrase.
+ */
+export function layoutSentenceLine(
+  columns: readonly { text: string; nativeLevels: readonly unknown[] }[],
+  { moraWidth = 14, charWidth = 15, gap = 6 }: { moraWidth?: number; charWidth?: number; gap?: number } = {},
+): { segments: SentenceLineSegment[]; totalWidth: number } {
+  let x = 0;
+  const segments = columns.map((column) => {
+    const width = Math.max(column.nativeLevels.length * moraWidth, [...column.text].length * charWidth + 4);
+    const segment = { x, width };
+    x += width + gap;
+    return segment;
+  });
+  return { segments, totalWidth: Math.max(0, x - gap) };
+}

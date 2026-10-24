@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { PhraseSnapshotRow } from '../domain/types';
 
-import { buildPitchGrid, levelsToRuns } from './attemptPitchGrid';
+import { buildPitchGrid, layoutSentenceLine, levelsToRuns } from './attemptPitchGrid';
 
 const row = (text: string): PhraseSnapshotRow => ({
   text,
@@ -36,5 +36,24 @@ describe('levelsToRuns', () => {
 
   it('centres a single mora', () => {
     expect(levelsToRuns([1], 100, 40, 0)).toEqual(['50.0,0.0']);
+  });
+});
+
+describe('layoutSentenceLine', () => {
+  it('places phrases left to right, widening short-mora phrases to fit their text', () => {
+    const { segments, totalWidth } = layoutSentenceLine(
+      [
+        { text: 'はい', nativeLevels: [0, 1, 0, 1, 0, 1] },
+        { text: '緑色では', nativeLevels: [0, 1] },
+      ],
+      { moraWidth: 10, charWidth: 10, gap: 5 },
+    );
+    expect(segments[0]).toEqual({ x: 0, width: 60 });
+    expect(segments[1]).toEqual({ x: 65, width: 44 });
+    expect(totalWidth).toBe(109);
+  });
+
+  it('is empty for no phrases', () => {
+    expect(layoutSentenceLine([])).toEqual({ segments: [], totalWidth: 0 });
   });
 });
