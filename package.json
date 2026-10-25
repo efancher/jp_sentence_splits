@@ -59,6 +59,7 @@
     "fix:vocabulary-numeral-readings": "tsx scripts/fix-vocabulary-numeral-readings.ts",
     "fix:caption-artifacts": "tsx scripts/fix-caption-artifacts.ts",
     "fix:pronoun-readings": "tsx scripts/fix-pronoun-readings.ts",
+    "fix:ichigo-ichie-readings": "tsx scripts/fix-ichigo-ichie-readings.ts",
     "fix:context-reading-overrides": "tsx scripts/fix-context-reading-overrides.ts",
     "audit:vocab-readings": "tsx scripts/audit-vocab-readings.ts",
     "db:query": "tsx scripts/db-query.ts",

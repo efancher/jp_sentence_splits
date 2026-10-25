@@ -60,6 +60,15 @@ def nani_override(surface: str, next_surface: str) -> Optional[str]:
     return None
 
 
+def ichigo_override(surface: str, prev_surface: str, next_surface: str) -> Optional[str]:
+    """unidic-lite splits 一期一会 into 一 / 期 / 一会 and reads the middle 期 as
+    き; the fixed phrase is いちごいちえ (rendaku). Only the 一 + 期 + 一会 shape
+    is rewritten, so 一期 / 二期 / 期待 elsewhere keep their default."""
+    if surface == "期" and prev_surface == "一" and next_surface.startswith("一会"):
+        return "ご"
+    return None
+
+
 _MAE_PREV_POS = ("連体詞", "数詞", "接尾辞")
 
 
@@ -110,8 +119,10 @@ def generate_reading(text: str) -> Optional[str]:
         surface = word.surface
         next_surface = words[i + 1].surface if i + 1 < len(words) else ""
         prev_pos = getattr(words[i - 1].feature, "pos1", "") or "" if i > 0 else ""
+        prev_surface = words[i - 1].surface if i > 0 else ""
         override = (
             nani_override(surface, next_surface)
+            or ichigo_override(surface, prev_surface, next_surface)
             or mae_override(surface, prev_pos, next_surface)
             or READING_OVERRIDES.get(surface)
         )

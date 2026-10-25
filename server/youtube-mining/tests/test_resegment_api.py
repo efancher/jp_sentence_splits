@@ -146,3 +146,20 @@ def test_tokenize_context_readings_for_nani_counters_and_nationality() -> None:
     assert reading_of("三日前に会った。", "前") == "まえ"
     assert reading_of("駅の前で待つ。", "前") == "まえ"
     assert reading_of("前社長は来た。", "前") == "ぜん"
+
+
+def test_tokenize_reads_ichigo_ichie_with_rendaku() -> None:
+    """unidic-lite splits 一期一会 into 一/期/一会 and reads 期 as き; the
+    phrase is いちごいちえ (ichigo_override). Other 期 uses are untouched."""
+    if not reading_engine_available():
+        return
+    from app.morphology import tokenize_japanese
+    from app.readings import generate_reading
+
+    def reading_of(sentence: str, surface: str) -> str:
+        return next(t.reading for t in tokenize_japanese(sentence) if t.surface == surface)
+
+    sentence = "今日はみなさんに、一期一会という言葉を紹介したいと思います。"
+    assert reading_of(sentence, "期") == "ご"
+    assert "いちごいちえ" in (generate_reading(sentence) or "")
+    assert reading_of("期待しています。", "期待") == "きたい"

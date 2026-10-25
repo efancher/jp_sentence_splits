@@ -10,7 +10,14 @@ from __future__ import annotations
 
 from app.models import MorphemeToken
 from app.name_readings import lookup_name_reading
-from app.readings import READING_OVERRIDES, _load_engine, has_kanji, mae_override, nani_override
+from app.readings import (
+    READING_OVERRIDES,
+    _load_engine,
+    has_kanji,
+    ichigo_override,
+    mae_override,
+    nani_override,
+)
 
 
 def _feature_str(feature: object, name: str) -> str:
@@ -108,6 +115,8 @@ def tokenize_japanese(text: str) -> list[MorphemeToken]:
         reading = _reading_from_feature(feature, surface, kata2hira)
         next_surface = words[i + 1].surface if i + 1 < len(words) else ""
         reading = nani_override(surface, next_surface) or reading
+        prev_surface = words[i - 1].surface if i > 0 else ""
+        reading = ichigo_override(surface, prev_surface, next_surface) or reading
         reading = mae_override(surface, tokens[-1].pos if tokens else "", next_surface) or reading
         # 人 as a suffix after a proper noun (イタリア人) is じん; after a
         # numeral (三人) it stays にん, which UniDic already gives.
