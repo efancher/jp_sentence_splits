@@ -395,6 +395,16 @@ export interface WalkthroughParticipant {
   basis: 'stated' | 'inferred';
 }
 
+/** One word or particle in sentence order, for the "Word by word" list. */
+export interface WalkthroughWord extends WalkthroughSpan {
+  /** Kana reading, only when it differs from the text. */
+  reading?: string;
+  /** What it means here; for a particle or ending, what it does. */
+  gloss: string;
+  /** Grammatical job in this sentence (e.g. "topic marker", "polite ending"), when it has one. */
+  job?: string;
+}
+
 export interface WalkthroughCheck {
   question: string;
   answer: string;
@@ -404,6 +414,8 @@ export interface ContextWalkthrough {
   /** Format version; absent means the original (pre-structure) format. */
   version?: number;
   participants?: WalkthroughParticipant[];
+  /** Every word and particle in sentence order (format version 3). */
+  words?: WalkthroughWord[];
   check?: WalkthroughCheck;
   /** Natural whole-sentence English. */
   natural: string;

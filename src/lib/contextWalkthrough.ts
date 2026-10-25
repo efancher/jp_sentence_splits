@@ -8,7 +8,7 @@
  * are computed here, bad steps are dropped individually, and everything is re-validated against the
  * live sentence before display. Nothing here touches reviews or FSRS.
  */
-import type { ContextWalkthrough, ContextWalkthroughStep, WalkthroughParticipant, WalkthroughRelation, WalkthroughSpan } from '../domain/types';
+import type { ContextWalkthrough, ContextWalkthroughStep, WalkthroughParticipant, WalkthroughWord, WalkthroughRelation, WalkthroughSpan } from '../domain/types';
 
 import type { PreparationContext } from './episodePreparation';
 
@@ -16,7 +16,7 @@ export const WALKTHROUGH_SENTENCES_PER_PART = 12;
 export const WALKTHROUGH_CONTEXT_BEFORE = 3;
 export const WALKTHROUGH_CONTEXT_AFTER = 2;
 /** Entries below this version still display but are offered for enrichment (see `sentencesNeedingUpgrade`). */
-export const CONTEXT_WALKTHROUGH_VERSION = 2;
+export const CONTEXT_WALKTHROUGH_VERSION = 3;
 export const RELATIONS: readonly WalkthroughRelation[] = ['subject', 'object', 'topic', 'modifier', 'quotation', 'listing', 'predicate', 'adverbial', 'link', 'other'];
 const MAX_STEPS = 16;
 const MAX_FIELD = 320;
@@ -59,12 +59,22 @@ export function buildWalkthroughInstructions(): string[] {
     '  surrounding sentences show it. If the context does not settle it, set who to "not specified" rather than inventing one.',
     '- "check": one short question about the sentence\'s real difficulty (attachment, who, scope), with its answer. Omit for trivial sentences.',
     '- Sentence-specific beats generic: write "を marks このポッドキャスト as what the listeners listen to", not "を marks the object".',
+    '- "words": EVERY word and particle of the sentence, in sentence order, one entry each, so the learner sees the whole sentence broken down',
+    '  at a glance. Entries: {text, reading, gloss, job}. "text" is copied exactly (no punctuation-only entries); keep a verb with its',
+    '  conjugation ending (住みたい) and a name or loanword whole. "reading" is the kana reading, only when text contains kanji. "gloss" is',
+    '  the meaning here, or for a particle or ending what it does. "job" is the short grammatical job in THIS sentence (e.g. "topic marker",',
+    '  "marks what is liked", "reason connector", "polite ending"); omit it for plain content words.',
     'Do not use a grammar label as a substitute for an explanation, and do not add any quotation marks other than JSON string quotes.',
   ];
 }
 
 export const WALKTHROUGH_SHAPE = {
   S4: {
+    words: [
+      { text: 'もう一つ', reading: 'もうひとつ', gloss: 'one more / the other one' },
+      { text: 'は', gloss: 'as for', job: 'topic marker' },
+      { text: '紙', reading: 'かみ', gloss: 'paper' },
+    ],
     natural: 'The other one is paper: the stuff you write things on, you know.',
     participants: [{ clause: '書いたりする', who: 'you / people in general', role: 'the one writing', basis: 'inferred' }],
     check: { question: 'What noun does 何かを書いたりする describe?', answer: 'やつ (the thing, i.e. paper).' },
@@ -225,6 +235,7 @@ export function parseWalkthroughs(raw: unknown, context: Pick<PreparationContext
       rejected.push({ handle, reason: `Kept ${steps.length} step${steps.length === 1 ? '' : 's'}; dropped ${dropped.map((text) => `“${text}”`).join(', ')} (not in the sentence, incomplete or overlapping).` });
     }
     const caveat = field(entry.caveat);
+    const words = parseWords(entry.words, sentence.japanese);
     const participants = parseParticipants(entry.participants, sentence.japanese);
     const check = entry.check && typeof entry.check === 'object' ? (entry.check as Record<string, unknown>) : undefined;
     const question = field(check?.question);
@@ -236,11 +247,32 @@ export function parseWalkthroughs(raw: unknown, context: Pick<PreparationContext
       natural,
       ...(caveat ? { caveat } : {}),
       ...(participants.length > 0 ? { participants } : {}),
+      ...(words.length > 0 ? { words } : {}),
       ...(question && answer ? { check: { question, answer } } : {}),
       steps,
     });
   }
   return { drafts, rejected };
+}
+
+/** Words must appear in the sentence in order; each is anchored after the previous one, and unmatched entries are dropped. */
+function parseWords(raw: unknown, japanese: string): WalkthroughWord[] {
+  if (!Array.isArray(raw)) return [];
+  const out: WalkthroughWord[] = [];
+  let cursor = 0;
+  for (const item of raw.slice(0, 40)) {
+    const entry = (item && typeof item === 'object' ? item : {}) as Record<string, unknown>;
+    const text = typeof entry.text === 'string' ? entry.text : '';
+    const gloss = field(entry.gloss, 120);
+    if (!text || !HAS_CONTENT.test(text) || !gloss) continue;
+    const start = japanese.indexOf(text, cursor);
+    if (start < 0) continue;
+    cursor = start + text.length;
+    const reading = field(entry.reading, 60);
+    const job = field(entry.job, 80);
+    out.push({ text, start, end: cursor, gloss, ...(reading && reading !== text ? { reading } : {}), ...(job ? { job } : {}) });
+  }
+  return out;
 }
 
 function parseParticipants(raw: unknown, japanese: string): WalkthroughParticipant[] {
@@ -291,8 +323,14 @@ export function validWalkthroughFor(japanese: string, walkthrough: ContextWalkth
     });
   if (steps.length === 0) return undefined;
   const participants = walkthrough.participants?.filter((p) => japanese.includes(p.clause));
-  const { participants: _old, ...rest } = walkthrough;
-  return { ...rest, ...(participants && participants.length > 0 ? { participants } : {}), steps };
+  const words = walkthrough.words?.filter((word) => spanHolds(japanese, word));
+  const { participants: _old, words: _oldWords, ...rest } = walkthrough;
+  return {
+    ...rest,
+    ...(participants && participants.length > 0 ? { participants } : {}),
+    ...(words && words.length > 0 ? { words } : {}),
+    steps,
+  };
 }
 
 export type HighlightKind = 'plain' | 'main' | 'connect' | 'both';

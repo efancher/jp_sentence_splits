@@ -56,6 +56,21 @@ describe('parseWalkthroughs', () => {
     expect(walkthrough.steps[2]!.mechanics).toMatch(/not a past-tense/);
   });
 
+  it('anchors the word-by-word list in order and drops entries that do not fit', () => {
+    const { drafts } = parseWalkthroughs(
+      { S2: { natural: 'One is a pen.', steps: [{ text: 'ペンです', gloss: 'a pen', explanation: 'x' }], words: [
+        { text: 'ひとつ', gloss: 'one' }, { text: 'は', gloss: 'as for', job: 'topic marker' }, { text: 'ペン', gloss: 'pen' },
+        { text: 'です', gloss: 'is', job: 'polite ending' }, { text: '。', gloss: 'stop' }, { text: 'ひとつ', gloss: 'out of order' },
+      ] } },
+      context,
+    );
+    const words = drafts.get('s2')!.words!;
+    expect(words.map((word) => word.text)).toEqual(['ひとつ', 'は', 'ペン', 'です']);
+    for (const word of words) expect('ひとつはペンです。'.slice(word.start, word.end)).toBe(word.text);
+    expect(words[1]!.job).toBe('topic marker');
+    expect(drafts.get('s2')!.version).toBe(3);
+  });
+
   it('handles structurally different sentences: relative clause, te-form helper, dropped subject, sentence-final particle', () => {
     const sentences = [
       { id: 'a', japanese: '昨日友達が買ってきた本を、もう読んでしまいました。' },

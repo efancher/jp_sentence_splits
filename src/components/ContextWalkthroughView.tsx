@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 
 import { getEpisodePreparationContext, saveEpisodePackReply } from '../db/repository';
-import type { ContextWalkthroughStep, WalkthroughCheck, WalkthroughParticipant, WalkthroughRelation } from '../domain/types';
+import type { ContextWalkthroughStep, WalkthroughCheck, WalkthroughParticipant, WalkthroughRelation, WalkthroughWord } from '../domain/types';
 import type { ClauseMapEntry } from '../lib/clauseMap';
 import { highlightSegments } from '../lib/contextWalkthrough';
 import { parseInlineReadings } from '../lib/parseInlineReadings';
@@ -98,6 +98,24 @@ export function ParticipantList({ participants }: { participants: WalkthroughPar
             <span className="jp">{item.clause}</span>: {item.who}
             {item.role ? ` (${item.role})` : ''}
             {item.basis === 'inferred' ? <span className="muted"> — inferred from context, not stated</span> : null}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** Every word and particle in order, with reading, meaning here and grammatical job. */
+export function WordByWordList({ words }: { words: WalkthroughWord[] }) {
+  return (
+    <div className="stack" style={{ gap: '0.15rem' }} aria-label="Word by word">
+      <strong>Word by word</strong>
+      <ul style={{ margin: 0, paddingLeft: '1.1rem' }}>
+        {words.map((word, index) => (
+          <li key={index}>
+            <span className="jp">{word.text}</span>
+            {word.reading ? <span className="jp muted"> ({word.reading})</span> : null}: {word.gloss}
+            {word.job ? <span className="muted"> — {word.job}</span> : null}
           </li>
         ))}
       </ul>
