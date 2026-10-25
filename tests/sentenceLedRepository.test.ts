@@ -136,38 +136,20 @@ describe('sentence-led flow repository', () => {
     expect(status.frontier?.position).toBe(status.sentences[1]!.position);
   });
 
-  it('unlocks the next sentence at 4 of 5 and keeps it unlocked afterwards', async () => {
+  it('opens the rest of the episode once one sentence has been answered, and keeps it open', async () => {
     const { book, ids } = await seedBook(3);
-    await answer(ids[0]!, [true, true, false, true, true]);
-    let status = await getSequentialBookStatus(book.id);
-    expect(status.sentences.map((s) => s.accessible)).toEqual([true, true, false]);
-
+    await answer(ids[0]!, [true]);
     await latchSequentialUnlocks(book.id);
-    // A later run of misses on sentence 1 must not re-lock sentence 2.
     await answer(ids[0]!, [false, false, false, false, false], 5);
-    status = await getSequentialBookStatus(book.id);
-    expect(status.sentences[1]!.accessible).toBe(true);
-  });
-
-  it('does not unlock at 3 of 5, or with fewer than 5 attempts', async () => {
-    const { book, ids } = await seedBook(2);
-    await answer(ids[0]!, [true, true, true, true]);
-    expect((await getSequentialBookStatus(book.id)).sentences[1]!.accessible).toBe(false);
-    await answer(ids[0]!, [false], 4);
-    // Window is now T,T,T,T,F... plus the earlier four: last five = T,T,T,T,F -> 4 of 5.
-    expect((await getSequentialBookStatus(book.id)).sentences[1]!.accessible).toBe(true);
-  });
-
-  it('a sentence without a usable check blocks the next one until it has been worked on', async () => {
-    const { book, ids } = await seedBook(3, false);
-    await setSentenceComprehensionCheck(ids[0]!, undefined);
     const status = await getSequentialBookStatus(book.id);
-    expect(status.sentences[0]!.waived).toBe(true);
-    expect(status.sentences[1]!.accessible).toBe(false);
-    await getDb().bookSentences.where('sentenceId').equals(ids[0]!).modify({ status: 'complete' });
-    const after = await getSequentialBookStatus(book.id);
-    expect(after.sentences[1]!.accessible).toBe(true);
-    expect(after.sentences[2]!.accessible).toBe(false);
+    expect(status.sentences.map((s) => s.accessible)).toEqual([true, true, true]);
+  });
+
+  it('a sentence worked on out of order opens the others without needing the first', async () => {
+    const { book, ids } = await seedBook(3, false);
+    await getDb().bookSentences.where('sentenceId').equals(ids[2]!).modify({ status: 'complete' });
+    const status = await getSequentialBookStatus(book.id);
+    expect(status.sentences.map((s) => s.accessible)).toEqual([true, true, true]);
   });
 
   it('legacy reviews without a meaningChoice record still count', async () => {

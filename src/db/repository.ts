@@ -6180,10 +6180,6 @@ export async function getSequentialBookStatus(
   const walked = new Set(
     events.filter((event) => event.action === 'walkthrough_completed').map((event) => event.sentenceId),
   );
-  // Dated chapters are independent episodes (podcast / news imports): each is its own sequence.
-  const datedChapterIds = new Set(
-    ((await db.books.get(bookId))?.chapters ?? []).filter((chapter) => chapter.sourceDate).map((chapter) => chapter.id),
-  );
   return computeSequentialStatus(
     memberships.map((membership, index) => {
       const item = itemBySentence.get(membership.sentenceId);
@@ -6195,7 +6191,8 @@ export async function getSequentialBookStatus(
         reviews: item ? (reviewsByItem.get(item.id) ?? []) : [],
         // Sentences already worked on before the mode was enabled stay open.
         introduced: membership.status !== 'unstarted' || walked.has(membership.sentenceId),
-        ...(membership.chapterId && datedChapterIds.has(membership.chapterId) ? { groupId: membership.chapterId } : {}),
+        // Each chapter is its own episode; chapterless sentences share one.
+        ...(membership.chapterId ? { groupId: membership.chapterId } : {}),
       };
     }),
     new Set(settings.sequentialUnlockOverrides ?? []),
@@ -10409,6 +10406,8 @@ async function findExploreCandidates(
 
   const freshTryRequests = sentenceFirst ? (await ensureSettings(db)).freshTryRequests : undefined;
   const candidates: ExploreCandidate[] = [];
+  /** Sequential mode: learnt sentences in the episode each book would offer first. */
+  const leadEpisodeLearnt = new Map<string, number>();
   for (const book of books) {
     const memberships = await db.bookSentences.where('bookId').equals(book.id).toArray();
     // Sentence-first: a lesson never changes BookSentence.status, so a
@@ -10455,6 +10454,21 @@ async function findExploreCandidates(
       )
       .sort((a, b) => a.position - b.position)
       .filter((item, index, all) => all.findIndex((other) => other.sentenceId === item.sentenceId) === index);
+    // Sequential mode: episodes already being learnt come first, the one with
+    // the most learnt sentences leading; order within an episode stays by
+    // position (stable sort), but is only a preference.
+    if (sequential) {
+      const learntByEpisode = new Map<string, number>();
+      for (const item of memberships) {
+        if (item.status !== 'unstarted' || walked?.has(item.sentenceId)) {
+          const key = item.chapterId ?? '';
+          learntByEpisode.set(key, (learntByEpisode.get(key) ?? 0) + 1);
+        }
+      }
+      const learnt = (item: BookSentence) => learntByEpisode.get(item.chapterId ?? '') ?? 0;
+      inReadingOrder.sort((a, b) => learnt(b) - learnt(a));
+      leadEpisodeLearnt.set(book.id, inReadingOrder[0] ? learnt(inReadingOrder[0]) : 0);
+    }
     // Sentence Growth can only serve sentences the learner has met, so within
     // the window already previewed, lessons that qualify for it come first.
     // Order only: nothing is added, gated or skipped, and sequential mode keeps
@@ -10499,6 +10513,10 @@ async function findExploreCandidates(
   const limited = candidates
     .map((candidate, index) => ({ candidate, index }))
     .sort((a, b) => {
+      // Sequential mode: a book whose next episode is further along goes first.
+      const leadA = leadEpisodeLearnt.get(a.candidate.bookId) ?? 0;
+      const leadB = leadEpisodeLearnt.get(b.candidate.bookId) ?? 0;
+      if (leadA !== leadB) return leadB - leadA;
       const rank = (c: ExploreCandidate) =>
         !sentenceFirst && c.sentences.some((sentence) => !sentence.vocabularyConfirmed) ? 0 : 1;
       const rankA = rank(a.candidate);

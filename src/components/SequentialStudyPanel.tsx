@@ -33,11 +33,10 @@ export function SequentialStudyPanel({ bookId, sentenceId }: { bookId: string; s
   }, [bookId, view?.book.newlyLatched.length]);
 
   if (!view) return null;
-  const { frontier, gatingSentence } = view.book;
+  const { frontier } = view.book;
   const total = view.book.sentences.length;
   const open = view.book.sentences.filter((s) => s.accessible).length;
   const cleared = view.book.sentences.filter((s) => s.progress.cleared).length;
-  const working = gatingSentence && !gatingSentence.progress.cleared ? gatingSentence : undefined;
   return (
     <section className="panel stack" aria-label="Episode order progress">
       <strong>
@@ -45,17 +44,17 @@ export function SequentialStudyPanel({ bookId, sentenceId }: { bookId: string; s
       </strong>
       <progress value={cleared} max={Math.max(total, 1)} aria-label="Sentences cleared" style={{ width: '100%' }} />
       <p className="muted" style={{ margin: 0 }}>
-        {open} open{working ? ` · working on sentence ${working.position + 1}` : ''}.
+        {open} open.
       </p>
       {view.current ? (
         <p className="muted" style={{ margin: 0 }}>
           This sentence: {progressLine(view.current)}
         </p>
       ) : null}
-      {frontier && gatingSentence ? (
+      {frontier ? (
         <p className="muted" style={{ margin: 0 }}>
-          Next to unlock: sentence {frontier.position + 1}. It opens when sentence{' '}
-          {gatingSentence.position + 1} is cleared. {progressLine(gatingSentence)}
+          Sentence {frontier.position + 1} is still locked: learn any sentence of its episode
+          and the whole episode opens. Started episodes with the most learnt sentences come first.
         </p>
       ) : !frontier ? (
         <p className="muted" style={{ margin: 0 }}>Every sentence in this book is open.</p>
@@ -76,16 +75,13 @@ export function LockedSentenceNotice({
   bookId: string;
   sentenceId: string;
 }) {
-  const view = useLiveQuery(() => getSequentialSentenceView(bookId, sentenceId), [bookId, sentenceId]);
-  const gating = view?.previous;
   return (
     <section className="panel stack" aria-label="Sentence locked">
       <strong>Not unlocked yet</strong>
       <p style={{ margin: 0 }}>
-        Sentences open in episode order. This one opens once the previous sentence is cleared:
-        at least 4 of its last 5 first-try meaning answers correct.
+        This sentence&rsquo;s episode hasn&rsquo;t been started. Learn its first sentence (or any
+        sentence in it) and the rest of the episode opens.
       </p>
-      {gating ? <p className="muted" style={{ margin: 0 }}>{progressLine(gating)}</p> : null}
       <div className="row">
         <Link to="/review">Go to Review</Link>
         <Link to={`/books/${bookId}/read`}>Read the episode</Link>

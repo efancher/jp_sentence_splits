@@ -348,17 +348,14 @@ export function SettingsPage() {
               void updateSettings({ sequentialStudyMode: event.target.checked });
             }}
           />
-          Introduce sentences in episode order
+          Focus on episodes already started
         </label>
         <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
-          The next sentence of a book unlocks once you answer at least 4 of
-          the previous sentence&rsquo;s last 5 meaning checks correctly (5
-          spaced first-try answers are needed; retries after feedback and
-          answers after a hint don&rsquo;t count). Once unlocked it stays
-          unlocked, sentences you&rsquo;ve already started stay open, and
-          reading, playback and context are never locked. Chapters with an
-          episode date (podcast and news imports) are independent: the first
-          sentence of every episode is open.
+          Each episode (chapter) opens with its first sentence. Once you&rsquo;ve
+          learnt any sentence of an episode, the rest of it opens too, in any
+          order, and new sentences are offered from your most-learnt episodes
+          first. Once unlocked a sentence stays unlocked, and reading,
+          playback and context are never locked.
         </p>
         <div className="row">
           <button

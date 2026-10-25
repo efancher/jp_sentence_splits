@@ -5,26 +5,27 @@ Verified against code 2026-10-02. Two layers: *opening* a sentence for study
 
 ## 1. Opening a sentence (`src/lib/sequentialStudy.ts`, only when `settings.sequentialStudyMode`)
 
+Updated 2026-10-25: order inside an episode is a preference, not a gate. Each
+chapter is an episode (chapterless sentences share one).
+
 ```mermaid
 flowchart TD
-  S[Sentence N+1 in a book] --> L{Latched in<br/>sequentialUnlockOverrides?}
+  S[Sentence in an episode] --> L{Latched in<br/>sequentialUnlockOverrides?}
   L -- yes --> OPEN[Open]
   L -- no --> I{Already started, walked through,<br/>or has attempts?}
   I -- yes --> OPEN
-  I -- no --> F{First sentence of book?}
+  I -- no --> E{Any other sentence of the episode<br/>started / walked / attempted?}
+  E -- yes --> OPEN
+  E -- no --> F{First sentence of the episode?}
   F -- yes --> OPEN
-  F -- no --> P{Sentence N open?}
-  P -- no --> LOCK[Locked: Analyze shows Japanese +<br/>'Not unlocked yet' + manual unlock]
-  P -- yes --> C{Last 5 qualifying attempts on N:<br/>>= 4 correct?}
-  C -- yes --> OPEN
-  C -- no --> W{N has no usable meaning check<br/>AND N was itself worked on?}
-  W -- yes --> OPEN2[Open, not latched]
-  W -- no --> LOCK
+  F -- no --> LOCK[Locked: Analyze shows Japanese +<br/>'Not unlocked yet' + manual unlock]
 ```
 
-Qualifying attempt = first pick on a meaning card, before any hint/translation,
-at least 10 minutes after the previously counted attempt. Unlocks are latched
-(permanent) except the waiver case. Each book is independent.
+Unlocks are latched (permanent). A latch alone never counts as "started".
+Candidate order (`findExploreCandidates`, sequential mode only): sentences from
+episodes with the most learnt sentences come first (position order within an
+episode); across books, the book whose leading episode is furthest along goes
+first, then the usual recency/ease ordering.
 
 ## 2. Activity gates
 

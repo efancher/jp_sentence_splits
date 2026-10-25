@@ -89,9 +89,8 @@ export function unlockProgress(attempts: readonly MeaningAttempt[]): UnlockProgr
 
 export type UnlockReason =
   | 'first' // first sentence of the book
-  | 'previous_cleared'
-  | 'previous_waived' // previous sentence has no usable meaning check and was already worked on, so it cannot gate
   | 'introduced' // already studied before the mode was on (grandfathered)
+  | 'episode_started' // another sentence of this episode was already learnt, so order no longer gates it
   | 'latched'; // was unlocked earlier (manual override or earlier computation)
 
 export interface SequentialSentenceStatus {
@@ -116,9 +115,9 @@ export interface SequentialInputSentence {
   /** Already studied before / outside this mode (analysis walkthrough done, reviews exist, …). */
   introduced: boolean;
   /**
-   * Sentences sharing a group gate each other in order; the first sentence of
-   * every group is open. Omit for one book-wide sequence (novels, series).
-   * Independent episodes (a podcast's dated chapters) each get their own group.
+   * A group is one episode. Its first sentence is open; once any sentence in
+   * it has been learnt the whole episode opens (order is a preference, not a
+   * gate). Omit for one book-wide episode.
    */
   groupId?: string;
 }
@@ -144,6 +143,14 @@ export function computeSequentialStatus(
   const ordered = [...input].sort((a, b) => a.position - b.position);
   const statuses: SequentialSentenceStatus[] = [];
   const newlyLatched: string[] = [];
+  // An episode counts as started once any of its sentences was actually worked
+  // on (latches don't count: the first sentence is latched before it is seen).
+  const startedGroups = new Set<string>();
+  for (const s of ordered) {
+    if (s.introduced || qualifyingAttempts(s.reviews).length > 0) {
+      startedGroups.add(s.groupId ?? '');
+    }
+  }
   const previousInGroup = new Map<string, { status: SequentialSentenceStatus; input: SequentialInputSentence }>();
   for (let i = 0; i < ordered.length; i += 1) {
     const s = ordered[i]!;
@@ -151,18 +158,13 @@ export function computeSequentialStatus(
     const waived = !s.hasUsableCheck;
     const groupKey = s.groupId ?? '';
     const before = previousInGroup.get(groupKey);
-    const prev = before?.status;
     let reason: UnlockReason | undefined;
     if (latched.has(s.sentenceId)) reason = 'latched';
     else if (s.introduced || progress.attempts > 0) reason = 'introduced';
+    else if (startedGroups.has(groupKey)) reason = 'episode_started';
     else if (!before) reason = 'first';
-    else if (prev?.accessible) {
-      if (prev.progress.cleared) reason = 'previous_cleared';
-      else if (prev.waived && before.input.introduced) reason = 'previous_waived';
-    }
     const accessible = reason !== undefined;
-    // A waiver unlock is derived, not earned: leave it unlatched so it follows the rule.
-    if (accessible && reason !== 'previous_waived' && !latched.has(s.sentenceId)) newlyLatched.push(s.sentenceId);
+    if (accessible && !latched.has(s.sentenceId)) newlyLatched.push(s.sentenceId);
     const status: SequentialSentenceStatus = {
       sentenceId: s.sentenceId,
       position: s.position,

@@ -90,13 +90,14 @@ describe('sequential status', () => {
     expect(s.gatingSentence?.sentenceId).toBe('a');
   });
 
-  it('unlocks the next sentence once the previous clears, but not two ahead', () => {
-    const s = computeSequentialStatus([
-      sentence('a', 1, run([true, true, true, true, false])),
-      sentence('b', 2),
-      sentence('c', 3),
-    ]);
-    expect(s.sentences.map((x) => x.accessible)).toEqual([true, true, false]);
+  it('opens only the first sentence of an episode that has not been started', () => {
+    const s = computeSequentialStatus([sentence('a', 1), sentence('b', 2), sentence('c', 3)]);
+    expect(s.sentences.map((x) => x.accessible)).toEqual([true, false, false]);
+  });
+
+  it('opens the rest of the episode after any sentence has qualifying attempts', () => {
+    const s = computeSequentialStatus([sentence('a', 1, run([true])), sentence('b', 2), sentence('c', 3)]);
+    expect(s.sentences.map((x) => x.accessible)).toEqual([true, true, true]);
   });
 
   it('never relocks: latched and introduced sentences stay accessible', () => {
@@ -108,46 +109,25 @@ describe('sequential status', () => {
     expect(s.newlyLatched).toEqual(['a', 'c']);
   });
 
-  it('waives a worked-through sentence with no usable meaning check so the learner is never stuck', () => {
-    const s = computeSequentialStatus([
-      sentence('a', 1, [], { hasUsableCheck: false, introduced: true }),
-      sentence('b', 2),
+  it('opens the whole episode once any of its sentences is learnt, in any order', () => {
+    const status = computeSequentialStatus([
+      sentence('a', 1, [], { groupId: 'ep1' }),
+      sentence('b', 2, [], { groupId: 'ep1' }),
+      sentence('c', 3, [], { introduced: true, groupId: 'ep1' }),
+      sentence('d', 4, [], { groupId: 'ep1' }),
     ]);
-    expect(s.sentences[1]!.accessible).toBe(true);
-    expect(s.sentences[1]!.reason).toBe('previous_waived');
+    expect(status.sentences.map((s) => s.accessible)).toEqual([true, true, true, true]);
+    expect(status.sentences[1]!.reason).toBe('episode_started');
   });
 
-  it('a waived sentence that has not been worked on yet does not unlock the next one', () => {
-    const s = computeSequentialStatus([
-      sentence('a', 1),
-      sentence('b', 2, [], { hasUsableCheck: false }),
-      sentence('c', 3, [], { hasUsableCheck: false }),
+  it('an unstarted episode still opens only its first sentence, even if another episode is started', () => {
+    const status = computeSequentialStatus([
+      sentence('a', 1, [], { introduced: true, groupId: 'ep1' }),
+      sentence('b', 2, [], { groupId: 'ep1' }),
+      sentence('c', 3, [], { groupId: 'ep2' }),
+      sentence('d', 4, [], { groupId: 'ep2' }),
     ]);
-    expect(s.sentences.map((x) => x.accessible)).toEqual([true, false, false]);
-    const worked = computeSequentialStatus([
-      sentence('a', 1, [], { hasUsableCheck: false, introduced: true }),
-      sentence('b', 2, [], { hasUsableCheck: false }),
-      sentence('c', 3),
-    ]);
-    expect(worked.sentences.map((x) => x.accessible)).toEqual([true, true, false]);
-  });
-
-  it('does not latch a waiver unlock', () => {
-    const s = computeSequentialStatus([
-      sentence('a', 1, [], { hasUsableCheck: false, introduced: true }),
-      sentence('b', 2),
-    ]);
-    expect(s.sentences[1]!.accessible).toBe(true);
-    expect(s.newlyLatched).toEqual(['a']);
-  });
-
-  it('waiver does not chain past a locked sentence', () => {
-    const s = computeSequentialStatus([
-      sentence('a', 1),
-      sentence('b', 2, [], { hasUsableCheck: false }),
-      sentence('c', 3),
-    ]);
-    expect(s.sentences.map((x) => x.accessible)).toEqual([true, false, false]);
+    expect(status.sentences.map((s) => s.accessible)).toEqual([true, true, true, false]);
   });
 
   it('is independent per book: each book starts at its own first sentence', () => {
