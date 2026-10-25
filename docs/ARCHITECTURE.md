@@ -396,9 +396,8 @@ maturity actually needs.
   for any recording aligned once elsewhere (at mining-commit time, by a
   client on the tailnet, or by `scripts/backfill-reference-alignment.ts`
   run on the box itself). Consumers still degrade gracefully (shadowing
-  analysis panel, `pitch_accent` / `word_listening` word isolation, karaoke
-  highlighting) when no tier has it. Also runs `faster-whisper` (`base`
-  model) for a secondary, non-authoritative ASR signal.
+  analysis panel, `pitch_accent` / `word_listening` word isolation) when no tier has it. Also runs
+  `faster-whisper` (`base` model) for a secondary, non-authoritative ASR signal.
 - **WaniKani**: no live integration. The kanji catalog (readings/meanings
   in `kanji`) came from a one-time WaniKani API import during Phase 2. The
   mnemonic feature that briefly layered per-word and per-kanji Tofugu

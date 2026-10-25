@@ -1,9 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 
-import { getReferenceAlignment, saveReferenceAlignment } from '../db/repository';
-import type { SentenceAudio, TargetVocabulary, VocabularySuggestion } from '../domain/types';
-import { useNativeAudio } from '../hooks/useNativeAudio';
-import { loadOrComputeAlignment } from '../lib/alignmentCache';
+import type { TargetVocabulary, VocabularySuggestion } from '../domain/types';
 import { segmentsInRange, type PositionedSegment } from '../lib/newWordFurigana';
 
 export type SentenceToken = {
@@ -13,8 +10,6 @@ export type SentenceToken = {
   end: number;
   gloss?: string;
 };
-
-type TimedWord = { start: number; end: number; text: string };
 
 /**
  * Splits a sentence into display tokens straight from its
@@ -82,63 +77,20 @@ export function buildSentenceTokens(
 }
 
 /**
- * Best-effort character offset in `japanese` for each forced-alignment
- * word, so playback position (which the aligner reports in seconds against
- * its *own*, dictionary-normalized transcript) can be mapped back onto the
- * real sentence's tokens. Both lists run left-to-right over the same
- * utterance, so a forward `indexOf` from a running cursor resyncs after any
- * mis-segmentation; `<unk>`/`<eps>` (audio the aligner couldn't place) map
- * to -1 and just don't drive a highlight.
- */
-export function alignmentCharPositions(japanese: string, words: TimedWord[]): number[] {
-  const positions: number[] = [];
-  let cursor = 0;
-  for (const word of words) {
-    if (!word.text || word.text === '<unk>' || word.text === '<eps>') {
-      positions.push(-1);
-      continue;
-    }
-    const found = japanese.indexOf(word.text, cursor);
-    if (found >= 0 && found <= cursor + 8) {
-      positions.push(found);
-      cursor = found + word.text.length;
-    } else {
-      positions.push(Math.min(cursor, Math.max(0, japanese.length - 1)));
-      cursor = Math.min(japanese.length, cursor + word.text.length);
-    }
-  }
-  return positions;
-}
-
-function tokenIndexForChar(tokens: SentenceToken[], char: number): number {
-  if (char < 0) return -1;
-  return tokens.findIndex((token) => char >= token.start && char < token.end);
-}
-
-/**
- * The revealed sentence on the listening card (Phase 7.4), shown as the
- * real sentence text — not the forced-alignment transcript, which is
- * dictionary-normalized and can diverge (kanji where the audio was kana,
- * literal `<unk>` where it couldn't be placed). The sentence is tokenized
- * from `vocabularySuggestions` (see `buildSentenceTokens`); while the audio
- * plays, a `requestAnimationFrame` loop highlights whichever token the
- * playhead currently sits in, mapped through the aligner's word timings
- * (`alignmentCharPositions`), and a small popup shows that token's English
- * gloss. Falls back to plain, static text whenever alignment isn't cached
- * and the tailnet-only alignment service is unreachable — it's a reading
- * aid, not the source of truth. A smaller kana line underneath
- * (`sentence.readingOnly`) is the actual pronunciation guide, kept separate
- * so the kanji sentence line isn't mistaken for it.
+ * The sentence as real text (not the forced-alignment transcript), tokenized
+ * from `vocabularySuggestions` (see `buildSentenceTokens`). Tapping a glossed
+ * token pins a small popup with its English gloss. Playback-synced word
+ * highlighting was removed (inaccurate, and it shifted the layout). A smaller
+ * kana line underneath (`sentence.readingOnly`) is the actual pronunciation
+ * guide, kept separate so the kanji sentence line isn't mistaken for it.
  */
 export function KaraokeSentenceText({
-  audio,
   japanese,
   readingOnly,
   vocabularySuggestions,
   targetVocabulary,
   rubySegments,
 }: {
-  audio: SentenceAudio;
   japanese: string;
   readingOnly?: string;
   vocabularySuggestions: VocabularySuggestion[];
@@ -146,76 +98,23 @@ export function KaraokeSentenceText({
   /** Furigana to draw over the tokens (e.g. only the words not yet learned). */
   rubySegments?: PositionedSegment[];
 }) {
-  const native = useNativeAudio();
-  const [alignmentWords, setAlignmentWords] = useState<TimedWord[]>([]);
-  const [activeWordIndex, setActiveWordIndex] = useState(-1);
   const wordRefs = useRef<Array<HTMLSpanElement | null>>([]);
   const [glossPopup, setGlossPopup] = useState<{ text: string; left: number; top: number } | null>(
     null,
   );
-  /** Tap-pinned token, independent of playback — lets a learner check a word's gloss on a paused/static sentence, not just while it's playing. Playback highlighting still takes priority once it starts (see effect below). */
+  /** Tap-pinned token, lets a learner check a word's gloss. */
   const [tappedTokenIndex, setTappedTokenIndex] = useState<number | null>(null);
 
   const tokens = useMemo(
     () => buildSentenceTokens(japanese, vocabularySuggestions, targetVocabulary ?? []),
     [japanese, vocabularySuggestions, targetVocabulary],
   );
-  const charPositions = useMemo(
-    () => alignmentCharPositions(japanese, alignmentWords),
-    [japanese, alignmentWords],
-  );
-
-  useEffect(() => {
-    let cancelled = false;
-    setAlignmentWords([]);
-    void loadOrComputeAlignment(
-      audio.id,
-      audio.blob,
-      japanese,
-      getReferenceAlignment,
-      saveReferenceAlignment,
-    ).then((result) => {
-      if (cancelled || !result) return;
-      setAlignmentWords(
-        result.words
-          .filter((word) => word.text && word.text !== '<eps>')
-          .map((word) => ({ start: word.start, end: word.end, text: word.text })),
-      );
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [audio.id, audio.blob, japanese]);
-
-  const active = native.isPlaying && native.activeItemId === audio.id;
-
-  useEffect(() => {
-    if (!active || alignmentWords.length === 0) {
-      setActiveWordIndex(-1);
-      return;
-    }
-    let frame: number;
-    const tick = () => {
-      const t = native.getCurrentTime();
-      const index = alignmentWords.findIndex((word) => t >= word.start && t < word.end);
-      setActiveWordIndex((prev) => (prev === index ? prev : index));
-      frame = requestAnimationFrame(tick);
-    };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [active, alignmentWords, native.getCurrentTime]);
-
-  const activeTokenIndex =
-    activeWordIndex >= 0 ? tokenIndexForChar(tokens, charPositions[activeWordIndex] ?? -1) : -1;
-
   // Reset any tapped word when the sentence itself changes underneath us.
   useEffect(() => {
     setTappedTokenIndex(null);
   }, [tokens]);
 
-  // Playback highlight wins when it's driving a word; otherwise fall back to
-  // whatever the learner last tapped.
-  const displayedTokenIndex = activeTokenIndex >= 0 ? activeTokenIndex : (tappedTokenIndex ?? -1);
+  const displayedTokenIndex = tappedTokenIndex ?? -1;
 
   useEffect(() => {
     const token = tokens[displayedTokenIndex];

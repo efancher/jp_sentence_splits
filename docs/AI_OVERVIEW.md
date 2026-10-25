@@ -200,8 +200,7 @@ built out Phases 1–9):
   `AttemptAnalysisSummary` — cached, recomputable-on-demand derived data
   from the forced-alignment/ASR services (local Dexie caches, keyed by
   version numbers so stale caches can be invalidated). `ReferenceAlignment`
-  is shared between the shadowing-analysis flow (`AnalysisPanel.tsx`), the
-  `listening` card's karaoke highlighting (`KaraokeSentenceText.tsx`), and
+  is shared between the shadowing-analysis flow (`AnalysisPanel.tsx`) and
   the `pitch_accent` / `word_listening` word-audio isolation
   (`SegmentLoopPlayer.tsx`) — all call the same `loadOrComputeAlignment`
   (`src/lib/alignmentCache.ts`), which resolves in three tiers: local Dexie
@@ -1226,13 +1225,8 @@ continues. Auto-advance relies on a completion signal on
 `NativeAudioController.play()` — an optional, generation-guarded `onEnded`
 callback (`src/lib/nativeAudio.ts`) that only fires on a genuine natural
 end, never on a manual stop or a superseded clip. Reuses
-`KaraokeSentenceText` (§4) for per-word highlight + gloss, but only on the
-currently-playing sentence — highlighting only means something there, and
-it keeps alignment-fetch cost to one clip at a time instead of firing for
-every sentence in the chapter on open. Each glossed word's popup can now
-also be tapped directly (2026-09-28) — independent of whether the sentence
-is playing, so checking a word's gloss doesn't require starting playback;
-playback highlighting still wins over a tapped word once it starts. A
+`KaraokeSentenceText` (§4) for the currently-playing sentence (tap-for-gloss
+and furigana; the per-word playback highlight was removed 2026-10-25). A
 viewer-local plain/furigana/reading-only toggle (`textDisplayMode`,
 defaulting from the global setting) degrades to static text with no
 per-word highlight outside plain mode, since ruby markup and the
@@ -1682,16 +1676,12 @@ Activity types currently wired, grouped by subject/eligibility (under the defaul
   (`buildSentenceTokens`, exported + unit-tested in
   `tests/karaokeSentenceText.test.ts`) — not the aligner's own
   dictionary-normalized transcript, which can diverge (kanji where the audio
-  was kana, literal `<unk>` where it couldn't be placed). It lazily
-  computes/caches a `ReferenceAlignment` for the clip (via
-  `loadOrComputeAlignment`, same cache the shadowing-analysis flow uses);
-  during playback a `requestAnimationFrame` loop highlights whichever token
-  the playhead sits in, mapped through the aligner's word timings by a
-  forward `indexOf` resync (`alignmentCharPositions`), and a popup shows
-  that token's English gloss. Falls back to plain static text when alignment
-  isn't cached and the service is unreachable. The gloss is the suggestion's
-  own `english` or a `targetVocabulary` entry matched by the suggestion's
-  dictionary `expression`/`reading` (so a conjugated token still resolves).
+  was kana, literal `<unk>` where it couldn't be placed). Tapping a glossed
+  token pins a popup with its English gloss (the suggestion's own `english`
+  or a `targetVocabulary` entry matched by the suggestion's dictionary
+  `expression`/`reading`, so a conjugated token still resolves). Playback-
+  synced word highlighting was removed 2026-10-25 (inaccurate, and it shifted
+  the page); the component no longer takes audio or fetches alignment.
   A smaller kana line (`sentence.readingOnly`) underneath is the separate
   pronunciation guide. This full-sentence `listening` card is **tier 2 of a
   listening ladder**: withheld until every `word_listening` card (below) for

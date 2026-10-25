@@ -393,7 +393,6 @@ export function ReaderPage() {
     if ((displayMode === 'plain' || displayMode === 'new') && isActive && audio) {
       return (
         <KaraokeSentenceText
-          audio={audio}
           japanese={sentence.japanese}
           vocabularySuggestions={sentence.vocabularySuggestions}
           targetVocabulary={sentence.targetVocabulary}

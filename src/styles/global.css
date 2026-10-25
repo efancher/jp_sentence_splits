@@ -582,7 +582,7 @@ strong.jp {
   border-top-color: var(--text-muted);
 }
 
-/* KaraokeSentenceText (ReviewPage listening card) — word-by-word playback highlight. */
+/* KaraokeSentenceText — tap-to-gloss word tokens. */
 .karaoke-word {
   transition: background-color 0.1s ease-out;
   border-radius: 4px;

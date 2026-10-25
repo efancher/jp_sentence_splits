@@ -3822,7 +3822,7 @@ function PitchAccentProductionCard({
 /**
  * Audio comprehension (Phase 7.4, docs brief §5D): audio plays first with
  * the Japanese text hidden. Reveal is staged in two steps rather than one:
- * "Reveal text" first shows only the (karaoke-highlighted) Japanese, so the
+ * "Reveal text" first shows only the Japanese, so the
  * learner can check whether they parsed the *audio* correctly before
  * meaning enters the picture; "Reveal translation" then shows the
  * translation and vocabulary together. Splitting these lets a learner tell
@@ -3836,10 +3836,7 @@ function PitchAccentProductionCard({
  * has, wired into NativeAudioButton's existing (previously unused here)
  * playbackRate prop. Once text is revealed, the sentence is rendered via
  * KaraokeSentenceText — the real sentence text, tokenized from its
- * vocabulary suggestions, with the currently-spoken token highlighted (and
- * its gloss shown) via lazily-computed forced alignment. It falls back to
- * plain static text on its own when alignment isn't available, so no
- * fallback branching is needed here.
+ * vocabulary suggestions, with tap-for-gloss on each glossed token.
  */
 /**
  * Measured native-clip pitch track under a revealed audio card, with a
@@ -4246,7 +4243,6 @@ function AudioComprehensionCard({
       ) : (
         <>
           <KaraokeSentenceText
-            audio={audio}
             japanese={sentence.japanese}
             readingOnly={sentence.readingOnly}
             vocabularySuggestions={sentence.vocabularySuggestions}

@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  alignmentCharPositions,
-  buildSentenceTokens,
-} from '../src/components/KaraokeSentenceText';
+import { buildSentenceTokens } from '../src/components/KaraokeSentenceText';
 import type { TargetVocabulary, VocabularySuggestion } from '../src/domain/types';
 
 function suggestion(overrides: Partial<VocabularySuggestion>): VocabularySuggestion {
@@ -82,30 +79,5 @@ describe('buildSentenceTokens', () => {
       { text: 'ABC', start: 0, end: 3, gloss: 'abc' },
       { text: 'D', start: 3, end: 4, gloss: 'd' },
     ]);
-  });
-});
-
-describe('alignmentCharPositions', () => {
-  it('resolves each aligner word to its character offset in the sentence, resyncing across a split', () => {
-    const japanese = '本を読みますか';
-    const words = [
-      { start: 0, end: 0.4, text: '本を' },
-      { start: 0.4, end: 0.6, text: '読み' }, // aligner split
-      { start: 0.6, end: 0.8, text: 'ます' },
-      { start: 0.8, end: 1, text: 'か' },
-    ];
-
-    expect(alignmentCharPositions(japanese, words)).toEqual([0, 2, 4, 6]);
-  });
-
-  it('maps <unk> to -1 and still places the following word past it', () => {
-    const japanese = 'それより家どこ';
-    const words = [
-      { start: 0, end: 0.3, text: 'それより' },
-      { start: 0.3, end: 0.5, text: '<unk>' }, // audio the aligner could not place (家)
-      { start: 0.5, end: 0.8, text: 'どこ' },
-    ];
-
-    expect(alignmentCharPositions(japanese, words)).toEqual([0, -1, 5]);
   });
 });
