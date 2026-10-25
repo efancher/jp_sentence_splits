@@ -447,7 +447,9 @@ export async function setBookSuspended(
     suspendedAt: suspended ? (existing.suspendedAt ?? now.toISOString()) : undefined,
     updatedAt: now.toISOString(),
   };
+  (globalThis as { __suspendMark?: (label: string) => void }).__suspendMark?.('put-start');
   await db.books.put(updated);
+  (globalThis as { __suspendMark?: (label: string) => void }).__suspendMark?.('put-done');
   notifySync('books', updated.id, updated);
   if (!suspended && existing.suspendedAt) {
     const memberships = await db.bookSentences.where('bookId').equals(bookId).toArray();
@@ -488,7 +490,9 @@ export async function setChapterSuspended(
     ),
     updatedAt: now.toISOString(),
   };
+  (globalThis as { __suspendMark?: (label: string) => void }).__suspendMark?.('put-start');
   await db.books.put(updated);
+  (globalThis as { __suspendMark?: (label: string) => void }).__suspendMark?.('put-done');
   notifySync('books', updated.id, updated);
   if (!suspended && currentChapter.suspendedAt) {
     const memberships = await db.bookSentences.where('bookId').equals(bookId).toArray();
@@ -496,6 +500,7 @@ export async function setChapterSuspended(
       memberships.filter((m) => m.chapterId === chapterId).map((m) => m.sentenceId),
     );
     await rescheduleResumedItems(sentenceIds, now);
+    (globalThis as { __suspendMark?: (label: string) => void }).__suspendMark?.('reschedule-done');
   }
   return updated;
 }

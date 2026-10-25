@@ -493,7 +493,23 @@ export function BookDetailPage() {
   }
   async function timedSuspend(action: () => Promise<unknown>) {
     suspendTiming.current = { t0: performance.now(), marks: [] };
-    await action();
+    // Main-thread stall detector: a big gap means JS is hogging the thread;
+    // none means the delay is IndexedDB queueing.
+    let last = performance.now();
+    let maxGap = 0;
+    const stall = window.setInterval(() => {
+      const now = performance.now();
+      maxGap = Math.max(maxGap, now - last - 50);
+      last = now;
+    }, 50);
+    (globalThis as { __suspendMark?: (label: string) => void }).__suspendMark = markSuspendTiming;
+    try {
+      await action();
+    } finally {
+      window.clearInterval(stall);
+      (globalThis as { __suspendMark?: unknown }).__suspendMark = undefined;
+      markSuspendTiming(`maxStall ${Math.round(maxGap)}ms`);
+    }
     markSuspendTiming('write');
     requestAnimationFrame(() => requestAnimationFrame(() => markSuspendTiming('paint')));
   }
