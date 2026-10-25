@@ -197,3 +197,10 @@ ASSIST_BACKENDS = [
 ]
 ASSIST_TIMEOUT_SECONDS = int(os.environ.get("MINING_ASSIST_TIMEOUT_SECONDS", "600"))
 ASSIST_MAX_PROMPT_CHARS = int(os.environ.get("MINING_ASSIST_MAX_PROMPT_CHARS", "200000"))
+
+# Optional ntfy topic URL for "Quick import is waiting for you" phone
+# notifications (assistant run finished/failed, mining job ready/failed).
+# Unset disables them. MINING_NTFY_CLICK_BASE_URL (the app's origin) makes a
+# tap open the app.
+NTFY_URL = os.environ.get("MINING_NTFY_URL") or None
+NTFY_CLICK_BASE_URL = (os.environ.get("MINING_NTFY_CLICK_BASE_URL") or "").rstrip("/") or None

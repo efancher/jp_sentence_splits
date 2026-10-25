@@ -15,6 +15,10 @@ Environment=MINING_YTDLP_COOKIES_FILE=%h/projects/jp_sentence_splits/server/yout
 # by the user, never read by tooling) holds SUPABASE_URL=... and
 # SUPABASE_SERVICE_ROLE_KEY=...; absent file = backup disabled.
 EnvironmentFile=-%h/.config/youtube-mining/supabase.env
+# Phone notifications (ntfy) when a mining job is ready or an assistant run
+# finishes/fails. The file (chmod 600) holds MINING_NTFY_URL=https://ntfy.sh/<secret-topic>
+# and optionally MINING_NTFY_CLICK_BASE_URL=<app origin>; absent = disabled.
+EnvironmentFile=-%h/.config/youtube-mining/ntfy.env
 Environment=MINING_EXIT_NODE=eds-macbook-pro
 Environment=MINING_EXIT_NODE_FALLBACK=iphone174
 # yt-dlp's JS challenge solver needs a node >= 22 binary; the systemd

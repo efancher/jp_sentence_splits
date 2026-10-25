@@ -35,6 +35,7 @@ from app import (
     config,
     exit_node,
     morphology,
+    notify,
     readings,
     resegment,
     source_cache,
@@ -372,6 +373,7 @@ def _run_job(job: Job, url: str) -> None:
         job.stage = "ready"
         job.set_message(f"Ready — {len(job.cues)} sentence(s) found.")
         _write_checkpoint(job)
+        notify.notify("Mining job ready", f"{job.title_override or job.url}: {len(job.cues)} sentence(s) found.")
     except Exception as exc:  # noqa: BLE001 - surfaced to the client as job.error
         logger.exception("Mining job %s failed", job.id)
         job.status = "error"
@@ -379,6 +381,7 @@ def _run_job(job: Job, url: str) -> None:
         job.set_message("Failed")
         job.error = str(exc)
         _write_checkpoint(job)
+        notify.notify("Mining job failed", str(exc)[:200], priority="high")
 
 
 def _fetch_transcript(job: Job, url: str) -> None:

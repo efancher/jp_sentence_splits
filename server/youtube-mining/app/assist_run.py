@@ -25,7 +25,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from app import config
+from app import config, notify
 from app.alignment_backfill import NODE_BINARY, REPO_ROOT, TSX_CLI
 
 logger = logging.getLogger("youtube_mining_api.assist_run")
@@ -99,6 +99,16 @@ def _watch(run_id: str, proc: subprocess.Popen[bytes], run_dir: Path) -> None:
     # The script writes its own terminal status; "running" here means it died
     # without doing so (killed, OOM, crash) — leave it resumable.
     _mark(run_dir, "interrupted", f"The run stopped unexpectedly (exit {returncode}).")
+    _notify_finished(_read_state(run_dir))
+
+
+def _notify_finished(state: dict[str, Any] | None) -> None:
+    status = (state or {}).get("status")
+    if status == "done":
+        notify.notify("Quick import ready", "The assistant finished - your sentences are ready to review.")
+    elif status in ("failed", "interrupted"):
+        detail = (state or {}).get("failure") or "The run stopped."
+        notify.notify("Quick import needs attention", str(detail)[:200], priority="high")
 
 
 def is_active(run_id: str) -> bool:

@@ -860,6 +860,13 @@ Targets are constants; no settings UI.
   to add one. Distinct from `AppSettings.recentPodcastFeedUrls`, a
   per-device MRU datalist of the last few raw URLs typed — that stays
   unlabeled and local-only.
+- **Phone notifications (2026-10-25).** The box can ping a phone through
+  ntfy when a mining job is ready/failed (`jobs._run_job`) and when a
+  "Send to assistant" run reaches done/failed/interrupted
+  (`assist_run._watch`). Enabled only by `MINING_NTFY_URL` (see
+  `deploy/youtube-mining-api.service`, `app/notify.py`); best-effort, no-op
+  when unset. A user-cancelled run whose process dies before writing
+  `cancelled` may also send an "interrupted" ping.
 - **Quick import** (`QuickMinePage.tsx`, route `/import/quick`) — one-page
   alternative to the 4-step wizard above, for "just import it": same
   idle-screen URL/podcast-feed picker and job creation/polling, but instead
