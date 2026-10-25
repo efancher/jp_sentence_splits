@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 
 import { getEpisodePreparationContext, saveEpisodePackReply } from '../db/repository';
 import type { ContextWalkthroughStep, WalkthroughCheck, WalkthroughParticipant, WalkthroughRelation } from '../domain/types';
+import type { ClauseMapEntry } from '../lib/clauseMap';
 import { highlightSegments } from '../lib/contextWalkthrough';
 import { parseInlineReadings } from '../lib/parseInlineReadings';
 import { buildEpisodePackPrompts } from '../lib/episodePack';
@@ -100,6 +101,31 @@ export function ParticipantList({ participants }: { participants: WalkthroughPar
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+/** The sentence as clauses joined by their connectors; boundaries come from chunk roles, not a parse. */
+export function ClauseMapView({ clauses }: { clauses: ClauseMapEntry[] }) {
+  return (
+    <div className="stack" style={{ gap: '0.2rem' }} aria-label="Grammar structure">
+      <strong>Grammar structure</strong>
+      <ol style={{ margin: 0, paddingLeft: '1.1rem' }}>
+        {clauses.map((clause, index) => (
+          <li key={index}>
+            {clause.connector ? (
+              <div className="muted">
+                joined by <span className="jp">{clause.connector.text}</span>{clause.connector.gloss ? <> (“{clause.connector.gloss}”)</> : null}
+              </div>
+            ) : null}
+            <span className="jp">{clause.text}</span>
+            {clause.stepGlosses.length > 0 ? (
+              <div className="muted">{clause.stepGlosses.map((item) => `${item.text} = ${item.gloss}`).join(' · ')}</div>
+            ) : null}
+          </li>
+        ))}
+      </ol>
+      <span className="muted" style={{ fontSize: '0.8rem' }}>Clause boundaries are estimated from chunk roles, not a full parse.</span>
     </div>
   );
 }

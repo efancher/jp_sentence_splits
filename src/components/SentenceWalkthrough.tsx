@@ -17,7 +17,8 @@ import { locateTargetSpan, selectSentenceTargets, type CompareSentence } from '.
 
 import { ClausePilotPreview } from './ClausePilotPreview';
 import { ChunkPuzzleStrip } from './ChunkPuzzleStrip';
-import { ContextStepCard, HighlightedSentence, ParticipantList, WalkthroughCheckView, WalkthroughContentImport, type RoleHelp } from './ContextWalkthroughView';
+import { buildClauseMap } from '../lib/clauseMap';
+import { ClauseMapView, ContextStepCard, HighlightedSentence, ParticipantList, WalkthroughCheckView, WalkthroughContentImport, type RoleHelp } from './ContextWalkthroughView';
 import { buildCheckPuzzle } from '../lib/earTiles';
 import { parkedDecisionKeys } from '../lib/glossSkill';
 
@@ -188,6 +189,11 @@ export function SentenceWalkthrough({
       return { ...item, ...span };
     });
   }, [chunks, sentence.japanese]);
+  // Generic heuristic roles are too unreliable to band into clauses, so only saved/AI-drafted chunks get a map.
+  const clauseMap = useMemo(
+    () => (chunkSpans && source !== 'draft' ? buildClauseMap(chunkSpans, sentence.japanese, contextual) : undefined),
+    [chunkSpans, source, sentence.japanese, contextual],
+  );
   const [step, setStep] = useState(0);
   const visitId = useMemo(() => createId('visit'), []);
   // The tap-what-you-hear tile check is its own review card now (`ear_tiles`, ReviewPage). Here the
@@ -427,6 +433,7 @@ export function SentenceWalkthrough({
               <strong>Putting it together</strong>
               <div>{contextual.natural}</div>
               {contextual.caveat ? <div className="muted"><strong>Depends on context: </strong>{contextual.caveat}</div> : null}
+              {clauseMap ? <ClauseMapView clauses={clauseMap} /> : null}
               {contextual.participants?.length ? <ParticipantList participants={contextual.participants} /> : null}
               {contextual.check ? <WalkthroughCheckView check={contextual.check} /> : null}
             </div>
