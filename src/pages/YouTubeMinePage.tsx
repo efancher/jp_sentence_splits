@@ -25,6 +25,7 @@ import {
   fetchJobWaveform,
   fetchPodcastFeed,
   getMiningJob,
+  MiningJobGoneError,
   listMiningJobs,
   translateJob,
   type MiningCue,
@@ -259,30 +260,36 @@ export function YouTubeMinePage() {
       return;
     }
     let cancelled = false;
-    void getMiningJob(savedJobId).then(
-      (job) => {
-        if (cancelled) return;
-        if (job.status === 'error') {
-          setError(job.error ?? 'The previous mining job failed.');
-          clearActiveJob();
-        } else {
-          applyResumedJob(savedJobId, job);
-        }
-        setResuming(false);
-      },
-      (err: unknown) => {
-        if (cancelled) return;
-        clearActiveJob(); // gone / swept
-        setError(
-          `Could not reconnect to your last mining job: ${
-            err instanceof Error ? err.message : 'unknown error'
-          }`,
-        );
-        setResuming(false);
-      },
-    );
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    const attempt = () => {
+      void getMiningJob(savedJobId).then(
+        (job) => {
+          if (cancelled) return;
+          if (job.status === 'error') {
+            setError(job.error ?? 'The previous mining job failed.');
+            clearActiveJob();
+          } else {
+            applyResumedJob(savedJobId, job);
+          }
+          setResuming(false);
+        },
+        (err: unknown) => {
+          if (cancelled) return;
+          if (!(err instanceof MiningJobGoneError)) {
+            // Poor connectivity, not a missing job: keep the pointer and retry.
+            retryTimer = setTimeout(attempt, 4000);
+            return;
+          }
+          clearActiveJob(); // gone / swept
+          setError(`Could not reconnect to your last mining job: ${err.message}`);
+          setResuming(false);
+        },
+      );
+    };
+    attempt();
     return () => {
       cancelled = true;
+      clearTimeout(retryTimer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -437,7 +444,9 @@ export function YouTubeMinePage() {
         },
         (err: unknown) => {
           if (cancelled) return;
-          setError(err instanceof Error ? err.message : 'Failed to check job status');
+          // A dropped poll on a flaky connection isn't a failed job; keep polling.
+          if (!(err instanceof MiningJobGoneError)) return;
+          setError(err.message);
           setStage('idle');
         },
       );

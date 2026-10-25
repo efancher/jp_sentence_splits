@@ -306,8 +306,15 @@ export async function listMiningJobs(): Promise<MiningJobSummary[]> {
   return z.array(jobSummarySchema).parse(await response.json());
 }
 
+/** The service answered 404: the job was swept or never existed. Anything
+ * else thrown by `getMiningJob` (network failure, 5xx) is transient. */
+export class MiningJobGoneError extends Error {}
+
 export async function getMiningJob(jobId: string): Promise<MiningJobStatus> {
   const response = await fetch(`${API_BASE}/jobs/${jobId}`);
+  if (response.status === 404) {
+    throw new MiningJobGoneError(`Failed to fetch mining job status: ${await readErrorDetail(response)}`);
+  }
   if (!response.ok) {
     throw new Error(`Failed to fetch mining job status: ${await readErrorDetail(response)}`);
   }

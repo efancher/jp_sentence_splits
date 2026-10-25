@@ -24,6 +24,7 @@ import {
   fetchPodcastFeed,
   getAssistRun,
   getMiningJob,
+  MiningJobGoneError,
   listMiningJobs,
   startAssistRun,
   type AssistRunStatus,
@@ -341,34 +342,43 @@ export function QuickMinePage() {
       return;
     }
     let cancelled = false;
-    void getMiningJob(savedJobId).then(
-      (job) => {
-        if (cancelled) return;
-        if (job.status === 'error') {
-          clearActiveJob();
-          if (queueRef.current.length > 0) {
-            void advanceQueue(`${job.error ?? 'The previous mining job failed.'} — skipped to the next episode.`);
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    const attempt = () => {
+      void getMiningJob(savedJobId).then(
+        (job) => {
+          if (cancelled) return;
+          if (job.status === 'error') {
+            clearActiveJob();
+            if (queueRef.current.length > 0) {
+              void advanceQueue(`${job.error ?? 'The previous mining job failed.'} — skipped to the next episode.`);
+            } else {
+              setError(job.error ?? 'The previous mining job failed.');
+            }
           } else {
-            setError(job.error ?? 'The previous mining job failed.');
+            applyResumedJob(savedJobId, job);
           }
-        } else {
-          applyResumedJob(savedJobId, job);
-        }
-        setResuming(false);
-      },
-      (err: unknown) => {
-        if (cancelled) return;
-        clearActiveJob();
-        const message = `Could not reconnect to your last mining job: ${
-          err instanceof Error ? err.message : 'unknown error'
-        }`;
-        if (queueRef.current.length > 0) void advanceQueue(`${message} — skipped to the next episode.`);
-        else setError(message);
-        setResuming(false);
-      },
-    );
+          setResuming(false);
+        },
+        (err: unknown) => {
+          if (cancelled) return;
+          if (!(err instanceof MiningJobGoneError)) {
+            // Poor connectivity, not a missing job: keep the pointer and retry.
+            setProgress('Reconnecting to your previous import…');
+            retryTimer = setTimeout(attempt, 4000);
+            return;
+          }
+          clearActiveJob();
+          const message = `Could not reconnect to your last mining job: ${err.message}`;
+          if (queueRef.current.length > 0) void advanceQueue(`${message} — skipped to the next episode.`);
+          else setError(message);
+          setResuming(false);
+        },
+      );
+    };
+    attempt();
     return () => {
       cancelled = true;
+      clearTimeout(retryTimer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -476,7 +486,9 @@ export function QuickMinePage() {
         },
         (err: unknown) => {
           if (cancelled) return;
-          failCurrent(err instanceof Error ? err.message : 'Failed to check job status');
+          // A dropped poll on a flaky connection isn't a failed job; keep polling.
+          if (!(err instanceof MiningJobGoneError)) return;
+          failCurrent(err.message);
         },
       );
     }, POLL_INTERVAL_MS);
