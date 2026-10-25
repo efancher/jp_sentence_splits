@@ -49,6 +49,7 @@ const SHADOW_LAYOUT_KEY = 'satori-glossbook:shadow-layout';
 /** Per-sentence contour wrap point (seconds per row), device-local: `{ [sentenceId]: seconds }`. */
 const CONTOUR_WRAP_KEY = 'satori-glossbook:shadow-contour-wrap';
 const CONTOUR_WRAP_OPTIONS = [2, 3, 4, 5, 6, 8] as const;
+const DEFAULT_CONTOUR_WRAP_SECONDS = 5;
 /** Pause between loop reps (ms), device-local and shared across sentences. */
 const LOOP_GAP_KEY = 'satori-glossbook:shadow-loop-gap-ms';
 
@@ -59,17 +60,19 @@ function readLoopGap(): number {
   } catch { return 0; }
 }
 
+/** Stored 0 means the learner explicitly chose "Off"; no entry means the default. */
 function readContourWrap(sentenceId: string): number | undefined {
   try {
     const value = (JSON.parse(localStorage.getItem(CONTOUR_WRAP_KEY) ?? '{}') as Record<string, unknown>)[sentenceId];
-    return typeof value === 'number' && value > 0 ? value : undefined;
-  } catch { return undefined; }
+    if (value === 0) return undefined;
+    return typeof value === 'number' && value > 0 ? value : DEFAULT_CONTOUR_WRAP_SECONDS;
+  } catch { return DEFAULT_CONTOUR_WRAP_SECONDS; }
 }
 
 function writeContourWrap(sentenceId: string, seconds: number | undefined) {
   try {
     const all = JSON.parse(localStorage.getItem(CONTOUR_WRAP_KEY) ?? '{}') as Record<string, number>;
-    if (seconds) all[sentenceId] = seconds; else delete all[sentenceId];
+    all[sentenceId] = seconds ?? 0;
     localStorage.setItem(CONTOUR_WRAP_KEY, JSON.stringify(all));
   } catch { /* storage unavailable */ }
 }
