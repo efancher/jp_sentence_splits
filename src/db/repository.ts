@@ -521,7 +521,10 @@ async function rescheduleResumedItems(sentenceIds: Set<string>, now: Date): Prom
   const linkIds = new Set(links.map((link) => link.id));
   const vocabularyItemIds = new Set(links.map((link) => link.vocabularyItemId));
 
-  const candidates = (await db.studyItems.toArray()).filter((item) => {
+  // Indexed lookup by subjectId: scanning the whole table took seconds on a
+  // phone with a large library.
+  const subjectIds = [...new Set([...sentenceIds, ...linkIds, ...vocabularyItemIds])];
+  const candidates = (await db.studyItems.where('subjectId').anyOf(subjectIds).toArray()).filter((item) => {
     if (item.fsrsState.due > nowIsoValue) return false;
     switch (item.subjectType) {
       case 'sentence':
