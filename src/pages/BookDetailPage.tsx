@@ -15,7 +15,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Fragment, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { Snackbar } from '../components/Snackbar';
@@ -478,6 +478,30 @@ export function BookDetailPage() {
     [bookId],
   );
 
+  // TEMPORARY diagnostics: time suspend/resume clicks (write, then each live
+  // query catching up, then first paint) and show the result in the snack bar.
+  const suspendTiming = useRef<{ t0: number; marks: string[]; timer?: number } | null>(null);
+  function markSuspendTiming(label: string) {
+    const run = suspendTiming.current;
+    if (!run) return;
+    run.marks.push(`${label} ${Math.round(performance.now() - run.t0)}ms`);
+    window.clearTimeout(run.timer);
+    run.timer = window.setTimeout(() => {
+      setSnack({ message: `Timing: ${run.marks.join(' · ')}` });
+      suspendTiming.current = null;
+    }, 3000);
+  }
+  async function timedSuspend(action: () => Promise<unknown>) {
+    suspendTiming.current = { t0: performance.now(), marks: [] };
+    await action();
+    markSuspendTiming('write');
+    requestAnimationFrame(() => requestAnimationFrame(() => markSuspendTiming('paint')));
+  }
+  useEffect(() => markSuspendTiming('book'), [data]);
+  useEffect(() => markSuspendTiming('coverage'), [coverage]);
+  useEffect(() => markSuspendTiming('grammar'), [grammarProgress]);
+  useEffect(() => markSuspendTiming('studyItems'), [sentenceStudyItems]);
+
   // Book-level progress summary (docs/ROADMAP.md "Ready to read" scoring
   // sibling): a rollup of the per-row status pills already rendered below,
   // plus the same known-vocabulary coverage BooksPage's list card shows.
@@ -757,7 +781,7 @@ export function BookDetailPage() {
           <button
             type="button"
             onClick={async () => {
-              await setBookSuspended(bookId, !data.book.suspendedAt);
+              await timedSuspend(() => setBookSuspended(bookId, !data.book.suspendedAt));
             }}
           >
             {data.book.suspendedAt ? 'Resume studying' : 'Suspend studying'}
@@ -1389,7 +1413,9 @@ export function BookDetailPage() {
                       <button
                         type="button"
                         onClick={() =>
-                          void setChapterSuspended(bookId, chapter.id, !chapter.suspendedAt)
+                          void timedSuspend(() =>
+                            setChapterSuspended(bookId, chapter.id, !chapter.suspendedAt),
+                          )
                         }
                       >
                         {chapter.suspendedAt ? 'Resume chapter' : 'Suspend chapter'}
