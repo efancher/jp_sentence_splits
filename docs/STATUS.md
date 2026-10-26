@@ -56,6 +56,17 @@ and possible extensions. This snapshot does not certify a live deployment.
   `clause_question_feedback`; old local reactions are imported once. Use
   `questions:coverage` for a fresh active-book inventory rather than historical
   counts. Independent reference review is still required before auto-grading.
+- Mining imports are tracked in the synced `mining_imports` table (migration
+  `20261026000000`, one row per episode keyed by canonical source id; last write
+  wins). Quick import and YouTube mine write it at job start (feed, target book,
+  episode date), on ready/failed, and on commit, and read it back when a job is
+  resumed, so a reloaded page still commits a podcast episode into its series
+  instead of a standalone book. Committed rows also feed the picker's
+  "Imported" mark. Source implementation and local/Postgres tests only; the
+  migration is not confirmed applied in production. Known gaps: the NHK Easy
+  page and the box-side job store are not tracked, a committed row keeps the
+  "Imported" mark after the book is deleted on purpose, and a re-import of an
+  already committed episode is allowed, not blocked.
 - Remix and Sentence Growth are implemented on `/play`, using UniDic tokens.
   Both accept introduced sentences without vocabulary confirmation in the
   default flow. Growth rebuilds the original sentence from its own chunks and

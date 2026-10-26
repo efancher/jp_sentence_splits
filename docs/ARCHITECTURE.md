@@ -152,10 +152,10 @@ distractor ranking even with no dedicated contrast card.
 compare-and-swap), soft deletes (`deleted_at`), an append-only
 `public.sync_events` table as the pull cursor, manual conflict resolution UI
 (`ConflictPanel.tsx`: keep-local / keep-remote / duplicate) for most
-entities — `planner_sessions` is the one exception, resolving push-time
-conflicts last-write-wins instead (`LAST_WRITE_WINS_ENTITIES`,
-`forcePushOverwrite`), since it's session-execution bookkeeping rather
-than durable content. Same Supabase project is already shared with the
+entities — `planner_sessions` and `mining_imports` are the exceptions,
+resolving push-time conflicts last-write-wins instead
+(`LAST_WRITE_WINS_ENTITIES`, `forcePushOverwrite`), since they're
+session/import bookkeeping rather than durable content. Same Supabase project is already shared with the
 (separate, being absorbed) `shadowing` repo, isolated via table prefixes —
 see `supabase/docs/supabase-setup.md`.
 

@@ -850,6 +850,18 @@ Targets are constants; no settings UI.
   the identical `commitShadowingPackageImport()` — same book-per-source,
   idempotent-on-reimport behavior; only how the preview gets built
   differs.
+- **Mining import tracking** (`mining_imports` table / `MiningImport`
+  entity, `beginMiningImport` / `updateMiningImportForJob` in
+  `repository.ts`) — one synced row per mined episode or video, keyed by a
+  deterministic id from `canonicalSourceId`, last-write-wins on conflict.
+  `QuickMinePage` and `YouTubeMinePage` create it when a job starts (series
+  id/title/feed URL, target book, episode date), mark it `ready`/`failed`, and
+  mark it `committed` (book, chapter, sentence count) from `onImported`. On
+  resume they restore the feed, series title, episode date/URL and target book
+  from the row by job id, since the browser only keeps the job id; with no
+  feed or target book the commit panel warns that the episode will be a
+  standalone book. Tracking failures are swallowed so an import never depends
+  on it. `getSeriesImportedSourceIds` also counts committed rows.
 - **Named podcast feed shortcuts** (`NamedPodcastFeedPicker.tsx`, used by
   both `QuickMinePage` and `YouTubeMinePage`'s "Or import a podcast
   episode" input) — a synced (`named_podcast_feeds` table/`NamedPodcastFeed`
