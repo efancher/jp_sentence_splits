@@ -1372,6 +1372,40 @@ export interface NamedPodcastFeed {
   updatedAt: string;
 }
 
+export type MiningImportStatus = 'mining' | 'ready' | 'committed' | 'failed';
+
+/**
+ * Tracking row for one mined episode/video (synced as `mining_imports`, last
+ * write wins). Holds the import's destination so a reloaded or resumed page
+ * (which only kept a job id) still commits into the right series book, and
+ * marks the episode imported/in flight across devices. `id` is deterministic
+ * from `sourceId` (see `miningImportId`), so re-importing reuses the row.
+ */
+export interface MiningImport {
+  id: string;
+  /** `canonicalSourceId` of the episode/video URL. */
+  sourceId: string;
+  sourceType: 'podcast' | 'youtube' | 'nhk_easy';
+  title: string;
+  /** Mining-service job; expires on the box (6-48h), so only meaningful while not committed. */
+  jobId?: string;
+  status: MiningImportStatus;
+  seriesId?: string;
+  seriesTitle?: string;
+  /** The podcast feed URL. */
+  seriesUrl?: string;
+  targetBookId?: string;
+  /** Episode publish date as listed in the feed. */
+  sourceDate?: string;
+  bookId?: string;
+  chapterId?: string;
+  sentenceCount?: number;
+  error?: string;
+  committedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 /**
  * AI-drafted per-sentence extras, split out of `Chapter.structureDrafts` /
  * `constructionDrafts` / `contextWalkthroughs` so a book row stays small (those

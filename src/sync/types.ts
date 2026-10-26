@@ -26,6 +26,7 @@ export type SyncEntity =
   | 'gloss_decisions'
   | 'clause_question_feedback'
   | 'named_podcast_feeds'
+  | 'mining_imports'
   | 'sentence_extras';
 
 export type SyncOperationType = 'upsert' | 'delete';

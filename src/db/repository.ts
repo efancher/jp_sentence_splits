@@ -66,6 +66,7 @@ import type {
   InboxMembership,
   InitialOrderMode,
   Kanji,
+  MiningImport,
   NamedPodcastFeed,
   PitchDrillAttempt,
   PlannerSession,
@@ -3206,9 +3207,10 @@ export async function getSeriesImportedSourceIds(
   seriesId: string,
 ): Promise<Set<string>> {
   const db = getDb();
-  const [seriesBook, allBooks] = await Promise.all([
+  const [seriesBook, allBooks, committedImports] = await Promise.all([
     db.books.where('sourceKey').equals(`shadowing:${seriesId}`).first(),
     db.books.toArray(),
+    db.miningImports.where('status').equals('committed').toArray(),
   ]);
   const sourceIds = new Set(
     (seriesBook?.chapters ?? [])
@@ -3219,6 +3221,9 @@ export async function getSeriesImportedSourceIds(
   for (const book of allBooks) {
     if (book.sourceUrl) sourceIds.add(canonicalSourceId(book.sourceUrl));
   }
+  // A committed tracking row survives a book being deleted, merged or not yet
+  // synced to this device, any of which hides the episode from the checks above.
+  for (const record of committedImports) sourceIds.add(canonicalSourceId(record.sourceId));
   return sourceIds;
 }
 
@@ -3642,6 +3647,82 @@ export async function deleteNamedPodcastFeed(id: string): Promise<void> {
   const db = getDb();
   await db.namedPodcastFeeds.delete(id);
   notifySync('named_podcast_feeds', id, { id }, 'delete');
+}
+
+// ---------------------------------------------------------------------------
+// Mining imports: one tracking row per mined episode/video (see MiningImport).
+// Carries the import's destination across page reloads and devices (a mining
+// job on the box only knows its URL, and the browser only kept a job id) and
+// marks episodes imported or in flight. Bookkeeping only: callers swallow
+// failures here, so an import never depends on this table.
+// ---------------------------------------------------------------------------
+
+/** Deterministic, so every device writing the same episode converges on one row. */
+export function miningImportId(sourceId: string): string {
+  return `mimp_${hashString(canonicalSourceId(sourceId))}`;
+}
+
+export async function beginMiningImport(input: {
+  /** The episode/video URL as the caller picked it. */
+  sourceId: string;
+  sourceType: MiningImport['sourceType'];
+  title: string;
+  jobId: string;
+  seriesId?: string;
+  seriesTitle?: string;
+  seriesUrl?: string;
+  targetBookId?: string;
+  sourceDate?: string;
+}): Promise<MiningImport> {
+  const db = getDb();
+  const id = miningImportId(input.sourceId);
+  const existing = await db.miningImports.get(id);
+  const timestamp = nowIso();
+  // A fresh run replaces the previous run's outcome (re-import is allowed),
+  // but keeps the row's identity and creation time.
+  const record: MiningImport = {
+    id,
+    sourceId: canonicalSourceId(input.sourceId),
+    sourceType: input.sourceType,
+    title: input.title,
+    jobId: input.jobId,
+    status: 'mining',
+    ...(input.seriesId ? { seriesId: input.seriesId } : {}),
+    ...(input.seriesTitle ? { seriesTitle: input.seriesTitle } : {}),
+    ...(input.seriesUrl ? { seriesUrl: input.seriesUrl } : {}),
+    ...(input.targetBookId ? { targetBookId: input.targetBookId } : {}),
+    ...(input.sourceDate ? { sourceDate: input.sourceDate } : {}),
+    createdAt: existing?.createdAt ?? timestamp,
+    updatedAt: timestamp,
+  };
+  await db.miningImports.put(record);
+  notifySync('mining_imports', record.id, record);
+  return record;
+}
+
+export async function getMiningImportForJob(jobId: string): Promise<MiningImport | undefined> {
+  return getDb().miningImports.where('jobId').equals(jobId).first();
+}
+
+export async function getMiningImportForSource(sourceId: string): Promise<MiningImport | undefined> {
+  return getDb().miningImports.get(miningImportId(sourceId));
+}
+
+/** Patch the row for a mining job (no-op if none was recorded, e.g. a job started before tracking). */
+export async function updateMiningImportForJob(
+  jobId: string,
+  patch: Partial<
+    Pick<MiningImport, 'status' | 'bookId' | 'chapterId' | 'sentenceCount' | 'error' | 'committedAt'>
+  >,
+): Promise<MiningImport | undefined> {
+  const db = getDb();
+  const existing = await getMiningImportForJob(jobId);
+  if (!existing) return undefined;
+  const updated: MiningImport = { ...existing, ...patch, updatedAt: nowIso() };
+  if (patch.status && patch.status !== 'failed' && !('error' in patch)) delete updated.error;
+  await db.miningImports.put(updated);
+  notifySync('mining_imports', updated.id, updated);
+  return updated;
 }
 
 export async function searchAll(query: string): Promise<{

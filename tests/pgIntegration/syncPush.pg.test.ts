@@ -10,11 +10,13 @@ vi.mock('../../src/sync/supabaseClient', () => ({
 
 import { getDb, resetDbForTests } from '../../src/db/database';
 import {
+  beginMiningImport,
   ensureGrammarPattern,
   ensureKanji,
   ensureSentenceGrammar,
   ensureVocabularyItem,
   logGlossDecision,
+  updateMiningImportForJob,
 } from '../../src/db/repository';
 import { createId } from '../../src/lib/ids';
 import { pushMutations } from '../../src/sync/engine';
@@ -145,6 +147,40 @@ describe.skipIf(!PG_TESTS_ENABLED)('push against real Postgres + RLS', () => {
     expect(await drain()).toEqual([undefined]);
 
     expect(scalar(`select count(*) from vocabulary_items where id = '${first.id}' and deleted_at is null`)).toBe('1');
+  });
+
+  it('pushes mining-import tracking, and a second device mining the same episode converges on one row', async () => {
+    const episode = 'https://cdn.example.com/staging/2023-9-9/86e5d4fc.mp3';
+    await device(USER_A);
+    await beginMiningImport({
+      sourceId: episode, sourceType: 'podcast', title: 'Episode #64', jobId: 'job-a',
+      seriesId: 'podcast-series-abc', seriesUrl: 'https://feeds.example.com/slow', sourceDate: '2023-09-09T00:00:00.000Z',
+    });
+    expect(await pushOnce()).toBeUndefined();
+    await updateMiningImportForJob('job-a', { status: 'committed', bookId: 'book_1', chapterId: 'chapter_1', sentenceCount: 24 });
+    expect(await pushOnce()).toBeUndefined();
+    expect(scalar(`select status || '|' || series_url || '|' || sentence_count::text from mining_imports`)).toBe(
+      'committed|https://feeds.example.com/slow|24',
+    );
+
+    // Another device that never pulled the first one's row re-mines the same episode.
+    await device(USER_A);
+    await beginMiningImport({ sourceId: episode, sourceType: 'podcast', title: 'Episode #64', jobId: 'job-b' });
+    await drain();
+    expect(scalar(`select count(*) from mining_imports where deleted_at is null`)).toBe('1');
+    expect(scalar(`select job_id from mining_imports`)).toBe('job-b');
+  });
+
+  it('keeps mining-import tracking private to its owner', async () => {
+    await device(USER_A);
+    await beginMiningImport({ sourceId: 'https://cdn.example.com/x.mp3', sourceType: 'youtube', title: 'X', jobId: 'job-a' });
+    await drain();
+
+    const other = await device(USER_B);
+    const { data } = await (other.client as { from: (t: string) => { select: (c: string) => Promise<{ data: unknown }> } })
+      .from('mining_imports')
+      .select('id');
+    expect(data).toEqual([]);
   });
 
   it('pushes gloss decisions with routing-evidence links and enforces the help-sequence domain', async () => {

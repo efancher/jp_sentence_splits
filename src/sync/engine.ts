@@ -28,6 +28,7 @@ import {
   remoteToInbox,
   remoteToKanji,
   remoteToNamedPodcastFeed,
+  remoteToMiningImport,
   remoteToSentenceExtras,
   remoteToPitchDrillAttempt,
   remoteToSentenceLearningEvent,
@@ -965,12 +966,12 @@ async function remapLinkReferences<T extends { id: string }, F extends keyof T &
  * Entities where a push-time version conflict should just overwrite the
  * cloud row with this device's local payload rather than surfacing a
  * manual keep-local/keep-remote/duplicate conflict (ConflictPanel.tsx) —
- * `planner_sessions` is session-execution bookkeeping, not durable
- * content, so silently letting the most recently-pushing device win is an
+ * `planner_sessions` (and `mining_imports`, import bookkeeping) is
+ * session-execution bookkeeping, not durable content, so silently letting the most recently-pushing device win is an
  * acceptable simplification (confirmed with the user, see
  * docs/STATUS.md).
  */
-const LAST_WRITE_WINS_ENTITIES = new Set<SyncEntity>(['planner_sessions']);
+const LAST_WRITE_WINS_ENTITIES = new Set<SyncEntity>(['planner_sessions', 'mining_imports']);
 
 /** Unconditionally overwrites the remote row with the local payload, ignoring the CAS mismatch that triggered `version_conflict` — see `LAST_WRITE_WINS_ENTITIES`. */
 async function forcePushOverwrite(
@@ -1326,6 +1327,8 @@ async function localRecordExists(entity: SyncEntity, recordId: string): Promise<
       return (await db.clauseQuestionFeedback.get(recordId)) != null;
     case 'named_podcast_feeds':
       return (await db.namedPodcastFeeds.get(recordId)) != null;
+    case 'mining_imports':
+      return (await db.miningImports.get(recordId)) != null;
     case 'sentence_extras':
       return (await db.sentenceExtras.get(recordId)) != null;
     default:
@@ -1548,6 +1551,9 @@ async function applyRemoteDelete(
     case 'named_podcast_feeds':
       await db.namedPodcastFeeds.delete(recordId);
       break;
+    case 'mining_imports':
+      await db.miningImports.delete(recordId);
+      break;
     case 'sentence_extras':
       await db.sentenceExtras.delete(recordId);
       break;
@@ -1704,6 +1710,9 @@ export async function applyRemoteUpsert(
     case 'named_podcast_feeds':
       await db.namedPodcastFeeds.put(remoteToNamedPodcastFeed(remote));
       break;
+    case 'mining_imports':
+      await db.miningImports.put(remoteToMiningImport(remote));
+      break;
     case 'sentence_extras':
       await db.sentenceExtras.put(remoteToSentenceExtras(remote));
       break;
@@ -1749,6 +1758,7 @@ export async function uploadAllLocalData(userId: string): Promise<void> {
   const glossDecisions = await db.glossDecisions.toArray();
   const clauseQuestionFeedback = await db.clauseQuestionFeedback.toArray();
   const namedPodcastFeeds = await db.namedPodcastFeeds.toArray();
+  const miningImports = await db.miningImports.toArray();
   const sentenceExtras = await db.sentenceExtras.toArray();
 
   for (const book of books) {
@@ -1829,6 +1839,9 @@ export async function uploadAllLocalData(userId: string): Promise<void> {
   for (const feed of namedPodcastFeeds) {
     await trackAndEnqueue('named_podcast_feeds', feed.id, feed);
   }
+  for (const miningImport of miningImports) {
+    await trackAndEnqueue('mining_imports', miningImport.id, miningImport);
+  }
   for (const extras of sentenceExtras) {
     await trackAndEnqueue('sentence_extras', extras.id, extras);
   }
@@ -1893,6 +1906,7 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
       db.glossDecisions,
       db.clauseQuestionFeedback,
       db.namedPodcastFeeds,
+      db.miningImports,
       db.sentenceExtras,
       db.syncQueue,
       db.syncRecordMeta,
@@ -1924,6 +1938,7 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
       await db.glossDecisions.clear();
       await db.clauseQuestionFeedback.clear();
       await db.namedPodcastFeeds.clear();
+      await db.miningImports.clear();
       await db.sentenceExtras.clear();
       await db.syncQueue.clear();
       await db.syncRecordMeta.clear();
@@ -2014,6 +2029,9 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
   });
   await pullFullTable('named_podcast_feeds', userId, async (rows) => {
     await db.namedPodcastFeeds.bulkPut(rows.map((r) => remoteToNamedPodcastFeed(r)));
+  });
+  await pullFullTable('mining_imports', userId, async (rows) => {
+    await db.miningImports.bulkPut(rows.map((r) => remoteToMiningImport(r)));
   });
   await pullFullTable('sentence_extras', userId, async (rows) => {
     await db.sentenceExtras.bulkPut(rows.map((r) => remoteToSentenceExtras(r)));

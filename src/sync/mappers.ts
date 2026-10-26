@@ -8,6 +8,7 @@ import type {
   InboxMembership,
   Kanji,
   NamedPodcastFeed,
+  MiningImport,
   SentenceExtras,
   PitchDrillAttempt,
   SentenceLearningEvent,
@@ -56,6 +57,7 @@ export type LocalSyncPayload =
   | GlossDecision
   | ClauseQuestionFeedback
   | NamedPodcastFeed
+  | MiningImport
   | SentenceExtras;
 
 /** Local reference-audio row without the Blob (for sync payloads). */
@@ -986,6 +988,56 @@ export function remoteToNamedPodcastFeed(
   };
 }
 
+export function miningImportToRemote(m: MiningImport, ownerId: string, version: number) {
+  return {
+    id: m.id,
+    owner_id: ownerId,
+    source_id: m.sourceId,
+    source_type: m.sourceType,
+    title: m.title,
+    job_id: m.jobId ?? null,
+    status: m.status,
+    series_id: m.seriesId ?? null,
+    series_title: m.seriesTitle ?? null,
+    series_url: m.seriesUrl ?? null,
+    target_book_id: m.targetBookId ?? null,
+    source_date: m.sourceDate ?? null,
+    book_id: m.bookId ?? null,
+    chapter_id: m.chapterId ?? null,
+    sentence_count: m.sentenceCount ?? null,
+    error: m.error ?? null,
+    committed_at: m.committedAt ?? null,
+    created_at: m.createdAt,
+    updated_at: m.updatedAt,
+    deleted_at: null,
+    version,
+  };
+}
+
+export function remoteToMiningImport(row: Record<string, unknown>): MiningImport {
+  const optional = (key: string): string | undefined => (row[key] as string | null) ?? undefined;
+  return {
+    id: String(row.id),
+    sourceId: String(row.source_id),
+    sourceType: row.source_type as MiningImport['sourceType'],
+    title: String(row.title),
+    jobId: optional('job_id'),
+    status: row.status as MiningImport['status'],
+    seriesId: optional('series_id'),
+    seriesTitle: optional('series_title'),
+    seriesUrl: optional('series_url'),
+    targetBookId: optional('target_book_id'),
+    sourceDate: optional('source_date'),
+    bookId: optional('book_id'),
+    chapterId: optional('chapter_id'),
+    sentenceCount: row.sentence_count == null ? undefined : Number(row.sentence_count),
+    error: optional('error'),
+    committedAt: optional('committed_at'),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
+}
+
 export function sentenceExtrasToRemote(extras: SentenceExtras, ownerId: string, version: number) {
   return {
     id: extras.id,
@@ -1312,6 +1364,8 @@ export function toRemoteRow(
       return clauseQuestionFeedbackToRemote(payload as ClauseQuestionFeedback, ownerId, version);
     case 'named_podcast_feeds':
       return namedPodcastFeedToRemote(payload as NamedPodcastFeed, ownerId, version);
+    case 'mining_imports':
+      return miningImportToRemote(payload as MiningImport, ownerId, version);
     case 'sentence_extras':
       return sentenceExtrasToRemote(payload as SentenceExtras, ownerId, version);
   }
