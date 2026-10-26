@@ -9,7 +9,7 @@
 import { getDb } from '../db/database';
 import { saveSentenceExtras } from '../db/repository';
 import { getBookWithExtras } from '../db/sentenceExtras';
-import { mergeChapterWalkthroughs, sentencesNeedingWalkthrough, validWalkthroughFor } from './contextWalkthrough';
+import { CONTEXT_WALKTHROUGH_VERSION, mergeChapterWalkthroughs, sentencesNeedingWalkthrough, validWalkthroughFor } from './contextWalkthrough';
 import { chunksMatchSource } from './chunking';
 import { constructionChecked, validLayersFor } from './phraseConstruction';
 import { applyQuickImportExtras, type Rejection } from './quickImportExtras';
@@ -28,6 +28,8 @@ export interface BookExtraStatus {
   missing: number[];
   /** Sentences that already have this extra, with a short description of what is there. */
   existing: { handle: number; summary: string }[];
+  /** Subset of `existing` (by handle) saved in an older format than the current one, so a regenerate would enrich them. */
+  outdated: number[];
 }
 
 export interface BookExtrasPlan {
@@ -75,7 +77,7 @@ export async function planBookAssistExtras(bookId: string): Promise<BookExtrasPl
   const walkthroughs = mergeChapterWalkthroughs(chapters);
   const needsWalkthrough = new Set(sentencesNeedingWalkthrough(sentences, walkthroughs));
 
-  const emptyStatus = (): BookExtraStatus => ({ missing: [], existing: [] });
+  const emptyStatus = (): BookExtraStatus => ({ missing: [], existing: [], outdated: [] });
   const kinds: Record<BookExtraKind, BookExtraStatus> = {
     structure: emptyStatus(),
     constructions: emptyStatus(),
@@ -94,7 +96,9 @@ export async function planBookAssistExtras(bookId: string): Promise<BookExtrasPl
     if (needsWalkthrough.has(sentence.id)) mark('walkthroughs', null);
     else {
       const walkthrough = validWalkthroughFor(sentence.japanese, walkthroughs[sentence.id]);
-      mark('walkthroughs', truncate(walkthrough?.natural ?? 'walkthrough'));
+      const older = (walkthrough?.version ?? 1) < CONTEXT_WALKTHROUGH_VERSION;
+      mark('walkthroughs', `${older ? 'older format, no word-by-word: ' : ''}${truncate(walkthrough?.natural ?? 'walkthrough')}`);
+      if (older) kinds.walkthroughs.outdated.push(sentence.handle);
     }
 
     const check = analysis?.comprehensionCheck;

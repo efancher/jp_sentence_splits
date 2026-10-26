@@ -129,6 +129,19 @@ describe('book extras plan + save', () => {
     const plan = await planBookAssistExtras(bookId);
     expect(plan.kinds.walkthroughs.existing.map((e) => e.handle)).toEqual([2]);
     expect(plan.kinds.walkthroughs.missing).toEqual([1, 3]);
+    expect(plan.kinds.walkthroughs.outdated).toEqual([]);
+  });
+
+  it('flags an existing walkthrough saved in an older format as outdated', async () => {
+    const reply = JSON.stringify({
+      walkthroughs: { S2: { natural: 'The other one is paper.', steps: [{ text: '紙', gloss: 'paper', explanation: 'the item' }] } },
+    });
+    await saveBookAssistExtras({ bookId, sentenceIds: ids, kinds: { walkthroughs: { handles: [2], replaceHandles: [] } } }, { 'walkthroughs:2-2': reply });
+    const row = (await getDb().sentenceExtras.get(ids[1]!))!;
+    await getDb().sentenceExtras.put({ ...row, contextWalkthrough: { ...row.contextWalkthrough!, version: 2 } });
+    const plan = await planBookAssistExtras(bookId);
+    expect(plan.kinds.walkthroughs.outdated).toEqual([2]);
+    expect(plan.kinds.walkthroughs.existing[0]!.summary).toMatch(/^older format/);
   });
 });
 

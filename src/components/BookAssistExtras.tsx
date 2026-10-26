@@ -166,6 +166,18 @@ export function BookAssistExtras({ bookId }: { bookId: string }) {
     setReplace((current) => ({ ...current, [kind]: new Set(on ? plan.kinds[kind].existing.map((e) => e.handle) : []) }));
   }
 
+  function setReplaceOutdated(kind: BookExtraKind, on: boolean) {
+    if (!plan) return;
+    setReplace((current) => {
+      const next = new Set(current[kind]);
+      for (const handle of plan.kinds[kind].outdated) {
+        if (on) next.add(handle);
+        else next.delete(handle);
+      }
+      return { ...current, [kind]: next };
+    });
+  }
+
   function toggleReplaceOne(kind: BookExtraKind, handle: number) {
     setReplace((current) => {
       const next = new Set(current[kind]);
@@ -336,6 +348,16 @@ export function BookAssistExtras({ bookId }: { bookId: string }) {
                   </div>
                   {include.has(kind) && status.existing.length > 0 ? (
                     <div className="stack" style={{ marginLeft: '1.6rem', gap: '0.25rem' }}>
+                      {status.outdated.length > 0 ? (
+                        <label className="row" style={{ alignItems: 'center', gap: '0.5rem' }}>
+                          <input
+                            type="checkbox"
+                            checked={status.outdated.every((handle) => replace[kind].has(handle))}
+                            onChange={(event) => setReplaceOutdated(kind, event.target.checked)}
+                          />
+                          <span>Upgrade the {status.outdated.length} older-format ones (adds the word-by-word list)</span>
+                        </label>
+                      ) : null}
                       <label className="row" style={{ alignItems: 'center', gap: '0.5rem' }}>
                         <input
                           type="checkbox"

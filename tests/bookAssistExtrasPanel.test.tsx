@@ -15,7 +15,7 @@ const snapshot = { bookId: 'b', sentenceIds: ['s1'], kinds: { constructions: { h
 const result: Awaited<ReturnType<typeof saveBookAssistExtras>> = { saved: { constructions: 1 }, keptExisting: {}, problems: [], rejections: [] };
 beforeEach(() => {
   vi.resetAllMocks(); localStorage.clear();
-  vi.mocked(planBookAssistExtras).mockResolvedValue({ sentences, kinds: Object.fromEntries(BOOK_EXTRA_KINDS.map((kind) => [kind, { missing: [1], existing: [] }])) as never });
+  vi.mocked(planBookAssistExtras).mockResolvedValue({ sentences, kinds: Object.fromEntries(BOOK_EXTRA_KINDS.map((kind) => [kind, { missing: [1], existing: [], outdated: [] }])) as never });
   vi.mocked(getAssistRun).mockResolvedValue({ status: 'done', progress: '', segmentsDone: 0, segmentsTotal: 0, log: [], updatedAt: 1,
     selection: { constructions: [1] }, sentenceCount: 1, bookSentences: sentences, extraReplies: { 'constructions:1-1': '{"constructions":{}}' } });
   vi.mocked(saveBookAssistExtras).mockResolvedValue(result);
