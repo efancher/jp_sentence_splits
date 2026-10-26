@@ -1,7 +1,13 @@
 import { useMemo, useState } from 'react';
 
 import type { AttemptAnalysisSummary } from '../domain/types';
-import { buildPitchGrid, contourRange, contourToLevels, layoutSentenceLine, levelsToRuns } from '../lib/attemptPitchGrid';
+import { buildPitchGrid, contourRange, isMeasured, contourToLevels, layoutSentenceLine, levelsToRuns } from '../lib/attemptPitchGrid';
+
+const GAP_REASON = {
+  phones: 'the aligner couldn’t read its sounds',
+  short: 'a single sound has no shape',
+  unvoiced: 'too little voiced pitch in the native',
+} as const;
 
 /** The two selected attempts in chronological order (grid rows are oldest-first). */
 function orderedPair(rows: readonly { id: string }[], selected: readonly string[]): [string, string] {
@@ -45,7 +51,7 @@ export function AttemptPitchGrid({
   const OVERLAY_W = 120;
   const OVERLAY_H = 56;
   const STRIP_H = 48;
-  const hasContours = grid.columns.every((c) => c.nativeContour);
+  const hasContours = grid.columns.every((c) => !isMeasured(c) || c.nativeContour);
   const contourScale = hasContours
     ? contourRange([
         ...grid.columns.map((c) => c.nativeContour),
@@ -89,7 +95,8 @@ export function AttemptPitchGrid({
         </div>
       ) : null}
       <div className="row" style={{ flexWrap: 'wrap', gap: '0.75rem', alignItems: 'flex-start' }}>
-        {grid.columns.map((column, index) => (
+        {grid.columns.map((column, index) =>
+          !isMeasured(column) ? null : (
           <figure key={index} className="apg-fig">
             <svg width={OVERLAY_W} height={OVERLAY_H} role="img" aria-label={`Pitch of ${column.text}`}>
               {levelsToRuns(column.nativeLevels, OVERLAY_W, OVERLAY_H).map((points, i) => (
@@ -106,7 +113,8 @@ export function AttemptPitchGrid({
             </svg>
             <figcaption className="jp">{column.text}</figcaption>
           </figure>
-        ))}
+          ),
+        )}
       </div>
       <strong style={{ fontSize: '0.9rem' }}>Whole sentence</strong>
       {!contourScale ? (
@@ -132,6 +140,13 @@ export function AttemptPitchGrid({
                 >
                   {grid.columns.map((column, index) => {
                     const seg = line.segments[index]!;
+                    if (!isMeasured(column)) {
+                      return (
+                        <g key={index} transform={`translate(${seg.x},0)`}>
+                          <rect width={seg.width} height={STRIP_H} className="apg-seg apg-seg-gap" />
+                        </g>
+                      );
+                    }
                     const contour = native ? column.nativeContour : row!.cells[index]?.learnerContour;
                     const levels = contour ? contourToLevels(contour, contourScale) : null;
                     return (
@@ -164,6 +179,11 @@ export function AttemptPitchGrid({
         </div>
       </div>
       )}
+      {grid.columns.some((c) => !isMeasured(c)) ? (
+        <p className="muted" style={{ margin: 0, fontSize: '0.8rem' }}>
+          Shaded phrases ({grid.columns.filter((c) => !isMeasured(c)).map((c) => `${c.text} – ${GAP_REASON[c.unmeasured!]}`).join('; ')}) couldn’t be measured, so they have no line.
+        </p>
+      ) : null}
       <p className="muted" style={{ margin: 0, fontSize: '0.8rem' }}>
         Thick line = native, thin = your attempts. The grid scales each phrase on its own; the whole-sentence lines share
         one height scale across the sentence and each phrase is stretched to its sounds, so compare shapes and where they

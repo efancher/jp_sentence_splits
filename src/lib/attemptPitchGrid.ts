@@ -8,15 +8,30 @@ const round1 = (v: number | null) => (v === null ? null : Math.round(v * 10) / 1
 /** Compact, storable form of a phrase-pitch result; undefined when nothing was shown. */
 export function toPhraseSnapshot(result: PhrasePitchResult): PhraseSnapshotRow[] | undefined {
   if (result.rows.length === 0) return undefined;
-  return result.rows.map((row) => ({
+  const measured: PhraseSnapshotRow[] = result.rows.map((row) => ({
     text: row.text,
     kana: row.kana.join(''),
     nativeLevels: row.nativeLevels.map(round2),
     learnerLevels: row.learnerLevels ? row.learnerLevels.map(round2) : null,
     nativeContour: row.nativeContour.map(round1),
     learnerContour: row.learnerContour ? row.learnerContour.map(round1) : null,
+    phraseIndex: row.phraseIndex,
   }));
+  const gaps: PhraseSnapshotRow[] = result.unmeasured.map((gap) => ({
+    text: gap.text,
+    kana: '',
+    nativeLevels: [],
+    learnerLevels: null,
+    nativeContour: [],
+    learnerContour: null,
+    phraseIndex: gap.phraseIndex,
+    unmeasured: gap.reason,
+  }));
+  return [...measured, ...gaps].sort((x, y) => x.phraseIndex! - y.phraseIndex!);
 }
+
+/** False for a phrase that could not be measured and only holds its place in the whole-sentence line. */
+export const isMeasured = (row: PhraseSnapshotRow): boolean => !row.unmeasured;
 
 export interface PitchGridAttempt {
   id: string;

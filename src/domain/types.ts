@@ -276,6 +276,10 @@ export interface PhraseSnapshotRow {
   /** Measured contour across the phrase (4 samples per mora, semitones 1 dp, null = unvoiced) — for the smooth whole-sentence line. Absent on snapshots saved before it existed. */
   nativeContour?: (number | null)[];
   learnerContour?: (number | null)[] | null;
+  /** Position of this phrase in the sentence's full phrase list. Absent on snapshots saved before unmeasured phrases were kept — those are re-derived by the backfill. */
+  phraseIndex?: number;
+  /** Set when the phrase could not be measured (the row then has no levels or contour); it stays in the whole-sentence line as a gap. */
+  unmeasured?: 'phones' | 'short' | 'unvoiced';
 }
 
 export interface Book {

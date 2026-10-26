@@ -24,7 +24,7 @@ export function attemptsNeedingPhraseSnapshot(
   attempts: readonly Attempt[],
   summaries: readonly AttemptAnalysisSummary[],
 ): Attempt[] {
-  const missing = new Set(summaries.filter((s) => !s.phraseSnapshot || s.phraseSnapshot.some((row) => !row.nativeContour)).map((s) => s.id));
+  const missing = new Set(summaries.filter((s) => !s.phraseSnapshot || s.phraseSnapshot.some((row) => !row.nativeContour || row.phraseIndex === undefined)).map((s) => s.id));
   return attempts.filter((a) => missing.has(a.id));
 }
 

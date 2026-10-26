@@ -8,7 +8,7 @@ const summary = (id: string, withSnapshot: boolean) =>
   ({
     id,
     phraseSnapshot: withSnapshot
-      ? [{ text: 'a', kana: 'a', native: 'lh', learner: 'lh', status: 'match', nativeLevels: [], learnerLevels: null, nativeContour: [] }]
+      ? [{ text: 'a', kana: 'a', native: 'lh', learner: 'lh', status: 'match', nativeLevels: [], learnerLevels: null, nativeContour: [], phraseIndex: 0 }]
       : undefined,
   }) as AttemptAnalysisSummary;
 
@@ -25,6 +25,14 @@ describe('attemptsNeedingPhraseSnapshot', () => {
     const old = {
       id: 'a',
       phraseSnapshot: [{ text: 'a', kana: 'a', nativeLevels: [], learnerLevels: null }],
+    } as AttemptAnalysisSummary;
+    expect(attemptsNeedingPhraseSnapshot([attempt('a')], [old]).map((x) => x.id)).toEqual(['a']);
+  });
+
+  it('also picks attempts whose snapshot predates unmeasured-phrase gaps', () => {
+    const old = {
+      id: 'a',
+      phraseSnapshot: [{ text: 'a', kana: 'a', nativeLevels: [], learnerLevels: null, nativeContour: [] }],
     } as AttemptAnalysisSummary;
     expect(attemptsNeedingPhraseSnapshot([attempt('a')], [old]).map((x) => x.id)).toEqual(['a']);
   });

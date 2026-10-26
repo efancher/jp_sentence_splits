@@ -107,10 +107,23 @@ export interface PhraseRow {
   learnerContour: (number | null)[] | null;
   /** How many of this phrase's morae had voiced pitch in your recording (null = not lined up). */
   learnerVoicedMorae: number | null;
+  /** Position in the sentence's full phrase list (rows skip phrases that could not be measured, so this can jump). */
+  phraseIndex: number;
+}
+
+export type UnmeasuredReason = 'phones' | 'short' | 'unvoiced';
+
+/** A phrase of the sentence that produced no row, and why — so the whole-sentence line can show a gap instead of silently dropping it. */
+export interface UnmeasuredPhrase {
+  phraseIndex: number;
+  text: string;
+  reason: UnmeasuredReason;
 }
 
 export interface PhrasePitchResult {
   rows: PhraseRow[];
+  /** Phrases left out of `rows`, in sentence order. */
+  unmeasured: UnmeasuredPhrase[];
   /** Set when nothing could be shown, and why (for a one-line explanation). */
   unavailable?: 'no-reference-timing' | 'no-pitch';
   /** True when the learner side could not be lined up mora by mora at all. */
@@ -232,6 +245,7 @@ export function buildPhrasePitch({
 }): PhrasePitchResult {
   const unavailable = (reason: NonNullable<PhrasePitchResult['unavailable']>): PhrasePitchResult => ({
     rows: [],
+    unmeasured: [],
     unavailable: reason,
     learnerUnavailable: true,
     learnerApproximateTokens: 0,
@@ -251,16 +265,28 @@ export function buildPhrasePitch({
   const refOffset = reference.pitchOffsetSeconds ?? 0;
   const learnerOffset = learner?.pitchOffsetSeconds ?? 0;
   const rows: PhraseRow[] = [];
+  const unmeasured: UnmeasuredPhrase[] = [];
 
-  for (const group of groups) {
+  for (const [phraseIndex, group] of groups.entries()) {
+    const skip = (reason: UnmeasuredReason) =>
+      unmeasured.push({ phraseIndex, text: group.map((t) => refTokens[t]!.text).join(''), reason });
     // A token whose phones don't parse hides its morae, so the whole phrase is skipped rather than guessed.
     const timings = group.map((t) => refTimings[t]);
-    if (timings.some((timing) => timing === null)) continue;
+    if (timings.some((timing) => timing === null)) {
+      skip('phones');
+      continue;
+    }
     const kana = timings.flatMap((timing) => timing!.kana);
-    if (kana.length < 2) continue; // one mora carries no shape
+    if (kana.length < 2) {
+      skip('short'); // one mora carries no shape
+      continue;
+    }
 
     const nativeMeans = timings.flatMap((timing) => timing!.intervals).map((iv) => meanSemitones(reference.pitch, iv.start - refOffset, iv.end - refOffset));
-    if (nativeMeans.filter((m) => m !== null).length < 2) continue; // not enough voiced native pitch to draw a contour
+    if (nativeMeans.filter((m) => m !== null).length < 2) {
+      skip('unvoiced'); // not enough voiced native pitch to draw a contour
+      continue;
+    }
 
     const nativeIntervals = timings.flatMap((timing) => timing!.intervals);
     const nativeContour = sampleContour(
@@ -292,11 +318,13 @@ export function buildPhrasePitch({
       nativeContour,
       learnerContour,
       learnerVoicedMorae: learnerMeans ? learnerMeans.filter((m) => m !== null).length : null,
+      phraseIndex,
     });
   }
 
   return {
     rows,
+    unmeasured,
     unavailable: rows.length === 0 ? 'no-pitch' : undefined,
     learnerUnavailable: !learnerTimings,
     learnerApproximateTokens: learnerLayout?.approximate ?? 0,
