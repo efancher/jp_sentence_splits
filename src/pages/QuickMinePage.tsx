@@ -7,10 +7,13 @@ import { NamedPodcastFeedPicker } from '../components/NamedPodcastFeedPicker';
 import { ShadowingPreviewCard } from '../components/ShadowingPreviewCard';
 import { SpanAudioButton } from '../components/SpanAudioButton';
 import {
+  beginMiningImport,
   commitSeriesEpisodeImport,
   getDb,
+  getMiningImportForJob,
   getSeriesImportedSourceIds,
   rememberPodcastFeedUrl,
+  updateMiningImportForJob,
 } from '../db/repository';
 import { canonicalSourceId, hashString } from '../lib/ids';
 import { displayJapanese, normalizeSentenceKey } from '../lib/normalize';
@@ -285,6 +288,8 @@ export function QuickMinePage() {
   );
   const targetBook = targetBooks?.find((book) => book.id === targetBookId);
   const [podcastFeedUrl, setPodcastFeedUrl] = useState('');
+  // Series title restored from the job's tracking row on resume, before the feed itself is reloaded.
+  const [resumedSeriesTitle, setResumedSeriesTitle] = useState('');
   const [podcastFeed, setPodcastFeed] = useState<PodcastFeed | null>(null);
   const [podcastFeedSort, setPodcastFeedSort] = useState<'newest' | 'oldest'>('newest');
   const [podcastFeedPage, setPodcastFeedPage] = useState(0);
@@ -348,6 +353,10 @@ export function QuickMinePage() {
         (job) => {
           if (cancelled) return;
           if (job.status === 'error') {
+            void updateMiningImportForJob(savedJobId, {
+              status: 'failed',
+              error: job.error ?? 'The previous mining job failed.',
+            }).catch(() => undefined);
             clearActiveJob();
             if (queueRef.current.length > 0) {
               void advanceQueue(`${job.error ?? 'The previous mining job failed.'} — skipped to the next episode.`);
@@ -438,10 +447,56 @@ export function QuickMinePage() {
     if (job.status === 'ready') {
       setTranscript(transcriptFromJob(job));
       setStage('combine');
+      void updateMiningImportForJob(id, { status: 'ready' }).catch(() => undefined);
     } else {
       setStage('starting');
     }
     storeActiveJob(id);
+    void restoreMiningImportContext(id);
+  }
+
+  /**
+   * The browser only keeps a job id across a reload, so the feed, target book
+   * and episode date the import was started with come back from its tracking
+   * row. Without them a podcast episode fell through to a standalone book
+   * instead of a chapter of its series.
+   */
+  async function restoreMiningImportContext(id: string): Promise<void> {
+    const record = await getMiningImportForJob(id).catch(() => undefined);
+    if (!record) return;
+    if (record.seriesUrl) setPodcastFeedUrl((current) => (current.trim() ? current : record.seriesUrl!));
+    if (record.seriesTitle) setResumedSeriesTitle(record.seriesTitle);
+    if (record.sourceDate) setPodcastEpisodeDate((current) => current ?? record.sourceDate!);
+    if (record.sourceType === 'podcast') setPodcastEpisodeSourceUrl((current) => current || record.sourceId);
+    if (record.targetBookId) setTargetBookIdState(record.targetBookId);
+  }
+
+  /** Record a freshly started job's destination; tracking must never block mining. */
+  function trackMiningStart(
+    id: string,
+    episodeUrl: string,
+    title: string | undefined,
+    sourceType: 'youtube' | 'podcast',
+    episodeDate: string | null | undefined,
+  ): void {
+    const feedUrl = podcastFeedUrl.trim();
+    void beginMiningImport({
+      sourceId: episodeUrl,
+      sourceType,
+      title: title || episodeUrl,
+      jobId: id,
+      ...(sourceType === 'podcast' && feedUrl
+        ? {
+            seriesId: `podcast-series-${hashString(feedUrl)}`,
+            seriesUrl: feedUrl,
+            ...(podcastFeed?.title || resumedSeriesTitle
+              ? { seriesTitle: podcastFeed?.title || resumedSeriesTitle }
+              : {}),
+          }
+        : {}),
+      ...(targetBookId ? { targetBookId } : {}),
+      ...(episodeDate ? { sourceDate: episodeDate } : {}),
+    }).catch(() => undefined);
   }
 
   async function resumeJob(id: string): Promise<void> {
@@ -482,6 +537,7 @@ export function QuickMinePage() {
             setTranscriptSource(job.transcriptSource ?? null);
             setTranscript(transcriptFromJob(job));
             setStage('combine');
+            void updateMiningImportForJob(jobId, { status: 'ready' }).catch(() => undefined);
           }
         },
         (err: unknown) => {
@@ -544,13 +600,18 @@ export function QuickMinePage() {
 
   async function startJob(
     jobUrl: string,
-    options: { title?: string; sourceType?: 'youtube' | 'podcast' } = {},
+    options: {
+      title?: string;
+      sourceType?: 'youtube' | 'podcast';
+      episodeDate?: string | null;
+    } = {},
   ) {
     setError('');
     setProgress('Starting…');
     setStage('starting');
     try {
-      const id = await createMiningJob(jobUrl, options);
+      const id = await createMiningJob(jobUrl, { title: options.title, sourceType: options.sourceType });
+      trackMiningStart(id, jobUrl, options.title, options.sourceType ?? 'youtube', options.episodeDate);
       setJobId(id);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start mining job');
@@ -583,7 +644,11 @@ export function QuickMinePage() {
   async function handleStartPodcastEpisode(episode: PodcastEpisode) {
     setPodcastEpisodeDate(episode.publishedAt ?? null);
     setPodcastEpisodeSourceUrl(episode.url);
-    await startJob(episode.url, { title: episode.title, sourceType: 'podcast' });
+    await startJob(episode.url, {
+      title: episode.title,
+      sourceType: 'podcast',
+      episodeDate: episode.publishedAt ?? null,
+    });
   }
 
   async function handleStartSelectedEpisodes() {
@@ -643,12 +708,19 @@ export function QuickMinePage() {
         // fall through and start it fresh
       }
     }
-    const started = startJob(head.episode.url, { title: head.episode.title, sourceType: 'podcast' });
+    const started = startJob(head.episode.url, {
+      title: head.episode.title,
+      sourceType: 'podcast',
+      episodeDate: head.episode.publishedAt ?? null,
+    });
     if (notice) setError(notice);
     await started;
   }
 
   function failCurrent(message: string): void {
+    if (jobIdRef.current) {
+      void updateMiningImportForJob(jobIdRef.current, { status: 'failed', error: message }).catch(() => undefined);
+    }
     if (queueRef.current.length > 0) {
       void advanceQueue(`${message} — skipped to the next episode.`);
     } else {
@@ -671,6 +743,7 @@ export function QuickMinePage() {
           void deleteMiningJob(id);
           return;
         }
+        trackMiningStart(id, head.episode.url, head.episode.title, 'podcast', head.episode.publishedAt);
         const withJob = queueRef.current.map((item) =>
           item.episode.url === head.episode.url ? { ...item, jobId: id } : item,
         );
@@ -1573,6 +1646,12 @@ export function QuickMinePage() {
                 }`
               : ''}
           </p>
+          {source?.type === 'podcast' && !targetBook && !podcastFeedUrl.trim() ? (
+            <p className="muted" role="note" style={{ margin: 0 }}>
+              No podcast feed or target book is known for this episode, so it will be imported as its own standalone
+              book instead of a chapter of its series. Pick a target book above, or load the feed again, to avoid that.
+            </p>
+          ) : null}
           <ShadowingPreviewCard
             preview={preview}
             retentionNote="Native clips are not included in Glossbook JSON backups. Re-mine this video to restore them if needed."
@@ -1594,7 +1673,7 @@ export function QuickMinePage() {
                   onCommit: (p: ShadowingImportPreview) =>
                     commitSeriesEpisodeImport({
                       seriesId: `podcast-series-${hashString(podcastFeedUrl.trim())}`,
-                      seriesTitle: podcastFeed?.title || source.title,
+                      seriesTitle: podcastFeed?.title || resumedSeriesTitle || source.title,
                       seriesUrl: podcastFeedUrl.trim(),
                       episodeTitle: source.title,
                       sourceId: podcastEpisodeSourceUrl || source.url,
@@ -1604,6 +1683,15 @@ export function QuickMinePage() {
                 }
               : {})}
             onImported={async (result) => {
+              if (jobId) {
+                void updateMiningImportForJob(jobId, {
+                  status: 'committed',
+                  bookId: result.bookId,
+                  chapterId: result.chapterId,
+                  sentenceCount: preview.counts.uniqueSentences,
+                  committedAt: new Date().toISOString(),
+                }).catch(() => undefined);
+              }
               if (extras) {
                 const maxHandle = rows.reduce((max, row) => Math.max(max, row.handle), 0);
                 const byNumber = Array.from({ length: maxHandle }, (_, i) => sentenceIdByHandle.get(i + 1));

@@ -9,10 +9,13 @@ import { SpanAudioButton } from '../components/SpanAudioButton';
 import { TranscriptStage } from '../components/TranscriptStage';
 import { TranslateAiHelp } from '../components/TranslateAiHelp';
 import {
+  beginMiningImport,
   commitSeriesEpisodeImport,
   getDb,
+  getMiningImportForJob,
   getSeriesImportedSourceIds,
   rememberPodcastFeedUrl,
+  updateMiningImportForJob,
 } from '../db/repository';
 import { canonicalSourceId, hashString } from '../lib/ids';
 import { displayJapanese, normalizeSentenceKey } from '../lib/normalize';
@@ -232,6 +235,8 @@ export function YouTubeMinePage() {
   // identity — kept separate from MiningSourceInfo.url, which can differ
   // after yt-dlp's redirect resolution.
   const [podcastEpisodeSourceUrl, setPodcastEpisodeSourceUrl] = useState('');
+  // Series title restored from the job's tracking row on resume, before the feed itself is reloaded.
+  const [resumedSeriesTitle, setResumedSeriesTitle] = useState('');
   // Wall-clock ms at which the current progress message started (server's
   // elapsedSeconds, converted). A 1s tick forces the "N:NN elapsed" re-render.
   const progressStartedAtRef = useRef<number>(Date.now());
@@ -266,6 +271,10 @@ export function YouTubeMinePage() {
         (job) => {
           if (cancelled) return;
           if (job.status === 'error') {
+            void updateMiningImportForJob(savedJobId, {
+              status: 'failed',
+              error: job.error ?? 'The previous mining job failed.',
+            }).catch(() => undefined);
             setError(job.error ?? 'The previous mining job failed.');
             clearActiveJob();
           } else {
@@ -372,6 +381,25 @@ export function YouTubeMinePage() {
     progressStartedAtRef.current = Date.now() - (job.elapsedSeconds ?? 0) * 1000;
     hydrateStageFromJob(job);
     storeActiveJob(id);
+    if (job.status === 'ready') {
+      void updateMiningImportForJob(id, { status: 'ready' }).catch(() => undefined);
+    }
+    void restoreMiningImportContext(id);
+  }
+
+  /**
+   * The browser only keeps a job id across a reload, so the feed and the
+   * picked episode's date / as-picked URL come back from the job's tracking
+   * row. Without them a resumed podcast episode was committed with the wrong
+   * chapter identity, or as a standalone book.
+   */
+  async function restoreMiningImportContext(id: string): Promise<void> {
+    const record = await getMiningImportForJob(id).catch(() => undefined);
+    if (!record) return;
+    if (record.seriesUrl) setPodcastFeedUrl((current) => (current.trim() ? current : record.seriesUrl!));
+    if (record.seriesTitle) setResumedSeriesTitle(record.seriesTitle);
+    if (record.sourceDate) setPodcastEpisodeDate((current) => current ?? record.sourceDate!);
+    if (record.sourceType === 'podcast') setPodcastEpisodeSourceUrl((current) => current || record.sourceId);
   }
 
   async function resumeJob(id: string): Promise<void> {
@@ -432,9 +460,14 @@ export function YouTubeMinePage() {
           progressStartedAtRef.current = Date.now() - (job.elapsedSeconds ?? 0) * 1000;
           setProgress(job.message);
           if (job.status === 'error') {
+            void updateMiningImportForJob(jobId, {
+              status: 'failed',
+              error: job.error ?? 'Mining failed',
+            }).catch(() => undefined);
             setError(job.error ?? 'Mining failed');
             setStage('idle');
           } else if (job.status === 'ready') {
+            void updateMiningImportForJob(jobId, { status: 'ready' }).catch(() => undefined);
             setSource(job.source ?? null);
             setTranscriptSource(job.transcriptSource ?? null);
             setTranscript(transcriptFromJob(job));
@@ -485,13 +518,35 @@ export function YouTubeMinePage() {
 
   async function startJob(
     jobUrl: string,
-    options: { title?: string; sourceType?: 'youtube' | 'podcast' } = {},
+    options: {
+      title?: string;
+      sourceType?: 'youtube' | 'podcast';
+      episodeDate?: string | null;
+    } = {},
   ) {
     setError('');
     setProgress('Starting…');
     setStage('starting');
     try {
-      const id = await createMiningJob(jobUrl, options);
+      const id = await createMiningJob(jobUrl, { title: options.title, sourceType: options.sourceType });
+      const sourceType = options.sourceType ?? 'youtube';
+      const feedUrl = podcastFeedUrl.trim();
+      void beginMiningImport({
+        sourceId: jobUrl,
+        sourceType,
+        title: options.title || jobUrl,
+        jobId: id,
+        ...(sourceType === 'podcast' && feedUrl
+          ? {
+              seriesId: `podcast-series-${hashString(feedUrl)}`,
+              seriesUrl: feedUrl,
+              ...(podcastFeed?.title || resumedSeriesTitle
+                ? { seriesTitle: podcastFeed?.title || resumedSeriesTitle }
+                : {}),
+            }
+          : {}),
+        ...(options.episodeDate ? { sourceDate: options.episodeDate } : {}),
+      }).catch(() => undefined);
       setJobId(id);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start mining job');
@@ -523,7 +578,11 @@ export function YouTubeMinePage() {
   async function handleStartPodcastEpisode(episode: PodcastEpisode) {
     setPodcastEpisodeDate(episode.publishedAt ?? null);
     setPodcastEpisodeSourceUrl(episode.url);
-    await startJob(episode.url, { title: episode.title, sourceType: 'podcast' });
+    await startJob(episode.url, {
+      title: episode.title,
+      sourceType: 'podcast',
+      episodeDate: episode.publishedAt ?? null,
+    });
   }
 
   async function runApply(note: string, fn: () => Promise<void>) {
@@ -1193,6 +1252,12 @@ export function YouTubeMinePage() {
                 }`
               : ''}
           </p>
+          {source?.type === 'podcast' && !podcastFeedUrl.trim() ? (
+            <p className="muted" role="note" style={{ margin: 0 }}>
+              No podcast feed is known for this episode, so it will be imported as its own standalone book instead of
+              a chapter of its series. Load the feed again to avoid that.
+            </p>
+          ) : null}
           <ShadowingPreviewCard
             preview={preview}
             retentionNote="Native clips are not included in Glossbook JSON backups. Re-mine this video to restore them if needed."
@@ -1202,7 +1267,7 @@ export function YouTubeMinePage() {
                   onCommit: (p) =>
                     commitSeriesEpisodeImport({
                       seriesId: `podcast-series-${hashString(podcastFeedUrl.trim())}`,
-                      seriesTitle: podcastFeed?.title || source.title,
+                      seriesTitle: podcastFeed?.title || resumedSeriesTitle || source.title,
                       seriesUrl: podcastFeedUrl.trim(),
                       episodeTitle: source.title,
                       sourceId: podcastEpisodeSourceUrl || source.url,
@@ -1212,7 +1277,16 @@ export function YouTubeMinePage() {
                 }
               : {})}
             onImported={(result) => {
-              if (jobId) void deleteMiningJob(jobId);
+              if (jobId) {
+                void updateMiningImportForJob(jobId, {
+                  status: 'committed',
+                  bookId: result.bookId,
+                  chapterId: result.chapterId,
+                  sentenceCount: preview.counts.uniqueSentences,
+                  committedAt: new Date().toISOString(),
+                }).catch(() => undefined);
+                void deleteMiningJob(jobId);
+              }
               clearActiveJob();
               // ?imported=1 -> BookDetailPage's one-time transcript-
               // validation reminder (docs/STATUS.md 2026-09-12).
