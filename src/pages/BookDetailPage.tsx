@@ -63,7 +63,9 @@ import {
   transferBookSentences,
   updateBook,
   updateBookChapter,
+  filterToIntroducedSentenceIds,
 } from '../db/repository';
+import { isSentenceLedFlow } from '../lib/sentenceLed';
 import {
   getAlignmentBackfillJob,
   startAlignmentBackfill,
@@ -467,15 +469,25 @@ export function BookDetailPage() {
     return computeGraduatedSubjectIds(sentenceStudyItems, settings.graduationMinScheduledDays);
   }, [sentenceStudyItems, settings]);
 
+  const sentenceLed = isSentenceLedFlow(settings);
+
+  // Sentence-led flow: sentences the learner has actually met (walked through,
+  // started in the book, or already carrying a card). Cards for vocabulary and
+  // grammar are paused, so card-based coverage no longer describes progress.
+  const introducedCount = useLiveQuery(async () => {
+    if (!sentenceLed || ids.length === 0) return null;
+    return (await filterToIntroducedSentenceIds(ids)).size;
+  }, [sentenceLed, ids]);
+
   const coverage = useLiveQuery(async () => {
-    if (!bookId) return null;
+    if (!bookId || sentenceLed) return null;
     const byBook = await getBookVocabularyCoverage();
     return byBook.get(bookId) ?? null;
-  }, [bookId]);
+  }, [bookId, sentenceLed]);
 
   const grammarProgress = useLiveQuery(
-    () => (bookId ? getBookGrammarProgress(bookId) : null),
-    [bookId],
+    () => (bookId && !sentenceLed ? getBookGrammarProgress(bookId) : null),
+    [bookId, sentenceLed],
   );
 
   // TEMPORARY diagnostics: time suspend/resume clicks (write, then each live
@@ -671,23 +683,32 @@ export function BookDetailPage() {
                   {progressSummary.byStatus.complete} complete
                 </span>
               </div>
-              <div className="muted" style={{ fontSize: '0.85rem' }}>
-                Vocabulary confirmed: {progressSummary.vocabConfirmed}/{progressSummary.total}{' '}
-                sentences
-              </div>
-              <div className="muted" style={{ fontSize: '0.85rem' }}>
-                {coverage && coveragePercent(coverage) !== null
-                  ? `~${coveragePercent(coverage)}% known vocabulary (${coverage.knownCount}/${coverage.totalCount} words at reading proficiency)`
-                  : 'Known vocabulary: not confirmed yet'}
-              </div>
+              {sentenceLed ? (
+                <div className="muted" style={{ fontSize: '0.85rem' }}>
+                  Introduced sentences: {introducedCount ?? '…'}/{progressSummary.total}
+                </div>
+              ) : null}
               <div className="muted" style={{ fontSize: '0.85rem' }}>
                 Graduated (mastered) sentences: {progressSummary.graduated}/{progressSummary.total}
               </div>
-              <div className="muted" style={{ fontSize: '0.85rem' }}>
-                {grammarProgress && grammarProgress.encountered > 0
-                  ? `Grammar patterns: ${grammarProgress.graduated}/${grammarProgress.tracked} graduated (${grammarProgress.tracked} tracked, ${grammarProgress.encountered} encountered)`
-                  : 'No grammar patterns tagged yet'}
-              </div>
+              {!sentenceLed ? (
+                <>
+                  <div className="muted" style={{ fontSize: '0.85rem' }}>
+                    Vocabulary confirmed: {progressSummary.vocabConfirmed}/{progressSummary.total}{' '}
+                    sentences
+                  </div>
+                  <div className="muted" style={{ fontSize: '0.85rem' }}>
+                    {coverage && coveragePercent(coverage) !== null
+                      ? `~${coveragePercent(coverage)}% known vocabulary (${coverage.knownCount}/${coverage.totalCount} words at reading proficiency)`
+                      : 'Known vocabulary: not confirmed yet'}
+                  </div>
+                  <div className="muted" style={{ fontSize: '0.85rem' }}>
+                    {grammarProgress && grammarProgress.encountered > 0
+                      ? `Grammar patterns: ${grammarProgress.graduated}/${grammarProgress.tracked} graduated (${grammarProgress.tracked} tracked, ${grammarProgress.encountered} encountered)`
+                      : 'No grammar patterns tagged yet'}
+                  </div>
+                </>
+              ) : null}
             </>
           )}
           <div className="row" style={{ alignItems: 'center', marginTop: '0.5rem' }}>
