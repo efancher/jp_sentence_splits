@@ -88,6 +88,10 @@ export function useShadowing() {
     () => shadowingController.getShadowMediaTime(),
     [],
   );
+  const isShadowLoopInGap = useCallback(
+    () => shadowingController.isShadowLoopInGap(),
+    [],
+  );
   const getShadowSampleRate = useCallback(
     () => shadowingController.getShadowSampleRate(),
     [],
@@ -106,6 +110,7 @@ export function useShadowing() {
     stopComparison,
     getShadowAnalyser,
     getShadowMediaTime,
+    isShadowLoopInGap,
     getShadowSampleRate,
   };
 }

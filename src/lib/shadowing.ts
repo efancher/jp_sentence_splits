@@ -412,6 +412,9 @@ export class ShadowingController {
     return this.shadowPlayer.getAnalyser();
   }
 
+  /** True during the pause between reps of a hands-free shadow loop. */
+  isShadowLoopInGap = (): boolean => this.shadowLoop?.gapUntil !== undefined;
+
   getShadowMediaTime(): number {
     return this.shadowPlayer.currentTime();
   }

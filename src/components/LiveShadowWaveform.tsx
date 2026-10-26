@@ -52,6 +52,7 @@ export function LiveShadowWaveform({
   range,
   showWaveform = true,
   wrapSeconds,
+  isHeld,
 }: {
   referenceBlob: Blob;
   active: boolean;
@@ -72,6 +73,11 @@ export function LiveShadowWaveform({
   showWaveform?: boolean;
   /** Wrap the pitch chart into stacked rows of this many seconds; omit for a single row. */
   wrapSeconds?: number;
+  /**
+   * While true (ShadowPage's pause between loop reps) the display freezes on the
+   * finished rep; the live line is only wiped when the next rep starts.
+   */
+  isHeld?: () => boolean;
 }) {
   const [referencePeaks, setReferencePeaks] = useState<WavePeak[]>([]);
   const [referencePitchBuckets, setReferencePitchBuckets] = useState<Array<number | null>>([]);
@@ -96,6 +102,9 @@ export function LiveShadowWaveform({
   const frameCountRef = useRef(0);
   const getMediaTimeRef = useRef(getMediaTime);
   getMediaTimeRef.current = getMediaTime;
+  const isHeldRef = useRef(isHeld);
+  isHeldRef.current = isHeld;
+  const wasHeldRef = useRef(false);
   const rangeStartMs = range?.startMs;
   const rangeEndMs = range?.endMs;
 
@@ -148,6 +157,7 @@ export function LiveShadowWaveform({
     setLiveMedianHz(null);
     setPlayheadIndex(0);
     frameCountRef.current = 0;
+    wasHeldRef.current = false;
 
     if (!analyser || durationSeconds <= 0) return;
 
@@ -164,6 +174,19 @@ export function LiveShadowWaveform({
 
     const tick = () => {
       const rawMediaTime = getMediaTimeRef.current();
+      // Pause between reps: leave the finished rep's contour on screen, and
+      // wipe it only once the next rep begins.
+      const held = isHeldRef.current?.() ?? false;
+      if (held) {
+        wasHeldRef.current = true;
+        lastMediaTimeRef.current = rawMediaTime;
+        rafRef.current = requestAnimationFrame(tick);
+        return;
+      }
+      if (wasHeldRef.current) {
+        wasHeldRef.current = false;
+        startRep();
+      }
       if (lastMediaTimeRef.current - rawMediaTime > durationSeconds / 2) startRep();
       lastMediaTimeRef.current = rawMediaTime;
       // Shift left by output latency so drawing tracks what you hear over AirPods,

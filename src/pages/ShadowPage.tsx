@@ -658,6 +658,7 @@ export function ShadowPage() {
           range={loopRange ?? undefined}
           active={isLoopingReps && shadowing.shadowActive}
           getMediaTime={shadowing.getShadowMediaTime}
+          isHeld={shadowing.isShadowLoopInGap}
           analyser={shadowing.getShadowAnalyser()}
           sampleRate={shadowing.getShadowSampleRate()}
           showWaveform={false}
