@@ -17,6 +17,8 @@ let existing = new Set<string>();
 /** ids whose presence in an insert makes the whole insert fail with a DB error. */
 let poisoned = new Set<string>();
 let transportDown = false;
+let inFlight = 0;
+let maxInFlight = 0;
 
 function fakeSupabase() {
   return {
@@ -33,14 +35,22 @@ function fakeSupabase() {
                 error: null,
               };
             },
-            eq: () => ({
+            eq: (_col: string, id: string) => ({
               maybeSingle: async () => {
                 calls.push({ table, kind: 'select_eq' });
-                return { data: null, error: null };
+                if (!existing.has(id)) return { data: null, error: null };
+                inFlight += 1;
+                maxInFlight = Math.max(maxInFlight, inFlight);
+                await new Promise((resolve) => setTimeout(resolve, 5));
+                inFlight -= 1;
+                return { data: { version: 1 }, error: null };
               },
             }),
           };
         },
+        update: () => ({
+          eq: () => ({ eq: () => ({ select: async () => ({ data: [{ version: 2 }], error: null }) }) }),
+        }),
         insert: async (rows: Record<string, unknown> | Record<string, unknown>[]) => {
           const list = Array.isArray(rows) ? rows : [rows];
           calls.push({ table, kind: 'insert', rows: list.length });
@@ -87,6 +97,8 @@ beforeEach(async () => {
   existing = new Set();
   poisoned = new Set();
   transportDown = false;
+  inFlight = 0;
+  maxInFlight = 0;
   await getDb().syncQueue.clear();
 });
 
@@ -175,5 +187,25 @@ describe('pushMutations batching', () => {
     // one request for the first run only — the other entity's run never starts
     expect(calls).toHaveLength(1);
     expect(await listPendingMutations()).toHaveLength(5); // all still queued
+  });
+
+  it('pushes rows that already exist concurrently, each still version-checked', async () => {
+    const ids = Array.from({ length: 12 }, (_, i) => `sent_e${i}`);
+    for (const id of ids) {
+      await enqueueMutation({
+        entity: 'sentence_extras',
+        recordId: id,
+        operation: 'upsert',
+        expectedVersion: 1,
+        payload: { id, createdAt: '2026-10-01T00:00:00Z', updatedAt: '2026-10-26T00:00:00Z' },
+      });
+    }
+    existing = new Set(ids);
+
+    expect(await pushMutations()).toBeUndefined();
+
+    expect(maxInFlight).toBeGreaterThan(1);
+    expect(calls.filter((c) => c.kind === 'insert')).toHaveLength(0);
+    expect(await listPendingMutations()).toHaveLength(0);
   });
 });

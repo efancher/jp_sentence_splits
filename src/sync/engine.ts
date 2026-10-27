@@ -345,11 +345,35 @@ async function pushUpsertBatch(items: SyncQueueItem[], ctx: PushCtx): Promise<vo
     ((existingRows ?? []) as unknown as Record<string, unknown>[]).map((row) => String(row[idCol])),
   );
   const fresh: SyncQueueItem[] = [];
+  const existing: SyncQueueItem[] = [];
   for (const item of items) {
-    if (existingIds.has(item.recordId)) await pushSingle(item, ctx);
+    if (existingIds.has(item.recordId)) existing.push(item);
     else fresh.push(item);
   }
+  await pushSinglesConcurrently(existing, ctx);
   await insertBisecting(fresh, ctx);
+}
+
+/** In-flight `pushSingle` calls per batch of already-existing rows. */
+const EXISTING_PUSH_CONCURRENCY = 6;
+
+/**
+ * Existing rows need a per-row version check and update (a bulk upsert would
+ * skip the optimistic lock), which is ~3 sequential round trips each. Running a
+ * few at once keeps the same conflict handling but stops a few hundred queued
+ * rewrites (e.g. upgraded walkthroughs) from outlasting a phone's cycle. Each
+ * item is independent: different record, own queue row.
+ */
+async function pushSinglesConcurrently(items: SyncQueueItem[], ctx: PushCtx): Promise<void> {
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length && !ctx.aborted) {
+      await pushSingle(items[next++]!, ctx);
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(EXISTING_PUSH_CONCURRENCY, items.length) }, worker),
+  );
 }
 
 async function failBatch(items: SyncQueueItem[], message: string, ctx: PushCtx): Promise<void> {
