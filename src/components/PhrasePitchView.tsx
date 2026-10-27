@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
-import { levelsToRuns } from '../lib/attemptPitchGrid';
-import type { PhrasePitchResult, PhraseRow } from '../lib/phrasePitch';
+import { levelsToRuns, selfScaledLevels } from '../lib/attemptPitchGrid';
+import { CONTOUR_POINTS_PER_MORA, type PhrasePitchResult, type PhraseRow } from '../lib/phrasePitch';
 
 const UNAVAILABLE_TEXT: Record<NonNullable<PhrasePitchResult['unavailable']>, string> = {
   'no-reference-timing':
@@ -19,7 +19,17 @@ const CHART_H = 56;
  */
 function PhraseBlock({ row, showLearner }: { row: PhraseRow; showLearner: boolean }) {
   const width = Math.max(row.kana.length, 2) * SLOT_W;
-  const learnerLevels = showLearner && row.learnerLevels?.length === row.kana.length ? row.learnerLevels : null;
+  // The measured contour (4 samples per mora) keeps the line running through devoiced or very short morae,
+  // which have no pitch of their own; the per-mora means are the fallback when no contour is stored.
+  const contourOf = (contour: readonly (number | null)[] | null | undefined, levels: (number | null)[] | null) =>
+    contour && contour.length === row.kana.length * CONTOUR_POINTS_PER_MORA
+      ? { levels: selfScaledLevels(contour), pad: SLOT_W / (2 * CONTOUR_POINTS_PER_MORA) }
+      : levels && levels.length === row.kana.length
+        ? { levels, pad: SLOT_W / 2 }
+        : null;
+  const native = contourOf(row.nativeContour, row.nativeLevels);
+  const learner = showLearner ? contourOf(row.learnerContour, row.learnerLevels) : null;
+  const learnerLevels = learner?.levels ?? null;
   return (
     <div className="pp-block">
       <strong className="jp">{row.text}</strong>
@@ -30,11 +40,13 @@ function PhraseBlock({ row, showLearner }: { row: PhraseRow; showLearner: boolea
         role="img"
         aria-label={`Pitch of ${row.text}${learnerLevels ? ', native and yours' : ', native'}`}
       >
-        {levelsToRuns(row.nativeLevels, width, CHART_H, SLOT_W / 2).map((points, i) => (
-          <polyline key={`n${i}`} points={points} className="apg-line apg-line-native" />
-        ))}
-        {learnerLevels
-          ? levelsToRuns(learnerLevels, width, CHART_H, SLOT_W / 2).map((points, i) => (
+        {native
+          ? levelsToRuns(native.levels, width, CHART_H, native.pad).map((points, i) => (
+              <polyline key={`n${i}`} points={points} className="apg-line apg-line-native" />
+            ))
+          : null}
+        {learner
+          ? levelsToRuns(learner.levels, width, CHART_H, learner.pad).map((points, i) => (
               <polyline key={`l${i}`} points={points} className="apg-line apg-line-attempt" data-rank="1" />
             ))
           : null}

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 
 import type { AttemptAnalysisSummary } from '../domain/types';
-import { buildPitchGrid, contourRange, isMeasured, contourToLevels, layoutSentenceLine, levelsToRuns } from '../lib/attemptPitchGrid';
+import { buildPitchGrid, contourRange, isMeasured, contourToLevels, levelsToRuns, selfScaledLevels } from '../lib/attemptPitchGrid';
 
 const GAP_REASON = {
   phones: 'the aligner couldn’t read its sounds',
@@ -47,10 +47,12 @@ export function AttemptPitchGrid({
   const selected = picked ?? [grid.rows[0]!.id, lastRow.id];
   const toggle = (id: string) =>
     setPicked(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
-  const line = layoutSentenceLine(grid.columns);
   const OVERLAY_W = 120;
   const OVERLAY_H = 56;
-  const STRIP_H = 48;
+  const TILE_GAP = 6;
+  // Whole-sentence tiles are the same size as the per-phrase tiles above, side by side (the row scrolls).
+  const segments = grid.columns.map((_, i) => ({ x: i * (OVERLAY_W + TILE_GAP), width: OVERLAY_W }));
+  const lineWidth = Math.max(0, grid.columns.length * (OVERLAY_W + TILE_GAP) - TILE_GAP);
   const hasContours = grid.columns.every((c) => !isMeasured(c) || c.nativeContour);
   const contourScale = hasContours
     ? contourRange([
@@ -99,13 +101,22 @@ export function AttemptPitchGrid({
           !isMeasured(column) ? null : (
           <figure key={index} className="apg-fig">
             <svg width={OVERLAY_W} height={OVERLAY_H} role="img" aria-label={`Pitch of ${column.text}`}>
-              {levelsToRuns(column.nativeLevels, OVERLAY_W, OVERLAY_H).map((points, i) => (
+              {levelsToRuns(
+                column.nativeContour ? selfScaledLevels(column.nativeContour) : column.nativeLevels,
+                OVERLAY_W,
+                OVERLAY_H,
+              ).map((points, i) => (
                 <polyline key={`n${i}`} points={points} className="apg-line apg-line-native" />
               ))}
               {grid.rows.map((row) => {
                 const rank = selected.indexOf(row.id);
-                const levels = row.cells[index]?.learnerLevels;
-                if (rank < 0 || !levels || levels.length !== column.nativeLevels.length) return null;
+                const cell = row.cells[index];
+                // Same sampling as the native line, so a devoiced mora doesn't leave a hole in one and not the other.
+                const levels =
+                  column.nativeContour && cell?.learnerContour?.length === column.nativeContour.length
+                    ? selfScaledLevels(cell.learnerContour)
+                    : cell?.learnerLevels;
+                if (rank < 0 || !levels || levels.length !== (column.nativeContour ? column.nativeContour.length : column.nativeLevels.length)) return null;
                 return levelsToRuns(levels, OVERLAY_W, OVERLAY_H).map((points, i) => (
                   <polyline key={`${row.id}${i}`} points={points} className="apg-line apg-line-attempt" data-rank={rank % 4} />
                 ));
@@ -123,7 +134,7 @@ export function AttemptPitchGrid({
         </p>
       ) : (
       <div className="apg-line-scroll">
-        <div style={{ width: line.totalWidth }}>
+        <div style={{ width: lineWidth }}>
           {strips.map((strip) => {
             const row = grid.rows.find((r) => r.id === strip.id);
             const native = strip.id === 'native';
@@ -133,17 +144,17 @@ export function AttemptPitchGrid({
                   {native ? 'Native' : `You · ${labelFor(row!.id, row!.createdAt)}`}
                 </span>
                 <svg
-                  width={line.totalWidth}
-                  height={STRIP_H}
+                  width={lineWidth}
+                  height={OVERLAY_H}
                   role="img"
                   aria-label={`${native ? 'Native' : 'Your'} pitch across the sentence`}
                 >
                   {grid.columns.map((column, index) => {
-                    const seg = line.segments[index]!;
+                    const seg = segments[index]!;
                     if (!isMeasured(column)) {
                       return (
                         <g key={index} transform={`translate(${seg.x},0)`}>
-                          <rect width={seg.width} height={STRIP_H} className="apg-seg apg-seg-gap" />
+                          <rect width={seg.width} height={OVERLAY_H} className="apg-seg apg-seg-gap" />
                         </g>
                       );
                     }
@@ -151,9 +162,9 @@ export function AttemptPitchGrid({
                     const levels = contour ? contourToLevels(contour, contourScale) : null;
                     return (
                       <g key={index} transform={`translate(${seg.x},0)`}>
-                        <rect width={seg.width} height={STRIP_H} className="apg-seg" />
+                        <rect width={seg.width} height={OVERLAY_H} className="apg-seg" />
                         {levels && levels.length === column.nativeContour!.length
-                          ? levelsToRuns(levels, seg.width, STRIP_H).map((points, i) => (
+                          ? levelsToRuns(levels, seg.width, OVERLAY_H).map((points, i) => (
                               <polyline
                                 key={i}
                                 points={points}
@@ -171,7 +182,7 @@ export function AttemptPitchGrid({
           })}
           <div className="apg-text jp">
             {grid.columns.map((column, index) => (
-              <span key={index} style={{ left: line.segments[index]!.x, width: line.segments[index]!.width }}>
+              <span key={index} style={{ left: segments[index]!.x, width: segments[index]!.width }}>
                 {column.text}
               </span>
             ))}

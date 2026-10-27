@@ -78,47 +78,31 @@ export function buildPitchGrid(attempts: readonly PitchGridAttempt[]): PitchGrid
 /**
  * Polyline point strings for a phrase's per-mora levels (0..1, high = up), one per run of voiced
  * morae — an unvoiced mora breaks the line rather than being interpolated across. A lone voiced
- * mora yields a one-point run (drawn as a dot).
+ * mora becomes a near-zero-length segment, which a round line cap draws as a dot (a true one-point
+ * `<polyline>` renders nothing).
  */
 export function levelsToRuns(levels: readonly (number | null)[], width: number, height: number, pad = 4): string[] {
   const runs: string[] = [];
   let current: string[] = [];
+  const flush = () => {
+    if (current.length === 1) {
+      const [px, py] = current[0]!.split(',');
+      current.push(`${(Number(px) + 0.01).toFixed(2)},${py}`);
+    }
+    if (current.length > 0) runs.push(current.join(' '));
+    current = [];
+  };
   const x = (i: number) => (levels.length <= 1 ? width / 2 : pad + (i * (width - 2 * pad)) / (levels.length - 1));
   const y = (level: number) => pad + (1 - level) * (height - 2 * pad);
   levels.forEach((level, i) => {
     if (level === null) {
-      if (current.length > 0) runs.push(current.join(' '));
-      current = [];
+      flush();
     } else {
       current.push(`${x(i).toFixed(1)},${y(level).toFixed(1)}`);
     }
   });
-  if (current.length > 0) runs.push(current.join(' '));
+  flush();
   return runs;
-}
-
-export interface SentenceLineSegment {
-  x: number;
-  width: number;
-}
-
-/**
- * Left-to-right layout of a whole sentence's phrases on one shared axis. A segment is as wide as its
- * morae need (`moraWidth` each) but never narrower than its written text (`charWidth` per character),
- * so the Japanese underneath never overlaps the next phrase.
- */
-export function layoutSentenceLine(
-  columns: readonly { text: string; nativeLevels: readonly unknown[] }[],
-  { moraWidth = 14, charWidth = 15, gap = 6 }: { moraWidth?: number; charWidth?: number; gap?: number } = {},
-): { segments: SentenceLineSegment[]; totalWidth: number } {
-  let x = 0;
-  const segments = columns.map((column) => {
-    const width = Math.max(column.nativeLevels.length * moraWidth, [...column.text].length * charWidth + 4);
-    const segment = { x, width };
-    x += width + gap;
-    return segment;
-  });
-  return { segments, totalWidth: Math.max(0, x - gap) };
 }
 
 /** Min/max of every voiced value across the given contours, or null when none is voiced. */
@@ -139,4 +123,10 @@ export function contourRange(contours: readonly (readonly (number | null)[] | nu
 export function contourToLevels(contour: readonly (number | null)[], range: { min: number; max: number }): (number | null)[] {
   const span = Math.max(1, range.max - range.min);
   return contour.map((v) => (v === null ? null : (v - range.min) / span));
+}
+
+/** A contour scaled on its own lowest..highest voiced sample (0..1, high = up) — for a chart of one phrase. */
+export function selfScaledLevels(contour: readonly (number | null)[]): (number | null)[] {
+  const range = contourRange([contour]);
+  return range ? contourToLevels(contour, range) : contour.map(() => null);
 }

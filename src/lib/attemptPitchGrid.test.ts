@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { PhraseSnapshotRow } from '../domain/types';
 
-import { buildPitchGrid, contourRange, contourToLevels, layoutSentenceLine, levelsToRuns } from './attemptPitchGrid';
+import { buildPitchGrid, contourRange, contourToLevels, levelsToRuns, selfScaledLevels } from './attemptPitchGrid';
 
 const row = (text: string): PhraseSnapshotRow => ({
   text,
@@ -31,30 +31,11 @@ describe('buildPitchGrid', () => {
 describe('levelsToRuns', () => {
   it('splits runs at unvoiced morae and maps high levels upward', () => {
     const runs = levelsToRuns([0, 1, null, 0.5], 100, 40, 0);
-    expect(runs).toEqual(['0.0,40.0 33.3,0.0', '100.0,20.0']);
+    expect(runs).toEqual(['0.0,40.0 33.3,0.0', '100.0,20.0 100.01,20.0']);
   });
 
   it('centres a single mora', () => {
-    expect(levelsToRuns([1], 100, 40, 0)).toEqual(['50.0,0.0']);
-  });
-});
-
-describe('layoutSentenceLine', () => {
-  it('places phrases left to right, widening short-mora phrases to fit their text', () => {
-    const { segments, totalWidth } = layoutSentenceLine(
-      [
-        { text: 'はい', nativeLevels: [0, 1, 0, 1, 0, 1] },
-        { text: '緑色では', nativeLevels: [0, 1] },
-      ],
-      { moraWidth: 10, charWidth: 10, gap: 5 },
-    );
-    expect(segments[0]).toEqual({ x: 0, width: 60 });
-    expect(segments[1]).toEqual({ x: 65, width: 44 });
-    expect(totalWidth).toBe(109);
-  });
-
-  it('is empty for no phrases', () => {
-    expect(layoutSentenceLine([])).toEqual({ segments: [], totalWidth: 0 });
+    expect(levelsToRuns([1], 100, 40, 0)).toEqual(['50.0,0.0 50.01,0.0']);
   });
 });
 
@@ -70,5 +51,12 @@ describe('contour helpers', () => {
 
   it('never stretches a near-flat range to full height', () => {
     expect(contourToLevels([0, 0.5], { min: 0, max: 0.5 })).toEqual([0, 0.5]);
+  });
+});
+
+describe('selfScaledLevels', () => {
+  it('scales a contour to its own range and keeps unvoiced samples null', () => {
+    expect(selfScaledLevels([null, 2, 6, 4])).toEqual([null, 0, 1, 0.5]);
+    expect(selfScaledLevels([null])).toEqual([null]);
   });
 });
