@@ -288,6 +288,31 @@ Unfinished work and optional extensions; completed behavior is in `AI_OVERVIEW.m
   - The old `sentence-realign` blank-row/truncation fixes are in the source.
     The 2026-09-13 deployment handoff has not been verified in this audit;
     check deployment state before treating it as either complete or pending.
+  - **Speaker labels for conversation podcasts (parked 2026-10-27).** Goal:
+    label who is speaking in two-person podcasts. Not built; no app or service
+    code changed. A CPU-only trial on `codex-dev` (scratch scripts, not in the
+    repo) showed the following.
+    - Pipeline: keep `large-v3-turbo`, add pyannote `speaker-diarization-community-1`
+      (gated on Hugging Face; needs an accepted-terms read token). kotoba-whisper-v2.0
+      (CTranslate2 build) was worse than turbo on one clip; v2.2 needs
+      `trust_remote_code`, and the transformers path was unusably slow on CPU.
+    - Cost: about 1.8x audio length for ASR plus diarization on CPU, ~3 GB peak
+      RAM (tight next to the aligner). With word timestamps (~3x ASR) a 17-minute
+      episode would take roughly an hour. No GPU needed for two-person podcasts;
+      a rented GPU is the first thing to try if quality proves good.
+    - Quality: long turns label cleanly. Short backchannels and overlap are
+      inconsistent. Naive per-word splitting on turn boundaries cut sentences
+      mid-phrase (574 cues became 684 rows), so it needs smoothing (minimum run
+      length, prefer pauses/punctuation) before use. Unverified: the third host
+      in the coten radio episode was never detected as a separate speaker.
+    - Open items: hand-label a few minutes of audio as ground truth to compare
+      per-segment, per-word and smoothed labelling; make it opt-in per source
+      with a speaker count (skip for single-speaker sources, `num_speakers=2`
+      for two-person ones, since pyannote can invent phantom speakers); run it
+      as a separate step after transcription so the ASR timeout is unaffected.
+      Whisper sometimes prefixes cues with names (ヤンヤン, 樋口); these did
+      not match the diarized speakers reliably and should not be treated as
+      labels.
 
 - [ ] **NHK Easy import refinements.** Import, translation and commit are built;
   articles/episodes share a series book, with imported badges and chapter dedup.
