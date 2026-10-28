@@ -111,7 +111,7 @@ export interface PhraseRow {
   phraseIndex: number;
 }
 
-export type UnmeasuredReason = 'phones' | 'short' | 'unvoiced';
+export type UnmeasuredReason = 'phones' | 'short' | 'unvoiced' | 'outside';
 
 /** A phrase of the sentence that produced no row, and why — so the whole-sentence line can show a gap instead of silently dropping it. */
 export interface UnmeasuredPhrase {
@@ -279,6 +279,14 @@ export function buildPhrasePitch({
     const kana = timings.flatMap((timing) => timing!.kana);
     if (kana.length < 2) {
       skip('short'); // one mora carries no shape
+      continue;
+    }
+
+    // The reference pitch may be sliced to the range you practised: a phrase wholly outside it has no pitch to read.
+    const firstStart = timings[0]!.intervals[0]!.start - refOffset;
+    const lastEnd = timings[timings.length - 1]!.intervals.at(-1)!.end - refOffset;
+    if (lastEnd <= 0 || firstStart >= reference.pitch.durationSeconds) {
+      skip('outside');
       continue;
     }
 

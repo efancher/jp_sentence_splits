@@ -113,6 +113,13 @@ describe('buildPhrasePitch', () => {
     expect(result.rows.map((r) => r.text)).toEqual(['はしが', 'たかいです']);
   });
 
+  it('marks phrases wholly outside the sliced practice range as outside, not as silent', () => {
+    const late = words().map((w) => ({ ...w, start: w.start + 5, end: w.end + 5, phones: w.phones.map((p) => ({ ...p, start: p.start + 5, end: p.end + 5 })) }));
+    const result = buildPhrasePitch({ reference: { words: late, pitch: NATIVE, pitchOffsetSeconds: 0 } });
+    expect(result.rows).toEqual([]);
+    expect(result.unmeasured.map((u) => u.reason)).toEqual(['outside', 'outside']);
+  });
+
   it('draws a flat native phrase as it is rather than forcing it into a shape', () => {
     const result = buildPhrasePitch({
       reference: { words: words(), pitch: pitchFor([2, 2.1, 1.9, 2, 2, 2.1, 1.9, 2]) },

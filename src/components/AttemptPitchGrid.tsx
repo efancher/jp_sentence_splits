@@ -7,6 +7,7 @@ const GAP_REASON = {
   phones: 'the aligner couldn’t read its sounds',
   short: 'a single sound has no shape',
   unvoiced: 'too little voiced pitch in the native',
+  outside: 'outside the part of the clip you practised',
 } as const;
 
 /** The two selected attempts in chronological order (grid rows are oldest-first). */

@@ -279,7 +279,7 @@ export interface PhraseSnapshotRow {
   /** Position of this phrase in the sentence's full phrase list. Absent on snapshots saved before unmeasured phrases were kept — those are re-derived by the backfill. */
   phraseIndex?: number;
   /** Set when the phrase could not be measured (the row then has no levels or contour); it stays in the whole-sentence line as a gap. */
-  unmeasured?: 'phones' | 'short' | 'unvoiced';
+  unmeasured?: 'phones' | 'short' | 'unvoiced' | 'outside';
 }
 
 export interface Book {
