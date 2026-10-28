@@ -26,6 +26,9 @@ import {
   setSentenceGrammarReviewStatus,
   updatePlannerSessionStep,
   requestFreshTry,
+  createBookChapter,
+  assignBookSentencesToChapter,
+  setChapterSuspended,
   updateSettings,
 } from '../src/db/repository';
 import { shadowAttemptSummary } from '../src/lib/sessionPlanner';
@@ -344,6 +347,37 @@ describe('Learning Orchestrator repository layer', () => {
     const lessons = session.steps.filter((step) => step.targetKind === 'sentence_learning');
     expect(lessons.map((step) => step.sentenceId)).toEqual([walked.id, fresh.id]);
     expect(lessons[0]!.label).toMatch(/^Fresh try/);
+  });
+
+  it('sentence-first: due fresh tries in a suspended episode never use up the per-book cap, and the cap lifts when no new lessons wait', async () => {
+    await updateSettings({ sentenceFirstPlanning: true });
+    const book = await createBook({ title: 'Episodes' });
+    const db = getDb();
+    const shelved = [makeSentence(), makeSentence(), makeSentence()];
+    const open = [makeSentence(), makeSentence(), makeSentence(), makeSentence()];
+    await db.sentences.bulkPut([...shelved, ...open]);
+    await addSentencesToBook(book.id, [...shelved, ...open].map((sentence) => sentence.id));
+    const shelvedChapter = await createBookChapter(book.id, 'Shelved');
+    const openChapter = await createBookChapter(book.id, 'Open');
+    await assignBookSentencesToChapter(book.id, shelved.map((sentence) => sentence.id), shelvedChapter.id);
+    await assignBookSentencesToChapter(book.id, open.map((sentence) => sentence.id), openChapter.id);
+    await setChapterSuspended(book.id, shelvedChapter.id, true);
+    // Shelved sentences were walked first (oldest), so they head the due list.
+    const walkedAt = (daysAgo: number) => new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000).toISOString();
+    await db.sentenceLearningEvents.bulkPut(
+      [...shelved, ...open].map((sentence, index) => ({
+        id: createId('sle'),
+        sentenceId: sentence.id,
+        bookId: book.id,
+        action: 'walkthrough_completed',
+        timestamp: walkedAt(30 - index),
+      })) as never,
+    );
+
+    const session = await addMinutesToTodaySession(60);
+    const lessons = session.steps.filter((step) => step.targetKind === 'sentence_learning');
+    expect(lessons.map((step) => step.sentenceId).sort()).toEqual(open.map((sentence) => sentence.id).sort());
+    expect(lessons.every((step) => step.revisit)).toBe(true);
   });
 
   it('sentence-first: a review-card fresh-try request jumps the spacing wait until an attempt is logged', async () => {

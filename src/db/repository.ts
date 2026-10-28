@@ -10506,17 +10506,6 @@ async function findExploreCandidates(
       : [];
     // Review-card requests jump the spacing queue (walked-through sentences only).
     const requestedIds = walked ? pendingFreshTryRequestIds(freshTryRequests, bookEvents).filter((id) => walked.has(id)) : [];
-    const revisitIds = sentenceFirst
-      ? [
-          ...new Set([
-            ...requestedIds,
-            // The per-book cap only throttles automatic revisits; ones the learner asked for are all kept.
-            ...[...new Set([...parkedGlossIds, ...sentencesDueForFreshTry(bookEvents)])]
-              .filter((id) => !requestedIds.includes(id))
-              .slice(0, EXPLORE_REVISITS_PER_BOOK),
-          ]),
-        ]
-      : [];
     const parkedGlossSet = new Set(parkedGlossIds);
     // Sequential study mode gates *introduction* only: a locked sentence is
     // simply not offered as new. Revisits (already-introduced) are unaffected.
@@ -10556,6 +10545,22 @@ async function findExploreCandidates(
     // its strict episode order.
     const unstarted =
       sentenceFirst && !sequential ? await floatGrowthEligibleFirst(inReadingOrder) : inReadingOrder;
+    // Shelved (suspended-episode) sentences are dropped *before* the cap, or the
+    // oldest due ones — often in shelved episodes — would eat the cap and then vanish.
+    const shelvedIds = new Set(memberships.filter((item) => !notShelved(item)).map((item) => item.sentenceId));
+    // The cap only keeps revisits from crowding out new lessons: with none waiting there is nothing to protect.
+    const automaticRevisitCap = unstarted.length > 0 ? EXPLORE_REVISITS_PER_BOOK : EXPLORE_SENTENCE_PREVIEW_LIMIT;
+    const revisitIds = sentenceFirst
+      ? [
+          ...new Set([
+            ...requestedIds,
+            // The per-book cap only throttles automatic revisits; ones the learner asked for are all kept.
+            ...[...new Set([...parkedGlossIds, ...sentencesDueForFreshTry(bookEvents)])]
+              .filter((id) => !requestedIds.includes(id) && !shelvedIds.has(id))
+              .slice(0, automaticRevisitCap),
+          ]),
+        ]
+      : [];
     const seenRevisit = new Set<string>();
     const revisitMemberships = memberships.filter((item) => {
       if (!revisitIds.includes(item.sentenceId) || seenRevisit.has(item.sentenceId) || !notShelved(item)) return false;

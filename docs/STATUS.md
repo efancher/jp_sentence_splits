@@ -12,9 +12,12 @@ and possible extensions. This snapshot does not certify a live deployment.
   `reading_in_context` card; word/grammar cards stay paused. Introduction gates
   use sentence learning events, started book membership or a sentence card.
 - "Fresh try" revisits: automatic ones (parked checks, spaced schedule) are capped
-  at `EXPLORE_REVISITS_PER_BOOK` per book per plan; ones requested via the review
-  card's "Fresh try this sentence" button are exempt from that cap and drafted
-  first. The glossing time budget still bounds the total. A Fresh try counts as
+  at `EXPLORE_REVISITS_PER_BOOK` per book per plan, counted after sentences in
+  suspended episodes are dropped and only while that book has new lessons waiting
+  (2026-10-28: the cap used to eat oldest-first due sentences from suspended
+  episodes, leaving open episodes with ~0 steps and a short session); ones
+  requested via the review card's "Fresh try this sentence" button are exempt
+  from that cap and drafted first. The glossing time budget still bounds the total. A Fresh try counts as
   done (spacing advances, a pending request clears) once its walkthrough is
   finished on a later day than the first; a "say it" attempt is optional.
   Previously only `expression_attempt` counted, so the same sentences were
