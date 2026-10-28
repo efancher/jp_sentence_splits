@@ -7,9 +7,9 @@ function item(state: FsrsState['state'], scheduledDays = 0) {
 }
 
 describe('sentenceStage', () => {
-  it('is new with no study items or only new ones', () => {
+  it('is new with no study items, and awaiting a first review with only new ones', () => {
     expect(sentenceStage([], 180)).toBe('new');
-    expect(sentenceStage([item('new')], 180)).toBe('new');
+    expect(sentenceStage([item('new')], 180)).toBe('awaiting');
   });
 
   it('maps a single item by state and interval', () => {
@@ -22,7 +22,7 @@ describe('sentenceStage', () => {
 
   it('uses the weakest item', () => {
     expect(sentenceStage([item('review', 200), item('review', 5)], 180)).toBe('young');
-    expect(sentenceStage([item('review', 200), item('new')], 180)).toBe('new');
+    expect(sentenceStage([item('review', 200), item('new')], 180)).toBe('awaiting');
   });
 
   it('never graduates when graduation is off', () => {

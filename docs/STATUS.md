@@ -80,7 +80,8 @@ and possible extensions. This snapshot does not certify a live deployment.
   playback highlighting, pause-group rehearsal and cancellable listen–repeat.
   Attempt comparison uses measured contours; older attempts can have pitch
   snapshots backfilled. These features are on main; branch-only notes were stale.
-- Book/chapter suspension, sentence-stage progress, chapter-level conflict
+- Book/chapter suspension, sentence-stage progress (grey = not started, purple =
+  awaiting first review: has cards but none reviewed yet), chapter-level conflict
   choices and repeat-edit sync race fixes are implemented. Extras save/recovery
   retains failed or unverified server results. Source audio has a best-effort
   private Storage backup/restore path when the backend is configured.
