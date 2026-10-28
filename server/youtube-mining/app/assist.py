@@ -1,6 +1,6 @@
 """Run a text prompt through a local LLM CLI (Codex, then Claude) so the
 frontend can automate its "copy prompt into a chat, paste the reply back"
-step. One request at a time (a single run lock), single attempt per backend —
+step. A bounded number of requests at a time (MINING_ASSIST_MAX_CONCURRENCY, default 3), single attempt per backend —
 the client owns retry policy so a misbehaving run can't loop unattended.
 Jobs live in memory only; a service restart drops them and the client
 resubmits.
@@ -54,7 +54,7 @@ _ctx = threading.local()
 _down_until: dict[str, float] = {}
 _jobs: dict[str, AssistJob] = {}
 _jobs_lock = threading.Lock()
-_run_lock = threading.Lock()
+_run_slots = threading.BoundedSemaphore(config.ASSIST_MAX_CONCURRENCY)
 
 
 def _resolve(configured: str | None, name: str) -> str:
@@ -195,7 +195,7 @@ def _probe(name: str, abort: threading.Event, finished: threading.Event) -> None
 
 
 def _execute(job: AssistJob, backends: list[str], prompt: str) -> None:
-    with _run_lock:
+    with _run_slots:
         job.status = "running"
         errors: list[str] = []
         for name in backends:

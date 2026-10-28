@@ -39,7 +39,7 @@ import {
   type PodcastFeed,
   runAssist,
 } from '../lib/miningApi';
-import type { AssistBackend } from '../lib/assistRun';
+import { ASSIST_CONCURRENCY_KEY, readStoredConcurrency, type AssistBackend } from '../lib/assistRun';
 import {
   COMBINED_PROMPT_FILENAME,
   checkCombinedReply,
@@ -247,6 +247,7 @@ export function QuickMinePage() {
     const saved = localStorage.getItem(ASSIST_BACKEND_KEY);
     return saved === 'codex' || saved === 'claude' ? saved : 'auto';
   });
+  const [assistConcurrency, setAssistConcurrency] = useState(readStoredConcurrency);
   const [assistProgress, setAssistProgress] = useState('');
   const [assistActivity, setAssistActivity] = useState<Pick<AssistRunStatus, 'status' | 'live' | 'log'> | null>(null);
   const [assistFailure, setAssistFailure] = useState('');
@@ -777,7 +778,7 @@ export function QuickMinePage() {
     setAssistProgress('Starting…');
     setAssistRunning(true);
     try {
-      const run = await startAssistRun({ runId: jobId, transcript, options: promptOptions, backend: assistBackend });
+      const run = await startAssistRun({ runId: jobId, transcript, options: promptOptions, backend: assistBackend, concurrency: assistConcurrency });
       if (run.status !== 'running') finishAssistRun(run);
     } catch (err) {
       setAssistRunning(false);
@@ -1436,6 +1437,25 @@ export function QuickMinePage() {
                   <option value="auto">Auto (Codex first)</option>
                   <option value="codex">Codex</option>
                   <option value="claude">Claude</option>
+                </select>
+              </label>
+              <label className="row" style={{ gap: '0.35rem' }}>
+                <span className="muted">Agents</span>
+                <select
+                  value={assistConcurrency}
+                  disabled={assistRunning}
+                  onChange={(e) => {
+                    const next = Number(e.target.value);
+                    setAssistConcurrency(next);
+                    localStorage.setItem(ASSIST_CONCURRENCY_KEY, String(next));
+                  }}
+                  title="Assistant calls at once. The box may allow fewer."
+                >
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
                 </select>
               </label>
               {assistRunning ? (

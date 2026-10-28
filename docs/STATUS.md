@@ -142,6 +142,13 @@ repair tooling, research materials and future roadmap ideas remain available.
   assistant" after moving them. `repair:orphaned-sentence-extras` (dry-run by
   default) repoints drafts left on a deleted book; its first production dry run
   found none.
+- **Parallel assistant calls (2026-10-28, local checks only):** Quick import and
+  book extras have an "Agents" 1–5 selector (default 1); the box clamps it to
+  `MINING_ASSIST_MAX_CONCURRENCY` (default 3, set in the service unit). Batches
+  were also shrunk (segmenting 40→20 fragments, extras 25→15 sentences,
+  book extras 100→50). Not yet run live: the service needs a restart to pick up
+  the new unit/cap, and the 8 GB box's memory under 2–3 concurrent CLIs is
+  unmeasured.
 
 - **Game supply:** the 2026-10-17 production probe found only 30 qualifying Growth
   sentences (none introduced) and one introduced audio-backed Remix skeleton.

@@ -45,6 +45,9 @@ Environment=MINING_CLAUDE_PATH=%h/.local/bin/claude
 # 6-11 min, so the 600s default cut some off; a hung backend is caught earlier
 # by the 90s health probe, not by this.
 Environment=MINING_ASSIST_TIMEOUT_SECONDS=1200
+# Assistant CLI calls allowed at once across all runs (each is a node process;
+# the box has 8 GB). Quick import's "Agents" selector is clamped to this.
+Environment=MINING_ASSIST_MAX_CONCURRENCY=3
 ExecStart=%h/projects/jp_sentence_splits/server/youtube-mining/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8003
 Restart=on-failure
 RestartSec=5

@@ -79,7 +79,13 @@ describe('mergeExtraReplies', () => {
 });
 
 describe('runExtraTasks', () => {
-  const base = { sentences, replies: {}, onTaskDone: () => {}, onProgress: () => {}, isCancelled: () => false };
+  const base = {
+    sentences,
+    replies: {},
+    onTaskDone: () => {},
+    onProgress: () => {},
+    isCancelled: () => false,
+  };
 
   it('stops after the capped attempts and keeps finished pieces for a resume', async () => {
     const tasks = planExtraTasks(sentences, only('structure'), 3);
@@ -94,16 +100,55 @@ describe('runExtraTasks', () => {
     expect(Object.keys(first.replies)).toEqual(['structure:1-3']);
 
     const run2 = vi.fn().mockResolvedValue({ reply: 'S6 | a | b | c', backend: 'claude' });
-    const second = await runExtraTasks({ ...base, tasks, replies: first.replies, run: run2 });
+    const second = await runExtraTasks({
+      ...base,
+      tasks,
+      replies: first.replies,
+      run: run2,
+    });
     // The piece itself, then the fix-up rounds for the sentences its reply left unusable.
     expect(run2).toHaveBeenCalledTimes(1 + MAX_REPAIR_ROUNDS);
     expect(second.failure).toBeNull();
   });
 });
 
+describe('runExtraTasks in parallel', () => {
+  it('overlaps pieces up to the limit and keeps every finished piece', async () => {
+    const tasks = planExtraTasks(sentences, only('structure'), 2);
+    let inFlight = 0;
+    let peak = 0;
+    const done: string[] = [];
+    const run = vi.fn(async (prompt: string) => {
+      inFlight++;
+      peak = Math.max(peak, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      inFlight--;
+      void prompt;
+      return { reply: sentences.map((x) => `S${x.handle} | a | b | c`).join('\n'), backend: 'codex' };
+    });
+    const result = await runExtraTasks({
+      sentences,
+      replies: {},
+      onProgress: () => {},
+      isCancelled: () => false,
+      tasks,
+      run,
+      concurrency: 2,
+      onTaskDone: (id) => done.push(id),
+    });
+    expect(peak).toBeLessThanOrEqual(2);
+    expect(Object.keys(result.replies).sort()).toEqual(tasks.map((t) => t.id).sort());
+    expect(done.length).toBe(tasks.length);
+  });
+});
+
 describe('runExtraTasks activity notes', () => {
   it('reports rejected replies, failed calls and saved parts', async () => {
-    const sentences = Array.from({ length: 3 }, (_, i) => ({ handle: i + 1, japanese: `文${i + 1}`, translation: `S${i + 1}` }));
+    const sentences = Array.from({ length: 3 }, (_, i) => ({
+      handle: i + 1,
+      japanese: `文${i + 1}`,
+      translation: `S${i + 1}`,
+    }));
     const [task] = planExtraTasks(sentences, { structure: true });
     const replies = ['no structure lines here', 'S3 | 文3 | role | gloss'];
     const run = vi.fn(async () => {

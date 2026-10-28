@@ -11,7 +11,7 @@ import {
 import { describeRejections } from '../lib/quickImportExtras';
 import { AssistRunActivity } from './AssistRunActivity';
 import { BOOK_EXTRA_KINDS, type BookExtraKind } from '../lib/bookAssistRun';
-import type { AssistBackend } from '../lib/assistRun';
+import { ASSIST_CONCURRENCY_KEY, readStoredConcurrency, type AssistBackend } from '../lib/assistRun';
 import {
   cancelAssistRun,
   deleteAssistRun,
@@ -67,6 +67,7 @@ export function BookAssistExtras({ bookId }: { bookId: string }) {
   const [include, setInclude] = useState<Set<BookExtraKind>>(new Set());
   const [replace, setReplace] = useState<Record<BookExtraKind, Set<number>>>(() => emptyReplace());
   const [reviewing, setReviewing] = useState<BookExtraKind | null>(null);
+  const [concurrency, setConcurrency] = useState(readStoredConcurrency);
   const [backend, setBackend] = useState<AssistBackend>(() => (localStorage.getItem(ASSIST_BACKEND_KEY) as AssistBackend | null) ?? 'auto');
   const [run, setRun] = useState<AssistRunStatus | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -213,6 +214,7 @@ export function BookAssistExtras({ bookId }: { bookId: string }) {
           sentences: plan.sentences.map((s) => ({ handle: s.handle, japanese: s.japanese, translation: s.translation })),
           selection: selectionOf(next) as Record<string, number[]>,
           backend,
+          concurrency,
         }),
       );
       localStorage.setItem(snapshotKey(bookId), JSON.stringify(next));
@@ -238,6 +240,7 @@ export function BookAssistExtras({ bookId }: { bookId: string }) {
           }),
           selection: selectionOf(snapshot) as Record<string, number[]>,
           backend,
+          concurrency,
         }),
       );
     } catch (err) {
@@ -420,9 +423,27 @@ export function BookAssistExtras({ bookId }: { bookId: string }) {
                   <option value="claude">Claude</option>
                 </select>
               </label>
+              <label className="row" style={{ gap: '0.35rem' }}>
+                <span className="muted">Agents</span>
+                <select
+                  value={concurrency}
+                  onChange={(e) => {
+                    const next = Number(e.target.value);
+                    setConcurrency(next);
+                    localStorage.setItem(ASSIST_CONCURRENCY_KEY, String(next));
+                  }}
+                  title="Assistant calls at once. The box may allow fewer."
+                >
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
             <div className="muted" style={{ fontSize: '0.85rem' }}>
-              Needs the mining box (tailnet). It handles about 100 sentences per assistant call (25 for walkthroughs), one call at a time, so a long
+              Needs the mining box (tailnet). It handles about 50 sentences per assistant call (15 for walkthroughs), up to the chosen number of calls at a time, so a long
               book takes a while and waits behind any Quick import in progress. Each finished part is saved onto the book
               as soon as this page sees it (open it again later to catch up); focus targets are not part of this.
             </div>

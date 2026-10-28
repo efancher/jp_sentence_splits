@@ -805,6 +805,7 @@ export async function startAssistRun(input: {
   transcript: WizardTranscriptSeg[];
   options: CombinedPromptOptions;
   backend?: AssistBackend;
+  concurrency?: number;
 }): Promise<AssistRunStatus> {
   const response = await fetch(`${API_BASE}/assist-runs`, {
     method: 'POST',
@@ -821,6 +822,7 @@ export async function startBookExtrasRun(input: {
   sentences: { handle: number; japanese: string; translation: string }[];
   selection: Record<string, number[]>;
   backend?: AssistBackend;
+  concurrency?: number;
 }): Promise<AssistRunStatus> {
   const response = await fetch(`${API_BASE}/assist-runs`, {
     method: 'POST',

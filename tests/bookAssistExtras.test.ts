@@ -29,8 +29,8 @@ describe('planBookExtraTasks', () => {
   it('uses smaller calls for walkthroughs than for other extras', () => {
     const all = Array.from({ length: 100 }, (_, i) => i + 1);
     const tasks = planBookExtraTasks(sentences(100), { walkthroughs: all, structure: all });
-    expect(tasks.filter((t) => t.kind === 'walkthroughs')).toHaveLength(4);
-    expect(tasks.filter((t) => t.kind === 'structure')).toHaveLength(1);
+    expect(tasks.filter((t) => t.kind === 'walkthroughs')).toHaveLength(7);
+    expect(tasks.filter((t) => t.kind === 'structure')).toHaveLength(2);
   });
 
   it('prompts only for the chosen sentences, each with neighbours as context', () => {

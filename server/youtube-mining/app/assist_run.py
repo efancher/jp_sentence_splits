@@ -120,6 +120,7 @@ def is_active(run_id: str) -> bool:
 def start(run_id: str, spec: dict[str, Any]) -> None:
     """Start (or resume) a run. No-op while one for this id is already live."""
     run_dir = _run_dir(run_id)
+    spec = {**spec, "concurrency": max(1, min(int(spec.get("concurrency") or 1), config.ASSIST_MAX_CONCURRENCY))}
     with _lock:
         existing = _procs.get(run_id)
         if existing is not None and existing.poll() is None:

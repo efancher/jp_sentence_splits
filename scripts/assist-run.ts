@@ -58,25 +58,48 @@ async function readError(response: Response): Promise<string> {
 
 let liveState: AssistRunState | null = null;
 
-/** Mirrors the server's view of the call in flight (backend, start time, finished attempts) into the run state. */
-function reportLive(info: { backend: string | null; startedAt: number | null; timeoutSeconds: number | null } | null): void {
+type LiveInfo = {
+  backend: string | null;
+  startedAt: number | null;
+  timeoutSeconds: number | null;
+};
+/** Calls in flight (several when the run is parallel), keyed by a per-call token. */
+const activeCalls = new Map<symbol, LiveInfo>();
+
+/** Mirrors the oldest call in flight (backend, start time) into the run state. */
+function publishLive(): void {
   if (!liveState) return;
+  let oldest: LiveInfo | null = null;
+  for (const info of activeCalls.values()) {
+    if (!oldest || (info.startedAt ?? Infinity) < (oldest.startedAt ?? Infinity)) oldest = info;
+  }
   const prev = liveState.live;
-  if (prev?.backend === info?.backend && prev?.startedAt === info?.startedAt) return;
-  liveState.live = info;
+  if (prev?.backend === oldest?.backend && prev?.startedAt === oldest?.startedAt) return;
+  liveState.live = oldest;
   liveState.updatedAt = Date.now();
   saveState(liveState);
 }
 
+function reportLive(token: symbol, info: LiveInfo | null): void {
+  if (info) activeCalls.set(token, info);
+  else activeCalls.delete(token);
+  publishLive();
+}
+
 async function runAssist(prompt: string, backend: string): Promise<{ reply: string; backend: string | null }> {
+  const token = Symbol('call');
   try {
-    return await runAssistCall(prompt, backend);
+    return await runAssistCall(prompt, backend, token);
   } finally {
-    reportLive(null);
+    reportLive(token, null);
   }
 }
 
-async function runAssistCall(prompt: string, backend: string): Promise<{ reply: string; backend: string | null }> {
+async function runAssistCall(
+  prompt: string,
+  backend: string,
+  token: symbol,
+): Promise<{ reply: string; backend: string | null }> {
   const created = await fetch(`${API_BASE}/assist`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -99,7 +122,12 @@ async function runAssistCall(prompt: string, backend: string): Promise<{ reply: 
       error?: string | null;
       startedAt?: number | null;
       timeoutSeconds?: number | null;
-      attempts?: { backend: string; outcome: string; detail?: string | null; seconds: number }[];
+      attempts?: {
+        backend: string;
+        outcome: string;
+        detail?: string | null;
+        seconds: number;
+      }[];
     };
     if (status.timeoutSeconds) maxWaitMs = status.timeoutSeconds * 2000 + 2 * 60 * 1000;
     const attempts = status.attempts ?? [];
@@ -116,7 +144,7 @@ async function runAssistCall(prompt: string, backend: string): Promise<{ reply: 
       saveState(liveState);
     }
     if (status.status === 'running' && status.backend) {
-      reportLive({
+      reportLive(token, {
         backend: status.backend,
         startedAt: status.startedAt ? Math.round(status.startedAt * 1000) : null,
         timeoutSeconds: status.timeoutSeconds ?? null,
@@ -131,7 +159,10 @@ async function main(): Promise<void> {
   const spec = JSON.parse(readFileSync(join(dir!, 'spec.json'), 'utf8')) as AssistRunSpec & Partial<BookAssistRunSpec>;
   let state = emptyAssistRunState();
   try {
-    state = { ...state, ...(JSON.parse(readFileSync(join(dir!, 'state.json'), 'utf8')) as AssistRunState) };
+    state = {
+      ...state,
+      ...(JSON.parse(readFileSync(join(dir!, 'state.json'), 'utf8')) as AssistRunState),
+    };
   } catch {
     // first run: no state yet
   }
@@ -139,9 +170,21 @@ async function main(): Promise<void> {
   try {
     const run = (prompt: string) => runAssist(prompt, spec.backend ?? 'auto');
     if (spec.sentences && spec.selection) {
-      await runBookExtrasPipeline({ spec: { sentences: spec.sentences, selection: spec.selection }, state, run, save: saveState, isCancelled: () => cancelled });
+      await runBookExtrasPipeline({
+        spec: { sentences: spec.sentences, selection: spec.selection },
+        state,
+        run,
+        save: saveState,
+        isCancelled: () => cancelled,
+      });
     } else {
-      await runAssistPipeline({ spec, state, run, save: saveState, isCancelled: () => cancelled });
+      await runAssistPipeline({
+        spec,
+        state,
+        run,
+        save: saveState,
+        isCancelled: () => cancelled,
+      });
     }
   } catch (err) {
     state.status = 'failed';

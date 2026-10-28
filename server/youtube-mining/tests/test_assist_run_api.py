@@ -79,6 +79,18 @@ def test_start_writes_spec_and_reports_running(
     assert len(spawned) == 1
 
 
+def test_concurrency_is_clamped_to_the_box_cap(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(config, "ASSIST_MAX_CONCURRENCY", 3)
+    assert client.post("/assist-runs", json={**BODY, "concurrency": 5}).status_code == 200
+    spec = json.loads((tmp_path / "assist-runs" / "job_1" / "spec.json").read_text())
+    assert spec["concurrency"] == 3
+    assert client.post("/assist-runs", json={**BODY, "runId": "job_2"}).status_code == 200
+    spec = json.loads((tmp_path / "assist-runs" / "job_2" / "spec.json").read_text())
+    assert spec["concurrency"] == 1
+
+
 def test_start_is_idempotent_while_live(client: TestClient, spawned: list[list[str]]) -> None:
     client.post("/assist-runs", json=BODY)
     client.post("/assist-runs", json=BODY)

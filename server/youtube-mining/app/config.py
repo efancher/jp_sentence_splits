@@ -196,6 +196,9 @@ ASSIST_BACKENDS = [
     if name.strip()
 ]
 ASSIST_TIMEOUT_SECONDS = int(os.environ.get("MINING_ASSIST_TIMEOUT_SECONDS", "600"))
+# Assistant CLI calls allowed at once, across every run. Each call is a node
+# process on an 8 GB box, so keep this low; runs asking for more are clamped.
+ASSIST_MAX_CONCURRENCY = max(1, int(os.environ.get("MINING_ASSIST_MAX_CONCURRENCY", "3")))
 ASSIST_MAX_PROMPT_CHARS = int(os.environ.get("MINING_ASSIST_MAX_PROMPT_CHARS", "200000"))
 
 # Optional ntfy topic URL for "Quick import is waiting for you" phone

@@ -7,10 +7,17 @@
  * Handles are book-wide S-numbers (position in the whole book + 1), so pieces
  * from different ranges merge without remapping.
  */
-import { describeStop, otherFailures } from './assistChunks';
-import { EXTRA_RANGE_SENTENCES, describeTaskRange, mergeExtraReplies, runExtraTasks, type ExtraTask, type ExtrasSentence } from './assistExtras';
+import { clampConcurrency, describeStop, otherFailures } from './assistChunks';
+import {
+  EXTRA_RANGE_SENTENCES,
+  describeTaskRange,
+  mergeExtraReplies,
+  runExtraTasks,
+  type ExtraTask,
+  type ExtrasSentence,
+} from './assistExtras';
 import { singleExtraBlock, type CombinedReplySections, type ExtraKind } from './combinedImportPrompt';
-import { logPatch, type AssistBackend, type AssistRunState } from './assistRun';
+import { logPatch, parallelProgress, type AssistBackend, type AssistRunState } from './assistRun';
 
 export const BOOK_EXTRA_KINDS = ['structure', 'constructions', 'walkthroughs', 'comprehension', 'particles'] as const;
 export type BookExtraKind = (typeof BOOK_EXTRA_KINDS)[number];
@@ -23,9 +30,11 @@ export interface BookAssistRunSpec {
   sentences: ExtrasSentence[];
   selection: BookExtraSelection;
   backend?: AssistBackend;
+  /** Assistant calls in flight at once (1–5; the box may cap it lower). Absent = 1. */
+  concurrency?: number;
 }
 
-export const BOOK_EXTRA_RANGE_SENTENCES = 100;
+export const BOOK_EXTRA_RANGE_SENTENCES = 50;
 /** Walkthroughs are far more output per sentence; 100 per call outran the assistant timeout. */
 const WALKTHROUGH_RANGE_SENTENCES = EXTRA_RANGE_SENTENCES;
 
@@ -83,7 +92,10 @@ export function planBookExtraTasks(
 }
 
 /** Finished pieces for one kind, joined into the reply section the importer already understands. */
-export function mergeBookExtraReplies(kind: BookExtraKind, replies: Readonly<Record<string, string>>): CombinedReplySections {
+export function mergeBookExtraReplies(
+  kind: BookExtraKind,
+  replies: Readonly<Record<string, string>>,
+): CombinedReplySections {
   const tasks = Object.keys(replies)
     .filter((id) => id.startsWith(`${kind}:`))
     .map((id) => ({ id, kind: kind as ExtraKind }) as ExtraTask);
@@ -102,6 +114,7 @@ export async function runBookExtrasPipeline(input: {
     Object.assign(state, patch, { updatedAt: Date.now() });
     input.save(state);
   };
+  const concurrency = clampConcurrency(spec.concurrency);
   const tasks = planBookExtraTasks(spec.sentences, spec.selection);
   update({ status: 'running', phase: 'extras', failure: null });
   if (tasks.length === 0) {
@@ -113,12 +126,21 @@ export async function runBookExtrasPipeline(input: {
     sentences: spec.sentences,
     replies: state.extraReplies,
     run: input.run,
+    concurrency,
     onTaskDone: (taskId, reply) => update({ extraReplies: { ...state.extraReplies, [taskId]: reply } }),
     onProgress: (p) =>
       update({
-        progress: `${p.task.heading.toLowerCase()} ${describeTaskRange(p.task)} (${p.position + 1} of ${p.total})${
-          p.attempt > 1 ? `, retry ${p.attempt - 1}` : ''
-        }${p.backend ? ` — ${p.backend}` : ' — asking the assistant…'}`,
+        progress:
+          concurrency > 1
+            ? parallelProgress(
+                'Extras',
+                Object.keys(state.extraReplies).length,
+                p.total,
+                Math.min(concurrency, p.total - Object.keys(state.extraReplies).length),
+              )
+            : `${p.task.heading.toLowerCase()} ${describeTaskRange(p.task)} (${p.position + 1} of ${p.total})${
+                p.attempt > 1 ? `, retry ${p.attempt - 1}` : ''
+              }${p.backend ? ` — ${p.backend}` : ' — asking the assistant…'}`,
       }),
     onNote: (text) => update(logPatch(state, text)),
     isCancelled: input.isCancelled,

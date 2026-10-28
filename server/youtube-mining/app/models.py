@@ -496,6 +496,8 @@ class AssistRunRequest(BaseModel):
     transcript: list[AssistRunSegment] = Field(default_factory=list)
     options: AssistRunOptions = Field(default_factory=AssistRunOptions)
     backend: AssistBackend = "auto"
+    # Assistant calls in flight at once; the box clamps it to its own cap.
+    concurrency: int = Field(default=1, ge=1, le=5)
     # Book-extras mode (existing book): the whole book's sentences plus, per
     # extra kind, the 1-based handles to generate it for. Replaces `transcript`.
     sentences: list[AssistRunBookSentence] | None = None

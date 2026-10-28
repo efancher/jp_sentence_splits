@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { CHUNK_FRAGMENTS } from './assistChunks';
 import { emptyAssistRunState, runAssistPipeline } from './assistRun';
 
 const seg = (startS: number) => ({
@@ -49,15 +50,15 @@ describe('runAssistPipeline', () => {
   });
 
   it('stops after the retry cap, keeps finished parts, and resumes without redoing them', async () => {
-    const transcript = Array.from({ length: 41 }, (_, i) => seg(i * 6));
+    const transcript = Array.from({ length: CHUNK_FRAGMENTS + 1 }, (_, i) => seg(i * 6));
     const line = (i: number) => {
       const total = i * 6;
       return `[${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}] あ。 || Ah.`;
     };
     const reply = (from: number, to: number) =>
       ['=== SENTENCES ===', ...Array.from({ length: to - from }, (_, k) => line(from + k)), '=== END ==='].join('\n');
-    const partOneReply = reply(0, 40);
-    const partTwoReply = reply(40, 41);
+    const partOneReply = reply(0, CHUNK_FRAGMENTS);
+    const partTwoReply = reply(CHUNK_FRAGMENTS, CHUNK_FRAGMENTS + 1);
 
     let failSecondPart = true;
     const run = vi.fn(async (prompt: string) => {

@@ -3,6 +3,7 @@ covers routing, the codex->claude fallback and the no-retry error path."""
 
 from __future__ import annotations
 
+import threading
 import time
 
 import pytest
@@ -104,3 +105,27 @@ def test_hung_backend_is_failed_over_after_a_failed_probe(client: TestClient, mo
     assert body["status"] == "done" and body["backend"] == "claude"
     assert [a["backend"] for a in body["attempts"]] == ["codex", "claude"]
     assert assist.backend_order("auto")[-1] == "codex"
+
+
+def test_concurrent_requests_are_capped_by_the_slot_count(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(assist, "_run_slots", threading.BoundedSemaphore(2))
+    state = {"now": 0, "peak": 0}
+    guard = threading.Lock()
+
+    def slow(prompt: str) -> str:
+        with guard:
+            state["now"] += 1
+            state["peak"] = max(state["peak"], state["now"])
+        time.sleep(0.1)
+        with guard:
+            state["now"] -= 1
+        return "ok"
+
+    monkeypatch.setitem(assist.RUNNERS, "codex", slow)
+    monkeypatch.setattr(assist, "PROBE_AFTER_SECONDS", 60)
+    jobs = [assist.submit("p", "codex") for _ in range(5)]
+    deadline = time.time() + 10
+    while time.time() < deadline and any(j.status not in ("done", "error") for j in jobs):
+        time.sleep(0.02)
+    assert [j.status for j in jobs] == ["done"] * 5
+    assert state["peak"] == 2

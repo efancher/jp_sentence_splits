@@ -915,12 +915,12 @@ Targets are constants; no settings UI.
   **"Send to assistant"** button runs the whole job on the mining box as one
   resumable run (`POST /assist-runs`, `server/youtube-mining/app/assist_run.py`
   spawning `scripts/assist-run.ts`; run id = the mining job id), so the page can
-  close: segment+translate in 40-fragment parts (`src/lib/assistChunks.ts`),
-  then the ticked extras in ~25-sentence ranges with 3 sentences of context
+  close: segment+translate in 20-fragment parts (`src/lib/assistChunks.ts`),
+  then the ticked extras in ~15-sentence ranges with 3 sentences of context
   before and 2 after, focus targets in one whole-episode call
   (`src/lib/assistExtras.ts`), orchestrated by `src/lib/assistRun.ts`. Each
   prompt goes to the box's `POST /assist` (the `codex` CLI, then `claude -p` as
-  backup, one at a time, tailnet-only; a "Primary" selector next to the button
+  backup, tailnet-only; up to `MINING_ASSIST_MAX_CONCURRENCY` (default 3) calls run at once and an "Agents" 1–5 selector (localStorage `quickmine.assistConcurrency`, sent as `concurrency`, clamped by the box) sets how many of a run's parts are in flight — a failed part lets in-flight ones finish and be saved; a "Primary" selector next to the button
   — Auto/Codex/Claude, remembered in localStorage — puts the chosen CLI first and
   keeps the other as backup, sent as `backend` in the `/assist-runs` spec). Every piece is validated (cut-off
   checks) and saved to the run's `state.json` on the box as it lands; a piece
@@ -937,8 +937,8 @@ Targets are constants; no settings UI.
   Activity list. The server also probes a backend with a one-word prompt 90s
   into a call; if the probe hangs (out of credits / wedged) the call is killed,
   the backend is deprioritised for 15 minutes and the other CLI takes over
-  immediately. Book extras send walkthroughs 25 sentences per call and other
-  kinds 100. The page polls
+  immediately. Book extras send walkthroughs 15 sentences per call and other
+  kinds 50. The page polls
   `GET /assist-runs/{id}` and, when it reopens an import (the active job is
   remembered), re-attaches to a running run or picks up a finished one. The
   review step's "Extras with the assistant" panel is still the client-driven

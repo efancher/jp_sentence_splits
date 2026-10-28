@@ -17,7 +17,37 @@ import {
 import { parseAiCombinedReply } from './miningQuickImport';
 import type { WizardTranscriptSeg } from './miningTranscript';
 
-export const CHUNK_FRAGMENTS = 40;
+/** Small parts keep each assistant call quick and cheap to redo; several can run side by side. */
+export const CHUNK_FRAGMENTS = 20;
+/** Most assistant calls one run may have in flight (the box may allow fewer). */
+export const MAX_ASSIST_CONCURRENCY = 5;
+
+export function clampConcurrency(value: unknown): number {
+  const n = typeof value === 'number' && Number.isFinite(value) ? Math.floor(value) : 1;
+  return Math.min(MAX_ASSIST_CONCURRENCY, Math.max(1, n));
+}
+
+/**
+ * Runs `worker` over `items` with up to `concurrency` in flight, handing out
+ * items in order. Stops handing out new items once `shouldStop()` is true;
+ * calls already in flight are left to finish. Workers must not throw.
+ */
+export async function runPool<T>(
+  items: readonly T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<void>,
+  shouldStop: () => boolean,
+): Promise<void> {
+  let next = 0;
+  const lanes = Array.from({ length: Math.min(clampConcurrency(concurrency), items.length) }, async () => {
+    while (!shouldStop()) {
+      const index = next++;
+      if (index >= items.length) return;
+      await worker(items[index]!, index);
+    }
+  });
+  await Promise.all(lanes);
+}
 /** One try plus one automatic retry. */
 export const MAX_ATTEMPTS_PER_CHUNK = 2;
 
@@ -78,7 +108,13 @@ export function validateChunkReply(reply: string, chunk: WizardTranscriptSeg[]):
   const last = chunk.at(-1);
   const rows = parseAiCombinedReply(sections.sentences, last?.endMs ?? 0);
   if (rows.length === 0) return 'The reply had no "[m:ss] japanese || english" lines.';
-  const warnings = checkCombinedReply({ reply, sections, rows, transcript: chunk, options: NO_EXTRAS });
+  const warnings = checkCombinedReply({
+    reply,
+    sections,
+    rows,
+    transcript: chunk,
+    options: NO_EXTRAS,
+  });
   return warnings[0] ?? null;
 }
 
@@ -110,16 +146,25 @@ export async function runSegmentChunks(input: {
   /** Optional activity-log line (rejected reply, failed call, saved part). */
   onNote?: (text: string) => void;
   isCancelled: () => boolean;
+  /** Parts asked for at once (default 1). When one part fails the others in flight still finish and are saved. */
+  concurrency?: number;
 }): Promise<ChunkRunResult> {
   const { chunks, run } = input;
   const replies = chunks.map((_, i) => input.replies[i] ?? null);
-  for (let index = 0; index < chunks.length; index++) {
-    if (replies[index]) continue;
+  const failures: { index: number; error: string }[] = [];
+  let cancelled = false;
+  let outOfCredits = false;
+  const pending = chunks.flatMap((_, index) => (replies[index] ? [] : [index]));
+
+  const doChunk = async (index: number): Promise<void> => {
     const chunk = chunks[index]!;
     let lastError = '';
     const label = `sentences part ${index + 1} of ${chunks.length}`;
     for (let attempt = 1; attempt <= MAX_ATTEMPTS_PER_CHUNK; attempt++) {
-      if (input.isCancelled()) return { replies, failure: null, cancelled: true };
+      if (input.isCancelled()) {
+        cancelled = true;
+        return;
+      }
       input.onProgress({ index, total: chunks.length, attempt, backend: null });
       try {
         const { reply, backend } = await run(buildChunkPrompt(chunk, index, chunks.length));
@@ -133,15 +178,25 @@ export async function runSegmentChunks(input: {
         replies[index] = reply;
         input.onChunkDone(index, reply);
         input.onNote?.(`${label}: saved (${backend ?? 'assistant'})`);
-        break;
+        return;
       } catch (err) {
-        if (input.isCancelled()) return { replies, failure: null, cancelled: true };
+        if (input.isCancelled()) {
+          cancelled = true;
+          return;
+        }
         lastError = err instanceof Error ? err.message : 'Assistant failed';
         input.onNote?.(`${label}: call failed (${lastError}) — attempt ${attempt} of ${MAX_ATTEMPTS_PER_CHUNK}`);
-        if (isOutOfCreditsError(lastError)) break;
+        if (isOutOfCreditsError(lastError)) {
+          outOfCredits = true;
+          break;
+        }
       }
     }
-    if (!replies[index]) return { replies, failure: { index, error: lastError }, cancelled: false };
-  }
-  return { replies, failure: null, cancelled: false };
+    failures.push({ index, error: lastError });
+  };
+
+  await runPool(pending, input.concurrency ?? 1, doChunk, () => cancelled || failures.length > 0 || outOfCredits);
+  if (cancelled) return { replies, failure: null, cancelled: true };
+  const first = failures.sort((a, b) => a.index - b.index)[0] ?? null;
+  return { replies, failure: first, cancelled: false };
 }

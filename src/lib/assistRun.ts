@@ -7,18 +7,27 @@
  * finished piece, so a stopped/failed/interrupted run resumes without
  * repeating work.
  */
-import { chunkTranscript, describeStop, mergeChunkReplies, otherFailures, runSegmentChunks } from './assistChunks';
 import {
-  mergeExtraReplies,
-  planExtraTasks,
-  runExtraTasks,
-  type ExtrasSentence,
-} from './assistExtras';
+  chunkTranscript,
+  clampConcurrency,
+  describeStop,
+  mergeChunkReplies,
+  otherFailures,
+  runSegmentChunks,
+} from './assistChunks';
+import { mergeExtraReplies, planExtraTasks, runExtraTasks, type ExtrasSentence } from './assistExtras';
 import { splitCombinedReply, type CombinedPromptOptions, type CombinedReplySections } from './combinedImportPrompt';
 import { parseAiCombinedReply } from './miningQuickImport';
 import type { WizardTranscriptSeg } from './miningTranscript';
 
 export type AssistRunStatus = 'running' | 'done' | 'failed' | 'cancelled' | 'interrupted';
+
+export const ASSIST_CONCURRENCY_KEY = 'quickmine.assistConcurrency';
+
+/** The learner's saved "agents at once" choice (browser only; 1 when unset). */
+export function readStoredConcurrency(): number {
+  return clampConcurrency(Number(localStorage.getItem(ASSIST_CONCURRENCY_KEY)));
+}
 
 export type AssistBackend = 'auto' | 'codex' | 'claude';
 
@@ -27,6 +36,13 @@ export interface AssistRunSpec {
   options: CombinedPromptOptions;
   /** Which CLI to try first on the box; the other stays as backup. Absent = "auto" (box default order). */
   backend?: AssistBackend;
+  /** Assistant calls in flight at once (1–5; the box may cap it lower). Absent = 1. */
+  concurrency?: number;
+}
+
+/** "Sentences: 3 of 8 parts done, 2 running — codex" when calls overlap; the single-call wording otherwise. */
+export function parallelProgress(label: string, done: number, total: number, running: number): string {
+  return `${label}: ${done} of ${total} parts done, ${running} running`;
 }
 
 export interface AssistRunState {
@@ -65,7 +81,9 @@ const MAX_LOG_ENTRIES = 30;
 
 /** State patch that appends one line to the activity log. */
 export function logPatch(state: Pick<AssistRunState, 'log'>, text: string): Pick<AssistRunState, 'log'> {
-  return { log: [...(state.log ?? []), { at: Date.now(), text }].slice(-MAX_LOG_ENTRIES) };
+  return {
+    log: [...(state.log ?? []), { at: Date.now(), text }].slice(-MAX_LOG_ENTRIES),
+  };
 }
 
 export function emptyAssistRunState(): AssistRunState {
@@ -97,11 +115,16 @@ export async function runAssistPipeline(input: {
     Object.assign(state, patch, { updatedAt: Date.now() });
     input.save(state);
   };
+  const concurrency = clampConcurrency(spec.concurrency);
   const via = (backend: string | null) => (backend ? ` — ${backend}` : ' — asking the assistant…');
 
   const chunks = chunkTranscript(spec.transcript);
   if (state.segmentReplies.length !== chunks.length) {
-    update({ segmentReplies: chunks.map(() => null), sentencesReply: null, extras: null });
+    update({
+      segmentReplies: chunks.map(() => null),
+      sentencesReply: null,
+      extras: null,
+    });
   }
   update({ status: 'running', phase: 'sentences', failure: null });
 
@@ -115,11 +138,20 @@ export async function runAssistPipeline(input: {
         segmentReplies[index] = reply;
         update({ segmentReplies });
       },
+      concurrency,
       onProgress: (p) =>
         update({
-          progress: `Sentences: part ${p.index + 1} of ${p.total}${
-            p.attempt > 1 ? ` (retry ${p.attempt - 1})` : ''
-          }${via(p.backend)}`,
+          progress:
+            concurrency > 1
+              ? parallelProgress(
+                  'Sentences',
+                  state.segmentReplies.filter(Boolean).length,
+                  p.total,
+                  Math.min(concurrency, p.total - state.segmentReplies.filter(Boolean).length),
+                )
+              : `Sentences: part ${p.index + 1} of ${p.total}${
+                  p.attempt > 1 ? ` (retry ${p.attempt - 1})` : ''
+                }${via(p.backend)}`,
         }),
       onNote: (text) => update(logPatch(state, text)),
       isCancelled: input.isCancelled,
@@ -141,7 +173,9 @@ export async function runAssistPipeline(input: {
       });
       return state;
     }
-    update({ sentencesReply: mergeChunkReplies(result.replies.filter((r): r is string => r !== null)) });
+    update({
+      sentencesReply: mergeChunkReplies(result.replies.filter((r): r is string => r !== null)),
+    });
   }
 
   const wantsExtras = Object.values(spec.options).some(Boolean);
@@ -166,15 +200,24 @@ export async function runAssistPipeline(input: {
     sentences,
     replies: state.extraReplies,
     run,
+    concurrency,
     onTaskDone: (taskId, reply) => {
       const extraReplies = { ...state.extraReplies, [taskId]: reply };
       update({ extraReplies, extras: mergeExtraReplies(tasks, extraReplies) });
     },
     onProgress: (p) =>
       update({
-        progress: `Extras: ${p.task.heading.toLowerCase()} ${p.task.from}–${p.task.to} (${p.position + 1} of ${p.total})${
-          p.attempt > 1 ? `, retry ${p.attempt - 1}` : ''
-        }${via(p.backend)}`,
+        progress:
+          concurrency > 1
+            ? parallelProgress(
+                'Extras',
+                Object.keys(state.extraReplies).length,
+                p.total,
+                Math.min(concurrency, p.total - Object.keys(state.extraReplies).length),
+              )
+            : `Extras: ${p.task.heading.toLowerCase()} ${p.task.from}–${p.task.to} (${p.position + 1} of ${p.total})${
+                p.attempt > 1 ? `, retry ${p.attempt - 1}` : ''
+              }${via(p.backend)}`,
       }),
     onNote: (text) => update(logPatch(state, text)),
     isCancelled: input.isCancelled,
@@ -196,6 +239,11 @@ export async function runAssistPipeline(input: {
     });
     return state;
   }
-  update({ status: 'done', phase: null, progress: '', extras: mergeExtraReplies(tasks, result.replies) });
+  update({
+    status: 'done',
+    phase: null,
+    progress: '',
+    extras: mergeExtraReplies(tasks, result.replies),
+  });
   return state;
 }
