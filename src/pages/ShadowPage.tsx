@@ -981,7 +981,8 @@ export function ShadowPage() {
               <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>{snapshotBackfill.message}</p>
             ) : null}
             <AttemptPitchGrid
-              summaries={analysisSummaries}
+              // Deleting an attempt leaves its analysis summary behind; only attempts still in the list count here.
+              summaries={analysisSummaries.filter((summary) => attempts.some((attempt) => attempt.id === summary.id))}
               labelFor={(_id, createdAt) =>
                 new Date(createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
               }
