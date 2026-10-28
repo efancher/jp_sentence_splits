@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 
 import type { KanaTimelineEntry } from '../lib/kanaTimeline';
-import { voicedTimeSpan, type PitchAnalysisPayload } from '../lib/pitch';
+import { robustRange, voicedTimeSpan, type PitchAnalysisPayload } from '../lib/pitch';
 import { KanaTimelineRow } from './KanaTimelineRow';
 
 const WIDTH = 320;
@@ -95,8 +95,8 @@ export function MeasuredPitchContour({
     );
     if (voiced.length < 2) return null;
     const values = voiced.map((frame) => frame.relativeSemitones as number);
-    const min = scaleRange ? Math.min(scaleRange.min, ...values) : Math.min(...values);
-    const max = scaleRange ? Math.max(scaleRange.max, ...values) : Math.max(...values);
+    // Robust range (see `robustRange`); points outside it are clamped when drawn.
+    const { min, max } = scaleRange ?? robustRange(values);
     const span = Math.max(0.001, max - min);
     const windowSpan = Math.max(0.001, window.end - window.start);
     // A 0-semitone (the speaker's own median) reference line, when it falls
@@ -104,7 +104,7 @@ export function MeasuredPitchContour({
     // be read against a fixed point instead of only against its own edges.
     const zeroY =
       min <= 0 && max >= 0 ? height - PAD_Y - ((0 - min) / span) * (height - 2 * PAD_Y) : null;
-    const extentSemitones = (scaleRange ? scaleRange.max - scaleRange.min : max - min).toFixed(1);
+    const extentSemitones = (max - min).toFixed(1);
 
     // Equal-time rows of `wrapSeconds` (one row when unset or the clip is
     // shorter), all on the same vertical scale and horizontal time scale so
@@ -130,8 +130,8 @@ export function MeasuredPitchContour({
         }
         lastVoicedTime = frame.timeSeconds;
         const x = ((frame.timeSeconds - start) / rowSeconds) * WIDTH;
-        const y =
-          height - PAD_Y - ((frame.relativeSemitones - min) / span) * (height - 2 * PAD_Y);
+        const clamped = Math.min(max, Math.max(min, frame.relativeSemitones));
+        const y = height - PAD_Y - ((clamped - min) / span) * (height - 2 * PAD_Y);
         current.push(`${x.toFixed(1)},${y.toFixed(1)}`);
       });
       if (current.length >= 2) runs.push(current.join(' '));

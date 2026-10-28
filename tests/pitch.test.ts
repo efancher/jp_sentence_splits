@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  correctPitchOutliers,
   estimateFramePitch,
   extractPitch,
   hzToRelativeSemitones,
@@ -201,5 +202,50 @@ describe('pitchSemitoneRange', () => {
     // the *uncropped* track here so a word crop shares the whole clip's scale.
     const frames = [frame(-4), frame(-1), frame(0), frame(2), frame(5), frame(null)];
     expect(pitchSemitoneRange({ frames })).toEqual({ min: -4, max: 5 });
+  });
+
+  it('ignores a lone outlier on long tracks', () => {
+    const frames: PitchFrame[] = Array.from({ length: 100 }, (_, i) =>
+      frame(i === 50 ? 24 : (i % 5) - 2),
+    );
+    expect(pitchSemitoneRange({ frames })!.max).toBeLessThan(5);
+  });
+});
+
+describe('correctPitchOutliers', () => {
+  const track = (hzs: Array<number | null>): PitchFrame[] =>
+    hzs.map((hz, index) => ({
+      timeSeconds: index * 0.016,
+      hz,
+      voiced: hz !== null,
+      confidence: hz === null ? 0 : 0.9,
+      relativeSemitones: null,
+    }));
+
+  it('folds octave errors, including a sustained one, back to the surrounding octave', () => {
+    const hzs = Array.from({ length: 40 }, (_, i) => 200 + (i % 3));
+    for (const i of [10, 11, 12, 13, 14]) hzs[i] = 100; // sustained half-octave error
+    hzs[25] = 400; // single-frame double-octave error
+    const frames = track(hzs);
+    correctPitchOutliers(frames);
+    for (const f of frames) {
+      expect(f.hz!).toBeGreaterThan(190);
+      expect(f.hz!).toBeLessThan(215);
+    }
+  });
+
+  it('replaces an unfoldable single-frame spike with its neighbourhood', () => {
+    const hzs = Array.from({ length: 30 }, () => 200);
+    hzs[15] = 200 * 2 ** (8 / 12); // 8 st up: not an octave multiple
+    const frames = track(hzs);
+    correctPitchOutliers(frames);
+    expect(frames[15]!.hz).toBeCloseTo(200, 5);
+  });
+
+  it('keeps a genuine sustained pitch jump', () => {
+    const hzs = [...Array.from({ length: 20 }, () => 150), ...Array.from({ length: 20 }, () => 190)];
+    const frames = track(hzs);
+    correctPitchOutliers(frames);
+    expect(frames[35]!.hz).toBeCloseTo(190, 5);
   });
 });

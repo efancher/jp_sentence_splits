@@ -30,7 +30,7 @@ export interface PitchAnalysisPayload {
 }
 
 /** Bump when `extractPitch`'s DSP would meaningfully change its output. */
-export const PITCH_TRACK_VERSION = 2;
+export const PITCH_TRACK_VERSION = 3;
 
 /**
  * Cached YIN pitch track of a sentence's reference clip — the *measured*
@@ -144,9 +144,97 @@ export function medianHz(values: number[]): number | null {
   return sorted[Math.floor(sorted.length / 2)] ?? null;
 }
 
+/** Frames further than this (semitones) from the running reference are treated as suspect. */
+const OCTAVE_SUSPECT_ST = 6;
+/** Voiced frames considered when forming the running reference. */
+const REFERENCE_WINDOW = 9;
+/** Consecutive unfoldable far-off frames that are accepted as a genuine pitch jump. */
+const GENUINE_JUMP_FRAMES = 6;
+/** Consecutive folded frames (~0.3s) after which an "octave error" is taken as a real octave move. */
+const SUSTAINED_FOLD_FRAMES = 20;
+/** A frame this far from its local median is replaced by it (short glitches). */
+const SPIKE_ST = 3;
+/** Voiced frames more than this far apart in time are not neighbours for spike removal. */
+const NEIGHBOUR_GAP_SECONDS = 0.08;
+
+const semitonesBetween = (hz: number, ref: number): number => 12 * Math.log2(hz / ref);
+
+/**
+ * Repairs YIN's classic octave errors in a raw track (mutates `frames`).
+ *
+ * 1. Octave folding — walk the voiced frames in time order against a running
+ *    median of recently accepted readings; a frame more than
+ *    `OCTAVE_SUSPECT_ST` away whose ×2 or ÷2 lands back near the reference
+ *    is corrected to that octave. Far-off frames that can't be folded don't
+ *    update the reference, unless `GENUINE_JUMP_FRAMES` in a row agree, in
+ *    which case it is a real pitch jump and the reference follows it.
+ * 2. Spike removal — a 5-frame median over contiguous voiced frames replaces
+ *    a reading more than `SPIKE_ST` from it (short non-octave glitches).
+ */
+export function correctPitchOutliers(frames: PitchFrame[]): void {
+  const voiced = frames.filter((frame) => frame.voiced && frame.hz !== null);
+  if (voiced.length < 3) return;
+  const globalMedian = medianHz(voiced.map((frame) => frame.hz as number)) as number;
+
+  const accepted: number[] = [];
+  let stray: PitchFrame[] = [];
+  let foldedRun: Array<{ frame: PitchFrame; original: number }> = [];
+  for (const frame of voiced) {
+    const hz = frame.hz as number;
+    const ref =
+      accepted.length >= 3
+        ? (medianHz(accepted.slice(-REFERENCE_WINDOW)) as number)
+        : globalMedian;
+    if (Math.abs(semitonesBetween(hz, ref)) <= OCTAVE_SUSPECT_ST) {
+      accepted.push(hz);
+      stray = [];
+      foldedRun = [];
+      continue;
+    }
+    const folded = [hz * 2, hz / 2].find(
+      (candidate) => Math.abs(semitonesBetween(candidate, ref)) <= OCTAVE_SUSPECT_ST - 2,
+    );
+    if (folded !== undefined) {
+      foldedRun.push({ frame, original: hz });
+      frame.hz = folded;
+      accepted.push(folded);
+      stray = [];
+      if (foldedRun.length >= SUSTAINED_FOLD_FRAMES) {
+        // Too long to be a tracker glitch: the speaker really moved an octave.
+        for (const entry of foldedRun) entry.frame.hz = entry.original;
+        accepted.length = 0;
+        for (const entry of foldedRun) accepted.push(entry.original);
+        foldedRun = [];
+      }
+      continue;
+    }
+    stray.push(frame);
+    if (stray.length >= GENUINE_JUMP_FRAMES) {
+      for (const strayFrame of stray) accepted.push(strayFrame.hz as number);
+      stray = [];
+    }
+  }
+
+  const folded = voiced.map((frame) => frame.hz as number);
+  voiced.forEach((frame, index) => {
+    const neighbours: number[] = [folded[index]!];
+    for (const direction of [-1, 1]) {
+      let previous = voiced[index]!;
+      for (let step = 1; step <= 2; step += 1) {
+        const next = voiced[index + direction * step];
+        if (!next || Math.abs(next.timeSeconds - previous.timeSeconds) > NEIGHBOUR_GAP_SECONDS) break;
+        neighbours.push(folded[index + direction * step]!);
+        previous = next;
+      }
+    }
+    if (neighbours.length < 5) return;
+    const local = medianHz(neighbours) as number;
+    if (Math.abs(semitonesBetween(folded[index]!, local)) > SPIKE_ST) frame.hz = local;
+  });
+}
+
 export function extractPitch(audio: CanonicalAudio): PitchAnalysisPayload {
   const frames: PitchFrame[] = [];
-  const voicedHz: number[] = [];
   let peakRms = 0;
   for (let start = 0; start + FRAME_SIZE <= audio.samples.length; start += HOP_SIZE) {
     peakRms = Math.max(peakRms, frameRms(audio.samples.subarray(start, start + FRAME_SIZE)));
@@ -163,7 +251,6 @@ export function extractPitch(audio: CanonicalAudio): PitchAnalysisPayload {
     }
     const { hz, confidence } = yinPitch(frame, audio.sampleRate, 0.35);
     const voiced = hz !== null && confidence >= 0.4;
-    if (voiced && hz !== null) voicedHz.push(hz);
     frames.push({
       timeSeconds,
       hz: voiced ? hz : null,
@@ -172,7 +259,8 @@ export function extractPitch(audio: CanonicalAudio): PitchAnalysisPayload {
       relativeSemitones: null,
     });
   }
-  const median = medianHz(voicedHz);
+  correctPitchOutliers(frames);
+  const median = medianHz(frames.flatMap((frame) => (frame.hz !== null ? [frame.hz] : [])));
   for (const frame of frames) {
     if (frame.hz !== null && median) {
       frame.relativeSemitones = 12 * Math.log2(frame.hz / median);
@@ -235,5 +323,19 @@ export function pitchSemitoneRange(
     .filter((frame) => frame.voiced && frame.relativeSemitones !== null)
     .map((frame) => frame.relativeSemitones as number);
   if (values.length < 2) return undefined;
-  return { min: Math.min(...values), max: Math.max(...values) };
+  return robustRange(values);
+}
+
+/**
+ * Plot range of a set of semitone readings: the full extent for short
+ * tracks, the 2nd–98th percentile for long ones so a residual glitch frame
+ * can't stretch the vertical scale and flatten the real contour. Callers
+ * should clamp drawn points into the range.
+ */
+export function robustRange(values: number[]): { min: number; max: number } {
+  const sorted = values.slice().sort((a, b) => a - b);
+  if (sorted.length < 30) return { min: sorted[0]!, max: sorted[sorted.length - 1]! };
+  const at = (fraction: number) =>
+    sorted[Math.min(sorted.length - 1, Math.max(0, Math.round(fraction * (sorted.length - 1))))]!;
+  return { min: at(0.02), max: at(0.98) };
 }
