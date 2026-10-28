@@ -1537,14 +1537,9 @@ button.sync-retry {
 .apg-swatch { width: 0.8rem; height: 0.25rem; border-radius: 2px; background: var(--border); }
 .apg-fig { margin: 0; text-align: center; }
 .apg-fig figcaption { font-size: 0.8rem; }
-.apg-fig svg { border: 1px solid color-mix(in srgb, var(--border) 70%, transparent); border-radius: 6px; }
-.apg-line-scroll { overflow-x: auto; padding-bottom: 0.25rem; }
-.apg-strip { margin-bottom: 0.4rem; }
-.apg-strip-label { display: block; font-size: 0.75rem; position: sticky; left: 0; }
+.apg-fig svg { display: block; margin-bottom: 0.25rem; border: 1px solid color-mix(in srgb, var(--border) 70%, transparent); border-radius: 6px; }
 .apg-seg { fill: none; stroke: color-mix(in srgb, var(--border) 70%, transparent); stroke-width: 1; }
 .apg-seg-gap { fill: color-mix(in srgb, var(--border) 35%, transparent); stroke-dasharray: 3 3; }
-.apg-text { position: relative; height: 1.3rem; font-size: 0.8rem; }
-.apg-text span { position: absolute; top: 0; text-align: center; white-space: nowrap; }
 .apg-line { fill: none; stroke-linecap: round; stroke-linejoin: round; }
 .apg-line-native { stroke: var(--text-muted); stroke-width: 4; opacity: 0.55; }
 .apg-line-attempt { stroke-width: 1.8; }

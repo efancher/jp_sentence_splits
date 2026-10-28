@@ -49,10 +49,6 @@ export function AttemptPitchGrid({
     setPicked(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
   const OVERLAY_W = 120;
   const OVERLAY_H = 56;
-  const TILE_GAP = 6;
-  // Whole-sentence tiles are the same size as the per-phrase tiles above, side by side (the row scrolls).
-  const segments = grid.columns.map((_, i) => ({ x: i * (OVERLAY_W + TILE_GAP), width: OVERLAY_W }));
-  const lineWidth = Math.max(0, grid.columns.length * (OVERLAY_W + TILE_GAP) - TILE_GAP);
   const hasContours = grid.columns.every((c) => !isMeasured(c) || c.nativeContour);
   const contourScale = hasContours
     ? contourRange([
@@ -133,61 +129,39 @@ export function AttemptPitchGrid({
           The full measured line needs a fresh analysis of these attempts — use “Add pitch comparison for earlier attempts” above if it’s showing, or analyse them again.
         </p>
       ) : (
-      <div className="apg-line-scroll">
-        <div style={{ width: lineWidth }}>
-          {strips.map((strip) => {
-            const row = grid.rows.find((r) => r.id === strip.id);
-            const native = strip.id === 'native';
-            return (
-              <div key={strip.id} className="apg-strip">
-                <span className="apg-strip-label muted">
-                  {native ? 'Native' : `You · ${labelFor(row!.id, row!.createdAt)}`}
-                </span>
+      <div className="row" style={{ flexWrap: 'wrap', gap: '0.75rem', alignItems: 'flex-start' }}>
+        {grid.columns.map((column, index) => (
+          <figure key={index} className="apg-fig">
+            {strips.map((strip) => {
+              const row = grid.rows.find((r) => r.id === strip.id);
+              const native = strip.id === 'native';
+              const contour = isMeasured(column) ? (native ? column.nativeContour : row!.cells[index]?.learnerContour) : null;
+              const levels = contour ? contourToLevels(contour, contourScale) : null;
+              return (
                 <svg
-                  width={lineWidth}
+                  key={strip.id}
+                  width={OVERLAY_W}
                   height={OVERLAY_H}
                   role="img"
-                  aria-label={`${native ? 'Native' : 'Your'} pitch across the sentence`}
+                  aria-label={`${native ? 'Native' : `Your ${labelFor(row!.id, row!.createdAt)}`} pitch across the sentence: ${column.text}`}
                 >
-                  {grid.columns.map((column, index) => {
-                    const seg = segments[index]!;
-                    if (!isMeasured(column)) {
-                      return (
-                        <g key={index} transform={`translate(${seg.x},0)`}>
-                          <rect width={seg.width} height={OVERLAY_H} className="apg-seg apg-seg-gap" />
-                        </g>
-                      );
-                    }
-                    const contour = native ? column.nativeContour : row!.cells[index]?.learnerContour;
-                    const levels = contour ? contourToLevels(contour, contourScale) : null;
-                    return (
-                      <g key={index} transform={`translate(${seg.x},0)`}>
-                        <rect width={seg.width} height={OVERLAY_H} className="apg-seg" />
-                        {levels && levels.length === column.nativeContour!.length
-                          ? levelsToRuns(levels, seg.width, OVERLAY_H).map((points, i) => (
-                              <polyline
-                                key={i}
-                                points={points}
-                                className={native ? 'apg-line apg-line-native' : 'apg-line apg-line-attempt'}
-                                data-rank={native ? undefined : strip.rank % 4}
-                              />
-                            ))
-                          : null}
-                      </g>
-                    );
-                  })}
+                  <rect width={OVERLAY_W} height={OVERLAY_H} className={isMeasured(column) ? 'apg-seg' : 'apg-seg apg-seg-gap'} />
+                  {levels && levels.length === column.nativeContour!.length
+                    ? levelsToRuns(levels, OVERLAY_W, OVERLAY_H).map((points, i) => (
+                        <polyline
+                          key={i}
+                          points={points}
+                          className={native ? 'apg-line apg-line-native' : 'apg-line apg-line-attempt'}
+                          data-rank={native ? undefined : strip.rank % 4}
+                        />
+                      ))
+                    : null}
                 </svg>
-              </div>
-            );
-          })}
-          <div className="apg-text jp">
-            {grid.columns.map((column, index) => (
-              <span key={index} style={{ left: segments[index]!.x, width: segments[index]!.width }}>
-                {column.text}
-              </span>
-            ))}
-          </div>
-        </div>
+              );
+            })}
+            <figcaption className="jp">{column.text}</figcaption>
+          </figure>
+        ))}
       </div>
       )}
       {grid.columns.some((c) => !isMeasured(c)) ? (
@@ -196,7 +170,7 @@ export function AttemptPitchGrid({
         </p>
       ) : null}
       <p className="muted" style={{ margin: 0, fontSize: '0.8rem' }}>
-        Thick line = native, thin = your attempts. The grid scales each phrase on its own; the whole-sentence lines share
+        Thick line = native, thin = your attempts. Under each phrase the whole-sentence tiles run native first, then each attempt. The grid scales each phrase on its own; the whole-sentence lines share
         one height scale across the sentence and each phrase is stretched to its sounds, so compare shapes and where they
         rise and fall.
       </p>
