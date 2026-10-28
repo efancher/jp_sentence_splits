@@ -562,7 +562,11 @@ export function BookDetailPage() {
       itemsBySentence.set(item.subjectId, list);
     }
     const graduationDays = settings?.graduationMinScheduledDays ?? 180;
-    const book = { total: 0, counts: emptyStageCounts() };
+    // The book-level bar covers active episodes only: shelved ones would dwarf it.
+    const book = { total: 0, counts: emptyStageCounts(), shelved: 0 };
+    const suspendedChapterIds = new Set(
+      (data?.book?.chapters ?? []).filter((chapter) => chapter.suspendedAt).map((chapter) => chapter.id),
+    );
     const chapters = new Map<string, { total: number; counts: StageCounts }>();
     for (const row of data?.rows ?? []) {
       const stage = sentenceStage(
@@ -572,10 +576,12 @@ export function BookDetailPage() {
       const key = row.membership.chapterId ?? UNASSIGNED_CHAPTER_KEY;
       const chapter = chapters.get(key) ?? { total: 0, counts: emptyStageCounts() };
       chapters.set(key, chapter);
-      for (const target of [book, chapter]) {
+      const shelved = suspendedChapterIds.has(key);
+      for (const target of shelved ? [chapter] : [book, chapter]) {
         target.total += 1;
         target.counts[stage] += 1;
       }
+      if (shelved) book.shelved += 1;
     }
     return {
       book,
@@ -668,7 +674,17 @@ export function BookDetailPage() {
               <div className="progress-bar" aria-hidden="true">
                 <span style={{ width: `${progressSummary.percent}%` }} />
               </div>
-              <StageProgressBar {...stagesByChapter.book} showLegend />
+              <StageProgressBar
+                total={stagesByChapter.book.total}
+                counts={stagesByChapter.book.counts}
+                showLegend
+              />
+              {stagesByChapter.book.shelved > 0 ? (
+                <div className="muted" style={{ fontSize: '0.85rem' }}>
+                  Active episodes only; {stagesByChapter.book.shelved} sentence
+                  {stagesByChapter.book.shelved === 1 ? '' : 's'} in suspended episodes not shown.
+                </div>
+              ) : null}
               <div className="row">
                 <span className="status-pill unstarted">
                   {progressSummary.byStatus.unstarted} unstarted

@@ -15,6 +15,7 @@ import {
 } from '../lib/sentenceLed';
 import { sessionStepCategory } from '../lib/sessionStepCategory';
 import { sentencesDueForFreshTry } from '../lib/sentenceJourney';
+import { emptyStageCounts, sentenceStage, type StageCounts } from '../lib/sentenceStages';
 import { buildEpisodeProgress, type EpisodeProgressRow } from '../lib/episodeProgress';
 import { ANALYSIS_FORMAT_VERSION } from '../appConfig';
 import { chunksMatchSource } from '../lib/chunking';
@@ -3765,6 +3766,54 @@ export async function getBookProgress(bookId: string): Promise<{
     complete,
     percent: total ? Math.round((complete / total) * 100) : 0,
   };
+}
+
+/**
+ * Per-book sentence-stage rollup for the Books list, via the same per-sentence
+ * rule as the book page's bars (`sentenceStage`). One pass over the sentence
+ * study items and book memberships rather than a query per book.
+ */
+export async function getBookStageCounts(): Promise<
+  Map<string, { total: number; counts: StageCounts; shelved: number }>
+> {
+  const db = getDb();
+  const [books, memberships, studyItems, settings] = await Promise.all([
+    db.books.toArray(),
+    db.bookSentences.toArray(),
+    db.studyItems.where('subjectType').equals('sentence').toArray(),
+    readSettings(),
+  ]);
+  const itemsBySentence = new Map<string, StudyItem[]>();
+  for (const item of studyItems) {
+    const list = itemsBySentence.get(item.subjectId) ?? [];
+    list.push(item);
+    itemsBySentence.set(item.subjectId, list);
+  }
+  // Sentences in suspended episodes are left out of the bar (and counted in
+  // `shelved`) — otherwise a few active episodes vanish next to a shelved backlog.
+  const suspendedChapters = new Map(
+    books.map((book) => [
+      book.id,
+      new Set((book.chapters ?? []).filter((chapter) => chapter.suspendedAt).map((chapter) => chapter.id)),
+    ]),
+  );
+  const result = new Map<string, { total: number; counts: StageCounts; shelved: number }>();
+  const seen = new Set<string>();
+  for (const membership of memberships) {
+    const key = `${membership.bookId}:${membership.sentenceId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const entry = result.get(membership.bookId) ?? { total: 0, counts: emptyStageCounts(), shelved: 0 };
+    result.set(membership.bookId, entry);
+    if (membership.chapterId && suspendedChapters.get(membership.bookId)?.has(membership.chapterId)) {
+      entry.shelved += 1;
+      continue;
+    }
+    const items = itemsBySentence.get(membership.sentenceId) ?? [];
+    entry.total += 1;
+    entry.counts[sentenceStage(items, settings.graduationMinScheduledDays)] += 1;
+  }
+  return result;
 }
 
 export async function exportBookMiningPackage(

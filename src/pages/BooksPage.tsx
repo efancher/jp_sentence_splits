@@ -5,9 +5,11 @@ import { useState } from 'react';
 import {
   createBook,
   getBookProgress,
+  getBookStageCounts,
   getBookVocabularyCoverage,
   getDb,
 } from '../db/repository';
+import { StageProgressBar } from '../components/StageProgressBar';
 import { coveragePercent } from '../lib/bookCoverage';
 import { isBookInStudyRotation } from '../lib/suspendedBooks';
 
@@ -19,15 +21,17 @@ export function BooksPage() {
   const [sortMode, setSortMode] = useState<SortMode>('recent');
   const books = useLiveQuery(async () => {
     const db = getDb();
-    const [all, coverageByBookId] = await Promise.all([
+    const [all, coverageByBookId, stagesByBookId] = await Promise.all([
       db.books.toArray(),
       getBookVocabularyCoverage(),
+      getBookStageCounts(),
     ]);
     const withProgress = await Promise.all(
       all.map(async (book) => ({
         book,
         progress: await getBookProgress(book.id),
         coverage: coverageByBookId.get(book.id) ?? null,
+        stages: stagesByBookId.get(book.id),
       })),
     );
     if (sortMode === 'easiest') {
@@ -102,7 +106,7 @@ export function BooksPage() {
       </section>
 
       <section className="stack">
-        {(books ?? []).map(({ book, progress, coverage }) => {
+        {(books ?? []).map(({ book, progress, coverage, stages }) => {
           const percent = coverage ? coveragePercent(coverage) : null;
           return (
             <article key={book.id} className="list-card">
@@ -123,6 +127,16 @@ export function BooksPage() {
               <div className="progress-bar" aria-hidden="true">
                 <span style={{ width: `${progress.percent}%` }} />
               </div>
+              {stages ? (
+                <>
+                  <StageProgressBar total={stages.total} counts={stages.counts} showLegend />
+                  {stages.shelved > 0 ? (
+                    <div className="muted" style={{ fontSize: '0.85rem' }}>
+                      Active episodes only; {stages.shelved} sentence{stages.shelved === 1 ? '' : 's'} in suspended episodes not shown.
+                    </div>
+                  ) : null}
+                </>
+              ) : null}
               <div className="muted" style={{ fontSize: '0.85rem' }}>
                 {percent === null
                   ? 'Vocabulary not confirmed yet'
