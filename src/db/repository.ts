@@ -2298,6 +2298,12 @@ export async function transferBookSentences(options: {
  * scripts/merge-book-into-chapter.ts, for e.g. a standalone shadowing-package
  * episode import that should have joined an existing series book.
  *
+ * The source's own chapters travel with it: a source holding several episode
+ * chapters lands as the same several chapters (titles, source ids and dates
+ * kept), and a single-chapter source lands under that chapter's title rather
+ * than the book's — an imported podcast book is titled after the series, not
+ * the episode. Only a source with no real chapter falls back to the book title.
+ *
  * If a source sentence already exists in the target book, the source's
  * membership is dropped instead of moved (the target's copy wins), promoting
  * the target's status only if it was still 'unstarted'.
@@ -2308,7 +2314,13 @@ export async function mergeBookIntoChapter(options: {
   chapterTitle?: string;
   /** Fill this existing chapter of the target instead of adding a new one. */
   intoChapterId?: string;
-}): Promise<{ chapterId: string; movedCount: number; collisionCount: number; reusedChapter: boolean }> {
+}): Promise<{
+  chapterId: string;
+  chapterCount: number;
+  movedCount: number;
+  collisionCount: number;
+  reusedChapter: boolean;
+}> {
   const db = getDb();
   const { sourceBookId, targetBookId } = options;
   if (sourceBookId === targetBookId) {
@@ -2316,12 +2328,11 @@ export async function mergeBookIntoChapter(options: {
   }
   const timestamp = nowIso();
 
-  let chapter: BookChapter | undefined;
+  let plans: MergeChapterPlan[] = [];
   let updatedTarget: Book | undefined;
   let movedMemberships: BookSentence[] = [];
   let promotedTargets: BookSentence[] = [];
   let collisions: BookSentence[] = [];
-  let reusedChapter = false;
   let repointedExtras: SentenceExtras[] = [];
 
   await db.transaction('rw', db.books, db.bookSentences, db.sentenceExtras, async () => {
@@ -2351,33 +2362,34 @@ export async function mergeBookIntoChapter(options: {
       targetBySentenceId.has(item.sentenceId),
     );
 
-    const targetChapters = target.chapters ?? [];
-    const title =
-      (options.chapterTitle ?? source.title).trim() ||
-      `Chapter ${targetChapters.length + 1}`;
-    const sourceId = source.sourceUrl ?? source.sourceKey ?? undefined;
-    const reusable = options.intoChapterId
-      ? targetChapters.find((item) => item.id === options.intoChapterId)
-      : findReusableChapter(targetChapters, targetMemberships, { title, sourceId });
-    if (options.intoChapterId && !reusable) {
-      throw new Error('Chapter not found in the target book');
-    }
-    reusedChapter = Boolean(reusable);
-    chapter = reusable ?? {
-      id: createId('chapter'),
-      title,
-      position: targetChapters.length,
-      ...(sourceId ? { sourceId } : {}),
-      ...(source.createdAt ? { sourceDate: source.createdAt } : {}),
-    };
+    plans = planMergedChapters({
+      source,
+      sourceMemberships,
+      targetChapters: target.chapters ?? [],
+      targetMemberships,
+      chapterTitle: options.chapterTitle,
+      intoChapterId: options.intoChapterId,
+    });
+    const firstChapterId = plans[0]!.chapter.id;
+    const planBySourceChapterId = new Map(
+      plans.flatMap((plan) => (plan.sourceChapterId ? [[plan.sourceChapterId, plan] as const] : [])),
+    );
+    const chapterIdFor = (item: BookSentence): string | undefined =>
+      plans.length > 1
+        ? planBySourceChapterId.get(item.chapterId ?? '')?.chapter.id
+        : firstChapterId;
 
-    movedMemberships = toMove.map((item, index) => ({
-      ...item,
-      bookId: targetBookId,
-      chapterId: chapter!.id,
-      position: maxTargetPosition + 1 + index,
-      addedAt: timestamp,
-    }));
+    movedMemberships = toMove.map((item, index) => {
+      const { chapterId: _previous, ...rest } = item;
+      const chapterId = chapterIdFor(item);
+      return {
+        ...rest,
+        ...(chapterId ? { chapterId } : {}),
+        bookId: targetBookId,
+        position: maxTargetPosition + 1 + index,
+        addedAt: timestamp,
+      };
+    });
     if (movedMemberships.length) {
       await db.bookSentences.bulkPut(movedMemberships);
     }
@@ -2416,14 +2428,17 @@ export async function mergeBookIntoChapter(options: {
     repointedExtras = sourceExtras.map((row) => ({
       ...row,
       bookId: targetBookId,
-      chapterId: chapterBySentenceId.get(row.id) ?? chapter!.id,
+      chapterId: chapterBySentenceId.get(row.id) ?? plans[0]!.chapter.id,
       updatedAt: timestamp,
     }));
     if (repointedExtras.length) await db.sentenceExtras.bulkPut(repointedExtras);
 
     updatedTarget = {
       ...target,
-      chapters: reusedChapter ? targetChapters : [...targetChapters, chapter],
+      chapters: [
+        ...(target.chapters ?? []),
+        ...plans.filter((plan) => !plan.reused).map((plan) => plan.chapter),
+      ],
       updatedAt: timestamp,
     };
     await db.books.put(updatedTarget);
@@ -2453,11 +2468,85 @@ export async function mergeBookIntoChapter(options: {
   notifySync('books', sourceBookId, { id: sourceBookId }, 'delete');
 
   return {
-    chapterId: chapter!.id,
+    chapterId: plans[0]!.chapter.id,
+    chapterCount: plans.length,
     movedCount: movedMemberships.length,
     collisionCount: collisions.length,
-    reusedChapter,
+    reusedChapter: plans.every((plan) => plan.reused),
   };
+}
+
+export interface MergeChapterPlan {
+  chapter: BookChapter;
+  /** The target's existing empty chapter being filled, rather than a new one. */
+  reused: boolean;
+  /** Source chapter whose sentences land here (unset for explicit/single-chapter plans). */
+  sourceChapterId?: string;
+}
+
+/**
+ * Decides which target chapter(s) a merged-in book's sentences land in.
+ * Pure so the title/chapter rules are testable without Dexie.
+ */
+export function planMergedChapters(input: {
+  source: Pick<Book, 'title' | 'sourceUrl' | 'sourceKey' | 'createdAt' | 'chapters'>;
+  sourceMemberships: readonly Pick<BookSentence, 'chapterId'>[];
+  targetChapters: readonly BookChapter[];
+  targetMemberships: readonly Pick<BookSentence, 'chapterId'>[];
+  chapterTitle?: string;
+  intoChapterId?: string;
+}): MergeChapterPlan[] {
+  const { source, targetChapters } = input;
+  if (input.intoChapterId) {
+    const chapter = targetChapters.find((item) => item.id === input.intoChapterId);
+    if (!chapter) throw new Error('Chapter not found in the target book');
+    return [{ chapter, reused: true }];
+  }
+
+  const used = new Set(input.sourceMemberships.map((item) => item.chapterId));
+  const populated = (source.chapters ?? [])
+    .filter((item) => used.has(item.id))
+    .sort((a, b) => a.position - b.position);
+  const fallbackSourceId = source.sourceUrl ?? source.sourceKey ?? undefined;
+  const claimed: BookChapter[] = [];
+  let added = 0;
+  const taken = [...input.targetMemberships];
+  const place = (template: BookChapter | undefined, title: string, sourceChapterId?: string): MergeChapterPlan => {
+    const sourceId = template?.sourceId ?? fallbackSourceId;
+    const reusable = findReusableChapter(
+      targetChapters.filter((item) => !claimed.includes(item)),
+      taken,
+      { title, sourceId },
+    );
+    if (reusable) {
+      claimed.push(reusable);
+      return { chapter: reusable, reused: true, sourceChapterId };
+    }
+    const sourceDate = template?.sourceDate ?? source.createdAt;
+    const chapter: BookChapter = {
+      ...(template ?? {}),
+      id: createId('chapter'),
+      title,
+      position: targetChapters.length + added,
+      ...(sourceId ? { sourceId } : {}),
+      ...(sourceDate ? { sourceDate } : {}),
+    };
+    added += 1;
+    claimed.push(chapter);
+    return { chapter, reused: false, sourceChapterId };
+  };
+
+  if (populated.length > 1) {
+    return populated.map((item) => place(item, item.title.trim() || source.title, item.id));
+  }
+  // The dialog pre-fills the book title; treat that as "no override" so the
+  // episode's own chapter title wins.
+  const override = input.chapterTitle?.trim();
+  const only = populated[0];
+  const title =
+    (override && override !== source.title.trim() ? override : only?.title.trim() || source.title.trim()) ||
+    `Chapter ${targetChapters.length + 1}`;
+  return [place(only, title, only?.id)];
 }
 
 /**

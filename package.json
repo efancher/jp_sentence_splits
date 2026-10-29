@@ -51,6 +51,7 @@
     "merge:book-into-chapter": "tsx scripts/merge-book-into-chapter.ts",
     "remove:duplicate-chapters": "tsx scripts/remove-duplicate-chapters.ts",
     "repair:orphaned-sentence-extras": "tsx scripts/repair-orphaned-sentence-extras.ts",
+    "repair:merged-book-chapters": "tsx scripts/repair-merged-book-chapters.ts",
     "repair:chapter-source-dates": "tsx scripts/repair-chapter-source-dates.ts",
     "repair:episode-sentence-order": "tsx scripts/repair-episode-sentence-order.ts",
     "fix:vocabulary-godan-readings": "tsx scripts/fix-vocabulary-godan-readings.ts",

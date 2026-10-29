@@ -98,4 +98,58 @@ describe('mergeBookIntoChapter', () => {
     const result = await mergeBookIntoChapter({ sourceBookId: 'standalone', targetBookId: 'series', intoChapterId: 'c-x' });
     expect(result).toMatchObject({ chapterId: 'c-x', reusedChapter: true });
   });
+
+  it('keeps the source chapter titles when the source holds several episodes', async () => {
+    const db = getDb();
+    await db.books.bulkPut([
+      book('series', 'Series', { chapters: [chapter('c-other', 'Episode 44', 0)] }),
+      book('pod', 'The Podcast', {
+        chapters: [
+          chapter('p1', 'No 24 Sakura', 0, { sourceId: 'src-24', sourceDate: '2022-04-11T02:00:00.000Z' }),
+          chapter('p2', 'No 28 Clumsy', 1, { sourceId: 'src-28' }),
+        ],
+      }),
+    ]);
+    await db.bookSentences.bulkPut([
+      membership('t1', 'series', 'sA', 0, 'c-other'),
+      membership('s1', 'pod', 'sB', 0, 'p1'),
+      membership('s2', 'pod', 'sC', 1, 'p1'),
+      membership('s3', 'pod', 'sD', 2, 'p2'),
+    ]);
+    const result = await mergeBookIntoChapter({ sourceBookId: 'pod', targetBookId: 'series', chapterTitle: 'The Podcast' });
+    expect(result).toMatchObject({ chapterCount: 2, movedCount: 3, reusedChapter: false });
+
+    const chapters = (await db.books.get('series'))!.chapters;
+    expect(chapters.map((c) => [c.title, c.position, c.sourceId])).toEqual([
+      ['Episode 44', 0, undefined],
+      ['No 24 Sakura', 1, 'src-24'],
+      ['No 28 Clumsy', 2, 'src-28'],
+    ]);
+    const byChapter = (title: string) => chapters.find((c) => c.title === title)!.id;
+    const moved = await db.bookSentences.where('bookId').equals('series').toArray();
+    expect(moved.filter((m) => m.chapterId === byChapter('No 24 Sakura')).map((m) => m.sentenceId).sort()).toEqual(['sB', 'sC']);
+    expect(moved.filter((m) => m.chapterId === byChapter('No 28 Clumsy')).map((m) => m.sentenceId)).toEqual(['sD']);
+  });
+
+  it('names a single-episode source chapter after the episode, not the book', async () => {
+    const db = getDb();
+    await db.books.bulkPut([
+      book('series', 'Series', { chapters: [] }),
+      book('pod', 'The Podcast', { chapters: [chapter('p1', 'No 18 Hisashiburi', 0, { sourceId: 'src-18' })] }),
+    ]);
+    await db.bookSentences.bulkPut([membership('s1', 'pod', 'sB', 0, 'p1')]);
+    await mergeBookIntoChapter({ sourceBookId: 'pod', targetBookId: 'series', chapterTitle: 'The Podcast' });
+    expect((await db.books.get('series'))!.chapters.map((c) => [c.title, c.sourceId])).toEqual([['No 18 Hisashiburi', 'src-18']]);
+  });
+
+  it('still honours a deliberately typed chapter title', async () => {
+    const db = getDb();
+    await db.books.bulkPut([
+      book('series', 'Series', { chapters: [] }),
+      book('pod', 'The Podcast', { chapters: [chapter('p1', 'No 18', 0)] }),
+    ]);
+    await db.bookSentences.bulkPut([membership('s1', 'pod', 'sB', 0, 'p1')]);
+    await mergeBookIntoChapter({ sourceBookId: 'pod', targetBookId: 'series', chapterTitle: 'My title' });
+    expect((await db.books.get('series'))!.chapters.map((c) => c.title)).toEqual(['My title']);
+  });
 });
