@@ -23,13 +23,14 @@ export function useShadowing() {
         playbackRate?: number;
         range?: TimeRangeMs | null;
         gapMs?: number;
+        leadInMs?: number;
         onRep: (take: { blob: Blob; durationMs: number }) => void;
       },
     ) => shadowingController.startShadowLoop(blob, opts),
     [],
   );
   const updateShadowLoop = useCallback(
-    (opts: { playbackRate?: number; range?: TimeRangeMs | null; gapMs?: number }) =>
+    (opts: { playbackRate?: number; range?: TimeRangeMs | null; gapMs?: number; leadInMs?: number }) =>
       shadowingController.updateShadowLoop(opts),
     [],
   );
@@ -92,6 +93,10 @@ export function useShadowing() {
     () => shadowingController.isShadowLoopInGap(),
     [],
   );
+  const getShadowLeadInRemainingMs = useCallback(
+    () => shadowingController.getShadowLeadInRemainingMs(),
+    [],
+  );
   const getShadowSampleRate = useCallback(
     () => shadowingController.getShadowSampleRate(),
     [],
@@ -111,6 +116,7 @@ export function useShadowing() {
     getShadowAnalyser,
     getShadowMediaTime,
     isShadowLoopInGap,
+    getShadowLeadInRemainingMs,
     getShadowSampleRate,
   };
 }

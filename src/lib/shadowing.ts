@@ -70,6 +70,10 @@ export class ShadowingController {
         gapMs: number;
         /** While set, the reference is muted and waiting for this wall-clock time before the next rep. */
         gapUntil?: number;
+        /** Silent countdown (ms) recorded before the reference starts each rep. 0 = none. */
+        leadInMs: number;
+        /** While set, the reference is muted and waiting for this wall-clock time to start the rep. */
+        leadInUntil?: number;
       }
     | undefined;
 
@@ -158,6 +162,8 @@ export class ShadowingController {
       range?: TimeRangeMs | null;
       /** Silent pause between reps, in ms. */
       gapMs?: number;
+      /** Recorded lead-in before the reference starts each rep, in ms. */
+      leadInMs?: number;
       onRep: (take: { blob: Blob; durationMs: number }) => void;
     },
   ): Promise<void> {
@@ -201,7 +207,13 @@ export class ShadowingController {
       cycling: false,
       range,
       gapMs: Math.max(0, opts.gapMs ?? 0),
+      leadInMs: Math.max(0, opts.leadInMs ?? 0),
     };
+    if (this.shadowLoop.leadInMs > 0) {
+      // First rep gets the same countdown: hold the reference silent until the lead-in is over.
+      this.shadowPlayer.setMuted(true);
+      this.shadowLoop.leadInUntil = Date.now() + this.shadowLoop.leadInMs;
+    }
     this.recordingStartedAt = Date.now();
     this.notify({ status: 'recording', recordingElapsedMs: 0, shadowActive: true });
     this.timer = setInterval(() => this.tick(), TICK_MS);
@@ -212,9 +224,18 @@ export class ShadowingController {
    * "Mark start"/"Mark end" target range stay adjustable while looping
    * instead of forcing a stop/restart. No-ops when no loop is running.
    */
-  updateShadowLoop(opts: { playbackRate?: number; range?: TimeRangeMs | null; gapMs?: number }): void {
+  updateShadowLoop(opts: {
+    playbackRate?: number;
+    range?: TimeRangeMs | null;
+    gapMs?: number;
+    leadInMs?: number;
+  }): void {
     const loop = this.shadowLoop;
     if (!loop) return;
+    if (opts.leadInMs !== undefined) {
+      loop.leadInMs = Math.max(0, opts.leadInMs);
+      if (loop.leadInUntil !== undefined) loop.leadInUntil = Math.min(loop.leadInUntil, Date.now() + loop.leadInMs);
+    }
     if (opts.gapMs !== undefined) {
       loop.gapMs = Math.max(0, opts.gapMs);
       // Shortening the pause takes effect on the one already running.
@@ -273,6 +294,16 @@ export class ShadowingController {
 
   private tickShadowLoop(loop: NonNullable<ShadowingController['shadowLoop']>): void {
     const now = this.shadowPlayer.currentTime();
+    if (loop.leadInUntil !== undefined) {
+      if (Date.now() < loop.leadInUntil) return;
+      // Countdown over: the reference has been playing muted, so rewind it to the rep start as it unmutes.
+      loop.leadInUntil = undefined;
+      const startSec = loop.range ? loop.range.startMs / 1000 : 0;
+      this.shadowPlayer.seek(startSec);
+      this.shadowPlayer.setMuted(false);
+      loop.lastCurrentTime = startSec;
+      return;
+    }
     if (loop.gapUntil !== undefined) {
       if (Date.now() < loop.gapUntil) return;
       // Pause over: restart the rep. The reference kept playing (muted) rather than pausing,
@@ -280,12 +311,17 @@ export class ShadowingController {
       loop.gapUntil = undefined;
       const startSec = loop.range ? loop.range.startMs / 1000 : 0;
       this.shadowPlayer.seek(startSec);
-      this.shadowPlayer.setMuted(false);
       loop.lastCurrentTime = startSec;
+      if (loop.leadInMs > 0) {
+        // The new take starts now, so it records the countdown too; the reference stays muted until it ends.
+        loop.leadInUntil = Date.now() + loop.leadInMs;
+      } else {
+        this.shadowPlayer.setMuted(false);
+      }
       this.cycleShadowLoopRecorder(loop);
       return;
     }
-    if (loop.gapMs > 0) {
+    if (loop.gapMs > 0 || loop.leadInMs > 0) {
       const startSec = loop.range ? loop.range.startMs / 1000 : 0;
       const endSec = loop.range ? loop.range.endMs / 1000 : (this.shadowPlayer.duration() ?? loop.clipSeconds);
       const wrapped = loop.lastCurrentTime - now > 0.5;
@@ -413,7 +449,14 @@ export class ShadowingController {
   }
 
   /** True during the pause between reps of a hands-free shadow loop. */
-  isShadowLoopInGap = (): boolean => this.shadowLoop?.gapUntil !== undefined;
+  isShadowLoopInGap = (): boolean =>
+    this.shadowLoop?.gapUntil !== undefined || this.shadowLoop?.leadInUntil !== undefined;
+
+  /** Ms left in the recorded lead-in before the reference starts; 0 when not counting down. */
+  getShadowLeadInRemainingMs = (): number => {
+    const until = this.shadowLoop?.leadInUntil;
+    return until === undefined ? 0 : Math.max(0, until - Date.now());
+  };
 
   getShadowMediaTime(): number {
     return this.shadowPlayer.currentTime();

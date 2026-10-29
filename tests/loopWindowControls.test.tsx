@@ -6,18 +6,21 @@ import { LoopWindowControls } from '../src/components/LoopWindowControls';
 function setup(range = { startMs: 1000, endMs: 2000 }, gapMs = 0) {
   const onRangeChange = vi.fn();
   const onGapChange = vi.fn();
+  const onLeadInChange = vi.fn();
   const onReset = vi.fn();
   render(
     <LoopWindowControls
       durationMs={4000}
       range={range}
       gapMs={gapMs}
+      leadInMs={0}
       onRangeChange={onRangeChange}
       onGapChange={onGapChange}
+      onLeadInChange={onLeadInChange}
       onReset={onReset}
     />,
   );
-  return { onRangeChange, onGapChange, onReset };
+  return { onRangeChange, onGapChange, onLeadInChange, onReset };
 }
 
 describe('LoopWindowControls', () => {
@@ -37,6 +40,12 @@ describe('LoopWindowControls', () => {
     expect(onGapChange).toHaveBeenLastCalledWith(1200);
     fireEvent.click(screen.getByRole('button', { name: 'Whole sentence' }));
     expect(onReset).toHaveBeenCalled();
+  });
+
+  it('reports the lead-in', () => {
+    const { onLeadInChange } = setup();
+    fireEvent.change(screen.getByLabelText('Lead-in before each rep'), { target: { value: '1500' } });
+    expect(onLeadInChange).toHaveBeenLastCalledWith(1500);
   });
 
   it('hides the reset when the window is the whole clip', () => {

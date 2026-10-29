@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { AnalysisPanel } from '../components/AnalysisPanel';
 import { LiveShadowWaveform } from '../components/LiveShadowWaveform';
-import { LoopWindowControls, MAX_LOOP_GAP_MS } from '../components/LoopWindowControls';
+import { LoopWindowControls, MAX_LOOP_GAP_MS, MAX_LOOP_LEAD_IN_MS } from '../components/LoopWindowControls';
 import { NativePitchPractice } from '../components/NativePitchPractice';
 import { AttemptPitchGrid } from '../components/AttemptPitchGrid';
 import { attemptsNeedingPhraseSnapshot, backfillPhraseSnapshots } from '../lib/backfillPhraseSnapshots';
@@ -52,6 +52,31 @@ const CONTOUR_WRAP_OPTIONS = [2, 3, 4, 5, 6, 8] as const;
 const DEFAULT_CONTOUR_WRAP_SECONDS = 5;
 /** Pause between loop reps (ms), device-local and shared across sentences. */
 const LOOP_GAP_KEY = 'satori-glossbook:shadow-loop-gap-ms';
+const LOOP_LEAD_IN_KEY = 'satori-glossbook:shadow-loop-lead-in-ms';
+
+function readLoopLeadIn(): number {
+  try {
+    const value = Number(localStorage.getItem(LOOP_LEAD_IN_KEY));
+    return Number.isFinite(value) ? Math.min(MAX_LOOP_LEAD_IN_MS, Math.max(0, value)) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/** "Get ready" countdown shown while the loop records its lead-in, before the native audio starts. */
+function LeadInCountdown({ getRemainingMs }: { getRemainingMs: () => number }) {
+  const [remaining, setRemaining] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setRemaining(getRemainingMs()), 100);
+    return () => clearInterval(id);
+  }, [getRemainingMs]);
+  if (remaining <= 0) return null;
+  return (
+    <div className="muted" role="status" aria-live="off" style={{ fontSize: '1.1rem' }}>
+      Starts in {(Math.ceil(remaining / 100) / 10).toFixed(1)}s…
+    </div>
+  );
+}
 
 function readLoopGap(): number {
   try {
@@ -129,6 +154,11 @@ export function ShadowPage() {
   function changeLoopGap(ms: number) {
     setLoopGapMs(ms);
     try { localStorage.setItem(LOOP_GAP_KEY, String(ms)); } catch { /* storage unavailable */ }
+  }
+  const [loopLeadInMs, setLoopLeadInMs] = useState(readLoopLeadIn);
+  function changeLoopLeadIn(ms: number) {
+    setLoopLeadInMs(ms);
+    try { localStorage.setItem(LOOP_LEAD_IN_KEY, String(ms)); } catch { /* storage unavailable */ }
   }
   const [ephemeralTake, setEphemeralTake] = useState<{ blob: Blob; durationMs: number } | null>(
     null,
@@ -296,6 +326,10 @@ export function ShadowPage() {
   useEffect(() => {
     if (isLoopingReps) updateShadowLoop({ gapMs: loopGapMs });
   }, [loopGapMs, isLoopingReps, updateShadowLoop]);
+
+  useEffect(() => {
+    if (isLoopingReps) updateShadowLoop({ leadInMs: loopLeadInMs });
+  }, [loopLeadInMs, isLoopingReps, updateShadowLoop]);
 
   // If the loop's mic/audio setup fails, drop back out of the loop UI.
   useEffect(() => {
@@ -496,6 +530,7 @@ export function ShadowPage() {
       playbackRate: speed,
       range: loopRange,
       gapMs: loopGapMs,
+      leadInMs: loopLeadInMs,
       onRep: (take) => {
         setEphemeralTake(take);
         setRepCount((n) => n + 1);
@@ -629,8 +664,10 @@ export function ShadowPage() {
           durationMs={referenceAudio.durationMs}
           range={loopRange ?? { startMs: 0, endMs: referenceAudio.durationMs }}
           gapMs={loopGapMs}
+          leadInMs={loopLeadInMs}
           onRangeChange={setTargetRange}
           onGapChange={changeLoopGap}
+          onLeadInChange={changeLoopLeadIn}
           onReset={handleClearTarget}
         />
       ) : null}
@@ -647,6 +684,9 @@ export function ShadowPage() {
             ))}
           </select>
         </label>
+      ) : null}
+      {isLoopingReps && loopLeadInMs > 0 ? (
+        <LeadInCountdown getRemainingMs={shadowing.getShadowLeadInRemainingMs} />
       ) : null}
       {isLoopingReps && !hideTranscript ? (
         <div className="jp jp-lg" aria-label="Sentence being shadowed">

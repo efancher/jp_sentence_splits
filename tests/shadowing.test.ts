@@ -379,6 +379,35 @@ describe('ShadowingController shadow mode', () => {
     await new Promise((r) => setTimeout(r, 30));
   });
 
+  it('records a silent lead-in before each rep and unmutes the reference when it ends', async () => {
+    const controller = new ShadowingController();
+    const takes: Array<{ blob: Blob; durationMs: number }> = [];
+    await controller.startShadowLoop(new Blob(['ref']), {
+      range: { startMs: 500, endMs: 1_500 },
+      leadInMs: 400,
+      onRep: (take) => takes.push(take),
+    });
+    const player = FakeShadowReferencePlayer.instances.at(-1)!;
+
+    // First rep: reference held silent during the countdown.
+    expect(player.setMuted).toHaveBeenLastCalledWith(true);
+    expect(controller.getShadowLeadInRemainingMs()).toBeGreaterThan(0);
+    await new Promise((r) => setTimeout(r, 550));
+    expect(player.setMuted).toHaveBeenLastCalledWith(false);
+    expect(player.seek).toHaveBeenLastCalledWith(0.5);
+    expect(controller.getShadowLeadInRemainingMs()).toBe(0);
+
+    // Range end: the next take starts with the countdown, reference stays muted until it ends.
+    player.fakeCurrentTime = 1.6;
+    await new Promise((r) => setTimeout(r, 250));
+    expect(takes).toHaveLength(1);
+    expect(player.setMuted).toHaveBeenLastCalledWith(true);
+    expect(controller.isShadowLoopInGap()).toBe(true);
+
+    controller.stopShadowLoop();
+    await new Promise((r) => setTimeout(r, 30));
+  });
+
   it('shortening the gap live cuts the running pause short', async () => {
     const controller = new ShadowingController();
     await controller.startShadowLoop(new Blob(['ref']), {
