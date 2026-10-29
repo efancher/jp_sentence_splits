@@ -154,6 +154,7 @@ export function ShadowPage() {
   const targetControlsRef = useRef<HTMLDivElement | null>(null);
 
   const quietMode = useLiveQuery(async () => (await readSettings()).quietMode ?? false, []);
+  const shadowingNote = useLiveQuery(async () => (await readSettings()).shadowingNote?.trim() ?? '', []);
 
   const data = useLiveQuery(async () => {
     const db = getDb();
@@ -671,6 +672,11 @@ export function ShadowPage() {
 
   return (
     <div className="stack">
+      {shadowingNote ? (
+        <section className="panel" style={{ padding: '0.5rem 0.75rem' }}>
+          <p style={{ margin: 0, fontSize: '0.9rem', whiteSpace: 'pre-wrap' }}>{shadowingNote}</p>
+        </section>
+      ) : null}
       {quietMode ? (
         <section className="panel stack" style={{ gap: '0.4rem' }}>
           <strong>Quiet mode is on</strong>

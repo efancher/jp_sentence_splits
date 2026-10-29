@@ -434,6 +434,22 @@ export function SettingsPage() {
           is deleted — turn this off to pick pitch-accent practice back up
           where it left off. Per-device.
         </p>
+        <label className="stack" style={{ gap: '0.25rem' }}>
+          Shadowing reminder
+          <textarea
+            rows={3}
+            maxLength={300}
+            value={settings.shadowingNote ?? ''}
+            placeholder="e.g. Relax your jaw. Match the rhythm before the pitch."
+            onChange={(event) => {
+              void updateSettings({ shadowingNote: event.target.value });
+            }}
+          />
+        </label>
+        <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+          A short note shown at the top of the shadowing page. Leave blank to
+          hide it. Per-device.
+        </p>
       </section>
 
       <AuthAndSyncSettings />

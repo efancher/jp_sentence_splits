@@ -776,6 +776,11 @@ export interface AppSettings {
    */
   pitchAccentPaused?: boolean;
   /**
+   * Short personal reminder shown at the top of the shadowing page (per-device,
+   * like `quietMode`). Empty/absent hides it.
+   */
+  shadowingNote?: string;
+  /**
    * Sentences the learner asked (review-card button) to get a "Fresh try" next,
    * sentenceId → request time. Honoured by the sentence-first planner ahead of
    * the spaced schedule until an expression attempt is logged after the request.
