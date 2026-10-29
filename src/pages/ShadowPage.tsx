@@ -592,11 +592,6 @@ export function ShadowPage() {
   const canHearTake = Boolean(ephemeralUrl) && !isLoopingReps;
   const practiceBar = (
     <div className="stack" style={{ gap: '0.4rem' }}>
-      {isLoopingReps && !hideTranscript ? (
-        <div className="jp jp-lg" aria-label="Sentence being shadowed">
-          {showMeaningInstead && sentence.translation ? sentence.translation : sentence.japanese}
-        </div>
-      ) : null}
       <div className="gloss-rail" role="toolbar" aria-label="Shadow practice controls">
       {referenceAudio ? (
         <>
@@ -652,6 +647,11 @@ export function ShadowPage() {
             ))}
           </select>
         </label>
+      ) : null}
+      {isLoopingReps && !hideTranscript ? (
+        <div className="jp jp-lg" aria-label="Sentence being shadowed">
+          {showMeaningInstead && sentence.translation ? sentence.translation : sentence.japanese}
+        </div>
       ) : null}
       {referenceAudio && isLoopingReps && shadowing.shadowActive ? (
         <LiveShadowWaveform
