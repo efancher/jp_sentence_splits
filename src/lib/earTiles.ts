@@ -1,4 +1,6 @@
 import type { EffectiveGameSignal, Sentence } from '../domain/types';
+import { toHiragana } from 'wanakana';
+
 import { seededShuffle } from './seededShuffle';
 
 /**
@@ -67,12 +69,45 @@ export function chunkSentenceIntoTiles(
   return chunkSentenceIntoTileDetails(sentence)?.map((chunk) => chunk.text) ?? null;
 }
 
+const KANJI = /[\u3400-\u9fff々〆ヶ]/u;
+const KANA_ONLY = /^[\u3040-\u309f\u30a0-\u30ff・ー]+$/u;
+
+/**
+ * How a token sounds in this sentence, in kana, or null when that can't be told. A token's stored
+ * `reading` is the dictionary-form reading for inflected words (飼っ -> かう), so it can't be used
+ * as-is: swap the lemma's trailing okurigana for the surface's (か + っ).
+ */
+export function tokenSurfaceReading(token: Pick<TileToken, 'surface' | 'expression' | 'reading'>): string | null {
+  const { surface, expression, reading } = token;
+  if (KANA_ONLY.test(surface)) return surface;
+  if (!reading) return null;
+  if (surface === expression) return reading;
+  let lastKanji = -1;
+  [...expression].forEach((char, index) => {
+    if (KANJI.test(char)) lastKanji = index;
+  });
+  if (lastKanji < 0) return null;
+  const chars = [...expression];
+  const prefix = chars.slice(0, lastKanji + 1).join('');
+  const lemmaTail = chars.slice(lastKanji + 1).join('');
+  if (!surface.startsWith(prefix)) return null;
+  const surfaceTail = surface.slice(prefix.length);
+  // 来 (き/こ) and the like: a bare kanji stem of an inflected word has no derivable reading.
+  if (lemmaTail !== '' && surfaceTail === '') return null;
+  if (!toHiragana(reading).endsWith(toHiragana(lemmaTail))) return null;
+  const stem = reading.slice(0, reading.length - lemmaTail.length);
+  return stem === '' ? null : stem + surfaceTail;
+}
+
+/** Placed in a tile's joined reading by a token whose sound can't be derived; the whole tile reading is then dropped. */
+const UNKNOWN_READING = '\u0000';
+
 interface TileDetail {
   text: string;
   /** POS and surface of the tile's final token, which decides what can be swapped for a distractor. */
   lastPos: string;
   lastSurface: string;
-  /** The tile's tokens' readings joined (kana as UniDic stores it). */
+  /** The tile's tokens' surface readings joined, or '' when any token's can't be derived. */
   reading: string;
   /** Offsets of the tile's first and last character in the sentence, so merged tiles can keep inner punctuation. */
   start: number;
@@ -90,7 +125,12 @@ function chunkSentenceIntoTileDetails(
       surface: token.surface,
       expression: token.expression,
       pos: token.pos,
-      reading: token.reading ?? '',
+      reading:
+        tokenSurfaceReading({
+          surface: token.surface,
+          expression: token.expression,
+          reading: token.reading ?? '',
+        }) ?? UNKNOWN_READING,
     }))
     .sort((a, b) => a.start - b.start);
   if (tokens.length === 0) return null;
@@ -488,7 +528,7 @@ export function buildTileDictation(
   if (start < 0) return null;
   return {
     text: detail.text,
-    reading: detail.reading,
+    reading: detail.reading.includes(UNKNOWN_READING) ? '' : detail.reading,
     before: sentence.japanese.slice(0, start),
     after: sentence.japanese.slice(start + detail.text.length),
   };

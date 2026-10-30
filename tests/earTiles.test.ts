@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { gradeDictation } from '../src/lib/dictationAnswer';
 import type { Sentence, VocabularySuggestion } from '../src/domain/types';
 import {
   buildCheckPuzzle,
@@ -14,6 +15,7 @@ import {
   earTilesRejection,
   isCorrectTile,
   scoreEarTiles,
+  tokenSurfaceReading,
 } from '../src/lib/earTiles';
 
 type Piece = [surface: string, pos: string, expression?: string];
@@ -293,6 +295,29 @@ describe('single-tile dictation', () => {
       ['猫', NOUN], ['が', KAKU], ['猫', NOUN], ['が', KAKU], ['猫', NOUN], ['を', KAKU],
     ]);
     expect(buildTileDictation(repeated, 1)).toMatchObject({ before: '猫が', after: '猫を' });
+  });
+
+  it('reads an inflected tile as it sounds, not by its dictionary-form reading', () => {
+    const base = sentence([
+      ['昔', NOUN], ['は', '助詞/係助詞'], ['魚', NOUN], ['を', KAKU], ['飼っ', VERB, '飼う'], ['て', '助詞/接続助詞'], ['い', '動詞/非自立可能', 'いる'],
+      ['まし', AUX, 'ます'], ['た', AUX], ['。', PUNCT],
+    ]);
+    const readings: Record<string, string> = { 昔: 'ムカシ', 魚: 'サカナ', 飼っ: 'カウ' };
+    const withReadings = {
+      ...base,
+      vocabularySuggestions: base.vocabularySuggestions!.map((t) => ({ ...t, reading: readings[t.surface] ?? t.surface })),
+    };
+    const tile = buildTileDictation(withReadings, 2);
+    expect(tile?.text).toBe('飼っていました');
+    expect(tile?.reading).toBe('カっていました');
+    expect(gradeDictation('かっていました', tile!.text, tile!.reading).correct).toBe(true);
+    expect(gradeDictation('飼っていました', tile!.text, tile!.reading).correct).toBe(true);
+    expect(gradeDictation('かうていました', tile!.text, tile!.reading).correct).toBe(false);
+  });
+
+  it('drops the reading rather than guess it for a bare-kanji inflected stem', () => {
+    expect(tokenSurfaceReading({ surface: '来', expression: '来る', reading: 'クル' })).toBeNull();
+    expect(tokenSurfaceReading({ surface: '食べさせ', expression: '食べる', reading: 'タベル' })).toBe('タべさせ');
   });
 
   it('reads the tile index off the activity type', () => {
