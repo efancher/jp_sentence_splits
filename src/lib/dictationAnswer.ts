@@ -20,15 +20,20 @@ export interface DictationGrade {
   typedKana: string;
 }
 
+/** を is only ever the particle, pronounced お, and romaji can only produce お; compare by sound. */
+const foldWo = (text: string) => text.replace(/を/g, 'お');
+
 function comparable(text: string): string {
-  return toHiragana(normalizeSentenceKey(text).replace(/[\p{P}\p{S}]/gu, ''), {
-    convertLongVowelMark: false,
-  });
+  return foldWo(
+    toHiragana(normalizeSentenceKey(text).replace(/[\p{P}\p{S}]/gu, ''), {
+      convertLongVowelMark: false,
+    }),
+  );
 }
 
 /** Per-character key for the diff: same folding as `comparable` (width, kana script, case). */
 function diffKey(char: string): string {
-  return toHiragana(char.normalize('NFKC').toLowerCase(), { convertLongVowelMark: false });
+  return foldWo(toHiragana(char.normalize('NFKC').toLowerCase(), { convertLongVowelMark: false }));
 }
 
 /**

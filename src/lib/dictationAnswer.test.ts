@@ -16,6 +16,14 @@ describe('gradeDictation', () => {
     expect(grade.gradedAgainst).toBe(KANA);
   });
 
+  it('accepts お for the particle を, since romaji can only type お', () => {
+    expect(gradeDictation('sakanao', '魚を', 'さかなを').correct).toBe(true);
+    expect(gradeDictation('sakanawo', '魚を', 'さかなを').correct).toBe(true);
+    expect(gradeDictation('sakana', '魚を', 'さかなを').correct).toBe(false);
+    // は stays distinct from わ: only particle は sounds like わ.
+    expect(gradeDictation('wana', '花', 'はな').correct).toBe(false);
+  });
+
   it('treats katakana and hiragana as equal', () => {
     expect(gradeDictation('キノウ、トモダチトエイガヲミニイキマシタ。', JP, KANA).correct).toBe(true);
   });
