@@ -1,4 +1,4 @@
-import { isHiragana, toHiragana, toKana } from 'wanakana';
+import { isHiragana, toHiragana, toKana, toRomaji } from 'wanakana';
 
 import { fixNumeralsInReadingOnly } from './fixNumeralReadings';
 import { normalizeSentenceKey } from './normalize';
@@ -23,11 +23,33 @@ export interface DictationGrade {
 /** を is only ever the particle, pronounced お, and romaji can only produce お; compare by sound. */
 const foldWo = (text: string) => text.replace(/を/g, 'お');
 
+const HIRAGANA_CHAR = /^[ぁ-ゖ]$/u;
+const VOWEL_KANA: Record<string, string> = { a: 'あ', i: 'い', u: 'う', e: 'え', o: 'お' };
+
+/**
+ * Long vowels by sound, written the hiragana way: ー repeats the vowel before it, and the
+ * おう/えい spellings of long o/e are the same as おお/ええ (ポーランド = ぽうらんど = ぽおらんど).
+ */
+function foldLongVowels(hiragana: string): string {
+  let out = '';
+  for (const char of hiragana) {
+    const previous = out.slice(-1);
+    const vowel = HIRAGANA_CHAR.test(previous) ? toRomaji(previous).slice(-1) : '';
+    if (char === 'ー' && VOWEL_KANA[vowel]) out += VOWEL_KANA[vowel];
+    else if (char === 'う' && vowel === 'o') out += 'お';
+    else if (char === 'い' && vowel === 'e') out += 'え';
+    else out += char;
+  }
+  return out;
+}
+
 function comparable(text: string): string {
-  return foldWo(
-    toHiragana(normalizeSentenceKey(text).replace(/[\p{P}\p{S}]/gu, ''), {
-      convertLongVowelMark: false,
-    }),
+  return foldLongVowels(
+    foldWo(
+      toHiragana(normalizeSentenceKey(text).replace(/[\p{P}\p{S}]/gu, ''), {
+        convertLongVowelMark: false,
+      }),
+    ),
   );
 }
 

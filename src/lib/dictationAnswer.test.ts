@@ -24,6 +24,16 @@ describe('gradeDictation', () => {
     expect(gradeDictation('wana', '花', 'はな').correct).toBe(false);
   });
 
+  it('compares long vowels by sound, the hiragana way', () => {
+    for (const typed of ['po-randogo', 'pourandogo', 'poorandogo', 'ぽーらんどご'])
+      expect(gradeDictation(typed, 'ポーランド語', 'ぽーらんどご').correct).toBe(true);
+    expect(gradeDictation('keikaku', '計画', 'けいかく').correct).toBe(true);
+    expect(gradeDictation('keekaku', '計画', 'けいかく').correct).toBe(true);
+    expect(gradeDictation('poranodogo', 'ポーランド語', 'ぽーらんどご').correct).toBe(false);
+    // 買う (ka-u) is not a long vowel and must not fold into かあ.
+    expect(gradeDictation('kaa', '買う', 'かう').correct).toBe(false);
+  });
+
   it('treats katakana and hiragana as equal', () => {
     expect(gradeDictation('キノウ、トモダチトエイガヲミニイキマシタ。', JP, KANA).correct).toBe(true);
   });
