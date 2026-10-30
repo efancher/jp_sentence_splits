@@ -4074,6 +4074,10 @@ function DictationCard({
             onCheck(value, result.gradedAgainst);
           }}
         >
+          <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+            Romaji is fine: type it as it sounds and it is read as kana. を = o or wo, particle は = ha, へ = he, long
+            vowels as in hiragana (ou, oo, ei) or - for ー. Kanji, katakana and hiragana all work too.
+          </p>
           {tile ? (
             <div className="jp jp-lg" aria-label="Sentence with one phrase missing">
               {tile.before}<span style={{ borderBottom: '2px dashed var(--accent)', padding: '0 0.6rem' }}>＿＿</span>{tile.after}
