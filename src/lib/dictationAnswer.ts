@@ -23,6 +23,14 @@ export interface DictationGrade {
 /** を is only ever the particle, pronounced お, and romaji can only produce お; compare by sound. */
 const foldWo = (text: string) => text.replace(/を/g, 'お');
 
+/**
+ * Loanword ティ/ディ/トゥ/ドゥ are what plain romaji ti/di/tu/du type as ち/ぢ/つ/づ (thi/dhi/twu/dwu make the
+ * real ones), so compare them as the plain-romaji kana. Applied to both sides, so either way of typing works.
+ */
+function foldLoanSyllables(hiragana: string): string {
+  return hiragana.replace(/てぃ/g, 'ち').replace(/でぃ/g, 'ぢ').replace(/とぅ/g, 'つ').replace(/どぅ/g, 'づ');
+}
+
 const HIRAGANA_CHAR = /^[ぁ-ゖ]$/u;
 const VOWEL_KANA: Record<string, string> = { a: 'あ', i: 'い', u: 'う', e: 'え', o: 'お' };
 
@@ -45,10 +53,12 @@ function foldLongVowels(hiragana: string): string {
 
 function comparable(text: string): string {
   return foldLongVowels(
-    foldWo(
-      toHiragana(normalizeSentenceKey(text).replace(/[\p{P}\p{S}]/gu, ''), {
-        convertLongVowelMark: false,
-      }),
+    foldLoanSyllables(
+      foldWo(
+        toHiragana(normalizeSentenceKey(text).replace(/[\p{P}\p{S}]/gu, ''), {
+          convertLongVowelMark: false,
+        }),
+      ),
     ),
   );
 }

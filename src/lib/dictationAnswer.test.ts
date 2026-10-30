@@ -34,6 +34,14 @@ describe('gradeDictation', () => {
     expect(gradeDictation('kaa', '買う', 'かう').correct).toBe(false);
   });
 
+  it('accepts plain romaji ti/di for loanword ティ/ディ', () => {
+    for (const typed of ['supagettiwo', 'supagetthiwo', 'スパゲッティを'])
+      expect(gradeDictation(typed, 'スパゲッティを', 'すぱげってぃを').correct).toBe(true);
+    expect(gradeDictation('dexi', 'ディ', 'でぃ').correct).toBe(true);
+    expect(gradeDictation('di', 'ディ', 'でぃ').correct).toBe(true);
+    expect(gradeDictation('supagetsuwo', 'スパゲッティを', 'すぱげってぃを').correct).toBe(false);
+  });
+
   it('treats katakana and hiragana as equal', () => {
     expect(gradeDictation('キノウ、トモダチトエイガヲミニイキマシタ。', JP, KANA).correct).toBe(true);
   });
