@@ -18,6 +18,7 @@ import {
   logGlossDecision,
   updateMiningImportForJob,
 } from '../../src/db/repository';
+import { notifySync } from '../../src/db/syncNotify';
 import { createId } from '../../src/lib/ids';
 import { pushMutations } from '../../src/sync/engine';
 import { updateSyncMeta } from '../../src/sync/queue';
@@ -169,6 +170,17 @@ describe.skipIf(!PG_TESTS_ENABLED)('push against real Postgres + RLS', () => {
     await drain();
     expect(scalar(`select count(*) from mining_imports where deleted_at is null`)).toBe('1');
     expect(scalar(`select job_id from mining_imports`)).toBe('job-b');
+  });
+
+  it('pushes the grammar-checked marker on a sentence extras row, and plain extras rows still push without it', async () => {
+    await device(USER_A);
+    const stamp = '2026-10-31T00:00:00.000Z';
+    notifySync('sentence_extras', 'sent_plain', { id: 'sent_plain', createdAt: stamp, updatedAt: stamp });
+    notifySync('sentence_extras', 'sent_checked', { id: 'sent_checked', grammarChecked: true, createdAt: stamp, updatedAt: stamp });
+    expect(await drain()).toEqual([undefined]);
+    expect(scalar(`select count(*) from sentence_extras where deleted_at is null`)).toBe('2');
+    expect(scalar(`select coalesce(grammar_checked::text, 'null') from sentence_extras where id = 'sent_checked'`)).toBe('true');
+    expect(scalar(`select coalesce(grammar_checked::text, 'null') from sentence_extras where id = 'sent_plain'`)).toBe('null');
   });
 
   it('keeps mining-import tracking private to its owner', async () => {

@@ -1438,6 +1438,8 @@ export interface SentenceExtras {
   structureDraft?: StructureDraftChunk[];
   constructionDraft?: ConstructionLayer[];
   contextWalkthrough?: ContextWalkthrough;
+  /** True once the book assistant's grammar extra has looked at this sentence, even if it found nothing to link. */
+  grammarChecked?: boolean;
   createdAt: string;
   updatedAt: string;
 }

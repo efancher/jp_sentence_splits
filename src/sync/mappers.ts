@@ -1047,6 +1047,8 @@ export function sentenceExtrasToRemote(extras: SentenceExtras, ownerId: string, 
     structure_draft: extras.structureDraft ?? null,
     construction_draft: extras.constructionDraft ?? null,
     context_walkthrough: extras.contextWalkthrough ?? null,
+    // Only sent when set, so a push still works on a database that has not run the grammar_checked migration yet.
+    ...(extras.grammarChecked ? { grammar_checked: true } : {}),
     created_at: extras.createdAt,
     updated_at: extras.updatedAt,
     deleted_at: null,
@@ -1062,6 +1064,7 @@ export function remoteToSentenceExtras(row: Record<string, unknown>): SentenceEx
     structureDraft: (row.structure_draft as SentenceExtras['structureDraft'] | null) ?? undefined,
     constructionDraft: (row.construction_draft as SentenceExtras['constructionDraft'] | null) ?? undefined,
     contextWalkthrough: (row.context_walkthrough as SentenceExtras['contextWalkthrough'] | null) ?? undefined,
+    grammarChecked: row.grammar_checked ? true : undefined,
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
   };

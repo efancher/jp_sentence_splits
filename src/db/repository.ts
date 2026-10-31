@@ -9835,6 +9835,7 @@ export interface SentenceExtrasPatch {
   structureDraft?: StructureDraftChunk[];
   constructionDraft?: ConstructionLayer[];
   contextWalkthrough?: ContextWalkthrough;
+  grammarChecked?: boolean;
 }
 
 /** Merges AI drafts into per-sentence `sentence_extras` rows (one small synced row per sentence, not the book row). */
