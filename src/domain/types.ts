@@ -794,12 +794,6 @@ export interface AppSettings {
    */
   freshTryRequests?: Record<string, string>;
   /**
-   * Sentences the learner flagged "sound" trouble on a review card, sentenceId
-   * → request time. The shadow-candidate ranking puts them first until a
-   * shadowing attempt is saved after the request (review trouble tags).
-   */
-  shadowRequests?: Record<string, string>;
-  /**
    * Sentence-first planning (Phase 5): the daily plan's glossing bucket drafts
    * `sentence_learning` lesson steps (eligible with zero confirmed vocabulary)
    * instead of vocabulary_review/continue_book. Existing in-progress sessions
@@ -1259,6 +1253,7 @@ export type GameSignal = 'weak' | 'stale' | 'strong';
 export type EffectiveGameSignal = GameSignal | 'any';
 
 /** What the learner says was hard on a review card (see `src/lib/reviewTroubleTags.ts`). */
+/** `'sound'` is historical: the chip was removed 2026-10-31, but older local logs carry it. */
 export type ReviewTroubleTag = 'reading' | 'meaning' | 'kanji' | 'sound';
 
 /**
@@ -1273,7 +1268,7 @@ export interface ReviewTroubleLog {
   sentenceId: string;
   rating: ReviewRating;
   tags: ReviewTroubleTag[];
-  /** Follow-ups actually queued (a fresh try needs a completed walkthrough first). */
+  /** Follow-ups actually queued (a fresh try needs a completed walkthrough first). `shadow` is historical, always false now. */
   queued: { freshTry: boolean; shadow: boolean };
 }
 

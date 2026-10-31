@@ -44,7 +44,6 @@ describe('buildReviewTroubleReport', () => {
       reading: 1,
       meaning: 1,
       kanji: 0,
-      sound: 2,
     });
     expect(report.freshTry).toEqual({ queued: 1, done: 1 });
     expect(report.shadow).toEqual({ queued: 2, done: 1 });

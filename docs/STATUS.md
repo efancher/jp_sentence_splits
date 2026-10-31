@@ -22,12 +22,13 @@ and possible extensions. This snapshot does not certify a live deployment.
   finished on a later day than the first; a "say it" attempt is optional.
   Previously only `expression_attempt` counted, so the same sentences were
   re-drafted daily and crowded out new lessons (2026-10-21).
-- Review "Trouble with" chips (Reading, Meaning, Kanji, Sound; prototype,
+- Review "Trouble with" chips (Reading, Meaning, Kanji; prototype,
   2026-10-20): optional, tapped before rating, never choosing the FSRS rating
   or crediting cards. Reading/Meaning/Kanji queue a Fresh try (walked-through
   sentences only; otherwise nothing is queued, the sentence is still a first
-  lesson); Sound puts the sentence first in shadow candidates until a shadowing
-  attempt is saved after the flag (`settings.shadowRequests`). Tag use is logged
+  lesson). The Sound chip (queued shadowing priority) was removed 2026-10-31 now
+  that shadowing is its own self-rated card; old logs keep their `sound` tags
+  but the `/progress` panel no longer lists them. Tag use is logged
   in the local-only `reviewTroubleLogs` table (not synced or backed up), so
   tags are per-device evidence. The `/progress` "Review trouble tags" panel
   summarises that log: tag counts, share of misses tagged, follow-ups done, and

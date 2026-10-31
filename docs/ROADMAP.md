@@ -152,11 +152,10 @@ Unfinished work and optional extensions; completed behavior is in `AI_OVERVIEW.m
   prototype shipped and CI-green the same day, `3285d3a`. Preferred over the
   graph/learned-routing approach above because the learner names the weakness
   instead of the system inferring it.)
-  **Where it stands:** optional Reading/Meaning/Kanji/Sound chips on the review
+  **Where it stands:** optional Reading/Meaning/Kanji chips on the review
   card (shown after reveal, before rating, never affecting the rating).
-  Reading/Meaning/Kanji queue a Fresh try (walked-through sentences only);
-  Sound puts the sentence first in shadow candidates until a later attempt is
-  saved (`settings.shadowRequests`). Tag use is logged in the local-only
+  They queue a Fresh try (walked-through sentences only). The Sound chip and
+  `settings.shadowRequests` were removed 2026-10-31. Tag use is logged in the local-only
   `reviewTroubleLogs` table. Details and limits: STATUS.md. Not yet checked in a
   browser on phone or desktop.
   **Next, in order:**
@@ -170,9 +169,7 @@ Unfinished work and optional extensions; completed behavior is in `AI_OVERVIEW.m
      day or next); if undone when the card falls due, show the card anyway.
      Check against real data that it cannot starve a gate before shipping.
   3. **Sync** `reviewTroubleLogs` (needs a Supabase migration, RLS and the sync
-     mappers) once step 1 shows the tags are worth keeping. `shadowRequests`
-     lives in settings and should follow the same path as `freshTryRequests`;
-     confirm that.
+     mappers) once step 1 shows the tags are worth keeping.
   4. **Word-level tags.** Tap the problem word. `reading_in_context` already
      records "Missed reading" word taps, so check whether those can double as
      the Reading tag before adding a second mechanism.
@@ -187,9 +184,8 @@ Unfinished work and optional extensions; completed behavior is in `AI_OVERVIEW.m
     buttons with checkboxes alone would be a deliberate change to that rule.
   - **Remediation queue, not FSRS cards:** walkthroughs have no recall grade, so
     scheduling them as FSRS items would pollute stability. (Shadowing became a
-    self-rated `shadowing` review card on 2026-10-30; these flags still decide
-    when a sound-trouble sentence is *surfaced early*, and a Sound tag could
-    later simply pull that card forward. Open: a scheduled recheck of the
+    self-rated `shadowing` review card on 2026-10-30; the Sound tag was
+    removed 2026-10-31 rather than rerouted. Open: a scheduled recheck of the
     walkthrough's unaided step as its own FSRS item.)
     Use per-sentence flags (e.g. needs-walkthrough, needs-shadow) set by the
     tag and cleared when the activity is done. Reading/meaning trouble routes

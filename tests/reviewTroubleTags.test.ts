@@ -44,16 +44,15 @@ function makeSentence(japanese: string): Sentence {
 }
 
 describe('trouble tag routing (pure)', () => {
-  it('sends knowledge gaps to a fresh try and sound to shadowing', () => {
-    expect(routeTroubleTags(['reading'])).toEqual({ freshTry: true, shadow: false });
-    expect(routeTroubleTags(['kanji', 'meaning'])).toEqual({ freshTry: true, shadow: false });
-    expect(routeTroubleTags(['sound'])).toEqual({ freshTry: false, shadow: true });
-    expect(routeTroubleTags(['reading', 'sound'])).toEqual({ freshTry: true, shadow: true });
-    expect(routeTroubleTags([])).toEqual({ freshTry: false, shadow: false });
+  it('sends knowledge gaps to a fresh try', () => {
+    expect(routeTroubleTags(['reading'])).toEqual({ freshTry: true });
+    expect(routeTroubleTags(['kanji', 'meaning'])).toEqual({ freshTry: true });
+    expect(routeTroubleTags([])).toEqual({ freshTry: false });
   });
 
   it('normalizes to a de-duplicated display order', () => {
-    expect(normalizeTroubleTags(['sound', 'reading', 'sound'])).toEqual(['reading', 'sound']);
+    // The removed 'sound' tag is dropped if an old caller still passes it.
+    expect(normalizeTroubleTags(['sound', 'meaning', 'reading', 'meaning'])).toEqual(['reading', 'meaning']);
   });
 });
 
@@ -124,44 +123,11 @@ describe('recordReviewTroubleTags', () => {
     expect(unwalkedLog?.queued).toEqual({ freshTry: false, shadow: false });
     const settings = await ensureSettings(getDb());
     expect(Object.keys(settings.freshTryRequests ?? {})).toEqual([walked.id]);
-    expect(settings.shadowRequests).toBeUndefined();
     // No FSRS side effects: tagging records no review and no learning event beyond the walkthrough.
     expect(await getDb().reviews.count()).toBe(0);
     expect((await listSentenceLearningEvents(book.id)).map((event) => event.action)).toEqual([
       'walkthrough_completed',
     ]);
-  });
-
-  it('a sound tag floats the sentence to the front of shadow candidates until it is shadowed', async () => {
-    await updateSettings({ sentenceLedFlow: false });
-    const book = await createBook({ title: 'Shadow Tags' });
-    const first = await shadowReadySentence(book, '彼は忙しいです。');
-    const flagged = await shadowReadySentence(book, '今日は雨です。');
-    // Give the flagged sentence more shadows so plain ordering would put it last.
-    const blob = new Blob(['x'], { type: 'audio/webm' });
-    await saveAttempt({ sentenceId: flagged.id, blob, mimeType: 'audio/webm', durationMs: 100 });
-    await saveAttempt({ sentenceId: flagged.id, blob, mimeType: 'audio/webm', durationMs: 100 });
-    expect((await getSessionPlannerInput(60)).shadowCandidates[0]?.sentenceId).toBe(first.id);
-
-    await new Promise((resolve) => setTimeout(resolve, 5));
-    const item = await ensureStudyItem('sentence', flagged.id, 'reading_in_context');
-    const log = await recordReviewTroubleTags({
-      studyItemId: item.id,
-      sentenceId: flagged.id,
-      rating: 'hard',
-      tags: ['sound'],
-    });
-    expect(log?.queued.shadow).toBe(true);
-
-    const flaggedPlan = await getSessionPlannerInput(60);
-    expect(flaggedPlan.shadowCandidates[0]?.sentenceId).toBe(flagged.id);
-    expect(flaggedPlan.shadowCandidates[0]?.reason).toMatch(/^You flagged the sound in review/);
-
-    await new Promise((resolve) => setTimeout(resolve, 5));
-    // Shadowing it after the request clears the priority; the fewest-shadows order returns.
-    await saveAttempt({ sentenceId: flagged.id, blob, mimeType: 'audio/webm', durationMs: 100 });
-    const cleared = await getSessionPlannerInput(60);
-    expect(cleared.shadowCandidates[0]?.sentenceId).toBe(first.id);
   });
 
   it('reports tags, queued follow-ups and the next review from stored data', async () => {

@@ -10,7 +10,6 @@ export const REVIEW_TROUBLE_TAGS: { value: ReviewTroubleTag; label: string; hint
   { value: 'reading', label: 'Reading', hint: 'Could not recall how a word is read' },
   { value: 'meaning', label: 'Meaning', hint: 'Could not recall what a word or the sentence means' },
   { value: 'kanji', label: 'Kanji', hint: 'Did not recognise the kanji form' },
-  { value: 'sound', label: 'Sound', hint: 'Hard to say or hear: rhythm, pitch or speed' },
 ];
 
 const TAG_ORDER = REVIEW_TROUBLE_TAGS.map((tag) => tag.value);
@@ -22,14 +21,13 @@ export function normalizeTroubleTags(tags: readonly ReviewTroubleTag[]): ReviewT
 
 /**
  * Which follow-up each tag asks for: knowledge gaps (reading, meaning, kanji)
- * go to a walkthrough "fresh try"; a sound problem goes to shadowing.
+ * go to a walkthrough "fresh try". (A "sound" tag used to queue shadowing; it
+ * was removed 2026-10-31 once shadowing became its own self-rated card.)
  */
 export function routeTroubleTags(tags: readonly ReviewTroubleTag[]): {
   freshTry: boolean;
-  shadow: boolean;
 } {
   return {
     freshTry: tags.some((tag) => tag === 'reading' || tag === 'meaning' || tag === 'kanji'),
-    shadow: tags.includes('sound'),
   };
 }
