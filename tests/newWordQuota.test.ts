@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { pickAudioQuotaSubjects, pickQuotaSubjects, pickSentenceQuotaSubjects, quotaRemaining } from '../src/lib/newWordQuota';
+import {
+  pickAudioQuotaSubjects,
+  pickQuotaSubjects,
+  pickSentenceQuotaSubjects,
+  pickShadowingQuotaSubjects,
+  quotaRemaining,
+} from '../src/lib/newWordQuota';
 
 const seed = (descriptorKey: string, subjectId: string) => ({ descriptorKey, subjectId });
 
@@ -70,5 +76,25 @@ describe('pickAudioQuotaSubjects', () => {
   it('picks nothing when the quota is used up or off', () => {
     expect(pickAudioQuotaSubjects(pool, 0)).toEqual([]);
     expect(pickAudioQuotaSubjects(pool, Number.NaN)).toEqual([]);
+  });
+});
+
+describe('pickShadowingQuotaSubjects', () => {
+  const pool = [
+    seed('listening', 'a'),
+    seed('shadowingCard', 's1'),
+    seed('shadowingCard', 's1'),
+    seed('shadowingCard', 's2'),
+    seed('shadowingCard', 's3'),
+  ];
+
+  it('picks distinct sentences from the shadowing descriptor only, in pool order', () => {
+    expect(pickShadowingQuotaSubjects(pool, 2)).toEqual(['s1', 's2']);
+    expect(pickShadowingQuotaSubjects(pool, 10)).toEqual(['s1', 's2', 's3']);
+  });
+
+  it('picks nothing when the quota is used up or off', () => {
+    expect(pickShadowingQuotaSubjects(pool, 0)).toEqual([]);
+    expect(pickShadowingQuotaSubjects(pool, Number.NaN)).toEqual([]);
   });
 });

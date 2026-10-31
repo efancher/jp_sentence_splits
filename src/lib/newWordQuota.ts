@@ -81,6 +81,29 @@ export function pickSentenceQuotaSubjects(pool: readonly PoolSeed[], remaining: 
   return picked;
 }
 
+/** The descriptor whose subjects are audio-gated sentences' `shadowing` review cards. */
+export const SHADOWING_DESCRIPTOR_KEY = 'shadowingCard';
+
+/** New `shadowing` cards seeded per local day (no setting yet; a fixed floor like the other top-ups). */
+export const DAILY_NEW_SHADOWING_CARDS = 2;
+
+/**
+ * The daily shadowing top-up: the first `shadowing` card of up to `remaining`
+ * introduced, audio-bearing sentences, in pool order (already interleaved).
+ */
+export function pickShadowingQuotaSubjects(pool: readonly PoolSeed[], remaining: number): string[] {
+  if (!(remaining > 0)) return [];
+  const picked: string[] = [];
+  const seen = new Set<string>();
+  for (const seed of pool) {
+    if (seed.descriptorKey !== SHADOWING_DESCRIPTOR_KEY || seen.has(seed.subjectId)) continue;
+    seen.add(seed.subjectId);
+    picked.push(seed.subjectId);
+    if (picked.length >= remaining) break;
+  }
+  return picked;
+}
+
 /** How many words the top-up may still add today. */
 export function quotaRemaining(quota: number, seededToday: number): number {
   return Math.max(0, Math.floor(quota) - seededToday);

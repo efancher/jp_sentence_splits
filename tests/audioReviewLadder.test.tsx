@@ -72,6 +72,7 @@ function openReview() {
 beforeEach(async () => {
   resetDbForTests();
   await ensureSettings(); // Sentence-led flow stays on.
+  await updateSettings({ dailyNewShadowCardQuota: 0 }); // Shadowing has its own describe below.
 });
 
 describe('sentence-led audio review ladder', () => {
@@ -176,5 +177,65 @@ describe('sentence-led audio review ladder', () => {
     await screen.findByText('All caught up.');
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
     expect(await getDb().reviews.count()).toBe(0);
+  });
+});
+
+describe('shadowing review card', () => {
+  const shadowingItems = () =>
+    getDb().studyItems.where('subjectId').equals('s').and((row) => row.activityType === 'shadowing').toArray();
+  // Everything else is parked far in the future (Ear Tiles only once reviewed, so dictation stays locked).
+  const parkEarTiles = { state: 'review' as const, reps: 1, due: '2099-01-01T00:00:00.000Z' };
+  // A due listening card keeps the queue busy, so only the top-up can introduce the shadowing card.
+  async function makeQueueBusy() {
+    const listening = await ensureStudyItem('sentence', 's', 'listening');
+    await getDb().studyItems.update(listening.id, {
+      fsrsState: { ...listening.fsrsState, state: 'review', due: '2026-01-02T00:00:00.000Z' },
+    });
+  }
+
+  it('is introduced by the daily top-up, and not when switched off', async () => {
+    await seed({ earState: parkEarTiles });
+    await makeQueueBusy();
+    const off = openReview();
+    await screen.findByRole('button', { name: 'Reveal text' });
+    expect(await shadowingItems()).toHaveLength(0);
+    off.unmount();
+
+    await updateSettings({ dailyNewShadowCardQuota: 1 });
+    openReview();
+    await screen.findByRole('button', { name: 'Reveal text' });
+    await waitFor(async () => expect(await shadowingItems()).toHaveLength(1));
+  });
+
+  it('shows Record and withholds the rating buttons until a take exists', async () => {
+    await seed({ earState: parkEarTiles });
+    const item = await ensureStudyItem('sentence', 's', 'shadowing');
+    await getDb().studyItems.update(item.id, {
+      fsrsState: { ...item.fsrsState, state: 'review', due: '2026-01-02T00:00:00.000Z' },
+    });
+    openReview();
+    await screen.findByRole('button', { name: 'Record' });
+    expect(screen.queryByRole('button', { name: 'Good' })).not.toBeInTheDocument();
+    expect(await getDb().reviews.count()).toBe(0);
+  });
+
+  it('is withheld for sentences not yet introduced', async () => {
+    await seed({ introduced: false });
+    await updateSettings({ dailyNewShadowCardQuota: 5 });
+    openReview();
+    await screen.findByText('No sentences to review here yet.');
+    expect(await shadowingItems()).toHaveLength(0);
+  });
+
+  it('is withheld in quiet mode, even when already due', async () => {
+    await seed({ earState: parkEarTiles });
+    const item = await ensureStudyItem('sentence', 's', 'shadowing');
+    await getDb().studyItems.update(item.id, {
+      fsrsState: { ...item.fsrsState, state: 'review', due: '2026-01-02T00:00:00.000Z' },
+    });
+    await updateSettings({ quietMode: true });
+    openReview();
+    await screen.findByText('All caught up.');
+    expect(screen.queryByRole('button', { name: 'Record' })).not.toBeInTheDocument();
   });
 });

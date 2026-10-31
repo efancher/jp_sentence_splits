@@ -57,6 +57,7 @@ import {
   pickContextSentenceForGrammarPattern,
   readSettings,
   recordReview,
+  saveAttempt,
   recordReviewTroubleTags,
   reportCardIssue,
   settleSessionStep,
@@ -116,6 +117,9 @@ import { sentenceIsSuspendedOnly } from '../lib/suspendedBooks';
 import { startOfLocalDayIso } from '../lib/dailyPractice';
 import {
   AUDIO_DESCRIPTOR_KEY,
+  DAILY_NEW_SHADOWING_CARDS,
+  SHADOWING_DESCRIPTOR_KEY,
+  pickShadowingQuotaSubjects,
   pickSentenceQuotaSubjects,
   pickAudioQuotaSubjects,
   pickQuotaSubjects,
@@ -309,6 +313,14 @@ const PITCH_ACCENT_ACTIVITY_TYPES: StudyActivityType[] = ['pitch_accent'];
 const PITCH_ACCENT_PRODUCTION_ACTIVITY_TYPES: StudyActivityType[] = ['pitch_accent_production'];
 
 /**
+ * Shadowing as a review card (2026-10-30): the sentence's native clip plus a
+ * recorded take, self-rated like every other card. The take is also saved as an
+ * ordinary local `Attempt`, so shadow history/coverage counts it. Sentence
+ * subject, audio-bearing introduced sentences only; quiet mode withholds it.
+ */
+const SHADOWING_ACTIVITY_TYPES: StudyActivityType[] = ['shadowing'];
+
+/**
  * Grammar-pattern review: subjectType `grammarPattern`, subjectId a
  * GrammarPattern.id. Was a 4-card ladder (grammar_comprehension/
  * grammar_completion/grammar_contrast/grammar_production), collapsed
@@ -352,6 +364,7 @@ const ACTIVITY_LABELS: Record<string, string> = {
   sentence_transformation: 'Conjugation in context',
   pitch_accent: 'Pitch accent',
   pitch_accent_production: 'Pitch accent (say it)',
+  shadowing: 'Shadowing',
   grammar_completion: 'Grammar completion',
   grammar_recognition: 'Grammar recognition',
 };
@@ -891,6 +904,8 @@ interface ReviewScope {
   existingVocabularyItems: StudyItem[];
   audioCandidates: AudioCandidate[];
   existingAudioItems: StudyItem[];
+  shadowingCandidates: AudioCandidate[];
+  existingShadowingItems: StudyItem[];
   confusionPairCandidates: ConfusionPairCandidate[];
   existingConfusionItems: StudyItem[];
   sentenceConjugationCandidates: SentenceConjugationCandidate[];
@@ -1060,6 +1075,25 @@ function buildActivityDescriptors(scope: ReviewScope): ActivityDescriptor[] {
       ensure: (candidate, activityType) =>
         ensureStudyItem('sentenceVocabulary', candidate.link.id, activityType),
       gateSentenceId: (candidate) => candidate.sentence.id,
+    }),
+    defineActivityDescriptor<AudioCandidate>({
+      key: SHADOWING_DESCRIPTOR_KEY,
+      activityTypes: SHADOWING_ACTIVITY_TYPES,
+      // Sentence-led flow only; the older flow keeps its card set unchanged.
+      candidates: scope.introducedSentenceIds
+        ? scope.shadowingCandidates.filter((candidate) =>
+            scope.introducedSentenceIds!.has(candidate.sentence.id),
+          )
+        : [],
+      existingItems: scope.existingShadowingItems,
+      subjectId: (candidate) => candidate.sentence.id,
+      buildCard: (studyItem, candidate) => ({
+        studyItem,
+        sentence: candidate.sentence,
+        audio: candidate.audio,
+      }),
+      ensure: (candidate, activityType) =>
+        ensureStudyItem('sentence', candidate.sentence.id, activityType),
     }),
     defineActivityDescriptor<PitchAccentReviewCandidate>({
       key: 'pitchAccent',
@@ -1391,6 +1425,15 @@ export function ReviewPage() {
       (item) => item.subjectType === 'sentence' && audioBySentenceId.has(item.subjectId),
     );
 
+    // Shadowing cards: introduced sentences with a reference clip. Recording
+    // is required, so quiet mode withholds them (existing items too).
+    const shadowingCandidates = settings?.quietMode ? [] : audioCandidates;
+    const existingShadowingItems = settings?.quietMode
+      ? []
+      : (await db.studyItems.where('activityType').anyOf(SHADOWING_ACTIVITY_TYPES).toArray()).filter(
+          (item) => item.subjectType === 'sentence' && audioBySentenceId.has(item.subjectId),
+        );
+
     const confusionPairCandidates = await getConfusionPairCandidates(
       vocabularyTargetCandidates,
     );
@@ -1600,6 +1643,8 @@ export function ReviewPage() {
       existingVocabularyItems: paused ? [] : existingVocabularyItems,
       audioCandidates,
       existingAudioItems,
+      shadowingCandidates,
+      existingShadowingItems,
       confusionPairCandidates: paused ? [] : confusionPairCandidates,
       existingConfusionItems: paused ? [] : existingConfusionItems,
       sentenceConjugationCandidates: paused ? [] : sentenceConjugationCandidates,
@@ -1884,6 +1929,12 @@ export function ReviewPage() {
           quota: settings.dailyNewAudioCardQuota ?? 0,
           countedActivity: 'ear_tiles',
           pick: pickAudioQuotaSubjects,
+        },
+        {
+          key: SHADOWING_DESCRIPTOR_KEY,
+          quota: settings.dailyNewShadowCardQuota ?? DAILY_NEW_SHADOWING_CARDS,
+          countedActivity: 'shadowing',
+          pick: pickShadowingQuotaSubjects,
         },
       ];
       let sentenceTopUpCount = 0;
@@ -2398,6 +2449,13 @@ export function ReviewPage() {
                 context={current.readingContext}
                 revealed={revealed}
                 onReveal={() => setRevealed(true)}
+              />
+            ) : current.audio && current.studyItem.activityType === 'shadowing' ? (
+              <ShadowingCard
+                key={current.studyItem.id}
+                sentence={current.sentence}
+                audio={current.audio}
+                onTakeRecorded={() => setRevealed(true)}
               />
             ) : current.audio && current.studyItem.activityType === EAR_TILES_ACTIVITY ? (
               <EarTilesCard
@@ -3695,6 +3753,96 @@ function PitchAccentCard({
             <div className="muted">{vocabularyItem.meaning}</div>
           ) : null}
         </>
+      )}
+    </>
+  );
+}
+
+/**
+ * `shadowing` card body: hear the native clip (loopable), record your take,
+ * compare the two by ear, then self-rate. Recording a take reveals the rating
+ * buttons (and the measured native contour below); nothing is scored or
+ * auto-rated. The take is saved as a local `Attempt` so shadow history and
+ * coverage ordering see it.
+ */
+function ShadowingCard({
+  sentence,
+  audio,
+  onTakeRecorded,
+}: {
+  sentence: Sentence;
+  audio: SentenceAudio;
+  onTakeRecorded: () => void;
+}) {
+  const shadowing = useShadowing();
+  const { cancelRecording } = shadowing;
+  const [takeUrl, setTakeUrl] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const savedRef = useRef<Blob | null>(null);
+
+  useEffect(() => () => cancelRecording(), [cancelRecording]);
+
+  useEffect(() => {
+    const take = shadowing.status === 'stopped' ? shadowing.lastRecording : null;
+    if (!take || savedRef.current === take.blob) return;
+    savedRef.current = take.blob;
+    const url = URL.createObjectURL(take.blob);
+    setTakeUrl((previous) => {
+      if (previous) URL.revokeObjectURL(previous);
+      return url;
+    });
+    setSaveError(null);
+    void saveAttempt({
+      sentenceId: sentence.id,
+      blob: take.blob,
+      mimeType: take.blob.type || 'audio/webm',
+      durationMs: take.durationMs,
+    }).catch((error: unknown) => {
+      // The review itself must not depend on the history write.
+      setSaveError(error instanceof Error ? error.message : 'Unable to save this take.');
+    });
+    onTakeRecorded();
+  }, [shadowing.status, shadowing.lastRecording, sentence.id, onTakeRecorded]);
+
+  useEffect(
+    () => () => {
+      setTakeUrl((previous) => {
+        if (previous) URL.revokeObjectURL(previous);
+        return null;
+      });
+    },
+    [],
+  );
+
+  const isRecording = shadowing.status === 'recording';
+  const isRequestingMic = shadowing.status === 'requesting-mic';
+
+  return (
+    <>
+      <div className="jp jp-lg">{sentence.japanese}</div>
+      {sentence.translation ? <div className="muted">{sentence.translation}</div> : null}
+      <div className="row" style={{ alignItems: 'center' }}>
+        <NativeAudioButton audio={audio} displayLabel="Play native" loopable />
+        <RecordToggleButton
+          isRecording={isRecording}
+          isRequestingMic={isRequestingMic}
+          elapsedMs={shadowing.recordingElapsedMs}
+          maxDurationMs={MAX_RECORDING_DURATION_MS}
+          idleLabel={takeUrl ? 'Record again' : 'Record'}
+          onStart={() => void shadowing.startRecording()}
+          onStop={() => void shadowing.stopRecording()}
+        />
+      </div>
+      {shadowing.error ? <p className="muted">{shadowing.error}</p> : null}
+      {saveError ? <p className="muted">{saveError}</p> : null}
+      {takeUrl ? (
+        <div className="stack">
+          {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+          <audio controls src={takeUrl} />
+          <div className="muted">Listen to your take against the native clip, then rate how it went.</div>
+        </div>
+      ) : (
+        <div className="muted">Shadow the clip, then record your take to rate this card.</div>
       )}
     </>
   );

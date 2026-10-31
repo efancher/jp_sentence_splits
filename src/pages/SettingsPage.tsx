@@ -262,6 +262,25 @@ export function SettingsPage() {
           cards follow once Ear Tiles is known well. 0 turns it off.
         </p>
         <label>
+          New shadowing cards per day
+          <input
+            type="number"
+            min={0}
+            step={1}
+            value={settings.dailyNewShadowCardQuota ?? 2}
+            onChange={(event) => {
+              const parsed = Number.parseInt(event.target.value, 10);
+              if (Number.isNaN(parsed) || parsed < 0) return;
+              void updateSettings({ dailyNewShadowCardQuota: parsed });
+            }}
+          />
+        </label>
+        <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+          Introduced sentences with audio get a shadowing card when Review
+          opens: play the native clip, record your take, then rate it yourself.
+          Sentence-led flow only; hidden in quiet mode. 0 turns it off.
+        </p>
+        <label>
           Graduate after this many days between reviews
           <input
             type="number"

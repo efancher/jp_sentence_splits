@@ -11253,7 +11253,13 @@ export async function getSessionPlannerInput(
     legacyPaused ? items.filter((item) => !isPausedLegacyDrillSubject(item.subjectType)) : items;
   const practiceDueItemsForMode = unlessLegacyPaused(
     settings.quietMode || settings.pitchAccentPaused
-      ? practiceDueItems.filter((item) => item.activityType !== 'pitch_accent_production')
+      ? practiceDueItems.filter(
+          (item) =>
+            item.activityType !== 'pitch_accent_production' &&
+            // `shadowing` records a take, so quiet mode withholds it; "Pause
+            // pitch accent" does not (shadowing is the sole pitch vehicle).
+            !(settings.quietMode && item.activityType === 'shadowing'),
+        )
       : practiceDueItems,
   );
   const [retainDueReady, practiceDueReady] = await Promise.all([

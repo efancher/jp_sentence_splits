@@ -73,6 +73,8 @@ export const PRACTICE_ACTIVITY_TYPES: StudyActivityType[] = [
   'grammar_contrast',
   'grammar_production',
   'pitch_accent_production',
+  // Record a take against the native clip, then self-rate (2026-10-30).
+  'shadowing',
 ];
 
 /** StudyItem subjects withheld by settings.legacyDrillsPaused (word & grammar drills); sentence/chunk cards continue. */

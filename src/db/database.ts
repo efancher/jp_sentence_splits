@@ -72,6 +72,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   dailyNewWordQuota: 12,
   dailyNewAudioCardQuota: 3,
   dailyNewSentenceCardQuota: 5,
+  dailyNewShadowCardQuota: 2,
   sentenceLedFlow: true,
   graduationMinScheduledDays: 180,
   dailyBudgetMinutes: DEFAULT_DAILY_BUDGET_MINUTES,

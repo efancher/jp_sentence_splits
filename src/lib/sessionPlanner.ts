@@ -524,7 +524,7 @@ export function reviewItemCostMinutes(activityType: StudyActivityType): number {
   // pitch_accent_production is neither list (record -> align -> score is its
   // own, slower cost tier) — checked first so it doesn't silently fall into
   // the cheap retain default.
-  if (activityType === 'pitch_accent_production') return MODE_ACTIVITY_ESTIMATE_MINUTES.pitchProduction;
+  if (activityType === 'pitch_accent_production' || activityType === 'shadowing') return MODE_ACTIVITY_ESTIMATE_MINUTES.pitchProduction;
   return PRACTICE_ACTIVITY_TYPE_SET.has(activityType)
     ? MODE_ACTIVITY_ESTIMATE_MINUTES.practice
     : MODE_ACTIVITY_ESTIMATE_MINUTES.retain;

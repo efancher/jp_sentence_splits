@@ -32,6 +32,8 @@ const SELF_RATED_ACTIVITY_TYPES = [
   // this bucket rather than GRADED_ACTIVITY_TYPES (docs/ROADMAP.md "Pull
   // the pitch-accent production drill into a review card…").
   'pitch_accent_production',
+  // Self-rated take against the native clip; no objective score.
+  'shadowing',
 ] as const;
 
 const GRADED_ACTIVITY_TYPES = [

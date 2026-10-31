@@ -1664,6 +1664,20 @@ Activity types currently wired, grouped by subject/eligibility (under the defaul
   `review`). The ✓/✗ is supplementary; the 4-point self-rate still sets the
   schedule; a miss classifies as `listening_failure`. Dictation tiles are
   `practice`-costed, `ear_tiles` is `retain`-costed.
+- **Sentence subject, audio-gated**: `shadowing` (2026-10-30) — introduced
+  sentences with a `SentenceAudio` row. The card shows the sentence, a
+  loopable native-clip button and Record; recording a take reveals the
+  self-rate buttons (and the measured native contour). Nothing is scored or
+  auto-rated: the 4-point self-rate alone sets the FSRS schedule, no
+  `Review` evidence field is added. The take is also saved as an ordinary
+  local `Attempt`, so shadow history and "fewest prior shadows" coverage
+  ordering count it. Seeded by a daily top-up
+  (`settings.dailyNewShadowCardQuota`, default 2, 0 = off) and the empty-queue
+  lazy path; withheld in quiet mode (existing items too), not by "Pause pitch
+  accent" (shadowing is the sole pitch vehicle). `practice`-costed at the
+  pitch-production tier. Walkthroughs are deliberately not FSRS items (the
+  walkthrough already seeds `reading_in_context`); a scheduled recheck of the
+  unaided step remains a possible follow-up (ROADMAP).
 - **Sentence subject, audio-gated**: `listening` — only eligible for
   sentences with a `SentenceAudio` row; audio plays first, Japanese text
   stays hidden until reveal. A playback-speed `<select>` (same

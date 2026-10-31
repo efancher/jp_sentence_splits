@@ -719,6 +719,13 @@ export interface AppSettings {
    */
   dailyNewAudioCardQuota: number;
   /**
+   * How many introduced sentences with audio get their first `shadowing`
+   * review card (record a take, self-rate) each local day when Review opens
+   * (2026-10-30). `0` turns it off. Readers still fall back to the default
+   * for records saved before this existed.
+   */
+  dailyNewShadowCardQuota: number;
+  /**
    * How many introduced sentences get their first `reading_in_context` card
    * each local day when Review opens, whether or not the due queue is empty
    * (2026-10-21). The lazy path only seeds on an empty queue, so none were

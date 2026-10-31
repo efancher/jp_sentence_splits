@@ -185,8 +185,12 @@ Unfinished work and optional extensions; completed behavior is in `AI_OVERVIEW.m
     path stays one tap. Keep the explicit FSRS rating: tags are supplementary
     evidence, never an auto-derived rating (house rule). Replacing the four
     buttons with checkboxes alone would be a deliberate change to that rule.
-  - **Remediation queue, not FSRS cards:** shadowing and walkthroughs have no
-    recall grade, so scheduling them as FSRS items would pollute stability.
+  - **Remediation queue, not FSRS cards:** walkthroughs have no recall grade, so
+    scheduling them as FSRS items would pollute stability. (Shadowing became a
+    self-rated `shadowing` review card on 2026-10-30; these flags still decide
+    when a sound-trouble sentence is *surfaced early*, and a Sound tag could
+    later simply pull that card forward. Open: a scheduled recheck of the
+    walkthrough's unaided step as its own FSRS item.)
     Use per-sentence flags (e.g. needs-walkthrough, needs-shadow) set by the
     tag and cleared when the activity is done. Reading/meaning trouble routes
     to a walkthrough; fluency/sound trouble routes to shadowing. Doing them

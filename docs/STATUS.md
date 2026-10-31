@@ -43,6 +43,11 @@ and possible extensions. This snapshot does not certify a live deployment.
   `reading_in_context` card of introduced sentences
   (`settings.dailyNewSentenceCardQuota`, default 5): none had been created after
   2026-10-18 for the same reason.
+- Shadowing is also a review card (`shadowing`, 2026-10-30): native clip, record
+  a take, self-rate; the take is saved as a local `Attempt` too. Topped up daily
+  (`settings.dailyNewShadowCardQuota`, default 2), hidden in quiet mode. The
+  ShadowPage loop is unchanged. Unverified on a physical iPhone (recording in
+  Review uses the same `useShadowing` hook as the pitch production card).
 - Audio reviews offer `ear_tiles`, then `dictation_tile:N` after Ear Tiles has
   two reviews and is out of learning/relearning. Whole-sentence dictation is
   retired. Typed-match feedback never chooses the FSRS rating.
