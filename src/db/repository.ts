@@ -10504,8 +10504,8 @@ export async function requestFreshTry(sentenceId: string, now: Date = new Date()
 /**
  * Review "what was hard?" tags (docs/ROADMAP.md "Review trouble tags and
  * remediation queue"). Logs the tags locally and queues the follow-up after the
- * review: reading/meaning/kanji → a Fresh try (walked-through sentences only).
- * Never touches FSRS or credits any card.
+ * review: reading/meaning/kanji → a Fresh try (walked-through sentences only),
+ * sound → shadowing priority. Never touches FSRS or credits any card.
  */
 export async function recordReviewTroubleTags(input: {
   studyItemId: string;
@@ -10520,6 +10520,13 @@ export async function recordReviewTroubleTags(input: {
   const route = routeTroubleTags(tags);
   const queued = { freshTry: false, shadow: false };
   if (route.freshTry) queued.freshTry = (await requestFreshTry(input.sentenceId, now)) === 'queued';
+  if (route.shadow) {
+    const settings = await ensureSettings(getDb());
+    await updateSettings({
+      shadowRequests: { ...settings.shadowRequests, [input.sentenceId]: now.toISOString() },
+    });
+    queued.shadow = true;
+  }
   const log: ReviewTroubleLog = {
     id: createId('review_trouble'),
     timestamp: now.toISOString(),
@@ -10993,6 +11000,7 @@ async function findShadowCandidates(
   const sentenceIdsWithAudio = sentenceIdsWithAudioUnfiltered.filter((id) => readiness.get(id));
   if (sentenceIdsWithAudio.length === 0) return [];
 
+  const shadowRequests = (await ensureSettings(db)).shadowRequests ?? {};
   const [attempts, sentences, bookSentences, recentlyMissedClozeSentenceIds] = await Promise.all([
     db.attempts.where('sentenceId').anyOf(sentenceIdsWithAudio).toArray(),
     db.sentences.bulkGet(sentenceIdsWithAudio),
@@ -11003,6 +11011,12 @@ async function findShadowCandidates(
   for (const attempt of attempts) {
     attemptCountBySentenceId.set(attempt.sentenceId, (attemptCountBySentenceId.get(attempt.sentenceId) ?? 0) + 1);
   }
+  // A "sound" trouble tag stays pending until a shadowing attempt is saved after it.
+  const requestedSentenceIds = new Set(
+    Object.entries(shadowRequests)
+      .filter(([id, at]) => !attempts.some((attempt) => attempt.sentenceId === id && attempt.createdAt > at))
+      .map(([id]) => id),
+  );
   const bookIdBySentenceId = new Map(bookSentences.map((item) => [item.sentenceId, item.bookId]));
 
   return sentenceIdsWithAudio
@@ -11011,9 +11025,11 @@ async function findShadowCandidates(
       sentence: sentences[index],
       attemptCount: attemptCountBySentenceId.get(sentenceId) ?? 0,
       recentlyMissedCloze: recentlyMissedClozeSentenceIds.has(sentenceId),
+      requested: requestedSentenceIds.has(sentenceId),
     }))
     .filter((candidate): candidate is typeof candidate & { sentence: Sentence } => Boolean(candidate.sentence))
     .sort((a, b) => {
+      if (a.requested !== b.requested) return a.requested ? -1 : 1;
       if (a.recentlyMissedCloze !== b.recentlyMissedCloze) return a.recentlyMissedCloze ? -1 : 1;
       return a.attemptCount - b.attemptCount;
     })
@@ -11022,7 +11038,9 @@ async function findShadowCandidates(
       sentenceId: candidate.sentenceId,
       bookId: bookIdBySentenceId.get(candidate.sentenceId),
       label: candidate.sentence.japanese.slice(0, 24),
-      reason: candidate.recentlyMissedCloze
+      reason: candidate.requested
+        ? `You flagged the sound in review — ${shadowAttemptSummary(candidate.attemptCount).toLowerCase()}`
+        : candidate.recentlyMissedCloze
         ? `Missed in review — ${shadowAttemptSummary(candidate.attemptCount).toLowerCase()}`
         : shadowAttemptSummary(candidate.attemptCount),
     }));
@@ -11256,13 +11274,7 @@ export async function getSessionPlannerInput(
     legacyPaused ? items.filter((item) => !isPausedLegacyDrillSubject(item.subjectType)) : items;
   const practiceDueItemsForMode = unlessLegacyPaused(
     settings.quietMode || settings.pitchAccentPaused
-      ? practiceDueItems.filter(
-          (item) =>
-            item.activityType !== 'pitch_accent_production' &&
-            // `shadowing` records a take, so quiet mode withholds it; "Pause
-            // pitch accent" does not (shadowing is the sole pitch vehicle).
-            !(settings.quietMode && item.activityType === 'shadowing'),
-        )
+      ? practiceDueItems.filter((item) => item.activityType !== 'pitch_accent_production')
       : practiceDueItems,
   );
   const [retainDueReady, practiceDueReady] = await Promise.all([

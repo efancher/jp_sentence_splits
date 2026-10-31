@@ -719,13 +719,6 @@ export interface AppSettings {
    */
   dailyNewAudioCardQuota: number;
   /**
-   * How many introduced sentences with audio get their first `shadowing`
-   * review card (record a take, self-rate) each local day when Review opens
-   * (2026-10-30). `0` turns it off. Readers still fall back to the default
-   * for records saved before this existed.
-   */
-  dailyNewShadowCardQuota: number;
-  /**
    * How many introduced sentences get their first `reading_in_context` card
    * each local day when Review opens, whether or not the due queue is empty
    * (2026-10-21). The lazy path only seeds on an empty queue, so none were
@@ -793,6 +786,12 @@ export interface AppSettings {
    * the spaced schedule until an expression attempt is logged after the request.
    */
   freshTryRequests?: Record<string, string>;
+  /**
+   * Sentences the learner flagged "sound" trouble on a review card, sentenceId
+   * → request time. The shadow-candidate ranking puts them first until a
+   * shadowing attempt is saved after the request (review trouble tags).
+   */
+  shadowRequests?: Record<string, string>;
   /**
    * Sentence-first planning (Phase 5): the daily plan's glossing bucket drafts
    * `sentence_learning` lesson steps (eligible with zero confirmed vocabulary)
@@ -1253,7 +1252,6 @@ export type GameSignal = 'weak' | 'stale' | 'strong';
 export type EffectiveGameSignal = GameSignal | 'any';
 
 /** What the learner says was hard on a review card (see `src/lib/reviewTroubleTags.ts`). */
-/** `'sound'` is historical: the chip was removed 2026-10-31, but older local logs carry it. */
 export type ReviewTroubleTag = 'reading' | 'meaning' | 'kanji' | 'sound';
 
 /**
@@ -1268,7 +1266,7 @@ export interface ReviewTroubleLog {
   sentenceId: string;
   rating: ReviewRating;
   tags: ReviewTroubleTag[];
-  /** Follow-ups actually queued (a fresh try needs a completed walkthrough first). `shadow` is historical, always false now. */
+  /** Follow-ups actually queued (a fresh try needs a completed walkthrough first). */
   queued: { freshTry: boolean; shadow: boolean };
 }
 

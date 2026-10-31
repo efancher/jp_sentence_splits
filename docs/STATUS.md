@@ -22,13 +22,12 @@ and possible extensions. This snapshot does not certify a live deployment.
   finished on a later day than the first; a "say it" attempt is optional.
   Previously only `expression_attempt` counted, so the same sentences were
   re-drafted daily and crowded out new lessons (2026-10-21).
-- Review "Trouble with" chips (Reading, Meaning, Kanji; prototype,
+- Review "Trouble with" chips (Reading, Meaning, Kanji, Sound; prototype,
   2026-10-20): optional, tapped before rating, never choosing the FSRS rating
   or crediting cards. Reading/Meaning/Kanji queue a Fresh try (walked-through
   sentences only; otherwise nothing is queued, the sentence is still a first
-  lesson). The Sound chip (queued shadowing priority) was removed 2026-10-31 now
-  that shadowing is its own self-rated card; old logs keep their `sound` tags
-  but the `/progress` panel no longer lists them. Tag use is logged
+  lesson); Sound puts the sentence first in shadow candidates until a shadowing
+  attempt is saved after the flag (`settings.shadowRequests`). Tag use is logged
   in the local-only `reviewTroubleLogs` table (not synced or backed up), so
   tags are per-device evidence. The `/progress` "Review trouble tags" panel
   summarises that log: tag counts, share of misses tagged, follow-ups done, and
@@ -44,11 +43,6 @@ and possible extensions. This snapshot does not certify a live deployment.
   `reading_in_context` card of introduced sentences
   (`settings.dailyNewSentenceCardQuota`, default 5): none had been created after
   2026-10-18 for the same reason.
-- Shadowing is also a review card (`shadowing`, 2026-10-30): native clip, record
-  a take, self-rate; the take is saved as a local `Attempt` too. Topped up daily
-  (`settings.dailyNewShadowCardQuota`, default 2), hidden in quiet mode. The
-  ShadowPage loop is unchanged. Unverified on a physical iPhone (recording in
-  Review uses the same `useShadowing` hook as the pitch production card).
 - Audio reviews offer `ear_tiles`, then `dictation_tile:N` after Ear Tiles has
   two reviews and is out of learning/relearning. Whole-sentence dictation is
   retired. Typed-match feedback never chooses the FSRS rating.
