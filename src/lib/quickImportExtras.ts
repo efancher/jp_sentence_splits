@@ -9,6 +9,8 @@
  */
 import { getDb } from '../db/database';
 import {
+  ensureGrammarPattern,
+  ensureSentenceGrammar,
   getEpisodePreparationContext,
   saveEpisodePackReply,
   setSentenceComprehensionCheck,
@@ -19,6 +21,8 @@ import { buildComprehensionCheck, parseBatchComprehensionCheckReply, parseBatchE
 import { checkSentenceReading } from './meaningCheckAutogen';
 import { mergeDistractorsWithSwaps } from './meaningChoices';
 import { remapSentenceHandles, type CombinedReplySections } from './combinedImportPrompt';
+import { planGrammarLinks } from './grammarLinkApply';
+import { parseBookGrammarReply } from './grammarLinkReply';
 import { parseBookParticleReply } from './particleChecks';
 
 export interface QuickImportExtrasResult {
@@ -29,6 +33,8 @@ export interface QuickImportExtrasResult {
   comprehension: number;
   readingsFixed: number;
   particles: number;
+  /** Sentence-to-pattern links saved by the book page's grammar extra. */
+  grammarLinks: number;
   problems: string[];
   /** Entries the parsers skipped, one per sentence, so callers can group them by reason. */
   rejections: Rejection[];
@@ -57,7 +63,7 @@ export function describeRejections(rejections: readonly Rejection[]): string {
 }
 
 export function hasQuickImportExtras(sections: CombinedReplySections): boolean {
-  return Boolean(sections.pack || sections.structure || sections.comprehension || sections.particles);
+  return Boolean(sections.pack || sections.structure || sections.comprehension || sections.particles || sections.grammar);
 }
 
 /** `sentenceIdByNumber[n - 1]` is the committed sentence id for the assistant's S<n>, or undefined if that row was removed. */
@@ -76,6 +82,7 @@ export async function applyQuickImportExtras(
     comprehension: 0,
     readingsFixed: 0,
     particles: 0,
+    grammarLinks: 0,
     problems: [],
     rejections: [],
   };
@@ -117,6 +124,10 @@ export async function applyQuickImportExtras(
       await setSentenceParticleChecks(sentenceId, checks);
       if (checks.length > 0) result.particles += 1;
     }
+  }
+
+  if (sections.grammar) {
+    result.grammarLinks = await applyGrammarLinks(sections.grammar, sentenceIdByNumber, result.problems);
   }
 
   if (sections.pack || sections.structure) {
@@ -176,4 +187,56 @@ export function takeImportExtrasNotice(bookId: string): string | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Saves the assistant's grammar links as unconfirmed `ai_suggested` occurrences. A pattern it names that the learner
+ * does not have is created (also `ai_suggested`) and reused by later sentences in the same reply. An occurrence the
+ * learner already confirmed, or that already has a span, is left exactly as it is.
+ */
+async function applyGrammarLinks(
+  reply: string,
+  sentenceIdByNumber: ReadonlyArray<string | undefined>,
+  problems: string[],
+): Promise<number> {
+  const db = getDb();
+  const parsed = parseBookGrammarReply(reply, sentenceIdByNumber.length);
+  const ids = sentenceIdByNumber.filter((id): id is string => Boolean(id));
+  const sentences = new Map((await db.sentences.bulkGet(ids)).flatMap((row) => (row ? [[row.id, row] as const] : [])));
+  const patterns = await db.grammarPatterns.toArray();
+  let saved = 0;
+  let dropped = 0;
+  for (const [index, links] of parsed.entries()) {
+    const sentenceId = sentenceIdByNumber[index];
+    const sentence = sentenceId ? sentences.get(sentenceId) : undefined;
+    if (!links || links.length === 0 || !sentenceId || !sentence) continue;
+    const { planned, dropped: bad } = planGrammarLinks(sentence.japanese, links, patterns);
+    dropped += bad.length;
+    for (const link of planned) {
+      let patternId = link.patternId;
+      if (!patternId && link.newPattern) {
+        const created = await ensureGrammarPattern(link.newPattern.name, {
+          shortMeaning: link.newPattern.meaning || undefined,
+          structuralTemplate: link.newPattern.template || undefined,
+          provenance: 'ai_suggested',
+        });
+        patterns.push(created);
+        patternId = created.id;
+      }
+      if (!patternId) continue;
+      const existing = await db.sentenceGrammar.where('[sentenceId+grammarPatternId]').equals([sentenceId, patternId]).first();
+      if (existing && (existing.confirmedByLearner || existing.start !== undefined)) continue;
+      await ensureSentenceGrammar(sentenceId, patternId, {
+        surfaceForm: link.surfaceForm,
+        start: link.start,
+        end: link.end,
+        occurrenceExplanation: link.note || undefined,
+        confirmedByLearner: false,
+        source: 'ai_suggested',
+      });
+      saved += 1;
+    }
+  }
+  if (dropped > 0) problems.push(`Grammar: ${dropped} link${dropped === 1 ? '' : 's'} skipped because the quoted text was not in the sentence.`);
+  return saved;
 }

@@ -171,7 +171,7 @@ async function main(): Promise<void> {
     const run = (prompt: string) => runAssist(prompt, spec.backend ?? 'auto');
     if (spec.sentences && spec.selection) {
       await runBookExtrasPipeline({
-        spec: { sentences: spec.sentences, selection: spec.selection },
+        spec: { sentences: spec.sentences, selection: spec.selection, grammarPatterns: spec.grammarPatterns },
         state,
         run,
         save: saveState,

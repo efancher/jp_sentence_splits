@@ -160,6 +160,14 @@ def test_book_extras_run_stores_spec_and_returns_pieces(client: TestClient, tmp_
     assert body["selection"] == {"walkthroughs": [1]} and body["sentenceCount"] == len(spec["sentences"])
 
 
+def test_book_extras_run_keeps_the_grammar_pattern_list_in_the_spec(client: TestClient, tmp_path: Path) -> None:
+    patterns = [{"id": "p1", "name": "〜ている", "template": "V-て + いる", "aliases": ["〜てる"]}]
+    body = {**BOOK_BODY, "runId": "book-extras-b2", "selection": {"grammar": [1]}, "grammarPatterns": patterns}
+    assert client.post("/assist-runs", json=body).json()["status"] == "running"
+    spec = json.loads((tmp_path / "assist-runs" / "book-extras-b2" / "spec.json").read_text())
+    assert spec["selection"] == {"grammar": [1]} and spec["grammarPatterns"] == patterns
+
+
 def test_run_needs_a_transcript_or_book_sentences(client: TestClient) -> None:
     assert client.post("/assist-runs", json={"runId": "x"}).status_code == 422
     assert client.post("/assist-runs", json={**BOOK_BODY, "selection": {}}).status_code == 422

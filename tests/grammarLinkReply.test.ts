@@ -1,32 +1,46 @@
 import { describe, expect, it } from 'vitest';
 import {
+  NO_AUTO_LINK_FAMILY,
   formatGrammarPatternList,
+  linkablePatterns,
   locateGrammarSpan,
   parseBookGrammarReply,
 } from '../src/lib/grammarLinkReply';
 
 describe('formatGrammarPatternList', () => {
-  it('numbers patterns from P1 with template and aliases', () => {
+  it('lists name, template and aliases, one pattern per line', () => {
     const lines = formatGrammarPatternList([
       { id: 'a', name: '〜ている', template: 'V-て + いる' },
       { id: 'b', name: '〜わけがない', aliases: ['訳がない'] },
+      { id: 'c', name: '〜ましょう' },
     ]);
-    expect(lines).toEqual(['P1 〜ている | V-て + いる', 'P2 〜わけがない | also: 訳がない']);
+    expect(lines).toEqual(['〜ている | V-て + いる', '〜わけがない | also: 訳がない', '〜ましょう']);
   });
 
   it('says so when no patterns are known', () => {
-    expect(formatGrammarPatternList([])[0]).toMatch(/every pattern you report is NEW/);
+    expect(formatGrammarPatternList([])[0]).toMatch(/every pattern you report is new/);
+  });
+});
+
+describe('linkablePatterns', () => {
+  it('drops patterns tagged no-auto-link and keeps untagged or other families', () => {
+    const kept = linkablePatterns([
+      { id: 'a', family: null },
+      { id: 'b', family: NO_AUTO_LINK_FAMILY },
+      { id: 'c', family: 'conditionals' },
+      { id: 'd' },
+    ]);
+    expect(kept.map((p) => p.id)).toEqual(['a', 'c', 'd']);
   });
 });
 
 describe('parseBookGrammarReply', () => {
   const reply = [
     '=== Sentence 1 ===',
-    'PATTERN: P2',
+    'PATTERN: 〜てしまう',
     'SPAN: 食べてしまった',
     'NOTE: regret',
-    'PATTERN: NEW',
-    'NAME: 〜ようにする',
+    'PATTERN: 〜ようにする',
     'TEMPLATE: V + ようにする',
     'MEANING: make a point of',
     'SPAN: 食べるようにして',
@@ -34,36 +48,30 @@ describe('parseBookGrammarReply', () => {
     '=== Sentence 2 ===',
     'NONE',
     '=== Sentence 4 ===',
-    'PATTERN: P9',
-    'SPAN: 何か',
-    'NOTE: out of range',
+    'PATTERN: 〜ている',
+    'NOTE: no span, so unusable',
   ].join('\n');
 
-  it('parses existing and new patterns, NONE, and missing sections', () => {
-    const parsed = parseBookGrammarReply(reply, 4, 3);
+  it('parses links, NONE, and missing sections', () => {
+    const parsed = parseBookGrammarReply(reply, 4);
     expect(parsed[0]).toEqual([
-      { patternNumber: 2, span: '食べてしまった', note: 'regret' },
-      {
-        newPattern: { name: '〜ようにする', template: 'V + ようにする', meaning: 'make a point of' },
-        span: '食べるようにして',
-        note: 'habit',
-      },
+      { name: '〜てしまう', template: '', meaning: '', span: '食べてしまった', note: 'regret' },
+      { name: '〜ようにする', template: 'V + ようにする', meaning: 'make a point of', span: '食べるようにして', note: 'habit' },
     ]);
     expect(parsed[1]).toEqual([]);
     expect(parsed[2]).toBeNull();
   });
 
   it('leaves a sentence as a candidate when every block is unusable', () => {
-    expect(parseBookGrammarReply(reply, 4, 3)[3]).toBeNull();
+    expect(parseBookGrammarReply(reply, 4)[3]).toBeNull();
   });
 
-  it('rejects a NEW pattern with no name and a link with no span', () => {
+  it('accepts fullwidth colons and keeps a usable block next to an unusable one', () => {
     const parsed = parseBookGrammarReply(
-      ['=== Sentence 1 ===', 'PATTERN: NEW', 'SPAN: x', 'PATTERN: P1', 'NOTE: n'].join('\n'),
-      1,
+      ['=== Sentence 1 ===', 'PATTERN： 〜ながら', 'SPAN： 歩きながら', 'PATTERN: 〜たい', 'NOTE: n'].join('\n'),
       1,
     );
-    expect(parsed[0]).toBeNull();
+    expect(parsed[0]).toEqual([{ name: '〜ながら', template: '', meaning: '', span: '歩きながら', note: '' }]);
   });
 });
 

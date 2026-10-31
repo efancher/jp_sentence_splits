@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { YOUTUBE_MINING_API_BASE } from '../appConfig';
 import type { AssistBackend } from './assistRun';
 import type { CombinedPromptOptions } from './combinedImportPrompt';
+import type { GrammarPatternRef } from './grammarLinkReply';
 import type { WizardTranscriptSeg } from './miningTranscript';
 
 /**
@@ -821,6 +822,8 @@ export async function startBookExtrasRun(input: {
   runId: string;
   sentences: { handle: number; japanese: string; translation: string }[];
   selection: Record<string, number[]>;
+  /** The learner's linkable grammar patterns; only read when `selection` asks for the grammar extra. */
+  grammarPatterns?: GrammarPatternRef[];
   backend?: AssistBackend;
   concurrency?: number;
 }): Promise<AssistRunStatus> {

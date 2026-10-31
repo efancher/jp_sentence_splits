@@ -966,6 +966,19 @@ Targets are constants; no settings UI.
   recovered runs conservatively keep existing extras. This recovery requires
   the backend's `bookSentences` response field. Empty construction results count
   as checked, so sentences with nothing to build are not generated repeatedly.
+  A sixth kind, **Grammar links** (2026-10-31), is sent the learner's patterns
+  (name, template, other spellings; entries with `family = no-auto-link` are left
+  out) via the run request's `grammarPatterns`. The assistant names an existing
+  pattern exactly, or proposes a new one with template and meaning, quoting the
+  construction's span; reply format is `=== Sentence N ===` blocks of
+  `PATTERN/TEMPLATE/MEANING/SPAN/NOTE` or `NONE` (`grammarLinkReply.ts`). Saving
+  (`applyGrammarLinks`) resolves names through canonical keys, aliases and a
+  gloss-insensitive match, creates unknown patterns as `ai_suggested`, drops links
+  whose quoted text is not in the sentence, and writes unconfirmed `ai_suggested`
+  `sentence_grammar` rows with start/end/surface form, never touching an
+  occurrence the learner confirmed or one that already has a span. Answered
+  sentences (links or NONE) are marked `sentence_extras.grammar_checked`; a
+  sentence the reply skipped stays eligible. Links grade nothing and gate nothing.
 - **Re-segment captions** (`ResegmentSourcePage.tsx`, route
   `/books/:bookId/resegment`, button on `BookDetailPage` for
   `sourceKey` starting `shadowing:`) — rebuilds a source's sentences on

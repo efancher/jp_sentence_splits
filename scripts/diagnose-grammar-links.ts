@@ -8,12 +8,8 @@
  *   --all      include sentences that have not been walked through (default: walked-through only)
  * Needs the mining box API reachable at MINING_API_SELF_BASE (default http://127.0.0.1:8003).
  */
-import {
-  buildGrammarPrompt,
-  locateGrammarSpan,
-  parseBookGrammarReply,
-  type GrammarPatternRef,
-} from '../src/lib/grammarLinkReply';
+import { planGrammarLinks } from '../src/lib/grammarLinkApply';
+import { buildGrammarPrompt, linkablePatterns, parseBookGrammarReply, type GrammarPatternRef } from '../src/lib/grammarLinkReply';
 import { createScriptSupabaseClient } from './lib/scriptSupabaseClient';
 
 const API_BASE = (process.env.MINING_API_SELF_BASE ?? 'http://127.0.0.1:8003').replace(/\/$/, '');
@@ -80,7 +76,7 @@ async function main(): Promise<void> {
     client.from('sentences').select('id,japanese,translation').in('id', sentenceIds),
     client
       .from('grammar_patterns')
-      .select('id,canonical_name,structural_template,aliases')
+      .select('id,canonical_name,normalized_key,structural_template,aliases,family')
       .is('deleted_at', null)
       .order('canonical_name'),
   ]);
@@ -91,21 +87,26 @@ async function main(): Promise<void> {
     const row = byId.get(id);
     return row ? [{ id, japanese: row.japanese as string, translation: ((row.translation as string) ?? '').trim() }] : [];
   });
-  const patterns: GrammarPatternRef[] = (patternRows ?? []).map((row) => ({
+  const all = (patternRows ?? []).map((row) => ({
     id: row.id as string,
-    name: row.canonical_name as string,
-    template: (row.structural_template as string | null) ?? undefined,
+    canonicalName: row.canonical_name as string,
+    normalizedKey: row.normalized_key as string,
     aliases: Array.isArray(row.aliases) ? (row.aliases as string[]) : [],
+    family: (row.family as string | null) ?? null,
+    template: (row.structural_template as string | null) ?? undefined,
   }));
+  const linkable = linkablePatterns(all);
+  const shown: GrammarPatternRef[] = linkable.map((p) => ({ id: p.id, name: p.canonicalName, template: p.template, aliases: p.aliases }));
 
-  console.log(`Sending ${sentences.length} sentences with ${patterns.length} known patterns to ${API_BASE} ...`);
-  const reply = await askAssistant(buildGrammarPrompt(sentences, patterns));
-  const parsed = parseBookGrammarReply(reply, sentences.length, patterns.length);
+  console.log(`Sending ${sentences.length} sentences with ${shown.length} linkable patterns (${all.length - shown.length} tagged no-auto-link) to ${API_BASE} ...`);
+  const reply = await askAssistant(buildGrammarPrompt(sentences, shown));
+  const parsed = parseBookGrammarReply(reply, sentences.length);
 
   let linked = 0;
   let proposed = 0;
   let dropped = 0;
   let unparsed = 0;
+  const nameById = new Map(all.map((p) => [p.id, p.canonicalName]));
   parsed.forEach((links, index) => {
     const sentence = sentences[index]!;
     console.log(`\n${index + 1}. ${sentence.japanese}\n   ${sentence.translation}`);
@@ -115,20 +116,18 @@ async function main(): Promise<void> {
       return;
     }
     if (links.length === 0) console.log('   NONE');
-    for (const link of links) {
-      const where = locateGrammarSpan(sentence.japanese, link.span);
-      if (!where) {
-        dropped += 1;
-        console.log(`   DROPPED (span not in sentence): ${link.span}`);
-        continue;
-      }
+    const plan = planGrammarLinks(sentence.japanese, links, all);
+    for (const note of plan.dropped) {
+      dropped += 1;
+      console.log(`   DROPPED ${note}`);
+    }
+    for (const link of plan.planned) {
       if (link.newPattern) {
         proposed += 1;
-        console.log(`   NEW  ${link.newPattern.name}  [${where.surfaceForm}]  ${link.newPattern.meaning}`);
+        console.log(`   NEW  ${link.newPattern.name}  [${link.surfaceForm}]  ${link.newPattern.meaning}`);
       } else {
         linked += 1;
-        const pattern = patterns[link.patternNumber! - 1]!;
-        console.log(`   LINK ${pattern.name}  [${where.surfaceForm}]  ${link.note}`);
+        console.log(`   LINK ${nameById.get(link.patternId!)}  [${link.surfaceForm}]  ${link.note}`);
       }
     }
   });

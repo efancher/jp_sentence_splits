@@ -84,6 +84,7 @@ export const NO_EXTRAS: Required<CombinedPromptOptions> = {
   structure: false,
   comprehension: false,
   particles: false,
+  grammar: false,
 };
 
 export function chunkTranscript<T>(segs: T[], size = CHUNK_FRAGMENTS): T[][] {

@@ -239,6 +239,7 @@ export function QuickMinePage() {
     structure: true,
     comprehension: true,
     particles: true,
+    grammar: false,
   });
   const [extras, setExtras] = useState<CombinedReplySections | null>(null);
   const [replyWarnings, setReplyWarnings] = useState<string[]>([]);

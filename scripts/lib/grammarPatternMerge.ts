@@ -3,10 +3,10 @@
  * out which pattern survives each approved group, what its canonical name/aliases become, and which dependent
  * rows move. No database access, so it is testable without credentials.
  */
+import { NO_AUTO_LINK_FAMILY } from '../../src/lib/grammarLinkReply';
 import { normalizeGrammarPatternKey } from '../../src/lib/grammarPatterns';
 
-/** The reserved `family` value that tells the book assistant not to link sentences to a pattern. */
-export const NO_AUTO_LINK_FAMILY = 'no-auto-link';
+export { NO_AUTO_LINK_FAMILY };
 
 export interface MergeGroup {
   /** Canonical name the surviving pattern ends up with. */

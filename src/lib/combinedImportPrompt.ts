@@ -13,6 +13,7 @@ import { STRUCTURE_LINE_EXAMPLE, buildStructureInstructions } from './episodeStr
 import { formatWizardTimestamp, type WizardTranscriptSeg } from './miningTranscript';
 import { CONSTRUCTION_SHAPE, buildConstructionInstructions } from './phraseConstruction';
 import { WALKTHROUGH_SHAPE, buildWalkthroughInstructions } from './contextWalkthrough';
+import { GRAMMAR_HEADING, GRAMMAR_INSTRUCTION_LINES } from './grammarLinkReply';
 
 export interface CombinedPromptOptions {
   targets?: boolean;
@@ -21,6 +22,8 @@ export interface CombinedPromptOptions {
   walkthroughs?: boolean;
   comprehension?: boolean;
   particles?: boolean;
+  /** Book-page extra only (needs the learner's pattern list); never part of a Quick import prompt. */
+  grammar?: boolean;
 }
 
 export const END_MARKER = '=== END ===';
@@ -100,6 +103,7 @@ function withDefaults(options: CombinedPromptOptions): Required<CombinedPromptOp
     walkthroughs: options.walkthroughs ?? true,
     comprehension: options.comprehension ?? true,
     particles: options.particles ?? true,
+    grammar: options.grammar ?? false,
   };
 }
 
@@ -218,6 +222,7 @@ function extraBlocks(opts: Required<CombinedPromptOptions>): { heading: string; 
       ],
     });
   }
+  if (opts.grammar) blocks.push({ heading: GRAMMAR_HEADING, lines: GRAMMAR_INSTRUCTION_LINES });
   return blocks;
 }
 
@@ -232,6 +237,7 @@ export function singleExtraBlock(kind: ExtraKind): { heading: string; lines: str
     walkthroughs: false,
     comprehension: false,
     particles: false,
+    grammar: false,
     [kind]: true,
   };
   return extraBlocks(only)[0]!;
@@ -283,11 +289,15 @@ export interface CombinedReplySections {
   structure: string;
   comprehension: string;
   particles: string;
+  /** Book-page grammar extra only: never present in a Quick import reply. */
+  grammar?: string;
 }
+
+type ImportReplyKey = Exclude<keyof CombinedReplySections, 'grammar'>;
 
 const SECTION_HEADER_RE =
   /^={2,}\s*(SENTENCES|EPISODE PACK|STRUCTURE|COMPREHENSION|PARTICLES|END)\s*={2,}$/i;
-const SECTION_KEYS: Record<string, keyof CombinedReplySections> = {
+const SECTION_KEYS: Record<string, ImportReplyKey> = {
   SENTENCES: 'sentences',
   'EPISODE PACK': 'pack',
   STRUCTURE: 'structure',
@@ -301,14 +311,14 @@ const SECTION_KEYS: Record<string, keyof CombinedReplySections> = {
  * the older single-part format still import.
  */
 export function splitCombinedReply(reply: string): CombinedReplySections {
-  const buffers: Record<keyof CombinedReplySections, string[]> = {
+  const buffers: Record<ImportReplyKey, string[]> = {
     sentences: [],
     pack: [],
     structure: [],
     comprehension: [],
     particles: [],
   };
-  let current: keyof CombinedReplySections | null = null;
+  let current: ImportReplyKey | null = null;
   let sawHeader = false;
   for (const rawLine of reply.replace(/^﻿/, '').split(/\r?\n/)) {
     const trimmed = rawLine.trim();
@@ -338,7 +348,7 @@ export function remapSentenceHandles(text: string, map: ReadonlyMap<number, numb
   return text.replace(/\bS(\d+)\b/g, (_whole, digits: string) => `S${map.get(Number(digits)) ?? 0}`);
 }
 
-const EXTRA_SECTION_KEYS: Record<string, keyof CombinedReplySections> = {
+const EXTRA_SECTION_KEYS: Record<string, ImportReplyKey> = {
   'EPISODE PACK': 'pack',
   STRUCTURE: 'structure',
   COMPREHENSION: 'comprehension',

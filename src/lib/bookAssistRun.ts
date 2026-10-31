@@ -18,8 +18,9 @@ import {
 } from './assistExtras';
 import { singleExtraBlock, type CombinedReplySections, type ExtraKind } from './combinedImportPrompt';
 import { logPatch, parallelProgress, type AssistBackend, type AssistRunState } from './assistRun';
+import type { GrammarPatternRef } from './grammarLinkReply';
 
-export const BOOK_EXTRA_KINDS = ['structure', 'constructions', 'walkthroughs', 'comprehension', 'particles'] as const;
+export const BOOK_EXTRA_KINDS = ['structure', 'constructions', 'walkthroughs', 'comprehension', 'particles', 'grammar'] as const;
 export type BookExtraKind = (typeof BOOK_EXTRA_KINDS)[number];
 
 /** Handles (1-based book positions) each extra should be generated for. */
@@ -29,6 +30,8 @@ export interface BookAssistRunSpec {
   /** The whole book in order; `handle` must equal position + 1. Only the selected handles get output, the rest is context. */
   sentences: ExtrasSentence[];
   selection: BookExtraSelection;
+  /** The learner's linkable grammar patterns, offered to the grammar extra (ignored without it). */
+  grammarPatterns?: GrammarPatternRef[];
   backend?: AssistBackend;
   /** Assistant calls in flight at once (1–5; the box may cap it lower). Absent = 1. */
   concurrency?: number;
@@ -124,6 +127,7 @@ export async function runBookExtrasPipeline(input: {
   const result = await runExtraTasks({
     tasks,
     sentences: spec.sentences,
+    grammarPatterns: spec.grammarPatterns,
     replies: state.extraReplies,
     run: input.run,
     concurrency,

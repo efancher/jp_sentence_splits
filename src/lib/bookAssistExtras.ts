@@ -11,6 +11,7 @@ import { saveSentenceExtras } from '../db/repository';
 import { getBookWithExtras } from '../db/sentenceExtras';
 import { CONTEXT_WALKTHROUGH_VERSION, mergeChapterWalkthroughs, sentencesNeedingWalkthrough, validWalkthroughFor } from './contextWalkthrough';
 import { chunksMatchSource } from './chunking';
+import { linkablePatterns, parseBookGrammarReply, type GrammarPatternRef } from './grammarLinkReply';
 import { constructionChecked, validLayersFor } from './phraseConstruction';
 import { applyQuickImportExtras, type Rejection } from './quickImportExtras';
 import { BOOK_EXTRA_KINDS, mergeBookExtraReplies, planBookExtraTasks, type BookExtraKind, type BookExtraSelection } from './bookAssistRun';
@@ -43,6 +44,7 @@ export const BOOK_EXTRA_LABELS: Record<BookExtraKind, { label: string; hint: str
   particles: { label: 'Particle questions', hint: 'what each に/で/と… is doing here', existingNoun: 'particle questions' },
   structure: { label: 'Sentence structure', hint: 'how the sentence splits into chunks', existingNoun: 'a saved analysis or draft' },
   constructions: { label: 'Phrase construction', hint: 'how inflections and helpers build a phrase', existingNoun: 'construction layers' },
+  grammar: { label: 'Grammar links', hint: 'which of your grammar patterns each sentence uses (shown once the sentence is walked through)', existingNoun: 'grammar links' },
 };
 
 function truncate(text: string, max = 70): string {
@@ -71,7 +73,13 @@ export async function planBookAssistExtras(bookId: string): Promise<BookExtrasPl
       });
     }
   });
-  const analyses = await db.analyses.bulkGet(sentences.map((s) => s.id));
+  const [analyses, grammarRows, extraRows] = await Promise.all([
+    db.analyses.bulkGet(sentences.map((s) => s.id)),
+    db.sentenceGrammar.where('sentenceId').anyOf(sentences.map((s) => s.id)).toArray(),
+    db.sentenceExtras.bulkGet(sentences.map((s) => s.id)),
+  ]);
+  const grammarCounts = new Map<string, number>();
+  for (const row of grammarRows) grammarCounts.set(row.sentenceId, (grammarCounts.get(row.sentenceId) ?? 0) + 1);
   const chapters = book?.chapters ?? [];
   const chapterOf = new Map(chapters.map((c) => [c.id, c]));
   const walkthroughs = mergeChapterWalkthroughs(chapters);
@@ -84,6 +92,7 @@ export async function planBookAssistExtras(bookId: string): Promise<BookExtrasPl
     walkthroughs: emptyStatus(),
     comprehension: emptyStatus(),
     particles: emptyStatus(),
+    grammar: emptyStatus(),
   };
   sentences.forEach((sentence, index) => {
     const analysis = analyses[index];
@@ -106,6 +115,10 @@ export async function planBookAssistExtras(bookId: string): Promise<BookExtrasPl
 
     const particles = analysis?.particleChecks;
     mark('particles', particles ? (particles.length === 0 ? 'checked, no particle questions' : `${particles.length} question${particles.length === 1 ? '' : 's'}`) : null);
+
+    const linked = grammarCounts.get(sentence.id) ?? 0;
+    if (linked > 0) mark('grammar', `${linked} pattern${linked === 1 ? '' : 's'}`);
+    else mark('grammar', extraRows[index]?.grammarChecked ? 'checked, nothing to link' : null);
 
     const draft = chapter?.structureDrafts?.[sentence.id];
     if (analysis?.chunks?.length) mark('structure', `saved analysis: ${truncate(analysis.chunks.map((c) => c.japanese).join(' / '))}`);
@@ -154,7 +167,7 @@ export async function saveBookAssistExtras(
     const entry = snapshot.kinds[kind];
     if (!entry) continue;
     const sections = mergeBookExtraReplies(kind, extraReplies);
-    if (!sections.pack && !sections.structure && !sections.comprehension && !sections.particles) continue;
+    if (!sections.pack && !sections.structure && !sections.comprehension && !sections.particles && !sections.grammar) continue;
 
     const stillMissing = new Set(current.kinds[kind].missing);
     const replace = new Set(entry.replaceHandles);
@@ -186,12 +199,13 @@ export async function saveBookAssistExtras(
       const applied = await applyQuickImportExtras(snapshot.bookId, chapterId, sections, byNumber(chapterId), {
         replaceCheckSentenceIds: replaceIds,
       });
-      result.saved[kind] = (result.saved[kind] ?? 0) + applied[kind];
+      result.saved[kind] = (result.saved[kind] ?? 0) + (kind === 'grammar' ? applied.grammarLinks : applied[kind]);
       // Each per-chapter call sees the other chapters' sentences as unknown handles: that is noise, not a rejection.
       result.rejections.push(...applied.rejections.filter((r) => chapterIds.length === 1 || !r.reason.startsWith('Unknown sentence handle')));
       result.problems.push(...applied.problems.filter((p) => !p.startsWith('Skipped or partly kept')));
     }
     if (kind === 'constructions') await markCheckedWithoutLayers(snapshot, extraReplies, allowed, replace, currentHandleById);
+    if (kind === 'grammar') await markGrammarChecked(snapshot, sections.grammar ?? '', allowed, currentHandleById);
   }
   return result;
 }
@@ -229,4 +243,37 @@ async function markCheckedWithoutLayers(
       await saveSentenceExtras(snapshot.bookId, chapterId, ids.map((id) => [id, { constructionDraft: [] }] as const));
     }
   }
+}
+
+/**
+ * A sentence the assistant answered for (links or NONE) is marked checked so it is not asked again; one whose
+ * section was missing or unusable stays unmarked and is retried on the next run.
+ */
+async function markGrammarChecked(
+  snapshot: BookExtrasRunSnapshot,
+  grammarReply: string,
+  allowed: ReadonlyMap<number, string>,
+  currentById: ReadonlyMap<string, BookExtraSentence>,
+): Promise<void> {
+  const parsed = parseBookGrammarReply(grammarReply, snapshot.sentenceIds.length);
+  const byChapter = new Map<string, string[]>();
+  for (const [handle, id] of allowed) {
+    if (parsed[handle - 1] === null || parsed[handle - 1] === undefined) continue;
+    const chapterId = currentById.get(id)?.chapterId;
+    if (chapterId) byChapter.set(chapterId, [...(byChapter.get(chapterId) ?? []), id]);
+  }
+  for (const [chapterId, ids] of byChapter) {
+    await saveSentenceExtras(snapshot.bookId, chapterId, ids.map((id) => [id, { grammarChecked: true }] as const));
+  }
+}
+
+/** The learner's patterns as the grammar extra should see them: everything except entries tagged no-auto-link. */
+export async function loadLinkableGrammarPatterns(): Promise<GrammarPatternRef[]> {
+  const patterns = await getDb().grammarPatterns.orderBy('canonicalName').toArray();
+  return linkablePatterns(patterns).map((pattern) => ({
+    id: pattern.id,
+    name: pattern.canonicalName,
+    template: pattern.structuralTemplate || undefined,
+    aliases: pattern.aliases,
+  }));
 }

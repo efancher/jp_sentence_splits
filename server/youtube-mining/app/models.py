@@ -502,6 +502,8 @@ class AssistRunRequest(BaseModel):
     # extra kind, the 1-based handles to generate it for. Replaces `transcript`.
     sentences: list[AssistRunBookSentence] | None = None
     selection: dict[str, list[int]] | None = None
+    # Book-extras grammar kind: the learner's linkable patterns ({id, name, template?, aliases?}), shown to the assistant.
+    grammarPatterns: list[dict] | None = None
 
     @model_validator(mode="after")
     def _needs_input(self):

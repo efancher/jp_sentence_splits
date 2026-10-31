@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
   BOOK_EXTRA_LABELS,
+  loadLinkableGrammarPatterns,
   planBookAssistExtras,
   saveBookAssistExtras,
   selectionOf,
@@ -213,6 +214,7 @@ export function BookAssistExtras({ bookId }: { bookId: string }) {
           runId: runIdFor(bookId),
           sentences: plan.sentences.map((s) => ({ handle: s.handle, japanese: s.japanese, translation: s.translation })),
           selection: selectionOf(next) as Record<string, number[]>,
+          grammarPatterns: next.kinds.grammar ? await loadLinkableGrammarPatterns() : undefined,
           backend,
           concurrency,
         }),
@@ -239,6 +241,7 @@ export function BookAssistExtras({ bookId }: { bookId: string }) {
             return { handle: index + 1, japanese: sentence?.japanese ?? '', translation: sentence?.translation ?? '' };
           }),
           selection: selectionOf(snapshot) as Record<string, number[]>,
+          grammarPatterns: snapshot.kinds.grammar ? await loadLinkableGrammarPatterns() : undefined,
           backend,
           concurrency,
         }),

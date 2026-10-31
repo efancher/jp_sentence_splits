@@ -16,6 +16,7 @@ import {
   type ExtraKind,
 } from './combinedImportPrompt';
 import { EPISODE_PREPARATION_VERSION } from './episodePreparation';
+import { formatGrammarPatternList, type GrammarPatternRef } from './grammarLinkReply';
 import { describeBad, findBadHandles, jsonObject, mergeRepair, stripFences, type BadHandle } from './assistRepair';
 
 export const EXTRA_RANGE_SENTENCES = 15;
@@ -51,7 +52,7 @@ export function describeTaskRange(task: Pick<ExtraTask, 'from' | 'to' | 'handles
     : `S${task.from}–S${task.to}`;
 }
 
-const KIND_ORDER: ExtraKind[] = ['structure', 'comprehension', 'particles', 'constructions', 'walkthroughs', 'targets'];
+const KIND_ORDER: ExtraKind[] = ['structure', 'comprehension', 'particles', 'grammar', 'constructions', 'walkthroughs', 'targets'];
 
 export function planExtraTasks(
   sentences: ExtrasSentence[],
@@ -84,7 +85,17 @@ export function planExtraTasks(
   return tasks;
 }
 
-export function buildExtraPrompt(task: ExtraTask, sentences: ExtrasSentence[], feedback: string[] = []): string {
+/** Per-run inputs some extras need besides the sentences (the grammar extra is told the learner's known patterns). */
+export interface ExtraPromptContext {
+  grammarPatterns?: readonly GrammarPatternRef[];
+}
+
+export function buildExtraPrompt(
+  task: ExtraTask,
+  sentences: ExtrasSentence[],
+  feedback: string[] = [],
+  context: ExtraPromptContext = {},
+): string {
   const block = singleExtraBlock(task.kind);
   const lines = block.lines.map((line) =>
     line
@@ -145,6 +156,9 @@ export function buildExtraPrompt(task: ExtraTask, sentences: ExtrasSentence[], f
         ]
       : []),
     '',
+    ...(task.kind === 'grammar'
+      ? ['--- known patterns ---', ...formatGrammarPatternList(context.grammarPatterns ?? []), '']
+      : []),
     '--- sentences ---',
     ...shown,
     '',
@@ -186,6 +200,7 @@ export function validateExtraReply(task: ExtraTask, reply: string): string | nul
       return null;
     case 'comprehension':
     case 'particles':
+    case 'grammar':
       return new RegExp(`=+\\s*Sentence\\s+${task.to}\\s*=+`, 'i').test(text)
         ? null
         : `The reply stops before "Sentence ${task.to}" — it was probably cut off.`;
@@ -215,6 +230,7 @@ export function mergeExtraReplies(
     structure: text('structure').join('\n'),
     comprehension: text('comprehension').join('\n\n'),
     particles: text('particles').join('\n\n'),
+    ...(text('grammar').length > 0 ? { grammar: text('grammar').join('\n\n') } : {}),
   };
 }
 
@@ -251,6 +267,8 @@ export async function runExtraTasks(input: {
   isCancelled: () => boolean;
   /** Pieces asked for at once (default 1). A credit-exhaustion failure stops new pieces; those in flight still finish and are kept. */
   concurrency?: number;
+  /** The learner's patterns, shown to the grammar extra. */
+  grammarPatterns?: readonly GrammarPatternRef[];
 }): Promise<ExtraRunResult> {
   const replies: Record<string, string> = {};
   const failures: ExtraRunResult['failures'] = [];
@@ -287,7 +305,7 @@ export async function runExtraTasks(input: {
       });
       try {
         const { reply, backend } = await input.run(
-          buildExtraPrompt(task, input.sentences, lastError ? [lastError] : []),
+          buildExtraPrompt(task, input.sentences, lastError ? [lastError] : [], { grammarPatterns: input.grammarPatterns }),
         );
         input.onProgress({
           task,
@@ -348,7 +366,7 @@ export async function runExtraTasks(input: {
         backend: null,
       });
       try {
-        const { reply } = await input.run(buildExtraPrompt(repairTask, input.sentences, describeBad(bad)));
+        const { reply } = await input.run(buildExtraPrompt(repairTask, input.sentences, describeBad(bad), { grammarPatterns: input.grammarPatterns }));
         const problem = validateExtraReply(repairTask, reply);
         if (problem) {
           input.onNote?.(

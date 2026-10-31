@@ -149,6 +149,21 @@ repair tooling, research materials and future roadmap ideas remain available.
   assistant" after moving them. `repair:orphaned-sentence-extras` (dry-run by
   default) repoints drafts left on a deleted book; its first production dry run
   found none.
+- **Grammar links (2026-10-31, step 1 of 4 built; local checks only):** book-page
+  "Generate extras with the assistant" has a "Grammar links" row. For sentences
+  without links it asks the box assistant which of the learner's patterns each
+  uses, then saves unconfirmed `sentence_grammar` rows (`ai_suggested`, with span,
+  surface form and a per-sentence note). Nothing in the UI shows them yet: the
+  walkthrough "Patterns here" block, hiding new AI-proposed patterns until a
+  walked-through sentence uses them, the aligned pattern page and the clickable
+  callback are the remaining steps (ROADMAP). Patterns tagged
+  `family = no-auto-link` are never sent to the assistant; the 2026-10-31 cleanup
+  (`merge:grammar-patterns`) merged six duplicate groups and tagged 22 entries.
+  `sentence_extras.grammar_checked` (migration `20261031000000`) records sentences
+  already looked at, so "nothing to link" sentences are not re-sent; the client
+  sends the column only when true, so push works before the migration is applied.
+  `diagnose:grammar-links` is a read-only dry run on a book's walked-through
+  sentences. Not yet run through the real panel or against a live box run.
 - **Parallel assistant calls (2026-10-28, local checks only):** Quick import and
   book extras have an "Agents" 1–5 selector (default 1); the box clamps it to
   `MINING_ASSIST_MAX_CONCURRENCY` (default 3, set in the service unit). Batches
