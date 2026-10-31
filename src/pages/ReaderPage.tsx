@@ -7,7 +7,7 @@ import { EpisodePreparationPanel } from '../components/EpisodePreparationPanel';
 import { KaraokeSentenceText } from '../components/KaraokeSentenceText';
 import { SentenceWalkthrough, walkthroughChunks } from '../components/SentenceWalkthrough';
 import { glossesFromWords } from '../lib/chunkGlosses';
-import { mergeChapterWalkthroughs } from '../lib/contextWalkthrough';
+import { mergeChapterConstructionDrafts, mergeChapterWalkthroughs } from '../lib/contextWalkthrough';
 import { WordGlossList, type CompareAids } from '../components/TargetLessonCard';
 import { ensureDefaultBookChapter, getBookWithExtras, getDb, getEpisodeFocus, getSavedWordStatus, listGlossDecisions, listSentenceLearningEvents, logGlossDecision, logSentenceLearningEvent, readSettings, updateSettings } from '../db/repository';
 import { registerReportContext } from '../lib/reportContext';
@@ -154,7 +154,8 @@ export function ReaderPage() {
     // Drafts are keyed by sentence id, so reading the whole book (no ?chapter=) still finds them.
     const structureDrafts = Object.assign({}, ...book.chapters.map((item) => item.structureDrafts ?? {})) as Record<string, StructureDraftChunk[]>;
     const contextWalkthroughs = mergeChapterWalkthroughs(book.chapters);
-    return { book, chapter, rows, audioRows, chunksBySentence, particleChecksBySentence, structureDrafts, contextWalkthroughs, savedMeanings, knownExpressions };
+    const constructionDrafts = mergeChapterConstructionDrafts(book.chapters);
+    return { book, chapter, rows, audioRows, chunksBySentence, particleChecksBySentence, structureDrafts, contextWalkthroughs, constructionDrafts, savedMeanings, knownExpressions };
   }, [bookId, chapterId]);
 
   const openedLessonRef = useRef<string | undefined>(undefined);
@@ -788,7 +789,7 @@ export function ReaderPage() {
                       focusTargets={walkthroughFocus}
                       episodeSentences={episodeSentences}
                       compareAids={compareAids}
-                      constructionDrafts={data.chapter?.constructionDrafts}
+                      constructionDrafts={data.constructionDrafts}
                       contextWalkthrough={data.contextWalkthroughs[row.sentence.id]}
                       importTarget={row.membership.chapterId ? { bookId, chapterId: row.membership.chapterId } : undefined}
                       events={lessonEvents ?? []}

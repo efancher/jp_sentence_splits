@@ -8,7 +8,7 @@
  * are computed here, bad steps are dropped individually, and everything is re-validated against the
  * live sentence before display. Nothing here touches reviews or FSRS.
  */
-import type { ContextWalkthrough, ContextWalkthroughStep, WalkthroughParticipant, WalkthroughWord, WalkthroughRelation, WalkthroughSpan } from '../domain/types';
+import type { ConstructionLayer, ContextWalkthrough, ContextWalkthroughStep, WalkthroughParticipant, WalkthroughWord, WalkthroughRelation, WalkthroughSpan } from '../domain/types';
 
 import type { PreparationContext } from './episodePreparation';
 
@@ -416,6 +416,19 @@ export function mergeChapterWalkthroughs(
     for (const [id, draft] of Object.entries(chapter.contextWalkthroughs ?? {})) {
       const existing = merged[id];
       if (!existing || (draft.version ?? 1) >= (existing.version ?? 1)) merged[id] = draft;
+    }
+  }
+  return merged;
+}
+
+/** Merges per-chapter construction drafts. Drafts are keyed by sentence id and a sentence repeated across chapters is stored once, so a chapter view must see the other chapters' drafts. */
+export function mergeChapterConstructionDrafts(
+  chapters: { constructionDrafts?: Record<string, ConstructionLayer[]> }[],
+): Record<string, ConstructionLayer[]> {
+  const merged: Record<string, ConstructionLayer[]> = {};
+  for (const chapter of chapters) {
+    for (const [id, layers] of Object.entries(chapter.constructionDrafts ?? {})) {
+      if (!merged[id] || layers.length > merged[id]!.length) merged[id] = layers;
     }
   }
   return merged;
