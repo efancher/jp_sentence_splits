@@ -149,7 +149,7 @@ repair tooling, research materials and future roadmap ideas remain available.
   assistant" after moving them. `repair:orphaned-sentence-extras` (dry-run by
   default) repoints drafts left on a deleted book; its first production dry run
   found none.
-- **Grammar links (2026-10-31, steps 1-2 of 5 built; local checks only):** book-page
+- **Grammar links (2026-10-31, steps 1-3 of 5 built; local checks only):** book-page
   "Generate extras with the assistant" has a "Grammar links" row. For sentences
   without links it asks the box assistant which of the learner's patterns each
   uses, then saves unconfirmed `sentence_grammar` rows (`ai_suggested`, with span,
@@ -162,8 +162,11 @@ repair tooling, research materials and future roadmap ideas remain available.
   the list until it has a visible link or a card. Unreviewed assistant links are
   also skipped when picking a grammar card's context sentence and when
   auto-tracking patterns (no silent cards; matters only in the optional older
-  flow). The aligned pattern page and the clickable "seen before" callback are
-  still to build (ROADMAP). Patterns tagged
+  flow). The pattern page has a "Lined up" section (2+ visible encounters with a
+  span): sentences simplest first with the pattern highlighted (matches share one
+  column on a wide screen; plain highlighted sentences on a phone) and
+  "Forms you have met" chips that filter by matched text. The clickable "seen
+  before" callback is still to build (ROADMAP). Patterns tagged
   `family = no-auto-link` are never sent to the assistant; the 2026-10-31 cleanup
   (`merge:grammar-patterns`) merged six duplicate groups and tagged 22 entries.
   `sentence_extras.grammar_checked` (migration `20261031000000`) records sentences

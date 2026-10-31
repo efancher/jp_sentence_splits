@@ -986,6 +986,14 @@ Targets are constants; no settings UI.
   page, grammar list counts/priority and Analyze "Grammar noticed" panel use the
   same rule (`grammarLinkVisibility.ts`, `withoutUnseenAiLinks`). Card-context
   picking and auto-tracking ignore unreviewed assistant links.
+  The pattern page (`GrammarPatternDetailPage`) adds a "Lined up" comparison
+  (`PatternExamples`, `grammarExamples.ts`) once two visible encounters have a
+  span: each sentence is split around the matched words (offsets are trusted only
+  while they still select the stored surface form, otherwise the form is searched
+  for), ordered shortest sentence first, with the match in a shared column on wide
+  screens and "Forms you have met" chips that filter by matched text. The full
+  "Your encounters" list below still shows every encounter, highlighting the span
+  where one is stored.
 - **Re-segment captions** (`ResegmentSourcePage.tsx`, route
   `/books/:bookId/resegment`, button on `BookDetailPage` for
   `sourceKey` starting `shadowing:`) — rebuilds a source's sentences on

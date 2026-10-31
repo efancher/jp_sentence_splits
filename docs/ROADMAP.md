@@ -205,14 +205,14 @@ Unfinished work and optional extensions; completed behavior is in `AI_OVERVIEW.m
   helps the learner extract and generalize a pattern across sentences.)
   **Built:** book-assistant "Grammar links" extra writing unconfirmed
   `sentence_grammar` rows with spans, and the finish-screen "Patterns here" block
-  with the visibility rule for unreviewed assistant links (STATUS.md).
+  with the visibility rule for unreviewed assistant links, and the pattern page's
+  "Lined up" examples with form chips (STATUS.md). Not built from that idea: a
+  "what varies" grouping by sub-meaning (the per-sentence notes are free text, so
+  grouping them needs an assistant pass).
   **Next, in order:**
-  1. **Pattern page as a comparison.** On `GrammarPatternDetailPage`: aligned,
-     highlighted examples across walked-through sentences ordered simple to
-     complex, plus a "what varies" grouping by the per-sentence notes.
-  2. **"Seen before" as a real link.** The walkthrough's recurrence count shows
+  1. **"Seen before" as a real link.** The walkthrough's recurrence count shows
      the earlier sentences inline with the pattern highlighted.
-  3. **Tag patterns while writing new walkthroughs** so new sentences need no
+  2. **Tag patterns while writing new walkthroughs** so new sentences need no
      separate run (an optional pattern field per walkthrough step).
   Ideas not chosen: linking one sentence at a time with `grammar-assist` at
   walkthrough completion (extra API cost); seeding names from OpenJLPT grammar

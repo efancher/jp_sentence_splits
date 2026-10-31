@@ -132,6 +132,29 @@ strong.jp {
   padding: 0 0.1em;
 }
 
+/* Pattern page "Lined up": a plain highlighted sentence on a phone, the matched words in one column on a wide screen. */
+.kwic-row {
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 700px) {
+  .kwic-row {
+    display: grid;
+    /* --kwic-match is the widest match in the list, so every row's highlight starts at the same x. */
+    grid-template-columns: minmax(0, 1fr) var(--kwic-match, auto) minmax(0, 1fr);
+    align-items: baseline;
+  }
+
+  .kwic-row mark {
+    justify-self: start;
+  }
+
+  .kwic-before {
+    text-align: right;
+  }
+}
+
 .jp-sm {
   font-size: 0.85em;
 }

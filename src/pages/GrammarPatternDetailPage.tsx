@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
 import { NativeAudioButton } from '../components/NativeAudioButton';
+import { PatternExamples } from '../components/PatternExamples';
 import {
   ensureGrammarRelationship,
   getDb,
@@ -13,6 +14,7 @@ import {
   type GrammarRelationshipView,
 } from '../db/repository';
 import type { GrammarPattern, GrammarRelationshipType } from '../domain/types';
+import { splitAtSpan } from '../lib/grammarExamples';
 import {
   computeGrammarLearnerState,
   GRAMMAR_LEARNER_STATE_LABELS,
@@ -311,6 +313,8 @@ export function GrammarPatternDetailPage() {
         )}
       </section>
 
+      {data?.pattern ? <PatternExamples encounters={data.encounters} /> : null}
+
       {data?.pattern ? (
         <section className="stack">
           <h3 style={{ margin: 0 }}>
@@ -323,15 +327,23 @@ export function GrammarPatternDetailPage() {
           ) : (
             data.encounters.map(({ sentenceGrammar, sentence, books, audio }) => {
               const book = books[0];
+              const parts = splitAtSpan(sentence.japanese, sentenceGrammar);
+              const text = parts ? (
+                <>
+                  {parts.before}
+                  <mark>{parts.match}</mark>
+                  {parts.after}
+                </>
+              ) : (
+                sentence.japanese
+              );
               return (
                 <article key={sentenceGrammar.id} className="list-card">
                   <div className="jp">
                     {book ? (
-                      <Link to={`/books/${book.id}/analyze/${sentence.id}`}>
-                        {sentence.japanese}
-                      </Link>
+                      <Link to={`/books/${book.id}/analyze/${sentence.id}`}>{text}</Link>
                     ) : (
-                      sentence.japanese
+                      text
                     )}
                   </div>
                   {sentence.translation ? (

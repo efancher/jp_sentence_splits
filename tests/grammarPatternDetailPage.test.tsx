@@ -212,4 +212,22 @@ describe('GrammarPatternDetailPage', () => {
       screen.queryByRole('link', { name: '忘れるわけがない。' }),
     ).not.toBeInTheDocument();
   });
+
+  it('lines up sentences that have a span, highlighting the pattern, and leaves the full list intact', async () => {
+    const pattern = await ensureGrammarPattern('〜わけがない');
+    await stubSentence('sent-1', '忘れるわけがない。');
+    await stubSentence('sent-2', 'そんなことを彼が言うわけがない。');
+    await stubSentence('sent-3', 'これは覚えていない。');
+    await ensureSentenceGrammar('sent-1', pattern.id, { surfaceForm: '忘れるわけがない', start: 0, end: 8 });
+    await ensureSentenceGrammar('sent-2', pattern.id, { surfaceForm: '言うわけがない', start: 9, end: 16 });
+    await ensureSentenceGrammar('sent-3', pattern.id, {});
+
+    renderPage(pattern.id);
+
+    expect(await screen.findByText('Lined up (2)')).toBeInTheDocument();
+    const rows = Array.from(document.querySelectorAll('.kwic-row'));
+    expect(rows.map((row) => row.querySelector('mark')?.textContent)).toEqual(['忘れるわけがない', '言うわけがない']);
+    expect(screen.getByText('Your encounters (3)')).toBeInTheDocument();
+    expect(screen.getByText('これは覚えていない。')).toBeInTheDocument();
+  });
 });
