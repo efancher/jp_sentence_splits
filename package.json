@@ -80,6 +80,7 @@
     "diagnose:gloss-reference": "tsx scripts/diagnose-gloss-reference.ts",
     "diagnose:routing-evidence": "tsx scripts/diagnose-routing-evidence.ts",
     "diagnose:conjugation-cards": "tsx scripts/diagnose-conjugation-cards.ts",
+    "diagnose:grammar-links": "tsx scripts/diagnose-grammar-links.ts",
     "remine:silent-shadowing-audio": "tsx scripts/remine-silent-shadowing-audio.ts",
     "validate:sentence-transcripts": "tsx scripts/validate-sentence-transcripts.ts",
     "experiment:word-boundary-verification": "tsx scripts/experiment-word-boundary-verification.ts",
