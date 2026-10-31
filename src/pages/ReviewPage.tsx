@@ -153,6 +153,7 @@ import {
 } from '../lib/earTiles';
 import { createId } from '../lib/ids';
 import { REVIEW_TROUBLE_TAGS } from '../lib/reviewTroubleTags';
+import { ReviewStageIcon } from '../components/ReviewStageIcon';
 import { EarTilesCheck } from '../components/EarTilesCheck';
 import { isReadingAnswerCorrect, surfaceReadingFromInline } from '../lib/readingAnswer';
 import { MAX_RECORDING_DURATION_MS, PLAYBACK_SPEEDS, type TimeRangeMs } from '../lib/recording';
@@ -2324,6 +2325,7 @@ export function ReviewPage() {
           <>
             <div className="row" style={{ justifyContent: 'space-between' }}>
               <div className="muted">
+                <ReviewStageIcon state={current.studyItem.fsrsState.state} />{' '}
                 {ACTIVITY_LABELS[current.studyItem.activityType] ??
                   current.studyItem.activityType}{' '}
                 · {queue.length} due
