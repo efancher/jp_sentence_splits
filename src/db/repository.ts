@@ -305,6 +305,7 @@ import {
   type UnderstandCandidate,
 } from '../lib/sessionPlanner';
 import { normalizeTroubleTags, routeTroubleTags } from '../lib/reviewTroubleTags';
+import { activeShadowSnoozeIds, shadowSnoozeUntil } from '../lib/shadowSnooze';
 import {
   CONTINUE_BOOK_MIN_INTRODUCED_RATIO,
   SHADOWING_MIN_INTRODUCED_RATIO,
@@ -10522,8 +10523,10 @@ export async function recordReviewTroubleTags(input: {
   if (route.freshTry) queued.freshTry = (await requestFreshTry(input.sentenceId, now)) === 'queued';
   if (route.shadow) {
     const settings = await ensureSettings(getDb());
+    const { [input.sentenceId]: _clearedSnooze, ...remainingSnoozes } = settings.shadowSnoozes ?? {};
     await updateSettings({
       shadowRequests: { ...settings.shadowRequests, [input.sentenceId]: now.toISOString() },
+      shadowSnoozes: remainingSnoozes,
     });
     queued.shadow = true;
   }
@@ -11000,7 +11003,9 @@ async function findShadowCandidates(
   const sentenceIdsWithAudio = sentenceIdsWithAudioUnfiltered.filter((id) => readiness.get(id));
   if (sentenceIdsWithAudio.length === 0) return [];
 
-  const shadowRequests = (await ensureSettings(db)).shadowRequests ?? {};
+  const settingsRow = await ensureSettings(db);
+  const shadowRequests = settingsRow.shadowRequests ?? {};
+  const snoozedSentenceIds = activeShadowSnoozeIds(settingsRow.shadowSnoozes, new Date());
   const [attempts, sentences, bookSentences, recentlyMissedClozeSentenceIds] = await Promise.all([
     db.attempts.where('sentenceId').anyOf(sentenceIdsWithAudio).toArray(),
     db.sentences.bulkGet(sentenceIdsWithAudio),
@@ -11028,6 +11033,7 @@ async function findShadowCandidates(
       requested: requestedSentenceIds.has(sentenceId),
     }))
     .filter((candidate): candidate is typeof candidate & { sentence: Sentence } => Boolean(candidate.sentence))
+    .filter((candidate) => !snoozedSentenceIds.has(candidate.sentenceId))
     .sort((a, b) => {
       if (a.requested !== b.requested) return a.requested ? -1 : 1;
       if (a.recentlyMissedCloze !== b.recentlyMissedCloze) return a.recentlyMissedCloze ? -1 : 1;
@@ -11044,6 +11050,39 @@ async function findShadowCandidates(
         ? `Missed in review — ${shadowAttemptSummary(candidate.attemptCount).toLowerCase()}`
         : shadowAttemptSummary(candidate.attemptCount),
     }));
+}
+
+/**
+ * "Try again later" on a shadowing sentence: hides it from shadow candidates
+ * until the start of the local day `days` days out, and skips any unsettled
+ * shadowing step for it in an in-progress session (the planner won't re-offer
+ * it, so a pending step would only sit there). Never touches FSRS.
+ */
+export async function snoozeShadowSentence(
+  sentenceId: string,
+  days: number,
+  now: Date = new Date(),
+): Promise<string> {
+  const settings = await ensureSettings(getDb());
+  const until = shadowSnoozeUntil(now, days);
+  const live = Object.fromEntries(
+    Object.entries(settings.shadowSnoozes ?? {}).filter(([, end]) => end > now.toISOString()),
+  );
+  await updateSettings({ shadowSnoozes: { ...live, [sentenceId]: until } });
+
+  const sessions = await getDb().plannerSessions.where('status').equals('in_progress').toArray();
+  for (const session of sessions) {
+    for (const step of session.steps) {
+      if (
+        step.bucket === 'shadowing' &&
+        step.sentenceId === sentenceId &&
+        (step.status === 'pending' || step.status === 'active')
+      ) {
+        await updatePlannerSessionStep(session.id, step.id, { status: 'skipped' });
+      }
+    }
+  }
+  return until;
 }
 
 /**

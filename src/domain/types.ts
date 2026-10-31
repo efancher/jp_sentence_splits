@@ -793,6 +793,12 @@ export interface AppSettings {
    */
   shadowRequests?: Record<string, string>;
   /**
+   * Sentences the learner pushed out of shadowing ("Try again" tomorrow / 5
+   * days / 2 weeks), sentenceId → ISO time the snooze ends. Shadow-candidate
+   * selection skips them until then. A new "sound" flag clears the snooze.
+   */
+  shadowSnoozes?: Record<string, string>;
+  /**
    * Sentence-first planning (Phase 5): the daily plan's glossing bucket drafts
    * `sentence_learning` lesson steps (eligible with zero confirmed vocabulary)
    * instead of vocabulary_review/continue_book. Existing in-progress sessions

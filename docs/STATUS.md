@@ -22,6 +22,12 @@ and possible extensions. This snapshot does not certify a live deployment.
   finished on a later day than the first; a "say it" attempt is optional.
   Previously only `expression_attempt` counted, so the same sentences were
   re-drafted daily and crowded out new lessons (2026-10-21).
+- Shadowing "Try again: Tomorrow / 5 days / 2 weeks" (2026-10-31): a button row
+  on shadowing session-step rows and the Shadow page. It stores
+  `settings.shadowSnoozes[sentenceId]` (end of the snooze, local-only like
+  `shadowRequests`), which `findShadowCandidates` skips, and skips the sentence's
+  open session step. A later Sound flag clears the snooze. Shadowing is not an
+  FSRS card (the review-card attempt of 2026-10-30 was reverted the same day).
 - Review "Trouble with" chips (Reading, Meaning, Kanji, Sound; prototype,
   2026-10-20): optional, tapped before rating, never choosing the FSRS rating
   or crediting cards. Reading/Meaning/Kanji queue a Fresh try (walked-through

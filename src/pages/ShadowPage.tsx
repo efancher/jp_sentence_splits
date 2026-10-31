@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { AnalysisPanel } from '../components/AnalysisPanel';
 import { LiveShadowWaveform } from '../components/LiveShadowWaveform';
+import { ShadowSnoozeButtons } from '../components/ShadowSnoozeButtons';
 import { LoopWindowControls, MAX_LOOP_GAP_MS, MAX_LOOP_LEAD_IN_MS } from '../components/LoopWindowControls';
 import { NativePitchPractice } from '../components/NativePitchPractice';
 import { AttemptPitchGrid } from '../components/AttemptPitchGrid';
@@ -716,6 +717,9 @@ export function ShadowPage() {
         <section className="panel" style={{ padding: '0.5rem 0.75rem' }}>
           <p style={{ margin: 0, fontSize: '0.9rem', whiteSpace: 'pre-wrap' }}>{shadowingNote}</p>
         </section>
+      ) : null}
+      {sentenceId ? (
+        <ShadowSnoozeButtons sentenceId={sentenceId} onSnoozed={() => navigate(-1)} />
       ) : null}
       {quietMode ? (
         <section className="panel stack" style={{ gap: '0.4rem' }}>

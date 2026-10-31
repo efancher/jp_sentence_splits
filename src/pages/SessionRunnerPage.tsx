@@ -2,6 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import { DailyPracticePanel } from '../components/DailyPracticePanel';
+import { ShadowSnoozeButtons } from '../components/ShadowSnoozeButtons';
 import {
   countAttemptsForSentences,
   endPlannerSessionEarly,
@@ -191,6 +192,11 @@ export function SessionRunnerPage() {
                   <button type="button" className="ghost" onClick={() => handleSkip(step)}>
                     Skip
                   </button>
+                </div>
+              ) : null}
+              {isUnsettled && !finished && step.bucket === 'shadowing' && step.sentenceId ? (
+                <div style={{ marginTop: '0.25rem' }}>
+                  <ShadowSnoozeButtons sentenceId={step.sentenceId} />
                 </div>
               ) : null}
             </li>
