@@ -979,6 +979,13 @@ Targets are constants; no settings UI.
   occurrence the learner confirmed or one that already has a span. Answered
   sentences (links or NONE) are marked `sentence_extras.grammar_checked`; a
   sentence the reply skipped stays eligible. Links grade nothing and gate nothing.
+  Display: an unreviewed assistant link (`source ai_suggested`, not confirmed) is
+  shown only for sentences the learner has met (walked through, started in a book
+  or carded); the walkthrough finish screen lists a sentence's patterns with a
+  "Not this" button that deletes the link (`SentencePatterns`), and the pattern
+  page, grammar list counts/priority and Analyze "Grammar noticed" panel use the
+  same rule (`grammarLinkVisibility.ts`, `withoutUnseenAiLinks`). Card-context
+  picking and auto-tracking ignore unreviewed assistant links.
 - **Re-segment captions** (`ResegmentSourcePage.tsx`, route
   `/books/:bookId/resegment`, button on `BookDetailPage` for
   `sourceKey` starting `shadowing:`) — rebuilds a source's sentences on

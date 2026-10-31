@@ -11,6 +11,7 @@ import {
   removeSentenceGrammar,
   setSentenceGrammarReviewStatus,
   updateGrammarPattern,
+  withoutUnseenAiLinks,
 } from '../db/repository';
 import type { GrammarPattern, SentenceGrammar } from '../domain/types';
 import {
@@ -58,10 +59,9 @@ export function GrammarPicker({ sentenceId, japanese, chunks }: GrammarPickerPro
 
   const data = useLiveQuery(async () => {
     const db = getDb();
-    const links = await db.sentenceGrammar
-      .where('sentenceId')
-      .equals(sentenceId)
-      .toArray();
+    const links = await withoutUnseenAiLinks(
+      await db.sentenceGrammar.where('sentenceId').equals(sentenceId).toArray(),
+    );
     const patterns = await db.grammarPatterns.bulkGet(
       links.map((link) => link.grammarPatternId),
     );

@@ -204,18 +204,15 @@ Unfinished work and optional extensions; completed behavior is in `AI_OVERVIEW.m
   motivation: the walkthrough explains each sentence's grammar once, and nothing
   helps the learner extract and generalize a pattern across sentences.)
   **Built:** book-assistant "Grammar links" extra writing unconfirmed
-  `sentence_grammar` rows with spans (STATUS.md). **Next, in order:**
-  1. **Show links only after the walkthrough.** A "Patterns here" block on the
-     walkthrough finish screen with a quiet "not this" dismiss. A display rule,
-     never an eligibility gate. Hide `ai_suggested` patterns from the grammar list
-     until a walked-through sentence uses them (new proposals are created
-     automatically).
-  2. **Pattern page as a comparison.** On `GrammarPatternDetailPage`: aligned,
+  `sentence_grammar` rows with spans, and the finish-screen "Patterns here" block
+  with the visibility rule for unreviewed assistant links (STATUS.md).
+  **Next, in order:**
+  1. **Pattern page as a comparison.** On `GrammarPatternDetailPage`: aligned,
      highlighted examples across walked-through sentences ordered simple to
      complex, plus a "what varies" grouping by the per-sentence notes.
-  3. **"Seen before" as a real link.** The walkthrough's recurrence count shows
+  2. **"Seen before" as a real link.** The walkthrough's recurrence count shows
      the earlier sentences inline with the pattern highlighted.
-  4. **Tag patterns while writing new walkthroughs** so new sentences need no
+  3. **Tag patterns while writing new walkthroughs** so new sentences need no
      separate run (an optional pattern field per walkthrough step).
   Ideas not chosen: linking one sentence at a time with `grammar-assist` at
   walkthrough completion (extra API cost); seeding names from OpenJLPT grammar

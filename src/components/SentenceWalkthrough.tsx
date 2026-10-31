@@ -29,6 +29,7 @@ import { GlossDecisionPanel, planGlossDecisions, type GlossDecisionInput } from 
 import { SentenceExpressionCard, meaningUnits } from './SentenceExpressionCard';
 import { NativeAudioButton } from './NativeAudioButton';
 import { PhraseConstructionSection } from './PhraseConstructionSection';
+import { SentencePatterns } from './SentencePatterns';
 import { TargetLessonCard, WordGlossList, type CompareAids, type LessonEventInput } from './TargetLessonCard';
 
 export type SupportPreset = 'full' | 'less' | 'minimal';
@@ -439,6 +440,7 @@ export function SentenceWalkthrough({
               {contextual.check ? <WalkthroughCheckView check={contextual.check} /> : null}
             </div>
           ) : null}
+          <SentencePatterns sentenceId={sentence.id} />
           {gist === 'closed' && !showTranslation && sentence.translation?.trim() ? (
             <button type="button" onClick={() => setGist('asking')}>Check my understanding</button>
           ) : null}

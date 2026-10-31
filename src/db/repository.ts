@@ -160,6 +160,7 @@ import {
   type GrammarLearnerState,
   type GrammarPriorityBucket,
 } from '../lib/grammarPatterns';
+import { isPatternListed, isUnreviewedAiLink, visibleGrammarLinks } from '../lib/grammarLinkVisibility';
 import {
   canonicalSourceId,
   createId,
@@ -9250,6 +9251,16 @@ export async function removeSentenceGrammar(sentenceGrammarId: string): Promise<
   notifySync('sentence_grammar', sentenceGrammarId, existing, 'delete');
 }
 
+/**
+ * Drops assistant-suggested links the learner has not acted on for sentences they have not met yet (see
+ * `visibleGrammarLinks`). Reads the introduced set only when such a link is present.
+ */
+export async function withoutUnseenAiLinks<T extends SentenceGrammar>(links: T[]): Promise<T[]> {
+  if (!links.some(isUnreviewedAiLink)) return links;
+  const introduced = await getIntroducedSentenceIds(links.map((link) => link.sentenceId));
+  return visibleGrammarLinks(links, introduced);
+}
+
 export interface GrammarEncounter {
   sentenceGrammar: SentenceGrammar;
   sentence: Sentence;
@@ -9270,10 +9281,9 @@ export async function listSentenceGrammarForPattern(
   grammarPatternId: string,
 ): Promise<GrammarEncounter[]> {
   const db = getDb();
-  const links = await db.sentenceGrammar
-    .where('grammarPatternId')
-    .equals(grammarPatternId)
-    .toArray();
+  const links = await withoutUnseenAiLinks(
+    await db.sentenceGrammar.where('grammarPatternId').equals(grammarPatternId).toArray(),
+  );
   if (links.length === 0) return [];
 
   const sentenceIds = [...new Set(links.map((link) => link.sentenceId))];
@@ -9343,7 +9353,7 @@ export interface GrammarPatternSummary {
  */
 export async function listGrammarPatternSummaries(): Promise<GrammarPatternSummary[]> {
   const db = getDb();
-  const [patterns, links, studyItems, bookSentences, books, settings] = await Promise.all([
+  const [patterns, allLinks, studyItems, bookSentences, books, settings] = await Promise.all([
     db.grammarPatterns.toArray(),
     db.sentenceGrammar.toArray(),
     db.studyItems.where('subjectType').equals('grammarPattern').toArray(),
@@ -9351,6 +9361,7 @@ export async function listGrammarPatternSummaries(): Promise<GrammarPatternSumma
     db.books.toArray(),
     readSettings(db),
   ]);
+  const links = await withoutUnseenAiLinks(allLinks);
   const graduatedPatternIds = computeGraduatedSubjectIds(
     studyItems,
     settings.graduationMinScheduledDays,
@@ -9392,7 +9403,14 @@ export async function listGrammarPatternSummaries(): Promise<GrammarPatternSumma
     else reviewsByStudyItemId.set(review.studyItemId, [review]);
   }
 
-  const summaries = patterns.map((pattern) => {
+  const listedPatterns = patterns.filter((pattern) =>
+    isPatternListed(
+      pattern,
+      linksByPatternId.get(pattern.id)?.length ?? 0,
+      (studyItemsByPatternId.get(pattern.id)?.length ?? 0) > 0,
+    ),
+  );
+  const summaries = listedPatterns.map((pattern) => {
     const patternLinks = linksByPatternId.get(pattern.id) ?? [];
     const encounterCount = patternLinks.length;
     const confirmedCount = patternLinks.filter((link) => link.confirmedByLearner).length;
@@ -10066,7 +10084,8 @@ export async function pickContextSentenceForGrammarPattern(
     .equals(grammarPatternId)
     .toArray();
   if (links.length === 0) return undefined;
-  const sorted = [...links].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  // An assistant link the learner never acted on is not a sentence to build a card from.
+  const sorted = links.filter((link) => !isUnreviewedAiLink(link)).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   for (const link of sorted) {
     if (suspendedIndex && sentenceIsSuspendedOnly(link.sentenceId, suspendedIndex)) continue;
     const sentence = await db.sentences.get(link.sentenceId);
@@ -10112,8 +10131,9 @@ export async function getAutoTrackEligibleGrammarCandidates(
   suspendedIndex?: SuspendedBookIndex | null,
 ): Promise<AutoTrackableGrammarCandidate[]> {
   const db = getDb();
+  // Unreviewed assistant links never start tracking on their own (AI suggestions are not promoted silently).
   const untrackedLinks = (await db.sentenceGrammar.toArray()).filter(
-    (link) => !trackedPatternIds.has(link.grammarPatternId),
+    (link) => !trackedPatternIds.has(link.grammarPatternId) && !isUnreviewedAiLink(link),
   );
   if (untrackedLinks.length === 0) return [];
 

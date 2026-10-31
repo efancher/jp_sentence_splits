@@ -149,14 +149,21 @@ repair tooling, research materials and future roadmap ideas remain available.
   assistant" after moving them. `repair:orphaned-sentence-extras` (dry-run by
   default) repoints drafts left on a deleted book; its first production dry run
   found none.
-- **Grammar links (2026-10-31, step 1 of 4 built; local checks only):** book-page
+- **Grammar links (2026-10-31, steps 1-2 of 5 built; local checks only):** book-page
   "Generate extras with the assistant" has a "Grammar links" row. For sentences
   without links it asks the box assistant which of the learner's patterns each
   uses, then saves unconfirmed `sentence_grammar` rows (`ai_suggested`, with span,
-  surface form and a per-sentence note). Nothing in the UI shows them yet: the
-  walkthrough "Patterns here" block, hiding new AI-proposed patterns until a
-  walked-through sentence uses them, the aligned pattern page and the clickable
-  callback are the remaining steps (ROADMAP). Patterns tagged
+  surface form and a per-sentence note). An unreviewed assistant link is visible
+  only once its sentence has been introduced (`withoutUnseenAiLinks`, using
+  `getIntroducedSentenceIds`): the walkthrough finish screen has a "Patterns here"
+  block (`SentencePatterns`, with a one-tap "Not this"), and the Analyze "Grammar
+  noticed" panel, the pattern page and the grammar list's counts, priority and
+  membership all apply the same rule, so an assistant-created pattern stays out of
+  the list until it has a visible link or a card. Unreviewed assistant links are
+  also skipped when picking a grammar card's context sentence and when
+  auto-tracking patterns (no silent cards; matters only in the optional older
+  flow). The aligned pattern page and the clickable "seen before" callback are
+  still to build (ROADMAP). Patterns tagged
   `family = no-auto-link` are never sent to the assistant; the 2026-10-31 cleanup
   (`merge:grammar-patterns`) merged six duplicate groups and tagged 22 entries.
   `sentence_extras.grammar_checked` (migration `20261031000000`) records sentences
