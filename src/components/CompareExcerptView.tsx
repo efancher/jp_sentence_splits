@@ -30,7 +30,7 @@ export function WordGlossList({ words, onWordTap, canTapWord }: { words: Compare
       {words.map((word) => (
         <li key={word.expression}>
           {onWordTap && (canTapWord?.(word.expression) ?? true) ? (
-            <button type="button" className="ghost jp" aria-label={`Check ${word.expression}`} onClick={() => onWordTap(word.expression)}>{word.expression}</button>
+            <button type="button" className="ghost jp word-check-button" aria-label={`Check ${word.expression}`} onClick={() => onWordTap(word.expression)}>{word.expression}</button>
           ) : (
             <span className="jp">{word.expression}</span>
           )}

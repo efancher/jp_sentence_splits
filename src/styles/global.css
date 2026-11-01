@@ -619,6 +619,21 @@ strong.jp {
   cursor: pointer;
 }
 
+/* A word on the selected sentence that takes a "did you know it" tap: dotted underline so it reads as a button. */
+.karaoke-word-checkable {
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.18em;
+}
+
+/* Words in the walkthrough list that take a "did you know it" tap. */
+.word-check-button {
+  min-height: 0;
+  padding: 0.1rem 0.5rem;
+  text-decoration: underline dotted;
+}
+
 .karaoke-line {
   position: relative;
 }

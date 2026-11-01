@@ -143,7 +143,7 @@ export function KaraokeSentenceText({
             ref={(el) => {
               wordRefs.current[index] = el;
             }}
-            className={`karaoke-word${index === displayedTokenIndex || (selectedWordStart !== undefined && token.start === selectedWordStart && isWordTappable?.(token)) ? ' karaoke-word-active' : ''}${token.gloss || isWordTappable?.(token) ? ' karaoke-word-tappable' : ''}`}
+            className={`karaoke-word${index === displayedTokenIndex || (selectedWordStart !== undefined && token.start === selectedWordStart && isWordTappable?.(token)) ? ' karaoke-word-active' : ''}${token.gloss ? ' karaoke-word-tappable' : ''}${isWordTappable?.(token) && onWordTap ? ' karaoke-word-checkable' : ''}`}
             {...(isWordTappable?.(token) && onWordTap
               ? {
                   role: 'button',
