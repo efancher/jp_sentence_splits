@@ -570,3 +570,35 @@ export function chooseDictationTile(
   }
   return null;
 }
+
+/** Where an Ear Tiles round stands; shared by the review-card check and the reader's in-text tool. */
+export interface EarTilesProgress {
+  /** Ids of the tiles placed so far, in spoken order. */
+  placed: string[];
+  /** Text of every wrong tile tapped, in any slot. */
+  wrongTaps: string[];
+  /** Fakes the learner tapped and ruled out. */
+  struck: string[];
+  /** A real tile tapped out of order, shown briefly as "not next". */
+  flash: string | null;
+}
+
+export const EMPTY_EAR_TILES_PROGRESS: EarTilesProgress = { placed: [], wrongTaps: [], struck: [], flash: null };
+
+export function earTilesDone(puzzle: Pick<EarTilesPuzzle, 'answer'>, progress: EarTilesProgress): boolean {
+  return progress.placed.length === puzzle.answer.length;
+}
+
+/** The round after tapping a bank tile; unchanged for taps that cannot count (finished, already placed or struck). */
+export function tapEarTile(puzzle: EarTilesPuzzle, progress: EarTilesProgress, tileId: string): EarTilesProgress {
+  if (earTilesDone(puzzle, progress) || progress.placed.includes(tileId) || progress.struck.includes(tileId)) return progress;
+  const tile = puzzle.bank.find((item) => item.id === tileId);
+  if (!tile) return progress;
+  if (isCorrectTile(puzzle, progress.placed.length, tile.text)) {
+    return { ...progress, placed: [...progress.placed, tileId], flash: null };
+  }
+  const wrongTaps = [...progress.wrongTaps, tile.text];
+  return tile.distractor
+    ? { ...progress, wrongTaps, struck: [...progress.struck, tileId], flash: null }
+    : { ...progress, wrongTaps, flash: tileId };
+}

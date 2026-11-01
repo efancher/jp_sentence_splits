@@ -11,7 +11,17 @@ import {
   WordMeaningPanel,
   type ReaderToolOutcome,
 } from '../components/ReaderTools';
-import { buildTileDictation, nextDictationTile } from '../lib/earTiles';
+import { EarTilesBank, EarTilesSlots, particleGlossDecisions } from '../components/EarTilesCheck';
+import {
+  EMPTY_EAR_TILES_PROGRESS,
+  buildCheckPuzzle,
+  buildTileDictation,
+  earTilesDone,
+  nextDictationTile,
+  tapEarTile,
+  type EarTilesProgress,
+  type EarTilesPuzzle,
+} from '../lib/earTiles';
 import { createId } from '../lib/ids';
 import { meaningCheckTargetKey } from '../lib/wordEvidence';
 import { SentenceWalkthrough, walkthroughChunks } from '../components/SentenceWalkthrough';
@@ -101,10 +111,11 @@ export function ReaderPage() {
     () => new Set(),
   );
   const [walkthroughId, setWalkthroughId] = useState<string>();
-  /** The in-place study tool open on a sentence: a dictation blank (with its tile) or a word-meaning check. */
+  /** The in-place study tool open on a sentence: a dictation blank (with its tile), a word-meaning check or an Ear Tiles round. */
   const [readerTool, setReaderTool] = useState<
     { sentenceId: string; kind: 'dictate'; tile: number; visitId: string } |
     { sentenceId: string; kind: 'meaning'; visitId: string } |
+    { sentenceId: string; kind: 'tiles'; visitId: string; puzzle: EarTilesPuzzle; progress: EarTilesProgress } |
     undefined
   >();
   /** Per-sentence override of the default word help: show every word, or none. */
@@ -293,7 +304,7 @@ export function ReaderPage() {
     if (readerTool && readerTool.sentenceId !== id) setReaderTool(undefined);
   }
 
-  function toggleReaderTool(sentence: Sentence, kind: 'dictate' | 'meaning') {
+  function toggleReaderTool(sentence: Sentence, kind: 'dictate' | 'meaning' | 'tiles') {
     if (readerTool?.sentenceId === sentence.id && readerTool.kind === kind) {
       setReaderTool(undefined);
       return;
@@ -303,8 +314,25 @@ export function ReaderPage() {
       setReaderTool({ sentenceId: sentence.id, kind, visitId });
       return;
     }
+    if (kind === 'tiles') {
+      const puzzle = buildCheckPuzzle(sentence, visitId);
+      if (puzzle) setReaderTool({ sentenceId: sentence.id, kind, visitId, puzzle, progress: EMPTY_EAR_TILES_PROGRESS });
+      return;
+    }
     const tile = nextDictationTile(sentence, 0);
     if (tile !== null) setReaderTool({ sentenceId: sentence.id, kind, tile, visitId });
+  }
+
+  /** One tile tap; a finished round feeds the particle skill's gloss log exactly like the pre-walkthrough check. */
+  function tapReaderTile(tool: Extract<NonNullable<typeof readerTool>, { kind: 'tiles' }>, tileId: string) {
+    const next = tapEarTile(tool.puzzle, tool.progress, tileId);
+    if (next === tool.progress) return;
+    setReaderTool({ ...tool, progress: next });
+    if (earTilesDone(tool.puzzle, next)) {
+      for (const decision of particleGlossDecisions(tool.puzzle, next.wrongTaps, { visitId: tool.visitId, sentenceId: tool.sentenceId })) {
+        void logGlossDecision({ ...decision, bookId });
+      }
+    }
   }
 
   /** The learner's own call from a reader tool, logged like every other lesson practice: evidence, never a rating. */
@@ -740,6 +768,9 @@ export function ReaderPage() {
                 <div className="stack" style={{ flex: 1, gap: '0.35rem' }}>
                   {chapterMode && audio ? playbackBar(index, audio) : null}
                   {(() => {
+                    if (readerTool?.kind === 'tiles' && readerTool.sentenceId === row.sentence.id) {
+                      return <EarTilesSlots puzzle={readerTool.puzzle} progress={readerTool.progress} />;
+                    }
                     const dictating = readerTool?.kind === 'dictate' && readerTool.sentenceId === row.sentence.id;
                     const tile = dictating ? buildTileDictation(row.sentence, readerTool.tile) : null;
                     return tile ? <DictationBlankLine tile={tile} /> : sentenceLine(row.sentence, isActive, audio);
@@ -773,6 +804,30 @@ export function ReaderPage() {
                         />
                       );
                     }
+                    if (readerTool.kind === 'tiles') {
+                      const tool = readerTool;
+                      return (
+                        <div className="stack" style={{ gap: '0.35rem' }} role="group" aria-label="Ear tiles">
+                          <p className="muted" style={{ margin: 0 }}>
+                            Listen, then tap the tiles you hear in order. Some were never said.
+                          </p>
+                          <div className="row" style={{ gap: '0.4rem' }}>
+                            {audio ? (
+                              <button type="button" onClick={() => toggleSentencePlay(index)}>
+                                {isSequencePlaying && singleIndexRef.current === index ? 'Stop' : 'Play'}
+                              </button>
+                            ) : null}
+                            <button type="button" onClick={() => setReaderTool(undefined)}>Close</button>
+                          </div>
+                          <EarTilesBank
+                            puzzle={tool.puzzle}
+                            progress={tool.progress}
+                            onTap={(tileId) => tapReaderTile(tool, tileId)}
+                            finish={<button type="button" onClick={() => setReaderTool(undefined)}>Done</button>}
+                          />
+                        </div>
+                      );
+                    }
                     const tool = readerTool;
                     return (
                       <WordMeaningPanel
@@ -799,8 +854,8 @@ export function ReaderPage() {
                     ) : null;
                   })()}
                   {(() => {
-                    // A word check asks for a meaning the word help and translation would otherwise print right under it.
-                    if (readerTool?.kind === 'meaning' && readerTool.sentenceId === row.sentence.id) return null;
+                    // A word check asks for a meaning the word help and translation would otherwise print right under it; Ear Tiles' word help would list the tiles.
+                    if ((readerTool?.kind === 'meaning' || readerTool?.kind === 'tiles') && readerTool.sentenceId === row.sentence.id) return null;
                     const help = sentenceWordHelp(row.sentence.vocabularySuggestions, data.knownExpressions, data.savedMeanings);
                     const override = wordHelpOverride.get(row.sentence.id);
                     const shown = override === 'all' ? help.allWords : override === 'none' ? [] : help.newWords;
@@ -869,6 +924,10 @@ export function ReaderPage() {
                     {audio ? (
                       <button type="button" aria-pressed={readerTool?.sentenceId === row.sentence.id && readerTool.kind === 'dictate'}
                         onClick={() => toggleReaderTool(row.sentence, 'dictate')}>Dictation</button>
+                    ) : null}
+                    {audio && buildCheckPuzzle(row.sentence, 'probe') ? (
+                      <button type="button" aria-pressed={readerTool?.sentenceId === row.sentence.id && readerTool.kind === 'tiles'}
+                        onClick={() => toggleReaderTool(row.sentence, 'tiles')}>Ear tiles</button>
                     ) : null}
                     <button type="button" aria-pressed={readerTool?.sentenceId === row.sentence.id && readerTool.kind === 'meaning'}
                       onClick={() => toggleReaderTool(row.sentence, 'meaning')}>Word check</button>
@@ -996,6 +1055,11 @@ export function ReaderPage() {
               aria-label="Dictation" title="Dictation: type a blanked phrase from what you hear"
               disabled={!audioByRow[focusedIndex]}
               onClick={() => toggleReaderTool(focusedRow.sentence, 'dictate')}>🎧</button>
+            <button type="button" className="icon-button"
+              aria-pressed={readerTool?.sentenceId === focusedRow.sentence.id && readerTool.kind === 'tiles'}
+              aria-label="Ear tiles" title="Ear tiles: rebuild the sentence from what you hear"
+              disabled={!audioByRow[focusedIndex] || !buildCheckPuzzle(focusedRow.sentence, 'probe')}
+              onClick={() => toggleReaderTool(focusedRow.sentence, 'tiles')}>🧩</button>
             <button type="button" className="icon-button"
               aria-pressed={readerTool?.sentenceId === focusedRow.sentence.id && readerTool.kind === 'meaning'}
               aria-label="Word check" title="Word check: recall a word's meaning"

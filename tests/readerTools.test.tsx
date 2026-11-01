@@ -6,6 +6,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { ensureSettings, resetDbForTests } from '../src/db/database';
 import { getDb, getWordMeaningCheckTarget } from '../src/db/repository';
 import type { Sentence, VocabularySuggestion } from '../src/domain/types';
+import { buildCheckPuzzle } from '../src/lib/earTiles';
 import { createId } from '../src/lib/ids';
 import { buildWordEvidence, meaningCheckTargetKey } from '../src/lib/wordEvidence';
 import { ReaderPage } from '../src/pages/ReaderPage';
@@ -152,6 +153,30 @@ describe('reader study tools', () => {
       expect(events[0]!.target!.key).toMatch(/^vocab:v-(cat|fish)$/);
     });
     expect(await getDb().reviews.count()).toBe(0);
+  });
+
+  it('rebuilds the sentence from tiles in the text itself, and rates nothing', async () => {
+    const user = userEvent.setup();
+    renderReader();
+    await user.click(await screen.findByRole('button', { name: 'Ear tiles' }));
+
+    // The blanks stand where the sentence line was; the bank sits in the panel below it.
+    const slots = await screen.findByLabelText('Sentence so far');
+    expect(slots.textContent).not.toContain('猫');
+    const bank = screen.getByLabelText('Tile bank');
+    expect(bank).toBeInTheDocument();
+
+    const answer = buildCheckPuzzle(sentenceRow(new Date().toISOString()), 'seed')!.answer;
+    for (const text of answer) {
+      const tile = Array.from(bank.querySelectorAll('button')).find((button) => button.textContent === text && !button.disabled);
+      expect(tile, text).toBeTruthy();
+      await user.click(tile!);
+    }
+    expect(await screen.findByText('✓ Heard it cleanly')).toBeInTheDocument();
+    expect(slots.textContent).toContain('猫');
+
+    expect(await getDb().reviews.count()).toBe(0);
+    expect(await getDb().studyItems.count()).toBe(0);
   });
 
   it('opens the word check, not the walkthrough, from a planner Word check step', async () => {

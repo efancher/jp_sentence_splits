@@ -1,127 +1,95 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 
 import type { SentenceAudio } from '../domain/types';
-import { isCorrectTile, particleOutcomes, type EarTilesPuzzle } from '../lib/earTiles';
+import {
+  EMPTY_EAR_TILES_PROGRESS,
+  earTilesDone,
+  particleOutcomes,
+  tapEarTile,
+  type EarTilesProgress,
+  type EarTilesPuzzle,
+} from '../lib/earTiles';
 
 import type { GlossDecisionInput } from './GlossDecisionPanel';
 import { NativeAudioButton } from './NativeAudioButton';
 
-/**
- * The warm-up before a sentence's walkthrough: hear the clip, then tap only the tiles that were
- * said, in the order said. A few tiles are fakes (a particle or ending swapped), so the check is
- * partly "did you hear は or が". Particle fakes are logged to the gloss decision log so the
- * particle skill keeps its evidence; missing one never lowers the support level.
- */
-export function EarTilesCheck({
-  sentenceId,
-  visitId,
-  puzzle,
-  audio,
-  onRecord,
-  onFinish,
-  finishLabel = 'Continue to the walkthrough',
-}: {
-  sentenceId: string;
-  visitId: string;
-  puzzle: EarTilesPuzzle;
-  audio: SentenceAudio;
-  /** Omit where there is no gloss decision log to feed (the review card). */
-  onRecord?: (decision: GlossDecisionInput) => void;
-  onFinish: () => void;
-  finishLabel?: string;
-}) {
-  const total = puzzle.answer.length;
-  const [placed, setPlaced] = useState<string[]>([]);
-  const [wrongTaps, setWrongTaps] = useState<string[]>([]);
-  // Fakes the learner has tapped and ruled out.
-  const [struck, setStruck] = useState<string[]>([]);
-  const [flash, setFlash] = useState<string | null>(null);
-  const recorded = useRef(false);
+/** The gloss decisions a finished round feeds the particle skill: one per particle fake in the bank. */
+export function particleGlossDecisions(
+  puzzle: EarTilesPuzzle,
+  wrongTaps: readonly string[],
+  ids: { visitId: string; sentenceId: string },
+): GlossDecisionInput[] {
+  return particleOutcomes(puzzle, wrongTaps).map((outcome) => ({
+    ...ids,
+    skill: 'particle',
+    subskill: outcome.particle === 'は' || outcome.particle === 'も' ? 'topic' : 'case',
+    ruleKey: `particle:${outcome.particle}:ear`,
+    targetText: outcome.tile,
+    levelShown: 4,
+    firstResponse: outcome.fellFor ? 'distractor' : outcome.tile,
+    firstCorrect: !outcome.fellFor,
+    referenceValue: outcome.tile,
+    referenceConfidence: 'settled',
+    hintMaxStep: 0,
+    explanationOpened: false,
+    vocabHelped: false,
+    translationLevel: 0,
+    outcome: outcome.fellFor ? 'assisted_correct' : 'independent_correct',
+  }));
+}
+
+/** The sentence being rebuilt: placed tiles in green, the next slot highlighted. Used inline in the reader's text. */
+export function EarTilesSlots({ puzzle, progress }: { puzzle: EarTilesPuzzle; progress: EarTilesProgress }) {
   const textOf = (id: string) => puzzle.bank.find((tile) => tile.id === id)?.text ?? '';
-  const done = placed.length === total;
+  const done = earTilesDone(puzzle, progress);
+  return (
+    <div className="row jp jp-lg" style={{ minHeight: '3rem', gap: '0.35rem', flexWrap: 'wrap' }} aria-label="Sentence so far">
+      {puzzle.answer.map((_, slot) => {
+        const id = progress.placed[slot];
+        return id ? (
+          <span key={slot} style={{ padding: '0.1rem 0.5rem', border: '2px solid var(--success)', borderRadius: 'var(--radius)', color: 'var(--success)' }}>
+            {textOf(id)}
+          </span>
+        ) : (
+          <span
+            key={slot}
+            aria-label={`Slot ${slot + 1}, empty`}
+            style={{
+              minWidth: '2rem',
+              padding: '0.1rem 0.5rem',
+              border: `2px dashed ${slot === progress.placed.length && !done ? 'var(--accent)' : 'var(--border)'}`,
+              borderRadius: 'var(--radius)',
+              textAlign: 'center',
+            }}
+          >
+            ＿
+          </span>
+        );
+      })}
+    </div>
+  );
+}
 
-  function record(finalWrongTaps: string[]) {
-    if (recorded.current) return;
-    recorded.current = true;
-    for (const outcome of particleOutcomes(puzzle, finalWrongTaps)) {
-      onRecord?.({
-        visitId,
-        sentenceId,
-        skill: 'particle',
-        subskill: outcome.particle === 'は' || outcome.particle === 'も' ? 'topic' : 'case',
-        ruleKey: `particle:${outcome.particle}:ear`,
-        targetText: outcome.tile,
-        levelShown: 4,
-        firstResponse: outcome.fellFor ? 'distractor' : outcome.tile,
-        firstCorrect: !outcome.fellFor,
-        referenceValue: outcome.tile,
-        referenceConfidence: 'settled',
-        hintMaxStep: 0,
-        explanationOpened: false,
-        vocabHelped: false,
-        translationLevel: 0,
-        outcome: outcome.fellFor ? 'assisted_correct' : 'independent_correct',
-      });
-    }
-  }
-
-  function tapTile(id: string) {
-    if (done || placed.includes(id) || struck.includes(id)) return;
-    const tile = puzzle.bank.find((item) => item.id === id);
-    if (!tile) return;
-    if (isCorrectTile(puzzle, placed.length, tile.text)) {
-      const nextPlaced = [...placed, id];
-      setPlaced(nextPlaced);
-      setFlash(null);
-      if (nextPlaced.length === total) record(wrongTaps);
-      return;
-    }
-    const nextWrong = [...wrongTaps, tile.text];
-    setWrongTaps(nextWrong);
-    if (tile.distractor) {
-      setStruck((current) => [...current, id]);
-      setFlash(null);
-    } else {
-      setFlash(id);
-    }
-  }
-
+/** The tile bank, the "not next / never said" status line and, once finished, the result. */
+export function EarTilesBank({
+  puzzle,
+  progress,
+  onTap,
+  finish,
+}: {
+  puzzle: EarTilesPuzzle;
+  progress: EarTilesProgress;
+  onTap: (tileId: string) => void;
+  /** Shown under the result once the round is done. */
+  finish: ReactNode;
+}) {
+  const { placed, wrongTaps, struck, flash } = progress;
+  const textOf = (id: string) => puzzle.bank.find((tile) => tile.id === id)?.text ?? '';
+  const done = earTilesDone(puzzle, progress);
   const fakesTapped = puzzle.bank.filter((tile) => tile.distractor && wrongTaps.includes(tile.text));
 
   return (
-    <div className="stack" style={{ gap: '0.5rem' }} aria-label="Ear tiles check">
-      <div className="row" style={{ alignItems: 'center', flexWrap: 'wrap' }}>
-        <NativeAudioButton audio={audio} displayLabel="Hear the sentence" />
-        <span className="muted" style={{ fontSize: '0.85rem' }}>
-          Tap the tiles you hear, in order. Some tiles were never said — skip those. Replay as often as you like.
-        </span>
-      </div>
-
-      <div className="row jp jp-lg" style={{ minHeight: '3rem', gap: '0.35rem', flexWrap: 'wrap' }} aria-label="Sentence so far">
-        {puzzle.answer.map((_, slot) => {
-          const id = placed[slot];
-          return id ? (
-            <span key={slot} style={{ padding: '0.1rem 0.5rem', border: '2px solid var(--success)', borderRadius: 'var(--radius)', color: 'var(--success)' }}>
-              {textOf(id)}
-            </span>
-          ) : (
-            <span
-              key={slot}
-              aria-label={`Slot ${slot + 1}, empty`}
-              style={{
-                minWidth: '2rem',
-                padding: '0.1rem 0.5rem',
-                border: `2px dashed ${slot === placed.length && !done ? 'var(--accent)' : 'var(--border)'}`,
-                borderRadius: 'var(--radius)',
-                textAlign: 'center',
-              }}
-            >
-              ＿
-            </span>
-          );
-        })}
-      </div>
-
+    <>
       {!done ? (
         <div className="row" style={{ flexWrap: 'wrap' }} aria-label="Tile bank">
           {puzzle.bank.map((tile) => {
@@ -134,7 +102,7 @@ export function EarTilesCheck({
                 type="button"
                 className="ghost"
                 disabled={isPlaced || isStruck}
-                onClick={() => tapTile(tile.id)}
+                onClick={() => onTap(tile.id)}
                 aria-label={isStruck ? `${tile.text}, not in the sentence` : flashed ? `${tile.text}, not next` : tile.text}
                 style={{
                   fontSize: '1.15rem',
@@ -172,11 +140,65 @@ export function EarTilesCheck({
               <span className="jp">{tile.distractor!.from}</span>.
             </div>
           ))}
-          <div>
-            <button type="button" className="primary" onClick={onFinish}>{finishLabel}</button>
-          </div>
+          <div>{finish}</div>
         </div>
       )}
+    </>
+  );
+}
+
+/**
+ * The warm-up before a sentence's walkthrough: hear the clip, then tap only the tiles that were
+ * said, in the order said. A few tiles are fakes (a particle or ending swapped), so the check is
+ * partly "did you hear は or が". Particle fakes are logged to the gloss decision log so the
+ * particle skill keeps its evidence; missing one never lowers the support level.
+ */
+export function EarTilesCheck({
+  sentenceId,
+  visitId,
+  puzzle,
+  audio,
+  onRecord,
+  onFinish,
+  finishLabel = 'Continue to the walkthrough',
+}: {
+  sentenceId: string;
+  visitId: string;
+  puzzle: EarTilesPuzzle;
+  audio: SentenceAudio;
+  /** Omit where there is no gloss decision log to feed (the review card). */
+  onRecord?: (decision: GlossDecisionInput) => void;
+  onFinish: () => void;
+  finishLabel?: string;
+}) {
+  const [progress, setProgress] = useState<EarTilesProgress>(EMPTY_EAR_TILES_PROGRESS);
+  const recorded = useRef(false);
+
+  function tapTile(id: string) {
+    const next = tapEarTile(puzzle, progress, id);
+    if (next === progress) return;
+    setProgress(next);
+    if (earTilesDone(puzzle, next) && !recorded.current) {
+      recorded.current = true;
+      for (const decision of particleGlossDecisions(puzzle, next.wrongTaps, { visitId, sentenceId })) onRecord?.(decision);
+    }
+  }
+
+  return (
+    <div className="stack" style={{ gap: '0.5rem' }} aria-label="Ear tiles check">
+      <div className="row" style={{ alignItems: 'center', flexWrap: 'wrap' }}>
+        <NativeAudioButton audio={audio} displayLabel="Hear the sentence" />
+        <span className="muted" style={{ fontSize: '0.85rem' }}>
+          Tap the tiles you hear, in order. Some tiles were never said — skip those. Replay as often as you like.
+        </span>
+      </div>
+      <EarTilesSlots puzzle={puzzle} progress={progress} />
+      <EarTilesBank
+        puzzle={puzzle}
+        progress={progress}
+        onTap={tapTile}
+        finish={<button type="button" className="primary" onClick={onFinish}>{finishLabel}</button>}
+      />
     </div>
   );
 }
