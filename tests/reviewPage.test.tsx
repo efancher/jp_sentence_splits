@@ -749,6 +749,44 @@ describe('ReviewPage', () => {
     }
   });
 
+  it("asks for the typed reading of the sentence's weakest word on its second review, and keeps the rating explicit", async () => {
+    await updateSettings({ sentenceLedFlow: true });
+    await seedBookWithSentence();
+    const db = getDb();
+    await db.sentences.update('sent-1', { inlineReading: '本[ほん]を読[よ]みます。' });
+    const item = await ensureStudyItem('sentence', 'sent-1', 'reading_in_context');
+    await db.studyItems.update(item.id, {
+      fsrsState: { ...item.fsrsState, reps: 1, state: 'review', due: '2026-01-01T00:00:00.000Z' },
+    });
+    // 本 keeps failing as a word card, so it is the sentence's weakest word.
+    const word = await repository.ensureVocabularyItem('本', 'ほん');
+    await db.sentenceVocabulary.put({
+      id: 'sv-weak',
+      sentenceId: 'sent-1',
+      vocabularyItemId: word.id,
+      surfaceForm: '本',
+    } as never);
+    const wordItem = await ensureStudyItem('vocabularyItem', word.id, 'reading_retrieval');
+    for (let i = 0; i < 3; i += 1) {
+      await db.reviews.add({ id: `fail-${i}`, studyItemId: wordItem.id, timestamp: new Date().toISOString(), rating: 'again' });
+    }
+
+    const user = userEvent.setup();
+    renderReviewPage('/review', '/review');
+    await user.type(await screen.findByLabelText('Type the reading of the highlighted part'), 'ほん');
+    await user.click(screen.getByRole('button', { name: 'Check', exact: true }));
+    await user.click(await screen.findByRole('button', { name: 'Reveal' }));
+    // The typed result never picks the rating: the learner still chooses.
+    expect(await db.reviews.where('studyItemId').equals(item.id).count()).toBe(0);
+    await user.click(screen.getByRole('button', { name: 'Hard' }));
+
+    await waitFor(async () => {
+      const saved = await db.reviews.where('studyItemId').equals(item.id).toArray();
+      expect(saved).toHaveLength(1);
+      expect(saved[0]).toMatchObject({ rating: 'hard', responseRaw: 'ほん', expectedAnswer: 'ほん' });
+    });
+  });
+
   it('offers a retry instead of presenting a card with missing history after a read failure', async () => {
     await updateSettings({ sentenceLedFlow: true });
     await seedBookWithSentence();

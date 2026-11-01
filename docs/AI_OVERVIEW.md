@@ -409,7 +409,11 @@ and greedily picks the sentences that cover the most uncovered weak words
 (`planWeakWordSentences`, words with strength under 0.3 only). The step's
 reason line names them ("Practises words that haven't stuck: …"). This is
 selection only: no due dates, no FSRS effect, and the sentence schedule stays
-the only "when". The model has no meaning-recall evidence yet and the
+the only "when". In sentence-first planning the same signal also adds
+walked-through sentences (last walked at least
+`WEAK_WORD_REVISIT_MIN_GAP_DAYS` = 3 days ago) as the lowest-priority revisit
+source, inside the existing per-book revisit cap, with the weak words named in
+the step's reason (`findWeakWordRevisits`). The model has no meaning-recall evidence yet and the
 JMdict-frequency prior (`scripts/lib/jmdictFrequency.ts`) is used only by
 `npm run diagnose:word-strength`, not in the app.
 
@@ -1674,6 +1678,19 @@ Activity types currently wired, grouped by subject/eligibility (under the defaul
   next review asks for the first flagged word's typed reading before reveal
   (`pickMissedReadingTarget`, ahead of the structure check below); a review
   that flags nothing clears it.
+  **Weak-word reading check (2026-11-01)**: from the sentence's second review
+  onward, when nothing was flagged missed, the card asks for the typed reading
+  of the sentence's weakest word before the structure check
+  (`getWeakWordRecallTarget`: a linked surface form with reading strength under
+  0.3, readable from the sentence's inline reading; fetched with the card's
+  history snapshot so it cannot change mid-card, and a failed lookup just
+  skips it). The typed answer rides the same `responseRaw`/`expectedAnswer`
+  path as the other pre-reveal checks and never picks the rating. The word is
+  recovered later by matching `expectedAnswer` to a linked word's reading, so
+  a right/wrong typed reading becomes reading-recall evidence for the word
+  with no schema change (`loadWordReadingStrengths`). Meaning is not asked: it
+  has no recall evidence and typed English cannot be auto-checked, so it stays
+  an open item (ROADMAP "reader as the single study surface").
   **Structure check (2026-09-29)**: from the sentence's second
   `reading_in_context` review onward (`fsrsState.reps >= 1` — the first
   review stays exactly as above), if the sentence's saved structural

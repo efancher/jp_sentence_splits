@@ -47,6 +47,16 @@ describe('buildWordEvidence', () => {
     expect(map.get('w2')!.every((e) => e.kind === 'exposure' && e.sentenceId === 's1')).toBe(true);
   });
 
+  it('turns resolved typed recalls into reading recall evidence', () => {
+    const map = buildWordEvidence({
+      studyItems,
+      wordsBySentence,
+      reviews: [],
+      typedRecalls: [{ wordId: 'w2', at, success: false }],
+    });
+    expect(map.get('w2')).toEqual([{ wordId: 'w2', facet: 'reading', kind: 'recall', at, success: false }]);
+  });
+
   it('skips unknown study items and unparseable timestamps', () => {
     const map = buildWordEvidence({
       studyItems,

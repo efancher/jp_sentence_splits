@@ -42,6 +42,7 @@ import {
   countVocabularyWordsSeededSince,
   getDueStudyItems,
   getSentenceReviewHistory,
+  getWeakWordRecallTarget,
   getPitchAccentDrillSentences,
   getReferencePitchTrack,
   loadSuspendedBookIndex,
@@ -1998,23 +1999,35 @@ export function ReviewPage() {
     current.studyItem.activityType === 'reading_in_context' || current.studyItem.activityType === 'listening'
   ) ? current.studyItem.id : undefined;
   const [historyLoad, setHistoryLoad] = useState<
-    { cardId: string; history: SentenceReviewHistory; failed?: false } |
+    { cardId: string; history: SentenceReviewHistory; weakTarget?: StructureCheckTarget; failed?: false } |
     { cardId: string; failed: true } | undefined
   >();
   const [historyRetry, setHistoryRetry] = useState(0);
+  // From the sentence's second reading_in_context review onward (like the structure check), the card may
+  // ask for the typed reading of the sentence's weakest word before reveal.
+  const weakTargetSentence =
+    current?.studyItem.activityType === 'reading_in_context' && current.studyItem.fsrsState.reps >= 1
+      ? current.sentence
+      : undefined;
   useEffect(() => {
     if (!historyCardId || !currentSentenceId) return;
     let cancelled = false;
     // A snapshot per card: history must arrive before the question samples its
     // choices, then remain fixed while the learner answers and rates it.
-    void getSentenceReviewHistory(currentSentenceId).then(
-      (history) => { if (!cancelled) setHistoryLoad({ cardId: historyCardId, history }); },
+    void Promise.all([
+      getSentenceReviewHistory(currentSentenceId),
+      // A failed lookup only means no weak-word check; it must not block the card.
+      weakTargetSentence ? getWeakWordRecallTarget(weakTargetSentence).catch(() => undefined) : undefined,
+    ]).then(
+      ([history, weakTarget]) => { if (!cancelled) setHistoryLoad({ cardId: historyCardId, history, weakTarget }); },
       () => { if (!cancelled) setHistoryLoad({ cardId: historyCardId, failed: true }); },
     );
     return () => { cancelled = true; };
-  }, [historyCardId, currentSentenceId, historyRetry]);
+  }, [historyCardId, currentSentenceId, historyRetry, weakTargetSentence]);
   const currentHistory = historyLoad?.cardId === historyCardId && !historyLoad?.failed
     ? historyLoad?.history : undefined;
+  const currentWeakTarget = historyLoad?.cardId === historyCardId && !historyLoad?.failed
+    ? historyLoad?.weakTarget : undefined;
   const sourceBooks = useLiveQuery(async () => {
     if (!currentSentenceId) return undefined;
     const db = getDb();
@@ -2551,6 +2564,9 @@ export function ReviewPage() {
                     current.sentence.japanese,
                     current.sentence.inlineReading,
                   ) ??
+                  // Then the sentence's weakest word by the strength model (second review onward):
+                  // the retrieval the learner kept missing, asked as typed recall, not recognition.
+                  currentWeakTarget ??
                   // Otherwise only from the sentence's second review onward —
                   // the first pass stays exactly as it always has, this is
                   // specifically the "repeat with less passive scaffolding"

@@ -60,8 +60,12 @@ and possible extensions. This snapshot does not certify a live deployment.
   older nine-per-sentence cards have not been retired.
 - Shadowing candidates are ordered by weak vocabulary after explicit sound flags
   and missed cloze cards, ahead of fewest attempts (`getWeakWordSentenceSignal`,
-  selection only, local history). Meaning has no recall evidence yet and the
-  frequency prior is diagnostic-only; see AI_OVERVIEW for the model.
+  selection only, local history). Sentence-first planning also revisits
+  walked-through sentences (3+ days since last walked) for weak words, and
+  `reading_in_context` asks for the typed reading of the sentence's weakest word
+  from its second review (answers feed the model; the rating stays explicit).
+  Meaning has no recall evidence yet and the frequency prior is
+  diagnostic-only; see AI_OVERVIEW for the model.
 - Reader, Analyze, review and Shadow support chapter layouts. The reader has
   per-sentence play/loop, new-word furigana and optional phrase/construction
   explanations. Episode preparation accepts the main JSON and structure lines

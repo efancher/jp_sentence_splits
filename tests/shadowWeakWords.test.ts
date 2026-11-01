@@ -9,6 +9,7 @@ import {
   ensureVocabularyItem,
   getDb,
   getSessionPlannerInput,
+  getWeakWordRecallTarget,
   getWeakWordSentenceSignal,
   setBookSentenceStatus,
   updateSettings,
@@ -101,6 +102,54 @@ describe('weak words steer shadowing candidates', () => {
     expect(ids).toEqual([weak.id, plain.id]);
     expect(input.shadowCandidates[0]!.reason).toContain('怪我');
     expect(input.shadowCandidates[1]!.reason).not.toContain('haven\'t stuck');
+  });
+
+  async function typedReadingFixture() {
+    const db = getDb();
+    const sentence = { ...makeSentence('本を読みます。'), inlineReading: '本[ほん]を読[よ]みます。' };
+    await db.sentences.put(sentence);
+    const word = await ensureVocabularyItem('本', 'ほん');
+    await db.sentenceVocabulary.put({
+      id: createId('sv'),
+      sentenceId: sentence.id,
+      vocabularyItemId: word.id,
+      surfaceForm: '本',
+    } as SentenceVocabulary);
+    const card = await ensureStudyItem('sentence', sentence.id, 'reading_in_context');
+    const review = async (typed?: string) => {
+      await db.reviews.put({
+        id: createId('review'),
+        studyItemId: card.id,
+        timestamp: new Date().toISOString(),
+        rating: 'good',
+        contextSentenceId: sentence.id,
+        ...(typed === undefined ? {} : { responseRaw: typed, expectedAnswer: 'ほん' }),
+      } as Review);
+    };
+    return { sentence, word, review };
+  }
+
+  it('targets a word seen only in passing, naming the surface and its reading', async () => {
+    const { sentence, word, review } = await typedReadingFixture();
+    await review(); // exposure only: one sentence is worth 0.25, still weak
+    expect(await getWeakWordRecallTarget(sentence)).toEqual({
+      japanese: '本',
+      expectedReading: 'ほん',
+      vocabularyItemId: word.id,
+    });
+  });
+
+  it('counts right typed readings as recall: the word stops being targeted', async () => {
+    const { sentence, review } = await typedReadingFixture();
+    await review('ほん');
+    await review('hon'); // romaji folds to the same reading
+    expect(await getWeakWordRecallTarget(sentence)).toBeUndefined();
+  });
+
+  it('counts a wrong typed reading against the word: it stays targeted', async () => {
+    const { sentence, review } = await typedReadingFixture();
+    await review('ぼん');
+    expect(await getWeakWordRecallTarget(sentence)).toMatchObject({ japanese: '本' });
   });
 
   it('adds nothing when no word is weak', async () => {

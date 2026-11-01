@@ -1,5 +1,6 @@
 import { openContentReports, type OpenContentReport } from '../lib/contentReports';
 import { isSentenceLedFlow } from '../lib/sentenceLed';
+import { isReadingAnswerCorrect, surfaceReadingFromInline } from '../lib/readingAnswer';
 import { buildWordEvidence } from '../lib/wordEvidence';
 import { planWeakWordSentences, wordStrength } from '../lib/wordStrength';
 import { buildSentenceLessonReport, type SentenceLessonReport } from '../lib/sentenceLessonReport';
@@ -11016,6 +11017,129 @@ async function getRecentlyMissedClozeSentenceIds(): Promise<Set<string>> {
 }
 
 /**
+ * Reading strength of every word that has any evidence (unseen words are left
+ * out — unseen is not weak), from local review, typed-recall and walkthrough
+ * history. Selection input only (`wordStrength.ts`): no due dates, no FSRS effect.
+ */
+async function loadWordReadingStrengths(): Promise<{
+  strengthByWord: Map<string, number>;
+  wordsBySentence: Map<string, string[]>;
+  links: SentenceVocabulary[];
+  vocabById: Map<string, VocabularyItem>;
+}> {
+  const db = getDb();
+  const [links, studyItems, reviews, events, vocab] = await Promise.all([
+    db.sentenceVocabulary.toArray(),
+    db.studyItems.toArray(),
+    db.reviews.toArray(),
+    db.sentenceLearningEvents.toArray(),
+    db.vocabularyItems.toArray(),
+  ]);
+  const wordsBySentence = new Map<string, string[]>();
+  const linksBySentence = new Map<string, SentenceVocabulary[]>();
+  for (const link of links) {
+    const words = wordsBySentence.get(link.sentenceId);
+    if (words) words.push(link.vocabularyItemId);
+    else wordsBySentence.set(link.sentenceId, [link.vocabularyItemId]);
+    const list = linksBySentence.get(link.sentenceId);
+    if (list) list.push(link);
+    else linksBySentence.set(link.sentenceId, [link]);
+  }
+
+  // A typed reading on a reading_in_context card (flagged word, weakest word, or structure chunk)
+  // asked about one word; find which by matching the saved expected reading to a linked word's reading.
+  const itemById = new Map(studyItems.map((item) => [item.id, item]));
+  const typed = reviews.filter((review) => {
+    if (!review.responseRaw || !review.expectedAnswer) return false;
+    return itemById.get(review.studyItemId)?.activityType === 'reading_in_context';
+  });
+  const typedSentenceIds = [
+    ...new Set(typed.map((review) => review.contextSentenceId ?? itemById.get(review.studyItemId)!.subjectId)),
+  ];
+  const typedSentences = new Map(
+    (await db.sentences.bulkGet(typedSentenceIds)).filter((s): s is Sentence => Boolean(s)).map((s) => [s.id, s]),
+  );
+  const typedRecalls: { wordId: string; at: number; success: boolean }[] = [];
+  for (const review of typed) {
+    const sentenceId = review.contextSentenceId ?? itemById.get(review.studyItemId)!.subjectId;
+    const sentence = typedSentences.get(sentenceId);
+    const at = Date.parse(review.timestamp);
+    if (!sentence || Number.isNaN(at)) continue;
+    const match = (linksBySentence.get(sentenceId) ?? []).find(
+      (link) =>
+        !!link.surfaceForm &&
+        isReadingAnswerCorrect(
+          review.expectedAnswer!,
+          surfaceReadingFromInline(sentence.inlineReading, link.surfaceForm) ?? '\u0000',
+        ),
+    );
+    if (match) {
+      typedRecalls.push({
+        wordId: match.vocabularyItemId,
+        at,
+        success: isReadingAnswerCorrect(review.responseRaw!, review.expectedAnswer!),
+      });
+    }
+  }
+
+  const evidence = buildWordEvidence({ reviews, studyItems, wordsBySentence, learningEvents: events, typedRecalls });
+  const now = Date.now();
+  const strengthByWord = new Map<string, number>();
+  for (const [wordId, items] of evidence) strengthByWord.set(wordId, wordStrength(items, 'reading', now));
+  return { strengthByWord, wordsBySentence, links, vocabById: new Map(vocab.map((item) => [item.id, item])) };
+}
+
+/**
+ * Which of `sentenceIds` cover the learner's weakest words
+ * (`planWeakWordSentences`). `order` is the pick order and `labels` names each
+ * pick's weak words for the planner's reason line. Empty when no word is weak enough.
+ */
+export async function getWeakWordSentenceSignal(
+  sentenceIds: string[],
+): Promise<{ order: string[]; labels: Map<string, string[]> }> {
+  if (sentenceIds.length === 0) return { order: [], labels: new Map() };
+  const { strengthByWord, wordsBySentence, vocabById } = await loadWordReadingStrengths();
+  const plan = planWeakWordSentences(
+    sentenceIds.map((sentenceId) => ({ sentenceId, wordIds: wordsBySentence.get(sentenceId) ?? [] })),
+    strengthByWord,
+  );
+  const labels = new Map<string, string[]>();
+  for (const [sentenceId, wordIds] of plan.weakWordsBySentence) {
+    labels.set(
+      sentenceId,
+      wordIds.map((id) => vocabById.get(id)?.expression).filter((x): x is string => Boolean(x)),
+    );
+  }
+  return { order: plan.order, labels };
+}
+
+/**
+ * The weakest word in one sentence worth a typed-reading check before reveal
+ * on a `reading_in_context` review: strength under 0.3, present in the
+ * sentence as a linked surface form, with a reading derivable from the
+ * sentence's inline reading. `undefined` when nothing qualifies, so the card
+ * falls back to its other checks. Selection only; the answer is evidence for
+ * the strength model, never a rating.
+ */
+export async function getWeakWordRecallTarget(
+  sentence: Pick<Sentence, 'id' | 'japanese' | 'inlineReading'>,
+): Promise<{ japanese: string; expectedReading: string; vocabularyItemId: string } | undefined> {
+  const { strengthByWord, links } = await loadWordReadingStrengths();
+  const candidates = links
+    .filter((link) => link.sentenceId === sentence.id && !!link.surfaceForm && sentence.japanese.includes(link.surfaceForm))
+    .map((link) => ({ link, strength: strengthByWord.get(link.vocabularyItemId) }))
+    .filter((entry): entry is { link: SentenceVocabulary; strength: number } => entry.strength !== undefined && entry.strength <= 0.3)
+    .sort((a, b) => a.strength - b.strength || a.link.id.localeCompare(b.link.id));
+  for (const { link } of candidates) {
+    const expectedReading = surfaceReadingFromInline(sentence.inlineReading, link.surfaceForm!);
+    if (expectedReading) {
+      return { japanese: link.surfaceForm!, expectedReading, vocabularyItemId: link.vocabularyItemId };
+    }
+  }
+  return undefined;
+}
+
+/**
  * Practice(shadowing) candidates: sentences with reference audio and the
  * fewest existing attempts, scoped to sentences actually in progress and
  * ready per getSentenceShadowingReadiness (user request, 2026-08-27) —
@@ -11027,51 +11151,9 @@ async function getRecentlyMissedClozeSentenceIds(): Promise<Set<string>> {
  * order (`getRecentlyMissedClozeSentenceIds`, cross-activity error routing).
  * The boost is skipped when `routeClozeMisses` is false (cards paused): no new
  * cloze reviews can clear a stale "missed twice" state, so it would pin the
- * same sentences to the front of every session.
+ * same sentences to the front of every session. Sentences covering weak words
+ * (`getWeakWordSentenceSignal`) come next, ahead of fewest attempts.
  */
-/**
- * Which of `sentenceIds` cover the learner's weakest words, from local review
- * and walkthrough history (`wordStrength.ts`; selection only, no due dates).
- * `order` is the pick order and `labels` names each pick's weak words for the
- * planner's reason line. Empty when no word is weak enough.
- */
-export async function getWeakWordSentenceSignal(
-  sentenceIds: string[],
-): Promise<{ order: string[]; labels: Map<string, string[]> }> {
-  if (sentenceIds.length === 0) return { order: [], labels: new Map() };
-  const db = getDb();
-  const [links, studyItems, reviews, events, vocab] = await Promise.all([
-    db.sentenceVocabulary.toArray(),
-    db.studyItems.toArray(),
-    db.reviews.toArray(),
-    db.sentenceLearningEvents.toArray(),
-    db.vocabularyItems.toArray(),
-  ]);
-  const wordsBySentence = new Map<string, string[]>();
-  for (const link of links) {
-    const list = wordsBySentence.get(link.sentenceId);
-    if (list) list.push(link.vocabularyItemId);
-    else wordsBySentence.set(link.sentenceId, [link.vocabularyItemId]);
-  }
-  const evidence = buildWordEvidence({ reviews, studyItems, wordsBySentence, learningEvents: events });
-  const now = Date.now();
-  const strengthByWord = new Map<string, number>();
-  for (const wordId of new Set(sentenceIds.flatMap((id) => wordsBySentence.get(id) ?? []))) {
-    // Words with no evidence at all are unseen, not weak — leave them out.
-    if (evidence.has(wordId)) strengthByWord.set(wordId, wordStrength(evidence.get(wordId)!, 'reading', now));
-  }
-  const plan = planWeakWordSentences(
-    sentenceIds.map((sentenceId) => ({ sentenceId, wordIds: wordsBySentence.get(sentenceId) ?? [] })),
-    strengthByWord,
-  );
-  const expressionById = new Map(vocab.map((item) => [item.id, item.expression]));
-  const labels = new Map<string, string[]>();
-  for (const [sentenceId, wordIds] of plan.weakWordsBySentence) {
-    labels.set(sentenceId, wordIds.map((id) => expressionById.get(id)).filter((x): x is string => Boolean(x)));
-  }
-  return { order: plan.order, labels };
-}
-
 async function findShadowCandidates(
   limit: number,
   activeSentenceIds: Set<string>,

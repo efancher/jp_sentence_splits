@@ -24,6 +24,13 @@ export interface WordEvidenceInput {
   /** Sentence id → ids of the vocabulary items linked to it. */
   wordsBySentence: ReadonlyMap<string, readonly string[]>;
   learningEvents?: readonly Pick<SentenceLearningEvent, 'sentenceId' | 'timestamp' | 'action'>[];
+  /**
+   * Typed reading answers given on `reading_in_context` cards, already matched
+   * to the word they asked about (the repository resolves the word from the
+   * saved expected reading). `success` is whether the typed reading matched; it
+   * is evidence for the planner, not a rating.
+   */
+  typedRecalls?: readonly { wordId: string; at: number; success: boolean }[];
 }
 
 const WORD_RECALL_ACTIVITIES = new Set(['reading_retrieval', 'reading_production']);
@@ -56,6 +63,10 @@ export function buildWordEvidence(input: WordEvidenceInput): Map<string, WordEvi
     } else if (item.subjectType === 'sentence') {
       exposeSentence(review.contextSentenceId ?? item.subjectId, at);
     }
+  }
+
+  for (const recall of input.typedRecalls ?? []) {
+    add({ wordId: recall.wordId, facet: 'reading', kind: 'recall', at: recall.at, success: recall.success });
   }
 
   for (const event of input.learningEvents ?? []) {
