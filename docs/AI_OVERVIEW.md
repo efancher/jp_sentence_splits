@@ -413,8 +413,18 @@ the only "when". In sentence-first planning the same signal also adds
 walked-through sentences (last walked at least
 `WEAK_WORD_REVISIT_MIN_GAP_DAYS` = 3 days ago) as the lowest-priority revisit
 source, inside the existing per-book revisit cap, with the weak words named in
-the step's reason (`findWeakWordRevisits`). The model has no meaning-recall
-evidence yet.
+the step's reason (`findWeakWordRevisits`). Each such revisit also drafts a
+cheap **Word check** step (up to `WORD_CHECK_STEPS_PER_PLAN` = 2 per plan, 1
+minute each, bucket `glossing`, `targetKind: sentence_learning` with the
+additive `wordCheck: true`): "Recall what a word here means (怪我 haven't stuck)
+— you judge how it went". Its page is `/books/:bookId/check/:sentenceId`, which
+renders the reader with that sentence's Word check already open (the
+walkthrough route `learn/:sentenceId` is unchanged), and it settles only by
+"Mark complete" like every other step. It counts as `vocabulary` in step
+categories and is excluded from the sentence-lesson report. The glossing
+ceiling includes it so a thin candidate list still has room for it. The
+meaning facet gets its evidence from the checks the learner actually does
+(`meaningCheckTargetKey`), not from the planner.
 
 **Frequency prior (2026-11-01).** Each word starts from a small score by
 general-language frequency (`frequencyBandPrior`, at most 0.8, so one failed

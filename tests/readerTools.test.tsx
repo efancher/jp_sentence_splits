@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 import { ensureSettings, resetDbForTests } from '../src/db/database';
@@ -152,6 +152,23 @@ describe('reader study tools', () => {
       expect(events[0]!.target!.key).toMatch(/^vocab:v-(cat|fish)$/);
     });
     expect(await getDb().reviews.count()).toBe(0);
+  });
+
+  it('opens the word check, not the walkthrough, from a planner Word check step', async () => {
+    // jsdom has no scrollIntoView; the lesson/check route scrolls the opened sentence into view.
+    Element.prototype.scrollIntoView = vi.fn();
+    render(
+      withAppProviders(
+        <MemoryRouter initialEntries={['/books/book-1/check/sent-1']}>
+          <Routes>
+            <Route path="books/:bookId/check/:sentenceId" element={<ReaderPage />} />
+          </Routes>
+        </MemoryRouter>,
+      ),
+    );
+    expect(await screen.findByRole('group', { name: 'Word meaning check' })).toBeInTheDocument();
+    expect(screen.getByText(/What does/)).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Sentence walkthrough' })).not.toBeInTheDocument();
   });
 
   it('closes the tool when another sentence is chosen', async () => {

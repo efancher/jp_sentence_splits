@@ -144,7 +144,15 @@ export const MODE_ACTIVITY_ESTIMATE_MINUTES = {
 } as const;
 
 /** Per-sentence cost of a single glossing step — `vocabulary_review` (a not-yet-confirmed sentence) or `continue_book` (a sentence whose vocabulary is confirmed and proficient), never both in the same pass, see buildExploreSteps. */
-export const EXPLORE_STEP_MINUTES = { analyze: 1.5, vocabulary: 1, lesson: 3, revisit: 2 } as const;
+export const EXPLORE_STEP_MINUTES = { analyze: 1.5, vocabulary: 1, lesson: 3, revisit: 2, wordCheck: 1 } as const;
+
+/**
+ * At most this many Word check steps (a self-judged "what does this word mean?"
+ * in the reader) per planning pass. They ride on weak-word revisits only, so a
+ * check always has a sentence with words that haven't stuck behind it, and
+ * meaning evidence accumulates without crowding the session.
+ */
+export const WORD_CHECK_STEPS_PER_PLAN = 2;
 
 /**
  * Minimum share of the glossing bucket's minutes that vocabulary

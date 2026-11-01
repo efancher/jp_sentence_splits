@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { ChunkPuzzleStrip } from '../components/ChunkPuzzleStrip';
 import { EpisodePreparationPanel } from '../components/EpisodePreparationPanel';
@@ -63,6 +63,8 @@ export function ReaderPage() {
   const { bookId = '', sentenceId: lessonSentenceId } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  // /books/:bookId/check/:sentenceId (planner Word check step) opens that sentence's word check, not its walkthrough.
+  const isWordCheckRoute = useLocation().pathname.includes('/check/');
   // /books/:bookId/learn/:sentenceId (planner lesson step) shows the sentence's own chapter.
   const lessonChapterId = useLiveQuery(
     async () =>
@@ -180,10 +182,11 @@ export function ReaderPage() {
     const index = data.rows.findIndex((row) => row.sentence.id === lessonSentenceId);
     if (index < 0) return;
     openedLessonRef.current = lessonSentenceId;
-    setWalkthroughId(lessonSentenceId);
+    if (isWordCheckRoute) setReaderTool({ sentenceId: lessonSentenceId, kind: 'meaning', visitId: createId('visit') });
+    else setWalkthroughId(lessonSentenceId);
     setSelectedId(lessonSentenceId);
     setTimeout(() => rowRefs.current[index]?.scrollIntoView({ block: 'center' }), 0);
-  }, [lessonSentenceId, lessonChapterId, data]);
+  }, [lessonSentenceId, lessonChapterId, data, isWordCheckRoute]);
 
   const focus = useLiveQuery(
     () => getEpisodeFocus(bookId, chapterId).catch(() => null),

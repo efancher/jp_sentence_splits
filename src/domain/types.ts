@@ -1693,6 +1693,8 @@ export interface PlannerSessionStep {
   targetCount?: number;
   /** `sentence_learning` only: a "Fresh try" revisit of an already walked-through sentence, not a first lesson. */
   revisit?: boolean;
+  /** `sentence_learning` only: a Word check (`/books/:bookId/check/:sentenceId`) — recall a word's meaning in the reader — not a walkthrough. */
+  wordCheck?: boolean;
 }
 
 /**

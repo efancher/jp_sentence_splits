@@ -66,6 +66,8 @@ and possible extensions. This snapshot does not certify a live deployment.
   walked-through sentences (3+ days since last walked) for weak words, and
   `reading_in_context` asks for the typed reading of the sentence's weakest word
   from its second review (answers feed the model; the rating stays explicit).
+  Each weak-word revisit also drafts a Word check step (max 2 per plan) that opens
+  the reader's word check at `/books/:bookId/check/:sentenceId`.
   Words start from a JMdict frequency-band prior (fetched on demand from
   `public/wordFrequency.json`; none offline). Meaning has no recall evidence
   yet; see AI_OVERVIEW for the model.

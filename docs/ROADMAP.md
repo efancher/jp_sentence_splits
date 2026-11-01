@@ -696,9 +696,10 @@ control).
   *Progress (2026-11-01):* (1) and (2) shipped; the dictation blank and a
   self-judged word-meaning check now run in the reader, and the walkthrough was
   already hosted there. Left: Ear Tiles placed in the episode text, shadowing as
-  a docked panel (pitch contour, recording; iOS gesture-gated audio), a
-  meaning check that is not just the weakest word (the planner does not yet
-  steer to it), and a WebKit/physical-iPhone check of the new tools (the
+  a docked panel (pitch contour, recording; iOS gesture-gated audio), Word
+  checks beyond weak-word revisits (the planner only drafts them beside those,
+  max 2 a plan, and not yet in a browser spec for the step route), and a
+  WebKit/physical-iPhone check of the new tools (the
   Chromium phone and desktop layout pass is done in `e2e/reader-tools.spec.ts`).
 - **Costs and constraints.** Shadowing needs a docked panel and its iOS
   gesture-gated audio setup, so it cannot fully dissolve into the text. Review

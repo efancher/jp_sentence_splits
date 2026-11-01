@@ -10,6 +10,7 @@ import type {
 import {
   BASELINE_SESSION_ALLOCATION,
   EXPLORE_STEP_MINUTES,
+  WORD_CHECK_STEPS_PER_PLAN,
   GAME_BREAK_INTERVAL_MINUTES,
   GAME_BREAK_MAX_PER_PASS,
   GAME_BREAK_MINUTES,
@@ -500,6 +501,8 @@ export interface PlannerStepDraft {
   reason: string;
   status: PlannerStepStatus;
   targetCount?: number;
+  /** A Word check in the reader (see PlannerSessionStep.wordCheck), not a walkthrough. */
+  wordCheck?: boolean;
 }
 
 export interface RecommendedSession {
@@ -779,7 +782,36 @@ function buildExploreSteps(
     remaining -= cost;
   }
 
+  // Word checks: a cheap, self-judged "what does this word mean?" for the sentences brought back because
+  // they hold words that haven't stuck. Meaning only learns from recall, so this is what feeds it.
+  let wordChecks = 0;
+  for (const entry of entries) {
+    if (wordChecks >= WORD_CHECK_STEPS_PER_PLAN) break;
+    if (!consumed.has(entry) || !isWordCheckCandidate(entry)) continue;
+    if (EXPLORE_STEP_MINUTES.wordCheck > remaining) break;
+    steps.push(wordCheckStepFor(entry));
+    remaining -= EXPLORE_STEP_MINUTES.wordCheck;
+    wordChecks += 1;
+  }
+
   return steps;
+}
+
+function wordCheckStepFor(entry: ExploreSentenceEntry): PlannerStepDraft {
+  const { candidate, sentence } = entry;
+  return {
+    id: draftStepId(),
+    bucket: 'glossing',
+    activityType: SYNTHETIC_ACTIVITY_TYPES.sentenceLearning,
+    targetKind: 'sentence_learning',
+    bookId: candidate.bookId,
+    sentenceId: sentence.sentenceId,
+    label: `Word check: ${sentence.preview}`,
+    estimatedMinutes: EXPLORE_STEP_MINUTES.wordCheck,
+    reason: `Recall what a word here means (${sentence.weakWords!.join('、')} haven't stuck) — you judge how it went`,
+    status: 'pending',
+    wordCheck: true,
+  };
 }
 
 /**
@@ -791,10 +823,15 @@ function buildExploreSteps(
  * doesn't attract redistributed spillover minutes it can't spend.
  */
 function exploreCeilingMinutes(candidates: ExploreCandidate[], sentenceFirst = false): number {
-  return classifyExploreSentences(candidates, sentenceFirst).reduce(
-    (total, entry) => total + exploreEntryCost(entry),
-    0,
-  );
+  const entries = classifyExploreSentences(candidates, sentenceFirst);
+  const lessons = entries.reduce((total, entry) => total + exploreEntryCost(entry), 0);
+  // Word checks ride on weak-word revisits (see buildExploreSteps); count the ones that can be drafted.
+  const checks = Math.min(WORD_CHECK_STEPS_PER_PLAN, entries.filter(isWordCheckCandidate).length);
+  return lessons + checks * EXPLORE_STEP_MINUTES.wordCheck;
+}
+
+function isWordCheckCandidate(entry: ExploreSentenceEntry): boolean {
+  return entry.kind === 'lesson' && !!entry.sentence.revisit && !!entry.sentence.weakWords?.length;
 }
 
 /** Step 7 (grammar): one step per grammar pattern worth examining, in priority order, until the budget runs out. */
@@ -1073,9 +1110,11 @@ export function sessionStepTargetPath(step: PlannerSessionStep): string | null {
     case 'vocabulary_detail':
       return '/vocabulary';
     case 'sentence_learning':
-      return step.bookId && step.sentenceId
-        ? `/books/${step.bookId}/learn/${step.sentenceId}`
-        : null;
+      if (!step.bookId || !step.sentenceId) return null;
+      // A Word check opens the reader with that sentence's word check ready; query-free like every step path.
+      return step.wordCheck
+        ? `/books/${step.bookId}/check/${step.sentenceId}`
+        : `/books/${step.bookId}/learn/${step.sentenceId}`;
     case 'game':
       // Query-free on purpose: useActiveSession matches a step's page by exact pathname.
       return step.gameId ? `/play/${step.gameId}/auto` : null;

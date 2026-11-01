@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { resetDbForTests } from '../src/db/database';
 import {
+  addMinutesToTodaySession,
   addSentencesToBook,
   createBook,
   ensureStudyItem,
@@ -12,7 +13,9 @@ import {
 } from '../src/db/repository';
 import type { Review, Sentence, SentenceVocabulary } from '../src/domain/types';
 import { createId } from '../src/lib/ids';
-import { buildRecommendedSession } from '../src/lib/sessionPlanner';
+import { buildRecommendedSession, sessionStepTargetPath } from '../src/lib/sessionPlanner';
+import { buildSentenceLessonReport } from '../src/lib/sentenceLessonReport';
+import { sessionStepCategory } from '../src/lib/sessionStepCategory';
 
 function makeSentence(japanese: string): Sentence {
   const timestamp = new Date().toISOString();
@@ -98,6 +101,41 @@ describe('weak words bring walked-through sentences back for a walkthrough', () 
     // Walked yesterday: too soon to bring back for its weak word.
     expect(byId.get(tooSoon.id)?.weakWords).toBeUndefined();
     expect(byId.get(plain.id)?.weakWords).toBeUndefined();
+  });
+
+  it('drafts a Word check beside the revisit, saves it on the session, and routes it to the reader check', async () => {
+    const { weak, tooSoon, plain } = await setup();
+    const session = await addMinutesToTodaySession(60);
+    const checks = session.steps.filter((step) => step.wordCheck);
+
+    // One check, for the one sentence brought back for its weak words — not for the others.
+    expect(checks).toHaveLength(1);
+    expect(checks[0]).toMatchObject({
+      sentenceId: weak.id,
+      targetKind: 'sentence_learning',
+      bucket: 'glossing',
+      status: 'pending',
+    });
+    expect(checks[0]!.label).toMatch(/^Word check:/);
+    expect(checks[0]!.reason).toContain('怪我');
+    expect(session.steps.some((step) => step.wordCheck && [tooSoon.id, plain.id].includes(step.sentenceId!))).toBe(false);
+    expect(sessionStepTargetPath(checks[0]!)).toBe(`/books/${checks[0]!.bookId}/check/${weak.id}`);
+    // The revisit itself still opens the walkthrough route, and the check counts as vocabulary, not a lesson.
+    const revisit = session.steps.find((step) => step.targetKind === 'sentence_learning' && !step.wordCheck && step.sentenceId === weak.id);
+    expect(sessionStepTargetPath(revisit!)).toBe(`/books/${revisit!.bookId}/learn/${weak.id}`);
+    expect(sessionStepCategory(checks[0]!)).toBe('vocabulary');
+
+    const saved = await getDb().plannerSessions.get(session.id);
+    expect(saved!.steps.filter((step) => step.wordCheck)).toHaveLength(1);
+  });
+
+  it('keeps Word checks out of the lesson report', async () => {
+    await setup();
+    const session = await addMinutesToTodaySession(60);
+    const lessons = session.steps.filter((step) => step.targetKind === 'sentence_learning' && !step.wordCheck);
+    const report = buildSentenceLessonReport([], [session]);
+    expect(session.steps.some((step) => step.wordCheck)).toBe(true);
+    expect(report.planned.lessons).toBe(lessons.length);
   });
 
   it('names the weak words in the drafted step', async () => {

@@ -576,6 +576,8 @@ export const plannerSessionStepSchema = z.object({
   targetCount: z.number().int().nonnegative().optional(),
   // Additive (2026-10-12): only set on `sentence_learning` fresh-try steps.
   revisit: z.boolean().optional(),
+  // Additive (2026-11-01): only set on `sentence_learning` Word check steps.
+  wordCheck: z.boolean().optional(),
 });
 
 export const plannerSessionSchema = z.object({

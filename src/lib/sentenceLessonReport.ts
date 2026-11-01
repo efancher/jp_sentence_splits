@@ -39,7 +39,7 @@ export function buildSentenceLessonReport(
   const inWindow = (iso: string) => new Date(iso).getTime() >= since;
   const recentSessions = sessions.filter((session) => inWindow(session.createdAt));
   const lessonSteps = recentSessions.flatMap((session) =>
-    session.steps.filter((step) => step.targetKind === 'sentence_learning'),
+    session.steps.filter((step) => step.targetKind === 'sentence_learning' && !step.wordCheck),
   );
   const recent = events.filter((event) => inWindow(event.timestamp));
   const walked = new Set(
@@ -74,7 +74,7 @@ export function buildSentenceLessonReport(
     },
     planDays: recentSessions.length,
     planDaysWithoutLessons: recentSessions.filter(
-      (session) => !session.steps.some((step) => step.targetKind === 'sentence_learning'),
+      (session) => !session.steps.some((step) => step.targetKind === 'sentence_learning' && !step.wordCheck),
     ).length,
     outcomes: {
       sentencesWalked: walked.size,
