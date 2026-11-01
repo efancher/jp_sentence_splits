@@ -138,7 +138,9 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 
     const toolbar = page.getByRole('toolbar', { name: 'Sentence tools' });
     await expect(toolbar).toBeVisible();
     for (const name of ['Previous sentence', 'Next sentence', 'Show translation', 'Walk through', 'Show structure', 'Back to book']) {
-      const control = toolbar.getByRole(name === 'Back to book' ? 'link' : 'button', { name });
+      // Below 700px the study tools (Walk through) sit under the selected sentence instead of in the rail.
+      const container = name === 'Walk through' && viewport.width < 700 ? page.getByRole('toolbar', { name: 'Study tools' }) : toolbar;
+      const control = container.getByRole(name === 'Back to book' ? 'link' : 'button', { name });
       await expect(control).toBeVisible();
       await expect(control).toHaveAttribute('title', /.+/);
     }
