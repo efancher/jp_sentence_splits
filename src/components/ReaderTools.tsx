@@ -102,6 +102,55 @@ export function DictationBlankPanel({
   );
 }
 
+/**
+ * Read check: the sentence is shown plain (no furigana, word help or translation), the learner reads
+ * it, optionally listens, then reveals the help and judges how it went. Their call is evidence only.
+ */
+export function ReadCheckPanel({
+  revealed,
+  hasAudio,
+  playing,
+  onPlay,
+  onReveal,
+  onRecord,
+  onClose,
+}: {
+  revealed: boolean;
+  hasAudio: boolean;
+  playing: boolean;
+  onPlay: () => void;
+  onReveal: () => void;
+  onRecord: (outcome: ReaderToolOutcome) => void;
+  onClose: () => void;
+}) {
+  const [recorded, setRecorded] = useState(false);
+  return (
+    <div className="stack" style={{ gap: '0.35rem' }} role="group" aria-label="Read check">
+      {!revealed ? (
+        <>
+          <p style={{ margin: 0 }}>Read it without help: what does this sentence say?</p>
+          <div className="row" style={{ gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <button type="button" className="primary" onClick={onReveal}>Show help and meaning</button>
+            {hasAudio ? <button type="button" onClick={onPlay}>{playing ? 'Stop' : 'Listen'}</button> : null}
+            <button type="button" onClick={onClose}>Close</button>
+          </div>
+        </>
+      ) : !recorded ? (
+        <div className="row" style={{ gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <span className="muted">Did you understand it before the reveal?</span>
+          <button type="button" onClick={() => { onRecord('got_it'); setRecorded(true); }}>Got it</button>
+          <button type="button" onClick={() => { onRecord('needed_help'); setRecorded(true); }}>Needed help</button>
+        </div>
+      ) : (
+        <div className="row" style={{ gap: '0.4rem', alignItems: 'center' }}>
+          <span className="muted">Recorded.</span>
+          <button type="button" onClick={onClose}>Close</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 type MeaningTarget = Awaited<ReturnType<typeof getWordMeaningCheckTarget>>;
 
 export function WordMeaningPanel({

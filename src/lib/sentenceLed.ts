@@ -31,15 +31,23 @@ const LEGACY_DRILL_ACTIVITY_TYPES = new Set([
   'grammar_completion',
 ]);
 
+/** Sentence-subject card types withheld by `settings.sentenceCardsPaused`; `dictation_tile:N` is matched by prefix. */
+const SENTENCE_CARD_ACTIVITY_TYPES = new Set(['reading_in_context', 'listening', 'ear_tiles', 'dictation']);
+
+export function isSentenceCardActivityType(activityType: string): boolean {
+  return SENTENCE_CARD_ACTIVITY_TYPES.has(activityType) || activityType.startsWith('dictation_tile:');
+}
+
 const PITCH_ACCENT_ACTIVITY_TYPES = new Set(['pitch_accent', 'pitch_accent_production']);
 
 /** Whether Review currently serves this card type under the given settings. */
 export function isActivityTypeInUse(
   activityType: string,
-  settings: Partial<FlowSettings & Pick<AppSettings, 'pitchAccentPaused'>> | undefined,
+  settings: Partial<FlowSettings & Pick<AppSettings, 'pitchAccentPaused' | 'sentenceCardsPaused'>> | undefined,
 ): boolean {
   if (LEGACY_DRILL_ACTIVITY_TYPES.has(activityType)) return !effectiveLegacyDrillsPaused(settings);
   if (PITCH_ACCENT_ACTIVITY_TYPES.has(activityType)) return !settings?.pitchAccentPaused;
+  if (isSentenceCardActivityType(activityType)) return !settings?.sentenceCardsPaused;
   return true;
 }
 

@@ -909,6 +909,9 @@ interface ReviewScope {
   existingGrammarItems: StudyItem[];
 }
 
+/** Descriptor keys whose cards are sentence-subject cards (reading_in_context; listening/Ear Tiles/dictation). */
+const SENTENCE_CARD_DESCRIPTOR_KEYS = new Set(['sentence', 'listening']);
+
 function buildActivityDescriptors(scope: ReviewScope): ActivityDescriptor[] {
   return [
     defineActivityDescriptor<Sentence>({
@@ -1649,9 +1652,16 @@ export function ReviewPage() {
     settings?.sentenceLedFlow,
   ]);
 
+  const sentenceCardsPaused = settings?.sentenceCardsPaused ?? false;
   const descriptors = useMemo(
-    () => (scope ? buildActivityDescriptors(scope) : []),
-    [scope],
+    () =>
+      scope
+        ? buildActivityDescriptors(scope).filter(
+            // "Pause sentence cards": the reader's Read check replaces the sentence-subject cards.
+            (descriptor) => !(sentenceCardsPaused && SENTENCE_CARD_DESCRIPTOR_KEYS.has(descriptor.key)),
+          )
+        : [],
+    [scope, sentenceCardsPaused],
   );
 
   // Build the session queue once, the first time scope data arrives —

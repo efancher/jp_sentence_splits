@@ -396,12 +396,12 @@ describe('Learning Orchestrator repository layer', () => {
 
     expect(await requestFreshTry(makeSentence().id)).toBe('not_walked');
     const before = await addMinutesToTodaySession(30);
-    expect(before.steps.filter((step) => step.targetKind === 'sentence_learning')).toEqual([]);
+    expect(before.steps.filter((step) => step.targetKind === 'sentence_learning' && !step.readCheck)).toEqual([]);
     await deleteTodayPlannerSession();
 
     expect(await requestFreshTry(walked.id)).toBe('queued');
     const after = await addMinutesToTodaySession(30);
-    const lesson = after.steps.find((step) => step.targetKind === 'sentence_learning');
+    const lesson = after.steps.find((step) => step.targetKind === 'sentence_learning' && !step.readCheck);
     expect(lesson?.sentenceId).toBe(walked.id);
     expect(lesson?.revisit).toBe(true);
     await deleteTodayPlannerSession();
@@ -415,7 +415,7 @@ describe('Learning Orchestrator repository layer', () => {
       timestamp: new Date(Date.now() + 1000).toISOString(),
     } as never);
     const done = await addMinutesToTodaySession(30);
-    expect(done.steps.some((step) => step.targetKind === 'sentence_learning')).toBe(false);
+    expect(done.steps.some((step) => step.targetKind === 'sentence_learning' && !step.readCheck)).toBe(false);
   });
 
   it('ending a session early marks remaining steps skipped, never completed', async () => {

@@ -75,6 +75,11 @@ export const PRACTICE_ACTIVITY_TYPES: StudyActivityType[] = [
   'pitch_accent_production',
 ];
 
+/** StudyItems withheld by settings.sentenceCardsPaused: every sentence-subject card (reading, listening, Ear Tiles, dictation). */
+export function isSentenceCardSubject(subjectType: string): boolean {
+  return subjectType === 'sentence';
+}
+
 /** StudyItem subjects withheld by settings.legacyDrillsPaused (word & grammar drills); sentence/chunk cards continue. */
 export function isPausedLegacyDrillSubject(subjectType: string): boolean {
   return (
@@ -153,6 +158,15 @@ export const EXPLORE_STEP_MINUTES = { analyze: 1.5, vocabulary: 1, lesson: 3, re
  * meaning evidence accumulates without crowding the session.
  */
 export const WORD_CHECK_STEPS_PER_PLAN = 2;
+
+/**
+ * Read checks (the reader's replacement for sentence review cards, see src/lib/readCheck.ts):
+ * at most this many drafted per plan, each about a minute, drawn from the `review` bucket.
+ */
+export const READ_CHECK_STEPS_PER_PLAN = 8;
+export const READ_CHECK_STEP_MINUTES = 1;
+/** Due sentences the planner input carries; the rest only feed the "N waiting" count. */
+export const READ_CHECK_CANDIDATE_LIMIT = 30;
 
 /**
  * Minimum share of the glossing bucket's minutes that vocabulary

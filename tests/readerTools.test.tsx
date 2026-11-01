@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
@@ -177,6 +177,77 @@ describe('reader study tools', () => {
 
     expect(await getDb().reviews.count()).toBe(0);
     expect(await getDb().studyItems.count()).toBe(0);
+  });
+
+  it('hides all help until a Read check is revealed, then logs only the learner’s own call as a gist check', async () => {
+    const user = userEvent.setup();
+    renderReader();
+    await user.click(await screen.findByRole('button', { name: 'Read check' }));
+
+    const group = await screen.findByRole('group', { name: 'Read check' });
+    expect(group).toBeInTheDocument();
+    // Plain sentence only: no translation, no word help while unrevealed.
+    expect(screen.queryByText('I ate the cat’s fish.')).not.toBeInTheDocument();
+    expect(screen.queryByText('猫 — cat')).not.toBeInTheDocument();
+    expect(await getDb().sentenceLearningEvents.count()).toBe(0);
+
+    await user.click(screen.getByRole('button', { name: 'Show help and meaning' }));
+    expect(await screen.findByText('I ate the cat’s fish.')).toBeInTheDocument();
+    expect(await getDb().sentenceLearningEvents.count()).toBe(0);
+    await user.click(screen.getByRole('button', { name: 'Needed help' }));
+
+    await waitFor(async () => {
+      const events = await getDb().sentenceLearningEvents.toArray();
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({ action: 'gist_check', sentenceId: 'sent-1', outcome: 'needed_help', assessmentSource: 'self' });
+    });
+    expect(await getDb().reviews.count()).toBe(0);
+    expect(await getDb().studyItems.count()).toBe(0);
+  });
+
+  it('opens the Read check, not the walkthrough, from a planner Read check step', async () => {
+    Element.prototype.scrollIntoView = vi.fn();
+    render(
+      withAppProviders(
+        <MemoryRouter initialEntries={['/books/book-1/recall/sent-1']}>
+          <Routes>
+            <Route path="books/:bookId/recall/:sentenceId" element={<ReaderPage />} />
+          </Routes>
+        </MemoryRouter>,
+      ),
+    );
+    expect(await screen.findByRole('group', { name: 'Read check' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Sentence walkthrough' })).not.toBeInTheDocument();
+  });
+
+  it('docks the shadowing workspace under the sentence, without the page chrome, and closes it again', async () => {
+    const user = userEvent.setup();
+    renderReader();
+    await user.click(await screen.findByRole('button', { name: 'Shadowing' }));
+
+    const region = await screen.findByRole('region', { name: 'Shadowing' });
+    // The embedded workspace keeps practice (record, loop) and drops the standalone page's chrome.
+    expect(await within(region).findByRole('button', { name: 'Record attempt' })).toBeInTheDocument();
+    expect(within(region).queryByText('Layout')).not.toBeInTheDocument();
+    expect(within(region).queryByRole('link', { name: 'Back to Practice' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Close shadowing' }));
+    expect(screen.queryByRole('region', { name: 'Shadowing' })).not.toBeInTheDocument();
+  });
+
+  it('opens shadowing, not the walkthrough, from a planner shadowing step', async () => {
+    Element.prototype.scrollIntoView = vi.fn();
+    render(
+      withAppProviders(
+        <MemoryRouter initialEntries={['/books/book-1/speak/sent-1']}>
+          <Routes>
+            <Route path="books/:bookId/speak/:sentenceId" element={<ReaderPage />} />
+          </Routes>
+        </MemoryRouter>,
+      ),
+    );
+    expect(await screen.findByRole('region', { name: 'Shadowing' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Sentence walkthrough' })).not.toBeInTheDocument();
   });
 
   it('opens the word check, not the walkthrough, from a planner Word check step', async () => {

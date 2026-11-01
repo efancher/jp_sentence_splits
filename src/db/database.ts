@@ -78,6 +78,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   sessionAllocation: { ...BASELINE_SESSION_ALLOCATION },
   quietMode: false,
   pitchAccentPaused: false,
+  sentenceCardsPaused: false,
   recentPodcastFeedUrls: [],
   recentNhkEasyFeedUrls: [],
 };

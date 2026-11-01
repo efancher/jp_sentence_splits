@@ -420,6 +420,22 @@ export function SettingsPage() {
         <label className="row">
           <input
             type="checkbox"
+            checked={settings.sentenceCardsPaused ?? false}
+            onChange={(event) => {
+              void updateSettings({ sentenceCardsPaused: event.target.checked });
+            }}
+          />
+          Pause sentence review cards (use Read checks in the reader instead)
+        </label>
+        <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+          Stops showing and planning reading, listening, Ear Tiles and
+          dictation cards. The planner drafts quick "Read check" steps that
+          open the reader instead. Nothing is deleted or rescheduled; turn it
+          off to get the cards back.
+        </p>
+        <label className="row">
+          <input
+            type="checkbox"
             checked={settings.pitchAccentPaused ?? false}
             onChange={(event) => {
               void updateSettings({ pitchAccentPaused: event.target.checked });

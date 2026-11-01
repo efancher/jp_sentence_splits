@@ -133,7 +133,7 @@ describe('weak words bring walked-through sentences back for a walkthrough', () 
   it('keeps Word checks out of the lesson report', async () => {
     await setup();
     const session = await addMinutesToTodaySession(60);
-    const lessons = session.steps.filter((step) => step.targetKind === 'sentence_learning' && !step.wordCheck);
+    const lessons = session.steps.filter((step) => step.targetKind === 'sentence_learning' && !step.wordCheck && !step.readCheck);
     const report = buildSentenceLessonReport([], [session]);
     expect(session.steps.some((step) => step.wordCheck)).toBe(true);
     expect(report.planned.lessons).toBe(lessons.length);

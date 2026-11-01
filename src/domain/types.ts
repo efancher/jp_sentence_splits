@@ -776,6 +776,14 @@ export interface AppSettings {
    */
   pitchAccentPaused?: boolean;
   /**
+   * Pauses the sentence review cards (`reading_in_context`, `listening`, `ear_tiles`,
+   * `dictation`, `dictation_tile:N`) in Review and in the planner's review batches.
+   * The reader's Read check step takes their place: a quick, self-judged check logged
+   * as a `gist_check` event, spaced from the sentence's own evidence. Nothing is deleted
+   * or rescheduled; turning it off restores the cards. Defaults to `false`.
+   */
+  sentenceCardsPaused?: boolean;
+  /**
    * Short personal reminder shown at the top of the shadowing page (per-device,
    * like `quietMode`). Empty/absent hides it.
    */
@@ -1695,6 +1703,8 @@ export interface PlannerSessionStep {
   revisit?: boolean;
   /** `sentence_learning` only: a Word check (`/books/:bookId/check/:sentenceId`) — recall a word's meaning in the reader — not a walkthrough. */
   wordCheck?: boolean;
+  /** `sentence_learning` only: a Read check (`/books/:bookId/recall/:sentenceId`) — read the sentence unaided in the reader, then judge it — not a walkthrough. Sits in the `review` bucket. */
+  readCheck?: boolean;
 }
 
 /**

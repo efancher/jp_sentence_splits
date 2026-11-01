@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { ChunkPuzzleStrip } from '../components/ChunkPuzzleStrip';
@@ -8,6 +8,7 @@ import { KaraokeSentenceText } from '../components/KaraokeSentenceText';
 import {
   DictationBlankLine,
   DictationBlankPanel,
+  ReadCheckPanel,
   WordMeaningPanel,
   type ReaderToolOutcome,
 } from '../components/ReaderTools';
@@ -42,6 +43,9 @@ import { describeSentenceProgress, glossableWords, sentenceWordHelp, summariseSe
 import { PLAYBACK_SPEEDS } from '../lib/recording';
 import { SentenceAudioAdjuster } from '../components/SentenceAudioAdjuster';
 
+// The shadowing workspace (recording, pitch analysis) is heavy; load it only when the tool is opened.
+const ShadowWorkspace = lazy(() => import('./ShadowPage').then((module) => ({ default: module.ShadowWorkspace })));
+
 /**
  * Always-available, non-graded chapter/book read-along (2026-09-23 roadmap
  * idea, un-gated per user request 2026-09-26 — no vocabulary-coverage
@@ -73,8 +77,12 @@ export function ReaderPage() {
   const { bookId = '', sentenceId: lessonSentenceId } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  // /books/:bookId/check/:sentenceId (planner Word check step) opens that sentence's word check, not its walkthrough.
-  const isWordCheckRoute = useLocation().pathname.includes('/check/');
+  // /books/:bookId/check/:sentenceId (planner Word check step) and /recall/:sentenceId (Read check step) open that
+  // sentence's tool, not its walkthrough.
+  const pathname = useLocation().pathname;
+  const isWordCheckRoute = pathname.includes('/check/');
+  const isReadCheckRoute = pathname.includes('/recall/');
+  const isShadowRoute = pathname.includes('/speak/');
   // /books/:bookId/learn/:sentenceId (planner lesson step) shows the sentence's own chapter.
   const lessonChapterId = useLiveQuery(
     async () =>
@@ -115,6 +123,8 @@ export function ReaderPage() {
   const [readerTool, setReaderTool] = useState<
     { sentenceId: string; kind: 'dictate'; tile: number; visitId: string } |
     { sentenceId: string; kind: 'meaning'; visitId: string } |
+    { sentenceId: string; kind: 'recall'; visitId: string; revealed: boolean } |
+    { sentenceId: string; kind: 'shadow'; visitId: string } |
     { sentenceId: string; kind: 'tiles'; visitId: string; puzzle: EarTilesPuzzle; progress: EarTilesProgress } |
     undefined
   >();
@@ -193,11 +203,13 @@ export function ReaderPage() {
     const index = data.rows.findIndex((row) => row.sentence.id === lessonSentenceId);
     if (index < 0) return;
     openedLessonRef.current = lessonSentenceId;
-    if (isWordCheckRoute) setReaderTool({ sentenceId: lessonSentenceId, kind: 'meaning', visitId: createId('visit') });
+    if (isShadowRoute) setReaderTool({ sentenceId: lessonSentenceId, kind: 'shadow', visitId: createId('visit') });
+    else if (isReadCheckRoute) setReaderTool({ sentenceId: lessonSentenceId, kind: 'recall', visitId: createId('visit'), revealed: false });
+    else if (isWordCheckRoute) setReaderTool({ sentenceId: lessonSentenceId, kind: 'meaning', visitId: createId('visit') });
     else setWalkthroughId(lessonSentenceId);
     setSelectedId(lessonSentenceId);
     setTimeout(() => rowRefs.current[index]?.scrollIntoView({ block: 'center' }), 0);
-  }, [lessonSentenceId, lessonChapterId, data, isWordCheckRoute]);
+  }, [lessonSentenceId, lessonChapterId, data, isWordCheckRoute, isReadCheckRoute, isShadowRoute]);
 
   const focus = useLiveQuery(
     () => getEpisodeFocus(bookId, chapterId).catch(() => null),
@@ -304,7 +316,7 @@ export function ReaderPage() {
     if (readerTool && readerTool.sentenceId !== id) setReaderTool(undefined);
   }
 
-  function toggleReaderTool(sentence: Sentence, kind: 'dictate' | 'meaning' | 'tiles') {
+  function toggleReaderTool(sentence: Sentence, kind: 'dictate' | 'meaning' | 'tiles' | 'recall' | 'shadow') {
     if (readerTool?.sentenceId === sentence.id && readerTool.kind === kind) {
       setReaderTool(undefined);
       return;
@@ -312,6 +324,16 @@ export function ReaderPage() {
     const visitId = createId('visit');
     if (kind === 'meaning') {
       setReaderTool({ sentenceId: sentence.id, kind, visitId });
+      return;
+    }
+    if (kind === 'shadow') {
+      // The shadowing panel owns audio and the microphone; stop the reader's own playback first.
+      native.stop();
+      setReaderTool({ sentenceId: sentence.id, kind, visitId });
+      return;
+    }
+    if (kind === 'recall') {
+      setReaderTool({ sentenceId: sentence.id, kind, visitId, revealed: false });
       return;
     }
     if (kind === 'tiles') {
@@ -333,6 +355,22 @@ export function ReaderPage() {
         void logGlossDecision({ ...decision, bookId });
       }
     }
+  }
+
+  /** A Read check's self-judged call: the same `gist_check` evidence the walkthrough logs, so the sentence journey and its spacing see it. */
+  function recordReadCheck(sentenceId: string, visitId: string, outcome: ReaderToolOutcome) {
+    void logSentenceLearningEvent({
+      id: createId('sl_event'),
+      visitId,
+      action: 'gist_check',
+      sentenceId,
+      bookId,
+      chapterId,
+      outcome,
+      assessmentSource: 'self',
+      quietMode: settings?.quietMode ?? false,
+      inventoryRevision: preparation?.sentenceFingerprint,
+    });
   }
 
   /** The learner's own call from a reader tool, logged like every other lesson practice: evidence, never a rating. */
@@ -771,6 +809,10 @@ export function ReaderPage() {
                     if (readerTool?.kind === 'tiles' && readerTool.sentenceId === row.sentence.id) {
                       return <EarTilesSlots puzzle={readerTool.puzzle} progress={readerTool.progress} />;
                     }
+                    // Unrevealed Read check: the plain sentence only, whatever the text mode shows.
+                    if (readerTool?.kind === 'recall' && !readerTool.revealed && readerTool.sentenceId === row.sentence.id) {
+                      return <div className="jp jp-lg" lang="ja">{row.sentence.japanese}</div>;
+                    }
                     const dictating = readerTool?.kind === 'dictate' && readerTool.sentenceId === row.sentence.id;
                     const tile = dictating ? buildTileDictation(row.sentence, readerTool.tile) : null;
                     return tile ? <DictationBlankLine tile={tile} /> : sentenceLine(row.sentence, isActive, audio);
@@ -828,6 +870,38 @@ export function ReaderPage() {
                         </div>
                       );
                     }
+                    if (readerTool.kind === 'shadow') {
+                      const tool = readerTool;
+                      return (
+                        <div className="stack" style={{ gap: '0.35rem' }} role="group" aria-label="Shadowing tool">
+                          <Suspense fallback={<p className="muted">Loading shadowing…</p>}>
+                            <ShadowWorkspace
+                              key={tool.visitId}
+                              bookId={bookId}
+                              sentenceId={row.sentence.id}
+                              embedded
+                              onSnoozed={() => setReaderTool(undefined)}
+                            />
+                          </Suspense>
+                          <div><button type="button" onClick={() => setReaderTool(undefined)}>Close shadowing</button></div>
+                        </div>
+                      );
+                    }
+                    if (readerTool.kind === 'recall') {
+                      const tool = readerTool;
+                      return (
+                        <ReadCheckPanel
+                          key={tool.visitId}
+                          revealed={tool.revealed}
+                          hasAudio={Boolean(audio)}
+                          playing={isSequencePlaying && singleIndexRef.current === index}
+                          onPlay={() => toggleSentencePlay(index)}
+                          onReveal={() => setReaderTool({ ...tool, revealed: true })}
+                          onRecord={(outcome) => recordReadCheck(row.sentence.id, tool.visitId, outcome)}
+                          onClose={() => setReaderTool(undefined)}
+                        />
+                      );
+                    }
                     const tool = readerTool;
                     return (
                       <WordMeaningPanel
@@ -855,7 +929,7 @@ export function ReaderPage() {
                   })()}
                   {(() => {
                     // A word check asks for a meaning the word help and translation would otherwise print right under it; Ear Tiles' word help would list the tiles.
-                    if ((readerTool?.kind === 'meaning' || readerTool?.kind === 'tiles') && readerTool.sentenceId === row.sentence.id) return null;
+                    if ((readerTool?.kind === 'meaning' || readerTool?.kind === 'tiles' || (readerTool?.kind === 'recall' && !readerTool.revealed)) && readerTool.sentenceId === row.sentence.id) return null;
                     const help = sentenceWordHelp(row.sentence.vocabularySuggestions, data.knownExpressions, data.savedMeanings);
                     const override = wordHelpOverride.get(row.sentence.id);
                     const shown = override === 'all' ? help.allWords : override === 'none' ? [] : help.newWords;
@@ -896,7 +970,7 @@ export function ReaderPage() {
                       const help = sentenceWordHelp(row.sentence.vocabularySuggestions, data.knownExpressions, data.savedMeanings);
                       // Mostly-unknown sentences show their translation by default; the toggle flips the default either way.
                       const mostlyUnknown = help.total > 0 && help.unknownCount * 2 > help.total;
-                      const wordChecking = readerTool?.kind === 'meaning' && readerTool.sentenceId === row.sentence.id;
+                      const wordChecking = (readerTool?.kind === 'meaning' || (readerTool?.kind === 'recall' && !readerTool.revealed)) && readerTool.sentenceId === row.sentence.id;
                       const shown = !wordChecking && mostlyUnknown !== revealedTranslations.has(row.sentence.id);
                       return shown ? (
                         <>
@@ -929,6 +1003,10 @@ export function ReaderPage() {
                       <button type="button" aria-pressed={readerTool?.sentenceId === row.sentence.id && readerTool.kind === 'tiles'}
                         onClick={() => toggleReaderTool(row.sentence, 'tiles')}>Ear tiles</button>
                     ) : null}
+                    <button type="button" aria-pressed={readerTool?.sentenceId === row.sentence.id && readerTool.kind === 'shadow'}
+                      onClick={() => toggleReaderTool(row.sentence, 'shadow')}>Shadowing</button>
+                    <button type="button" aria-pressed={readerTool?.sentenceId === row.sentence.id && readerTool.kind === 'recall'}
+                      onClick={() => toggleReaderTool(row.sentence, 'recall')}>Read check</button>
                     <button type="button" aria-pressed={readerTool?.sentenceId === row.sentence.id && readerTool.kind === 'meaning'}
                       onClick={() => toggleReaderTool(row.sentence, 'meaning')}>Word check</button>
                     </>)}
@@ -1055,6 +1133,14 @@ export function ReaderPage() {
               aria-label="Dictation" title="Dictation: type a blanked phrase from what you hear"
               disabled={!audioByRow[focusedIndex]}
               onClick={() => toggleReaderTool(focusedRow.sentence, 'dictate')}>🎧</button>
+            <button type="button" className="icon-button"
+              aria-pressed={readerTool?.sentenceId === focusedRow.sentence.id && readerTool.kind === 'shadow'}
+              aria-label="Shadowing" title="Shadowing: loop, record and compare your pitch"
+              onClick={() => toggleReaderTool(focusedRow.sentence, 'shadow')}>🎙</button>
+            <button type="button" className="icon-button"
+              aria-pressed={readerTool?.sentenceId === focusedRow.sentence.id && readerTool.kind === 'recall'}
+              aria-label="Read check" title="Read check: read it unaided, then judge yourself"
+              onClick={() => toggleReaderTool(focusedRow.sentence, 'recall')}>📖</button>
             <button type="button" className="icon-button"
               aria-pressed={readerTool?.sentenceId === focusedRow.sentence.id && readerTool.kind === 'tiles'}
               aria-label="Ear tiles" title="Ear tiles: rebuild the sentence from what you hear"

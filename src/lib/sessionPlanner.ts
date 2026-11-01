@@ -11,6 +11,8 @@ import {
   BASELINE_SESSION_ALLOCATION,
   EXPLORE_STEP_MINUTES,
   WORD_CHECK_STEPS_PER_PLAN,
+  READ_CHECK_STEPS_PER_PLAN,
+  READ_CHECK_STEP_MINUTES,
   GAME_BREAK_INTERVAL_MINUTES,
   GAME_BREAK_MAX_PER_PASS,
   GAME_BREAK_MINUTES,
@@ -369,6 +371,16 @@ export interface DueBatchCandidate {
   priorities: ReviewPriorityResult[];
 }
 
+/** A walked-through sentence whose next Read check is due (see src/lib/readCheck.ts). */
+export interface ReadCheckCandidate {
+  bookId: string;
+  sentenceId: string;
+  preview: string;
+  reason: string;
+  /** Sentences due in all (this list is trimmed), for the "N waiting" nudge on the first step. */
+  waiting: number;
+}
+
 export interface ExploreCandidate {
   bookId: string;
   label: string;
@@ -443,6 +455,8 @@ export interface SessionPlannerInput {
   /** Due StudyItems costed at the slower "practice" per-item rate (cloze/reading_production/sentence_transformation/contrastive/grammar_completion/grammar_contrast) — merged with retainDue into one ranked `review` batch. */
   practiceDue: ReviewPriorityInput[];
   exploreCandidates: ExploreCandidate[];
+  /** Sentences due for a Read check, most urgent first. Drafted into the `review` bucket (sentence cards are replaced by these). */
+  readCheckCandidates?: ReadCheckCandidate[];
   /** Sentence-first planning (settings.sentenceFirstPlanning): explore sentences become `sentence_learning` lessons with no vocabulary gate or reserve. */
   sentenceFirst?: boolean;
   understandCandidates: UnderstandCandidate[];
@@ -503,6 +517,8 @@ export interface PlannerStepDraft {
   targetCount?: number;
   /** A Word check in the reader (see PlannerSessionStep.wordCheck), not a walkthrough. */
   wordCheck?: boolean;
+  /** A Read check in the reader (see PlannerSessionStep.readCheck), not a walkthrough. */
+  readCheck?: boolean;
 }
 
 export interface RecommendedSession {
@@ -612,6 +628,33 @@ function buildReviewBatchSteps(
       targetCount: batch.length + batchNewCardSlots,
     };
   });
+}
+
+/** Read check steps (one minute each) for the due sentences, within the review budget left after the card batches. */
+function buildReadCheckSteps(candidates: readonly ReadCheckCandidate[], budgetMinutes: number): PlannerStepDraft[] {
+  const steps: PlannerStepDraft[] = [];
+  let remaining = budgetMinutes;
+  for (const candidate of candidates.slice(0, READ_CHECK_STEPS_PER_PLAN)) {
+    if (READ_CHECK_STEP_MINUTES > remaining) break;
+    steps.push({
+      id: draftStepId(),
+      bucket: 'review',
+      activityType: SYNTHETIC_ACTIVITY_TYPES.sentenceLearning,
+      targetKind: 'sentence_learning',
+      bookId: candidate.bookId,
+      sentenceId: candidate.sentenceId,
+      label: `Read check: ${candidate.preview}`,
+      estimatedMinutes: READ_CHECK_STEP_MINUTES,
+      reason:
+        steps.length === 0 && candidate.waiting > 1
+          ? `${candidate.reason} (${candidate.waiting} sentences waiting for a check)`
+          : candidate.reason,
+      status: 'pending',
+      readCheck: true,
+    });
+    remaining -= READ_CHECK_STEP_MINUTES;
+  }
+  return steps;
 }
 
 interface ExploreSentenceEntry {
@@ -1102,8 +1145,9 @@ export function sessionStepTargetPath(step: PlannerSessionStep): string | null {
         : null;
     }
     case 'shadow':
+      // Shadowing opens in the reader (docked panel); /shadow/:sentenceId still serves the standalone page.
       return step.bookId && step.sentenceId
-        ? `/books/${step.bookId}/shadow/${step.sentenceId}`
+        ? `/books/${step.bookId}/speak/${step.sentenceId}`
         : null;
     case 'review':
       return step.bookId ? `/books/${step.bookId}/review` : '/review';
@@ -1112,6 +1156,7 @@ export function sessionStepTargetPath(step: PlannerSessionStep): string | null {
     case 'sentence_learning':
       if (!step.bookId || !step.sentenceId) return null;
       // A Word check opens the reader with that sentence's word check ready; query-free like every step path.
+      if (step.readCheck) return `/books/${step.bookId}/recall/${step.sentenceId}`;
       return step.wordCheck
         ? `/books/${step.bookId}/check/${step.sentenceId}`
         : `/books/${step.bookId}/learn/${step.sentenceId}`;
@@ -1144,7 +1189,9 @@ export function buildRecommendedSession(input: SessionPlannerInput): Recommended
     Math.min(input.newCardBacklogCount ?? 0, input.newCardsPerSessionLimit ?? 0),
   );
   const newCardMinutes = newCardSlots * MODE_ACTIVITY_ESTIMATE_MINUTES.retain;
-  const reviewCeiling = reviewBatchCostMinutes(rankedReview, reviewLimit) + newCardMinutes;
+  const readCheckMinutes =
+    Math.min(READ_CHECK_STEPS_PER_PLAN, input.readCheckCandidates?.length ?? 0) * READ_CHECK_STEP_MINUTES;
+  const reviewCeiling = reviewBatchCostMinutes(rankedReview, reviewLimit) + newCardMinutes + readCheckMinutes;
 
   // Every bucket — not just review — is clamped to what its candidate list
   // can actually spend. Without this, minutes freed by a capped bucket get
@@ -1167,7 +1214,7 @@ export function buildRecommendedSession(input: SessionPlannerInput): Recommended
     },
   });
 
-  const reviewSteps = buildReviewBatchSteps(rankedReview, allocation.review, newCardSlots);
+  const reviewBatchSteps = buildReviewBatchSteps(rankedReview, allocation.review, newCardSlots);
 
   const shadowSteps = buildShadowSteps(
     input.shadowCandidates,
@@ -1176,6 +1223,14 @@ export function buildRecommendedSession(input: SessionPlannerInput): Recommended
   );
 
   const exploreSteps = buildExploreSteps(input.exploreCandidates, allocation.glossing, input.sentenceFirst);
+  // A sentence drafted for a Fresh try (a full walkthrough) doesn't also get a Read check in the same plan.
+  const walkedAgainIds = new Set(exploreSteps.filter((step) => step.targetKind === 'sentence_learning').map((step) => step.sentenceId));
+  const reviewBatchSpent = reviewBatchSteps.reduce((sum, step) => sum + step.estimatedMinutes, 0);
+  const readCheckSteps = buildReadCheckSteps(
+    (input.readCheckCandidates ?? []).filter((candidate) => !walkedAgainIds.has(candidate.sentenceId)),
+    allocation.review - reviewBatchSpent,
+  );
+  const reviewSteps = [...reviewBatchSteps, ...readCheckSteps];
   // The grammar bucket runs two passes over one shared budget: corpus-flagged
   // patterns "worth learning now" first (the corpus has already told the
   // learner they recur), then "notice the grammar in this worked-through
@@ -1240,6 +1295,12 @@ export function buildRecommendedSession(input: SessionPlannerInput): Recommended
     rankedReview.length < reviewLimit
   ) {
     explanation.push("No large review backlog right now, so review is a small part of today's plan.");
+  }
+  if (readCheckSteps.length > 0) {
+    const waiting = readCheckSteps.length > 0 ? input.readCheckCandidates![0]!.waiting : 0;
+    explanation.push(
+      `${waiting} walked-through sentence${waiting === 1 ? ' is' : 's are'} due for a Read check; ${readCheckSteps.length} ${readCheckSteps.length === 1 ? 'is' : 'are'} in today's plan.`,
+    );
   }
   const plannedMinutes = ALL_SESSION_BUCKETS.reduce((sum, mode) => sum + allocation[mode], 0);
   if (gameBreaks > 0) {

@@ -4,6 +4,7 @@ import { isReadingAnswerCorrect, surfaceReadingFromInline } from '../lib/reading
 import { buildWordEvidence } from '../lib/wordEvidence';
 import { loadWordFrequency, lookupWordBand } from '../lib/wordFrequency';
 import { frequencyBandPrior, planWeakWordSentences, READER_KNOWN_STRENGTH, wordStrength } from '../lib/wordStrength';
+import { readCheckReason, sentencesDueForReadCheck } from '../lib/readCheck';
 import { explainWeakWordSentences, type WeakWordExplanation } from '../lib/weakWordExplain';
 import { buildSentenceLessonReport, type SentenceLessonReport } from '../lib/sentenceLessonReport';
 import { parkedSentenceIds } from '../lib/glossSkill';
@@ -300,6 +301,7 @@ import {
   computeRecentActivityDistribution,
   shadowAttemptSummary,
   type ExploreCandidate,
+  type ReadCheckCandidate,
   type GameBreakCandidate,
   type GrammarNoticingCandidate,
   type RecentActivityEvent,
@@ -316,8 +318,10 @@ import {
   SHADOWING_MIN_INTRODUCED_RATIO,
   EXPLORE_CANDIDATE_LIMIT,
   EXPLORE_REVISITS_PER_BOOK,
+  READ_CHECK_CANDIDATE_LIMIT,
   WEAK_WORD_REVISIT_MIN_GAP_DAYS,
   isPausedLegacyDrillSubject,
+  isSentenceCardSubject,
   EXPLORE_SENTENCE_PREVIEW_LIMIT,
   GRAMMAR_NOTICING_CANDIDATE_LIMIT,
   NEGLECT_WINDOW_DAYS,
@@ -10667,6 +10671,44 @@ async function findWeakWordRevisits(
   return new Map(signal.order.slice(0, limit).map((id) => [id, signal.labels.get(id) ?? []]));
 }
 
+/**
+ * Walked-through sentences due for a Read check (src/lib/readCheck.ts), most urgent first.
+ * Sentences in `excluded` (already spoken for today, or about to get a Fresh try) are skipped.
+ * Selection only: nothing is stored and no card is created.
+ */
+export async function findReadCheckCandidates(
+  limit: number,
+  excluded: ReadonlySet<string> = new Set(),
+  now: Date = new Date(),
+): Promise<ReadCheckCandidate[]> {
+  const db = getDb();
+  const [events, books, suspendedIndex] = await Promise.all([
+    db.sentenceLearningEvents.toArray(),
+    db.books.toArray(),
+    loadSuspendedBookIndex(),
+  ]);
+  const due = sentencesDueForReadCheck(events, now).filter((entry) => !excluded.has(entry.sentenceId));
+  if (due.length === 0) return [];
+  const activeBooks = new Set(books.filter(isBookInStudyRotation).map((book) => book.id));
+  const memberships = await db.bookSentences.where('sentenceId').anyOf(due.map((entry) => entry.sentenceId)).toArray();
+  const membershipBySentence = new Map<string, BookSentence>();
+  for (const membership of memberships) {
+    if (!activeBooks.has(membership.bookId)) continue;
+    if (suspendedIndex && membershipIsShelved(membership, suspendedIndex)) continue;
+    if (!membershipBySentence.has(membership.sentenceId)) membershipBySentence.set(membership.sentenceId, membership);
+  }
+  const reachable = due.filter((entry) => membershipBySentence.has(entry.sentenceId));
+  const picked = reachable.slice(0, limit);
+  const sentences = await db.sentences.bulkGet(picked.map((entry) => entry.sentenceId));
+  return picked.map((entry, index) => ({
+    bookId: membershipBySentence.get(entry.sentenceId)!.bookId,
+    sentenceId: entry.sentenceId,
+    preview: sentences[index]?.japanese.slice(0, 24) ?? '',
+    reason: readCheckReason(entry),
+    waiting: reachable.length,
+  }));
+}
+
 /** Explore candidates: books with sentences not yet started, most-recently-opened first ("continue where you left off" reusing Book.lastOpenedAt, the same signal BookDetailPage's touchBookOpened already maintains). */
 async function findExploreCandidates(
   limit: number,
@@ -11592,13 +11634,18 @@ export async function getSessionPlannerInput(
   const legacyPaused = effectiveLegacyDrillsPaused(settings);
   const unlessLegacyPaused = (items: StudyItem[]): StudyItem[] =>
     legacyPaused ? items.filter((item) => !isPausedLegacyDrillSubject(item.subjectType)) : items;
-  const practiceDueItemsForMode = unlessLegacyPaused(
-    settings.quietMode || settings.pitchAccentPaused
-      ? practiceDueItems.filter((item) => item.activityType !== 'pitch_accent_production')
-      : practiceDueItems,
+  // "Pause sentence cards" (settings.sentenceCardsPaused): the reader's Read checks replace them.
+  const unlessSentenceCardsPaused = (items: StudyItem[]): StudyItem[] =>
+    settings.sentenceCardsPaused ? items.filter((item) => !isSentenceCardSubject(item.subjectType)) : items;
+  const practiceDueItemsForMode = unlessSentenceCardsPaused(
+    unlessLegacyPaused(
+      settings.quietMode || settings.pitchAccentPaused
+        ? practiceDueItems.filter((item) => item.activityType !== 'pitch_accent_production')
+        : practiceDueItems,
+    ),
   );
   const [retainDueReady, practiceDueReady] = await Promise.all([
-    filterReadyGrammarDueItems(unlessLegacyPaused(notSuspended(retainDueItems)), suspendedIndex),
+    filterReadyGrammarDueItems(unlessSentenceCardsPaused(unlessLegacyPaused(notSuspended(retainDueItems))), suspendedIndex),
     filterReadyGrammarDueItems(notSuspended(practiceDueItemsForMode), suspendedIndex),
   ]);
 
@@ -11641,6 +11688,8 @@ export async function getSessionPlannerInput(
   const understandCandidates = (legacyPaused ? [] : understandCandidatesRaw)
     .filter((candidate) => !exclude.grammarPatternIds.has(candidate.grammarPatternId))
     .slice(0, UNDERSTAND_CANDIDATE_LIMIT);
+  // The planner drops any sentence it actually drafts a Fresh try for (a full walkthrough already covers it).
+  const readCheckCandidates = await findReadCheckCandidates(READ_CHECK_CANDIDATE_LIMIT, exclude.sentenceIds, now);
   const shadowCandidates = shadowCandidatesRaw
     .filter((candidate) => !exclude.sentenceIds.has(candidate.sentenceId))
     .slice(0, SHADOW_CANDIDATE_LIMIT);
@@ -11655,6 +11704,7 @@ export async function getSessionPlannerInput(
     retainDue,
     practiceDue,
     exploreCandidates,
+    readCheckCandidates,
     understandCandidates,
     grammarNoticingCandidates,
     shadowCandidates,
