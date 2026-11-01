@@ -1572,6 +1572,30 @@ button.sync-retry {
 .apg-line-attempt[data-rank='2'], .apg-swatch[data-rank='2'] { stroke: #8fb8de; background: #8fb8de; }
 .apg-line-attempt[data-rank='3'], .apg-swatch[data-rank='3'] { stroke: var(--danger); background: var(--danger); }
 
+/* The reader keeps its tool rail beside the text at every width, in view while scrolling. */
+.gloss-workbench--side {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.5rem;
+}
+
+.gloss-workbench--side > .gloss-rail {
+  position: sticky;
+  top: 0.75rem;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 0.3rem;
+  max-height: calc(100dvh - 9rem);
+  overflow-y: auto;
+}
+
+@media (max-width: 699px) {
+  .gloss-workbench--side .icon-button {
+    min-width: 2.25rem;
+    min-height: 2.25rem;
+  }
+}
+
 /* The sentence the reader's study tools currently act on. */
 .reader-focused {
   border-left: 3px solid var(--accent);

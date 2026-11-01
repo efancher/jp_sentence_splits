@@ -105,15 +105,15 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 
     await page.goto('/#/books/book/read?chapter=ch');
     await expect(page.getByRole('toolbar', { name: 'Sentence tools' })).toBeVisible();
 
-    // Both new rail buttons are reachable. From 700px the rail is a sticky column that must fit the viewport;
-    // below that it is a wrapping row after the text, in page flow, so it only has to fit the width.
+    // The rail is a sticky side column at every width: each tool must be reachable (it scrolls inside the rail if
+    // the window is short) and stay within the viewport.
     for (const name of ['Dictation', 'Ear tiles', 'Word check']) {
       const button = page.getByRole('button', { name });
       await button.scrollIntoViewIfNeeded();
       await expect(button).toBeVisible();
       const box = (await button.boundingBox())!;
       expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
-      if (viewport.width >= 700) expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
+      expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
     }
 
     await page.getByRole('button', { name: 'Dictation' }).click();

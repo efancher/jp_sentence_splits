@@ -192,29 +192,6 @@ describe('reader study tools', () => {
     expect(screen.queryByLabelText('Sentence with a phrase blanked')).not.toBeInTheDocument();
   });
 
-  it('puts the study tools under the selected sentence on a narrow screen, not in the side rail', async () => {
-    const original = window.matchMedia;
-    window.matchMedia = ((query: string) => ({
-      matches: true, media: query, addEventListener: () => undefined, removeEventListener: () => undefined,
-    })) as never;
-    try {
-      const user = userEvent.setup();
-      renderReader();
-      const inline = await screen.findByRole('toolbar', { name: 'Study tools' });
-      expect(within(inline).getByRole('button', { name: 'Dictation' })).toBeInTheDocument();
-      expect(within(inline).getByRole('button', { name: 'Shadowing' })).toBeInTheDocument();
-      // The rail keeps navigation and display controls, but not the study tools.
-      const rail = screen.getByRole('toolbar', { name: 'Sentence tools' });
-      expect(within(rail).queryByRole('button', { name: 'Dictation' })).not.toBeInTheDocument();
-      expect(within(rail).getByRole('button', { name: 'Next sentence' })).toBeInTheDocument();
-
-      await user.click(within(inline).getByRole('button', { name: 'Word check' }));
-      expect(await screen.findByRole('group', { name: 'Word meaning check' })).toBeInTheDocument();
-    } finally {
-      window.matchMedia = original;
-    }
-  });
-
   it('hides all help until a Read check is revealed, then logs only the learner’s own call as a gist check', async () => {
     const user = userEvent.setup();
     renderReader();
