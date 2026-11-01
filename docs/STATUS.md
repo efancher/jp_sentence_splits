@@ -75,8 +75,11 @@ and possible extensions. This snapshot does not certify a live deployment.
   as a word strengthens), optional phrase/construction explanations, and
   in-place Dictation (blanked phrase) and Word check (self-judged meaning) tools
   that log lesson evidence and feed the word-strength model's meaning facet.
-  The two new tools are covered by component tests but have not been checked in
-  a browser on phone or desktop. Episode preparation accepts the main JSON and
+  The two new tools have component tests and a Chromium browser spec
+  (`e2e/reader-tools.spec.ts`, 390px and 1280px: no horizontal overflow, rail
+  reachable, events persisted, no review or study item created); WebKit is not
+  covered (its test contexts refuse the audio Blob). Word check hides the word
+  help and translation while it is open so they do not answer it. Episode preparation accepts the main JSON and
   structure lines together. Source-matched extras live in `sentence_extras`, with a read-only
   overlay for older inline book data.
 - Progressive glossing and ungraded clause questions are available. Source

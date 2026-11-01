@@ -796,6 +796,8 @@ export function ReaderPage() {
                     ) : null;
                   })()}
                   {(() => {
+                    // A word check asks for a meaning the word help and translation would otherwise print right under it.
+                    if (readerTool?.kind === 'meaning' && readerTool.sentenceId === row.sentence.id) return null;
                     const help = sentenceWordHelp(row.sentence.vocabularySuggestions, data.knownExpressions, data.savedMeanings);
                     const override = wordHelpOverride.get(row.sentence.id);
                     const shown = override === 'all' ? help.allWords : override === 'none' ? [] : help.newWords;
@@ -836,7 +838,8 @@ export function ReaderPage() {
                       const help = sentenceWordHelp(row.sentence.vocabularySuggestions, data.knownExpressions, data.savedMeanings);
                       // Mostly-unknown sentences show their translation by default; the toggle flips the default either way.
                       const mostlyUnknown = help.total > 0 && help.unknownCount * 2 > help.total;
-                      const shown = mostlyUnknown !== revealedTranslations.has(row.sentence.id);
+                      const wordChecking = readerTool?.kind === 'meaning' && readerTool.sentenceId === row.sentence.id;
+                      const shown = !wordChecking && mostlyUnknown !== revealedTranslations.has(row.sentence.id);
                       return shown ? (
                         <>
                           <div className="muted">{row.sentence.translation || '(no translation)'}</div>

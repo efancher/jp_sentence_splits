@@ -698,7 +698,8 @@ control).
   already hosted there. Left: Ear Tiles placed in the episode text, shadowing as
   a docked panel (pitch contour, recording; iOS gesture-gated audio), a
   meaning check that is not just the weakest word (the planner does not yet
-  steer to it), and a browser/phone layout pass on the new tools.
+  steer to it), and a WebKit/physical-iPhone check of the new tools (the
+  Chromium phone and desktop layout pass is done in `e2e/reader-tools.spec.ts`).
 - **Costs and constraints.** Shadowing needs a docked panel and its iOS
   gesture-gated audio setup, so it cannot fully dissolve into the text. Review
   behavior (self-rating, sibling burying, gates) is tuned inside `ReviewPage`
