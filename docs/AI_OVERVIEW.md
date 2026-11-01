@@ -1285,7 +1285,7 @@ original layer (the SRS layer was added later, additively).
 
 ### 3b. Chapter/book read-along — `ReaderPage.tsx` (`/books/:bookId/read`, optional `?chapter=<id>`)
 
-Reader text modes: default "Furigana on new words" (ruby only over words whose vocabulary item isn't reading-proficient; `src/lib/newWordFurigana.ts`), plus Plain, Furigana and Reading-only; the choice persists in `satori-glossbook:reader-text-mode`.
+Reader text modes: default "Furigana on new words" (ruby only over words not yet known; `src/lib/newWordFurigana.ts`). "Known" (`getSavedWordStatus`, 2026-11-01) is reading-proficient on its cards **or** reading strength at least `READER_KNOWN_STRENGTH` (0.6, `wordStrength.ts`): cards are paused so proficiency alone froze, while strength moves with recall, walkthroughs, failures and time, so furigana and the word-help list fade as a word strengthens and return after failures or long gaps. The same set feeds the word-help list and the coverage ratio, plus Plain, Furigana and Reading-only; the choice persists in `satori-glossbook:reader-text-mode`.
 An always-available (no unlock/gate), non-SRS comprehensible-input viewer —
 "try it from time to time to see how comprehension is doing," not a card:
 no `Review` row, no self-rating. Reachable from a "Read" button on

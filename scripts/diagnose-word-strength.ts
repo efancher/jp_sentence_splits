@@ -32,11 +32,12 @@ async function main() {
       expression: String(r.expression ?? ''),
       reading: String(r.reading ?? ''),
     })),
-    fetchAll(supabase, 'study_items', 'id, subject_type, subject_id, activity_type', user.id, (r) => ({
+    fetchAll(supabase, 'study_items', 'id, subject_type, subject_id, activity_type, fsrs_state', user.id, (r) => ({
       id: String(r.id),
       subjectType: String(r.subject_type) as 'vocabularyItem',
       subjectId: String(r.subject_id),
       activityType: String(r.activity_type),
+      fsrsState: String((r.fsrs_state as { state?: string } | null)?.state ?? 'new'),
     })),
     fetchAll(supabase, 'reviews', 'id, study_item_id, timestamp, rating, context_sentence_id', user.id, (r) => ({
       studyItemId: String(r.study_item_id),
@@ -94,6 +95,33 @@ async function main() {
         `${bandLabel(entry.wordId).padEnd(7)} in ${sentencesByWord.get(entry.wordId)?.size ?? 0} sentence(s), ${recallCount(entry.wordId)} recall(s)`,
     );
   }
+
+  // How the reader's "known" decision changes: card proficiency (what it used) vs strength (what it will use).
+  const KNOWN_STRENGTH = 0.6;
+  const legacyKnown = new Set(
+    studyItems
+      .filter(
+        (item) =>
+          item.subjectType === 'vocabularyItem' &&
+          (item.activityType === 'reading_retrieval' || item.activityType === 'reading_production') &&
+          (item.fsrsState === 'review' || item.fsrsState === 'relearning'),
+      )
+      .map((item) => item.subjectId),
+  );
+  const strengthById = new Map(ranked.map((entry) => [entry.wordId, entry.strength]));
+  const strengthOf = (id: string) => strengthById.get(id) ?? 0;
+  const both = wordIds.filter((id) => legacyKnown.has(id) && strengthOf(id) >= KNOWN_STRENGTH).length;
+  const onlyLegacy = wordIds.filter((id) => legacyKnown.has(id) && strengthOf(id) < KNOWN_STRENGTH);
+  const onlyModel = wordIds.filter((id) => !legacyKnown.has(id) && strengthOf(id) >= KNOWN_STRENGTH);
+  console.log(`\nReader "known" (strength >= ${KNOWN_STRENGTH}) vs card proficiency, ${wordIds.length} met words:`);
+  console.log(`  known by both: ${both}; cards only: ${onlyLegacy.length}; strength only: ${onlyModel.length}`);
+  const show = (ids: string[]) =>
+    ids
+      .slice(0, 12)
+      .map((id) => `${byId.get(id)?.expression ?? id}(${strengthOf(id).toFixed(2)})`)
+      .join('  ');
+  console.log(`  cards-known but below threshold: ${show(onlyLegacy)}`);
+  console.log(`  strength-known but no card proficiency: ${show(onlyModel)}`);
 
   const weakness = new Map(ranked.map((entry) => [entry.wordId, 1 - entry.strength]));
   const sentences = [...wordsBySentence].map(([sentenceId, ids]) => ({ sentenceId, wordIds: ids }));

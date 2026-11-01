@@ -64,6 +64,15 @@ export const WORD_STRENGTH_CONFIG = {
   failurePenaltyCap: 1.5,
 } as const;
 
+/**
+ * Reading strength at which the reader treats a word as known: it drops the
+ * word's furigana and its word-help entry. About two recent successful recalls,
+ * or a very common word that has been met and not failed. Below it the word
+ * keeps its scaffolding, so help fades as a word strengthens and returns after
+ * failures or long gaps.
+ */
+export const READER_KNOWN_STRENGTH = 0.6;
+
 const DAY_MS = 86_400_000;
 
 function decay(ageMs: number, halfLifeDays: number): number {

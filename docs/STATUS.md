@@ -70,8 +70,9 @@ and possible extensions. This snapshot does not certify a live deployment.
   `public/wordFrequency.json`; none offline). Meaning has no recall evidence
   yet; see AI_OVERVIEW for the model.
 - Reader, Analyze, review and Shadow support chapter layouts. The reader has
-  per-sentence play/loop, new-word furigana and optional phrase/construction
-  explanations. Episode preparation accepts the main JSON and structure lines
+  per-sentence play/loop, new-word furigana (a word counts as known from card
+  proficiency or reading strength of at least 0.6, so furigana and word help fade
+  as a word strengthens) and optional phrase/construction explanations. Episode preparation accepts the main JSON and structure lines
   together. Source-matched extras live in `sentence_extras`, with a read-only
   overlay for older inline book data.
 - Progressive glossing and ungraded clause questions are available. Source

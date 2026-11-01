@@ -3,7 +3,7 @@ import { isSentenceLedFlow } from '../lib/sentenceLed';
 import { isReadingAnswerCorrect, surfaceReadingFromInline } from '../lib/readingAnswer';
 import { buildWordEvidence } from '../lib/wordEvidence';
 import { loadWordFrequency, lookupWordBand } from '../lib/wordFrequency';
-import { frequencyBandPrior, planWeakWordSentences, wordStrength } from '../lib/wordStrength';
+import { frequencyBandPrior, planWeakWordSentences, READER_KNOWN_STRENGTH, wordStrength } from '../lib/wordStrength';
 import { buildSentenceLessonReport, type SentenceLessonReport } from '../lib/sentenceLessonReport';
 import { parkedSentenceIds } from '../lib/glossSkill';
 import { getMeaningBank } from '../lib/meaningChoices';
@@ -4820,9 +4820,13 @@ export async function getProficientVocabularyItemIds(
 }
 
 /**
- * Saved meanings and "known" status for surface expressions: an expression is
- * known when a saved vocabulary item with it is reading-proficient. Read-only;
- * used to decide how much word help the Reader shows.
+ * Saved meanings and "known" status for surface expressions. An expression is
+ * known when a saved vocabulary item with it is reading-proficient on its
+ * cards, or its reading strength (`wordStrength.ts`) reaches
+ * READER_KNOWN_STRENGTH. Cards have been paused under the sentence-led flow, so
+ * card proficiency alone froze; strength keeps moving with recall, walkthroughs
+ * and time, which is what fades furigana and word help as a word strengthens.
+ * Read-only; used to decide how much word help the Reader shows.
  */
 export async function getSavedWordStatus(
   expressions: string[],
@@ -4831,7 +4835,10 @@ export async function getSavedWordStatus(
   const savedMeanings = new Map<string, string>();
   for (const item of items) if (item.meaning.trim() && !savedMeanings.has(item.expression)) savedMeanings.set(item.expression, item.meaning);
   const proficientIds = await getProficientReadingVocabularyItemIds(items.map((item) => item.id));
-  return { savedMeanings, knownExpressions: new Set(items.filter((item) => proficientIds.has(item.id)).map((item) => item.expression)) };
+  const { strengthByWord } = items.length ? await loadWordReadingStrengths() : { strengthByWord: new Map<string, number>() };
+  const isKnown = (id: string) =>
+    proficientIds.has(id) || (strengthByWord.get(id) ?? 0) >= READER_KNOWN_STRENGTH;
+  return { savedMeanings, knownExpressions: new Set(items.filter((item) => isKnown(item.id)).map((item) => item.expression)) };
 }
 
 /**

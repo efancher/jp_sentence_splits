@@ -30,4 +30,26 @@ describe('getSavedWordStatus', () => {
     expect(status.savedMeanings.has('猫')).toBe(false);
     expect(status.savedMeanings.has('犬')).toBe(false);
   });
+
+  it('also marks a word known once its recall strength is high, and unknown again after a failure', async () => {
+    const db = getDb();
+    await db.vocabularyItems.put({ id: 'v9', expression: '紙', reading: 'かみ', meaning: '', createdAt: now, updatedAt: now });
+    // Card still `new` (cards are paused), but two recent successful recalls.
+    await db.studyItems.put({
+      id: 'c9', subjectType: 'vocabularyItem', subjectId: 'v9', activityType: 'reading_retrieval',
+      fsrsState: fsrs('new'), createdAt: now, updatedAt: now,
+    });
+    const at = new Date().toISOString();
+    await db.reviews.bulkPut([
+      { id: 'r1', studyItemId: 'c9', timestamp: at, rating: 'good' },
+      { id: 'r2', studyItemId: 'c9', timestamp: at, rating: 'good' },
+    ]);
+    expect([...(await getSavedWordStatus(['紙'])).knownExpressions]).toEqual(['紙']);
+
+    await db.reviews.bulkPut([
+      { id: 'r3', studyItemId: 'c9', timestamp: at, rating: 'again' },
+      { id: 'r4', studyItemId: 'c9', timestamp: at, rating: 'again' },
+    ]);
+    expect([...(await getSavedWordStatus(['紙'])).knownExpressions]).toEqual([]);
+  });
 });
