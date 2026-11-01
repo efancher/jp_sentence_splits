@@ -141,8 +141,10 @@ import { gradeDictation, typedAsKana, type DictationGrade } from '../lib/dictati
 import {
   buildCheckPuzzle,
   buildTileDictation,
+  chooseDictationTile,
   DICTATION_TILE_TYPES,
   dictationTileIndex,
+  dictationTileKey,
   EAR_TILES_ACTIVITY,
   earTilesKnownWell,
   type TileDictation,
@@ -1000,12 +1002,35 @@ function buildActivityDescriptors(scope: ReviewScope): ActivityDescriptor[] {
         const tile = dictationTileIndex(activityType);
         // Dictation tiles are the raw split (never merged), so check them directly.
         if (tile === null || buildTileDictation(candidate.sentence, tile) === null) return false;
-        return scope.existingAudioItems.some(
-          (item) =>
-            item.subjectId === candidate.sentence.id &&
-            item.activityType === EAR_TILES_ACTIVITY &&
-            earTilesKnownWell(item.fsrsState),
-        );
+        const sentenceId = candidate.sentence.id;
+        const ownDictationTiles = scope.existingAudioItems
+          .filter((item) => item.subjectId === sentenceId)
+          .map((item) => dictationTileIndex(item.activityType))
+          .filter((index): index is number => index !== null);
+        if (
+          !scope.existingAudioItems.some(
+            (item) =>
+              item.subjectId === sentenceId &&
+              item.activityType === EAR_TILES_ACTIVITY &&
+              earTilesKnownWell(item.fsrsState),
+          )
+        ) {
+          return false;
+        }
+        // A tile that already has a card keeps surfacing, so earlier seeding is never stranded.
+        if (ownDictationTiles.includes(tile)) return true;
+        // One new dictation tile per sentence, and never a phrase another sentence already dictates.
+        if (ownDictationTiles.length > 0) return false;
+        const claimedKeys = new Set<string>();
+        const sentenceById = new Map(scope.audioCandidates.map((c) => [c.sentence.id, c.sentence]));
+        for (const item of scope.existingAudioItems) {
+          const index = dictationTileIndex(item.activityType);
+          if (index === null || item.subjectId === sentenceId) continue;
+          const other = sentenceById.get(item.subjectId);
+          const text = other ? buildTileDictation(other, index)?.text : undefined;
+          if (text) claimedKeys.add(dictationTileKey(text));
+        }
+        return chooseDictationTile(candidate.sentence, claimedKeys) === tile;
       },
     }),
     defineActivityDescriptor<WordListeningCandidate>({

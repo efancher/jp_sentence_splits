@@ -533,3 +533,28 @@ export function buildTileDictation(
     after: sentence.japanese.slice(start + detail.text.length),
   };
 }
+
+/** A tile's text with whitespace and punctuation removed, so the same phrase compares equal across sentences. */
+export function dictationTileKey(text: string): string {
+  return text.replace(/[\s、。，．！？!?「」『』（）()・…〜~ー]/g, '');
+}
+
+/**
+ * The one tile to seed a dictation card for, or null when none is worth it.
+ * A sentence gets a single dictation tile — the first that is not a phrase
+ * another sentence already dictates — so a common phrase such as ました is not
+ * drilled once per sentence it appears in. `claimedKeys` holds the
+ * `dictationTileKey`s of tiles already dictated from other sentences.
+ */
+export function chooseDictationTile(
+  sentence: Pick<Sentence, 'japanese' | 'vocabularySuggestions'>,
+  claimedKeys: ReadonlySet<string>,
+): number | null {
+  for (let index = 0; index < CHECK_MAX_TILES; index += 1) {
+    const tile = buildTileDictation(sentence, index);
+    if (!tile) return null;
+    const key = dictationTileKey(tile.text);
+    if (key && !claimedKeys.has(key)) return index;
+  }
+  return null;
+}

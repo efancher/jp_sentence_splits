@@ -6,7 +6,9 @@ import {
   buildCheckPuzzle,
   buildEarTilesPuzzle,
   buildTileDictation,
+  chooseDictationTile,
   chunkSentenceIntoTiles,
+  dictationTileKey,
   describeEarTilesPick,
   DICTATION_TILE_TYPES,
   dictationTileIndex,
@@ -283,6 +285,12 @@ describe('single-tile dictation', () => {
   it('cuts one tile out of the sentence, keeping the text either side', () => {
     expect(buildTileDictation(s, 1)).toMatchObject({ text: '猫が', before: '私は', after: '魚を食べました。' });
     expect(buildTileDictation(s, 3)?.text).toBe('食べました');
+  });
+
+  it('chooses one tile, skipping phrases another sentence already dictates', () => {
+    expect(chooseDictationTile(s, new Set())).toBe(0);
+    expect(chooseDictationTile(s, new Set([dictationTileKey('私は')]))).toBe(1);
+    expect(chooseDictationTile(s, new Set(['私は', '猫が', '魚を', '食べました'].map(dictationTileKey)))).toBeNull();
   });
 
   it('has no tile past the last one, or for a sentence too short to tile', () => {
