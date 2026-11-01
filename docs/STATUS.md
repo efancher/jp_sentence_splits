@@ -84,8 +84,8 @@ and possible extensions. This snapshot does not certify a live deployment.
   disk-backed profile). Word check hides the word
   help and translation while it is open so they do not answer it.
 - **Tap-a-word feedback (2026-11-01).** On the selected sentence each content word in the
-  sentence line is itself a button (plain, new-word-furigana and furigana text modes; the
-  walkthrough's "Words in this sentence" list items are buttons too). Tapping one asks separately
+  sentence line is itself a button (plain, new-word-furigana and furigana text modes; in a
+  walkthrough the highlighted sentence and the "Words in this sentence" list items are buttons too). Tapping one asks separately
   about its reading and meaning ("I knew it" / "I didn't"), then shows both; the panel sits under
   the line, or under the walkthrough while one is open, and works during shadowing because the
   line stays above the docked panel. It logs `target_practice` events (`vocab-read:<id>` for

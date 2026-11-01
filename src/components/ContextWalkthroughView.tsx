@@ -38,20 +38,60 @@ export function HighlightedSentence({
   main,
   connect,
   inlineReading,
+  tappableWords,
+  onWordTap,
 }: {
   japanese: string;
   main?: { start: number; end: number };
   connect?: { start: number; end: number };
   /** When set, furigana is drawn from this "漢字[かんじ]" string. */
   inlineReading?: string;
+  /** Words in the sentence (offsets into `japanese`) that take a "did you know it" tap. */
+  tappableWords?: ReadonlyArray<{ start: number; end: number; expression: string }>;
+  onWordTap?: (expression: string) => void;
 }) {
   let offset = 0;
+  /** The text of [from, from+text.length), with each tappable word inside it drawn as a button. */
+  const withWords = (from: number, text: string): ReactNode => {
+    if (!onWordTap || !tappableWords?.length) return rubySlice(japanese, inlineReading, from, text);
+    const to = from + text.length;
+    const inside = tappableWords.filter((word) => word.start < to && word.end > from).sort((a, b) => a.start - b.start);
+    if (inside.length === 0) return rubySlice(japanese, inlineReading, from, text);
+    const out: ReactNode[] = [];
+    let cursor = from;
+    inside.forEach((word, index) => {
+      const start = Math.max(word.start, cursor);
+      const end = Math.min(word.end, to);
+      if (end <= start) return;
+      if (start > cursor) out.push(<span key={`t${index}`}>{rubySlice(japanese, inlineReading, cursor, japanese.slice(cursor, start))}</span>);
+      out.push(
+        <span
+          key={`w${index}`}
+          role="button"
+          tabIndex={0}
+          className="karaoke-word-checkable"
+          aria-label={`Check ${word.expression}`}
+          onClick={() => onWordTap(word.expression)}
+          onKeyDown={(event) => {
+            if (event.key !== 'Enter' && event.key !== ' ') return;
+            event.preventDefault();
+            onWordTap(word.expression);
+          }}
+        >
+          {rubySlice(japanese, inlineReading, start, japanese.slice(start, end))}
+        </span>,
+      );
+      cursor = end;
+    });
+    if (cursor < to) out.push(<span key="tail">{rubySlice(japanese, inlineReading, cursor, japanese.slice(cursor, to))}</span>);
+    return out;
+  };
   return (
     <div className="jp jp-lg" aria-label="Sentence with the explained part highlighted">
       {highlightSegments(japanese, main, connect).map((segment, index) => {
         const from = offset;
         offset += segment.text.length;
-        const content = rubySlice(japanese, inlineReading, from, segment.text);
+        const content = withWords(from, segment.text);
         return segment.kind === 'plain' ? (
           <span key={index}>{content}</span>
         ) : (

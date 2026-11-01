@@ -416,6 +416,8 @@ export function SentenceWalkthrough({
             main={contextStep}
             connect={contextStep?.connects}
             inlineReading={showFurigana ? sentence.inlineReading : undefined}
+            tappableWords={canTapWord ? sentence.vocabularySuggestions.filter((item) => item.selectedByDefault && item.end > item.start && canTapWord(item.expression)).map((item) => ({ start: item.start, end: item.end, expression: item.expression })) : undefined}
+            onWordTap={onWordTap}
           />
           <details>
             <summary className="muted">Chunk view (generic roles)</summary>
