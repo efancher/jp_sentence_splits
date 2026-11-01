@@ -303,9 +303,9 @@ test('a word in the walkthrough list can be tapped even when its sentence has no
   const panel = page.getByRole('group', { name: 'Word feedback' });
   await expect(panel).toBeVisible();
   await panel.getByRole('button', { name: 'I knew it' }).first().click();
-  await expect.poll(async () => (await storedCounts(page)).events.length).toBe(1);
+  // Opening the walkthrough logs its own events, so wait for this word's reading call specifically.
+  await expect.poll(async () => (await storedCounts(page)).events.filter((event) => event.target?.key.startsWith('vocab-read:')).length).toBe(1);
   const stored = await storedCounts(page);
-  expect(stored.events[0]!.target!.key).toMatch(/^vocab-read:/);
   expect(stored.reviews).toBe(0);
   expect(stored.studyItems).toBe(0);
 });
