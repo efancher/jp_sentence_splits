@@ -15,7 +15,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { Snackbar } from '../components/Snackbar';
@@ -146,19 +146,13 @@ function BookMetadataForm({
   );
 }
 
-function SortableRow({
-  id,
-  bookId,
-  position,
-  sentence,
-  status,
-  vocabularyReviewStatus,
-  graduated,
-  selected,
-  editOrder,
-  onSelect,
-  onMove,
-}: {
+interface RowDragProps {
+  setNodeRef: (node: HTMLElement | null) => void;
+  style: React.CSSProperties;
+  handleProps: Record<string, unknown>;
+}
+
+type BookRowProps = {
   id: string;
   bookId: string;
   position: number;
@@ -170,30 +164,39 @@ function SortableRow({
   graduated: boolean;
   selected: boolean;
   editOrder: boolean;
-  onSelect: (checked: boolean) => void;
-  onMove: (action: 'up' | 'down' | 'top' | 'bottom' | number) => void;
-}) {
+  onSelect: (id: string, checked: boolean) => void;
+  onMove: (id: string, action: 'up' | 'down' | 'top' | 'bottom' | number) => void;
+};
+
+function RowView({
+  id,
+  bookId,
+  position,
+  sentence,
+  status,
+  vocabularyReviewStatus,
+  graduated,
+  selected,
+  editOrder,
+  onSelect,
+  onMove,
+  drag,
+}: BookRowProps & { drag?: RowDragProps }) {
   const [requestedPosition, setRequestedPosition] = useState(
     String(position + 1),
   );
   useEffect(() => {
     setRequestedPosition(String(position + 1));
   }, [position]);
-  const { attributes, listeners, setNodeRef, transform, transition } =
-    useSortable({ id, disabled: !editOrder });
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
 
   return (
-    <article ref={setNodeRef} style={style} className="list-card">
+    <article ref={drag?.setNodeRef} style={drag?.style} className="list-card">
       <div className="row" style={{ justifyContent: 'space-between' }}>
         <label className="row">
           <input
             type="checkbox"
             checked={selected}
-            onChange={(event) => onSelect(event.target.checked)}
+            onChange={(event) => onSelect(id, event.target.checked)}
           />
           <span className="muted">#{position + 1}</span>
           <span className={`status-pill ${status}`}>{status}</span>
@@ -202,13 +205,12 @@ function SortableRow({
           </span>
           {graduated ? <span className="status-pill">Graduated</span> : null}
         </label>
-        {editOrder ? (
+        {editOrder && drag ? (
           <button
             type="button"
             className="drag-handle ghost"
             aria-label="Drag to reorder"
-            {...attributes}
-            {...listeners}
+            {...drag.handleProps}
           >
             ⋮⋮
           </button>
@@ -219,16 +221,16 @@ function SortableRow({
       <VocabChips items={sentence.targetVocabulary} />
       {editOrder ? (
         <div className="row">
-          <button type="button" onClick={() => onMove('up')}>
+          <button type="button" onClick={() => onMove(id, 'up')}>
             Up
           </button>
-          <button type="button" onClick={() => onMove('down')}>
+          <button type="button" onClick={() => onMove(id, 'down')}>
             Down
           </button>
-          <button type="button" onClick={() => onMove('top')}>
+          <button type="button" onClick={() => onMove(id, 'top')}>
             Top
           </button>
-          <button type="button" onClick={() => onMove('bottom')}>
+          <button type="button" onClick={() => onMove(id, 'bottom')}>
             Bottom
           </button>
           <label className="position-control">
@@ -243,7 +245,7 @@ function SortableRow({
           </label>
           <button
             type="button"
-            onClick={() => onMove(Number(requestedPosition))}
+            onClick={() => onMove(id, Number(requestedPosition))}
           >
             Move
           </button>
@@ -269,6 +271,25 @@ function SortableRow({
     </article>
   );
 }
+
+/** Reorder mode only: registers the row with dnd-kit. Kept out of the normal view, where ~2000 `useSortable` registrations made the page crawl. */
+function SortableRow(props: BookRowProps) {
+  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({
+    id: props.id,
+  });
+  return (
+    <RowView
+      {...props}
+      drag={{
+        setNodeRef,
+        style: { transform: CSS.Transform.toString(transform), transition },
+        handleProps: { ...attributes, ...listeners },
+      }}
+    />
+  );
+}
+
+const PlainRow = memo(RowView);
 
 /** Sentinel key for sentences that belong to no chapter/episode. */
 const UNASSIGNED_CHAPTER_KEY = '__unassigned__';
@@ -589,6 +610,29 @@ export function BookDetailPage() {
         chapters.get(key) ?? { total: 0, counts: emptyStageCounts() },
     };
   }, [data, sentenceStudyItems, settings]);
+
+  const idsRef = useRef<string[]>([]);
+  idsRef.current = ids;
+  const handleSelect = useCallback((sentenceId: string, checked: boolean) => {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (checked) next.add(sentenceId);
+      else next.delete(sentenceId);
+      return next;
+    });
+  }, []);
+  const handleMove = useCallback(
+    (sentenceId: string, action: 'up' | 'down' | 'top' | 'bottom' | number) => {
+      const previous = [...idsRef.current];
+      void moveBookSentence(bookId, sentenceId, action).then(() =>
+        setSnack({
+          message: 'Order updated',
+          undo: async () => reorderBookSentences(bookId, previous),
+        }),
+      );
+    },
+    [bookId],
+  );
 
   const collapsedChapters = useMemo(
     () => new Set(data?.book?.collapsedChapterIds ?? []),
@@ -1599,79 +1643,64 @@ export function BookDetailPage() {
         ) : null}
       </section>
 
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragEnd={(event) => void onDragEnd(event)}
-      >
-        <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+      {(() => {
+        const hasChapters = (data.book.chapters?.length ?? 0) > 0;
+        const chapterTitles = new Map((data.book.chapters ?? []).map((chapter) => [chapter.id, chapter.title]));
+        const visibleRows = data.rows.filter(
+          (row) =>
+            row.sentence &&
+            !collapsedChapters.has(row.membership.chapterId ?? UNASSIGNED_CHAPTER_KEY),
+        );
+        const Row = editOrder ? SortableRow : PlainRow;
+        const list = (
           <div className="stack">
-            {(() => {
-              const hasChapters = (data.book.chapters?.length ?? 0) > 0;
-              const visibleRows = data.rows.filter(
-                (row) =>
-                  row.sentence &&
-                  !collapsedChapters.has(
-                    row.membership.chapterId ?? UNASSIGNED_CHAPTER_KEY,
-                  ),
+            {visibleRows.map((row, index) => {
+              const chapterKey = row.membership.chapterId ?? UNASSIGNED_CHAPTER_KEY;
+              const previousKey =
+                index > 0
+                  ? visibleRows[index - 1]!.membership.chapterId ?? UNASSIGNED_CHAPTER_KEY
+                  : null;
+              const showHeader = hasChapters && chapterKey !== previousKey;
+              return (
+                <Fragment key={row.membership.sentenceId}>
+                  {showHeader ? (
+                    <div className="chapter-section-header">
+                      {(row.membership.chapterId && chapterTitles.get(row.membership.chapterId)) ??
+                        'Unassigned'}
+                    </div>
+                  ) : null}
+                  <Row
+                    id={row.membership.sentenceId}
+                    bookId={bookId}
+                    position={row.membership.position}
+                    sentence={row.sentence!}
+                    status={row.analysis?.status ?? row.membership.status}
+                    vocabularyReviewStatus={row.analysis?.vocabularyReviewStatus}
+                    graduated={graduatedSentenceIds.has(row.membership.sentenceId)}
+                    selected={selected.has(row.membership.sentenceId)}
+                    editOrder={editOrder}
+                    onSelect={handleSelect}
+                    onMove={handleMove}
+                  />
+                </Fragment>
               );
-              return visibleRows.map((row, index) => {
-                const chapterKey =
-                  row.membership.chapterId ?? UNASSIGNED_CHAPTER_KEY;
-                const previousKey =
-                  index > 0
-                    ? visibleRows[index - 1]!.membership.chapterId ??
-                      UNASSIGNED_CHAPTER_KEY
-                    : null;
-                const showHeader = hasChapters && chapterKey !== previousKey;
-                const chapterTitle = data.book.chapters?.find(
-                  (chapter) => chapter.id === row.membership.chapterId,
-                )?.title;
-                return (
-                  <Fragment key={row.membership.sentenceId}>
-                    {showHeader ? (
-                      <div className="chapter-section-header">
-                        {chapterTitle ?? 'Unassigned'}
-                      </div>
-                    ) : null}
-                    <SortableRow
-                      id={row.membership.sentenceId}
-                      bookId={bookId}
-                      position={row.membership.position}
-                      sentence={row.sentence!}
-                      status={row.analysis?.status ?? row.membership.status}
-                      vocabularyReviewStatus={row.analysis?.vocabularyReviewStatus}
-                      graduated={graduatedSentenceIds.has(row.membership.sentenceId)}
-                      selected={selected.has(row.membership.sentenceId)}
-                      editOrder={editOrder}
-                      onSelect={(checked) => {
-                        const next = new Set(selected);
-                        if (checked) next.add(row.membership.sentenceId);
-                        else next.delete(row.membership.sentenceId);
-                        setSelected(next);
-                      }}
-                      onMove={(action) => {
-                        const previous = [...ids];
-                        void moveBookSentence(
-                          bookId,
-                          row.membership.sentenceId,
-                          action,
-                        ).then(() =>
-                          setSnack({
-                            message: 'Order updated',
-                            undo: async () =>
-                              reorderBookSentences(bookId, previous),
-                          }),
-                        );
-                      }}
-                    />
-                  </Fragment>
-                );
-              });
-            })()}
+            })}
           </div>
-        </SortableContext>
-      </DndContext>
+        );
+        return editOrder ? (
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={(event) => void onDragEnd(event)}
+          >
+            <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+              {list}
+            </SortableContext>
+          </DndContext>
+        ) : (
+          list
+        );
+      })()}
 
       {snack ? (
         <Snackbar
