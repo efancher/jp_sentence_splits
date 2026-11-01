@@ -73,7 +73,9 @@ async function main() {
   const bandByWord = new Map<string, FrequencyBand | null>();
   for (const wordId of wordIds) {
     const word = byId.get(wordId);
-    bandByWord.set(wordId, word ? lookupFrequency(frequency, word.expression, word.reading) : null);
+    const band = word ? lookupFrequency(frequency, word.expression, word.reading) : null;
+    // Match the app (src/lib/wordFrequency.ts): words with only an unbanded priority tag get no prior.
+    bandByWord.set(wordId, band === 'priority' ? null : band);
   }
   const priorByWord = new Map([...bandByWord].map(([id, band]) => [id, frequencyBandPrior(band)]));
   const ranked = rankAtRiskWords(wordIds, evidence, now, { facets: ['reading'], priorByWord });

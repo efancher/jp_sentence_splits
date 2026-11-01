@@ -2,7 +2,8 @@ import { openContentReports, type OpenContentReport } from '../lib/contentReport
 import { isSentenceLedFlow } from '../lib/sentenceLed';
 import { isReadingAnswerCorrect, surfaceReadingFromInline } from '../lib/readingAnswer';
 import { buildWordEvidence } from '../lib/wordEvidence';
-import { planWeakWordSentences, wordStrength } from '../lib/wordStrength';
+import { loadWordFrequency, lookupWordBand } from '../lib/wordFrequency';
+import { frequencyBandPrior, planWeakWordSentences, wordStrength } from '../lib/wordStrength';
 import { buildSentenceLessonReport, type SentenceLessonReport } from '../lib/sentenceLessonReport';
 import { parkedSentenceIds } from '../lib/glossSkill';
 import { getMeaningBank } from '../lib/meaningChoices';
@@ -11084,9 +11085,16 @@ async function loadWordReadingStrengths(): Promise<{
 
   const evidence = buildWordEvidence({ reviews, studyItems, wordsBySentence, learningEvents: events, typedRecalls });
   const now = Date.now();
+  const vocabById = new Map(vocab.map((item) => [item.id, item]));
+  // General-language frequency is a small starting score; the learner's own evidence moves a word off it.
+  const frequency = await loadWordFrequency();
   const strengthByWord = new Map<string, number>();
-  for (const [wordId, items] of evidence) strengthByWord.set(wordId, wordStrength(items, 'reading', now));
-  return { strengthByWord, wordsBySentence, links, vocabById: new Map(vocab.map((item) => [item.id, item])) };
+  for (const [wordId, items] of evidence) {
+    const word = vocabById.get(wordId);
+    const prior = frequencyBandPrior(word ? lookupWordBand(frequency, word.expression, word.reading) : null);
+    strengthByWord.set(wordId, wordStrength(items, 'reading', now, { prior }));
+  }
+  return { strengthByWord, wordsBySentence, links, vocabById };
 }
 
 /**

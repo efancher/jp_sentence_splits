@@ -1,0 +1,10 @@
+wordFrequency.json is derived from JMdict.
+
+JMdict is © the Electronic Dictionary Research and Development Group
+(https://www.edrdg.org/), used under the Creative Commons Attribution-ShareAlike
+4.0 licence (https://creativecommons.org/licenses/by-sa/4.0/). See
+https://www.edrdg.org/edrdg/licence.html.
+
+This file keeps only each entry's frequency band (the "nfNN" priority tag) per
+spelling and reading. It is rebuilt with `npm run build:word-frequency` and is
+shared under the same licence.

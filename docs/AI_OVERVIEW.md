@@ -413,9 +413,21 @@ the only "when". In sentence-first planning the same signal also adds
 walked-through sentences (last walked at least
 `WEAK_WORD_REVISIT_MIN_GAP_DAYS` = 3 days ago) as the lowest-priority revisit
 source, inside the existing per-book revisit cap, with the weak words named in
-the step's reason (`findWeakWordRevisits`). The model has no meaning-recall evidence yet and the
-JMdict-frequency prior (`scripts/lib/jmdictFrequency.ts`) is used only by
-`npm run diagnose:word-strength`, not in the app.
+the step's reason (`findWeakWordRevisits`). The model has no meaning-recall
+evidence yet.
+
+**Frequency prior (2026-11-01).** Each word starts from a small score by
+general-language frequency (`frequencyBandPrior`, at most 0.8, so one failed
+recall outweighs it): common words begin stronger, rare or untagged ones weak.
+The bands are JMdict `nfNN` tags (500 words each) built into
+`public/wordFrequency.json` by `npm run build:word-frequency`
+(`scripts/lib/jmdictFrequency.ts` parses the raw EDRDG file), and fetched on
+demand by `src/lib/wordFrequency.ts` — not bundled or precached (~770 KB). An
+offline or failed fetch means no prior, never an error. Words with only an
+unbanded priority tag (news1, ichi1…) get none. The data is JMdict-derived and
+shared under CC BY-SA 4.0 (`public/wordFrequency.NOTICE.txt`). The bands come
+from newspaper text, so conversational words such as たくさん and ない sit low.
+`npm run diagnose:word-strength` applies the same prior.
 
 **Quiet mode** (`settings.quietMode`, per-device, toggle on both Settings
 and Home): when the learner can't speak aloud, `getSessionPlannerInput`
