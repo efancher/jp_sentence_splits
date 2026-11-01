@@ -671,6 +671,36 @@ Unfinished work and optional extensions; completed behavior is in `AI_OVERVIEW.m
 - Bank coverage: shipped 2026-10-02 (book-page "Meaning choices: bulk generate" panel with copy/paste and AI-now, plus background auto-generation for sentences with no check). Remaining: auto top-up of thin banks (manual only today) and wiring generation directly into each import commit instead of the background worker.
 - Sequential mode: latch from the planner too (it is read-only today) and expose a per-book "reset unlocks".
 
+## Possibilities (reader as the single study surface)
+
+Direction from a 2026-11-01 discussion, not scheduled. Make the reader the one
+place study happens, with each activity a tool acting on the text in place:
+Ear Tiles puts the chunk blocks where they belong in the episode; dictation
+blanks the target and gets a playback/loop strip; the walkthrough gets a toolbar
+with pop-up definitions and explanations; shadowing gets a toolbar plus a panel
+for pitch contour and recording. The smart activity schedule stays and decides
+which location and tool come next (SessionBar remains the single advance
+control).
+
+- **Why.** Review cards feel artificial and each activity logs its own evidence.
+  In the reader, scaffolding can fade by word strength (hide furigana/gloss on
+  weak words so the reader itself forces recall), and every tool reports evidence
+  to one shared word-strength estimate. That estimate only chooses sentences and
+  words; the sentence FSRS schedule stays the only "when", so two schedulers
+  cannot disagree.
+- **Order.** (1) Word-strength library, evidence-weighted (retrieval counts far
+  more than exposure), usable from any surface. (2) Use the reader to fade
+  furigana/gloss by word strength as a cheap test of the idea. (3) Migrate tools
+  one at a time, simplest first (dictation blank, Ear Tiles), then walkthrough,
+  then shadowing last, keeping the old pages working throughout.
+- **Costs and constraints.** Shadowing needs a docked panel and its iOS
+  gesture-gated audio setup, so it cannot fully dissolve into the text. Review
+  behavior (self-rating, sibling burying, gates) is tuned inside `ReviewPage`
+  and must not regress in a big-bang rewrite. Mined or review-only sentences
+  have no episode context and need a single-sentence or short-window fallback.
+  The schedule needs an obvious "next up" so the reader does not become
+  open-ended wandering. Ratings stay explicit; tool results are evidence only.
+
 ## Possibilities (analytics & cross-activity coherence)
 
 Unfinished ideas from the 2026-09-08 discussion. Shipped progress panels,
