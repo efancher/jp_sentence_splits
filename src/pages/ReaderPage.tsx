@@ -44,6 +44,21 @@ import { describeSentenceProgress, glossableWords, sentenceWordHelp, summariseSe
 import { PLAYBACK_SPEEDS } from '../lib/recording';
 import { SentenceAudioAdjuster } from '../components/SentenceAudioAdjuster';
 
+/** Below 700px the rail is a wrapping row after the chapter text; the study tools then sit under the selected sentence instead. */
+function useNarrowScreen(): boolean {
+  const query = '(max-width: 699px)';
+  const [narrow, setNarrow] = useState(() => (typeof window !== 'undefined' && typeof window.matchMedia === 'function' ? window.matchMedia(query).matches : false));
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    const list = window.matchMedia(query);
+    const update = () => setNarrow(list.matches);
+    update();
+    list.addEventListener('change', update);
+    return () => list.removeEventListener('change', update);
+  }, []);
+  return narrow;
+}
+
 // The shadowing workspace (recording, pitch analysis) is heavy; load it only when the tool is opened.
 const ShadowWorkspace = lazy(() => import('./ShadowPage').then((module) => ({ default: module.ShadowWorkspace })));
 
@@ -80,6 +95,7 @@ export function ReaderPage() {
   const navigate = useNavigate();
   // /books/:bookId/check/:sentenceId (planner Word check step) and /recall/:sentenceId (Read check step) open that
   // sentence's tool, not its walkthrough.
+  const narrow = useNarrowScreen();
   const pathname = useLocation().pathname;
   const isWordCheckRoute = pathname.includes('/check/');
   const isReadCheckRoute = pathname.includes('/recall/');
@@ -568,6 +584,33 @@ export function ReaderPage() {
     return <div className="jp jp-lg">{sentence.japanese}</div>;
   }
 
+  /** The study tools for one sentence: icon-only in the side rail, labelled under the sentence on narrow screens. */
+  function studyToolButtons(sentence: Sentence, labelled: boolean) {
+    const open = (kind: NonNullable<typeof readerTool>['kind']) => readerTool?.sentenceId === sentence.id && readerTool.kind === kind;
+    const items: Array<{ label: string; glyph: string; title: string; pressed: boolean; onClick: () => void }> = [
+      { label: 'Walk through', glyph: '🚶', title: 'Walk through this sentence', pressed: walkthroughId === sentence.id,
+        onClick: () => setWalkthroughId(walkthroughId === sentence.id ? undefined : sentence.id) },
+      { label: 'Dictation', glyph: '🎧', title: 'Dictation: type a blanked phrase from what you hear', pressed: open('dictate'), onClick: () => toggleReaderTool(sentence, 'dictate') },
+      { label: 'Shadowing', glyph: '🎙', title: 'Shadowing: loop, record and compare your pitch', pressed: open('shadow'), onClick: () => toggleReaderTool(sentence, 'shadow') },
+      { label: 'Read check', glyph: '📖', title: 'Read check: read it unaided, then judge yourself', pressed: open('recall'), onClick: () => toggleReaderTool(sentence, 'recall') },
+      { label: 'Ear tiles', glyph: '🧩', title: 'Ear tiles: rebuild the sentence from what you hear', pressed: open('tiles'), onClick: () => toggleReaderTool(sentence, 'tiles') },
+      { label: 'Word check', glyph: '💭', title: "Word check: recall a word's meaning", pressed: open('meaning'), onClick: () => toggleReaderTool(sentence, 'meaning') },
+    ];
+    return items.map((item) => (
+      <button
+        key={item.label}
+        type="button"
+        className={labelled ? 'ghost' : 'icon-button'}
+        aria-pressed={item.pressed}
+        aria-label={item.label}
+        title={item.title}
+        onClick={item.onClick}
+      >
+        {labelled ? `${item.glyph} ${item.label}` : item.glyph}
+      </button>
+    ));
+  }
+
   function playbackBar(index: number, audio: SentenceAudio) {
     const playing = isSequencePlaying && singleIndexRef.current === index;
     const sourceUrl = audio.sourceUrl ?? book.sourceUrl;
@@ -768,6 +811,11 @@ export function ReaderPage() {
           </select>
         </label>
       </div>
+      {chapterMode ? (
+        <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+          Tap a sentence to select it; the study tools act on the selected sentence.
+        </p>
+      ) : null}
       <div className={chapterMode ? 'gloss-workbench' : undefined}>
       <div className="stack reader-book">
         {rows.map((row, index) => {
@@ -802,7 +850,7 @@ export function ReaderPage() {
               ref={(el) => {
                 rowRefs.current[index] = el;
               }}
-              className={`panel${isActive ? ' reader-row-active' : ''}`}
+              className={`panel${isActive ? ' reader-row-active' : ''}${chapterMode ? ' reader-focused' : ''}`}
             >
               <div className="row" style={{ alignItems: 'flex-start' }}>
                 {audio && !chapterMode ? (
@@ -831,6 +879,11 @@ export function ReaderPage() {
                     const tile = dictating ? buildTileDictation(row.sentence, readerTool.tile) : null;
                     return tile ? <DictationBlankLine tile={tile} /> : sentenceLine(row.sentence, isActive, audio);
                   })()}
+                  {chapterMode && narrow ? (
+                    <div className="row" role="toolbar" aria-label="Study tools" style={{ gap: '0.3rem', flexWrap: 'wrap' }}>
+                      {studyToolButtons(row.sentence, true)}
+                    </div>
+                  ) : null}
                   {(() => {
                     if (readerTool?.sentenceId !== row.sentence.id) return null;
                     if (readerTool.kind === 'dictate') {
@@ -1119,7 +1172,6 @@ export function ReaderPage() {
       {chapterMode && focusedRow ? (() => {
         const translationOpen = translationDefaultShown(focusedRow.sentence) !== revealedTranslations.has(focusedRow.sentence.id);
         const wordOverride = wordHelpOverride.get(focusedRow.sentence.id);
-        const walking = walkthroughId === focusedRow.sentence.id;
         const nextMode = TEXT_MODE_ORDER[(TEXT_MODE_ORDER.indexOf(displayMode) + 1) % TEXT_MODE_ORDER.length]!;
         return (
           <div className="gloss-rail" role="toolbar" aria-label="Sentence tools" aria-orientation="vertical">
@@ -1138,29 +1190,7 @@ export function ReaderPage() {
             <button type="button" className="icon-button" aria-pressed={translationOpen}
               aria-label={translationOpen ? 'Hide translation' : 'Show translation'} title={translationOpen ? 'Hide translation' : 'Show translation'}
               onClick={() => toggleTranslation(focusedRow.sentence.id)}>EN</button>
-            <button type="button" className="icon-button" aria-pressed={walking} aria-expanded={walking}
-              aria-label="Walk through" title="Walk through this sentence"
-              onClick={() => setWalkthroughId(walking ? undefined : focusedRow.sentence.id)}>🚶</button>
-            <button type="button" className="icon-button"
-              aria-pressed={readerTool?.sentenceId === focusedRow.sentence.id && readerTool.kind === 'dictate'}
-              aria-label="Dictation" title="Dictation: type a blanked phrase from what you hear"
-              onClick={() => toggleReaderTool(focusedRow.sentence, 'dictate')}>🎧</button>
-            <button type="button" className="icon-button"
-              aria-pressed={readerTool?.sentenceId === focusedRow.sentence.id && readerTool.kind === 'shadow'}
-              aria-label="Shadowing" title="Shadowing: loop, record and compare your pitch"
-              onClick={() => toggleReaderTool(focusedRow.sentence, 'shadow')}>🎙</button>
-            <button type="button" className="icon-button"
-              aria-pressed={readerTool?.sentenceId === focusedRow.sentence.id && readerTool.kind === 'recall'}
-              aria-label="Read check" title="Read check: read it unaided, then judge yourself"
-              onClick={() => toggleReaderTool(focusedRow.sentence, 'recall')}>📖</button>
-            <button type="button" className="icon-button"
-              aria-pressed={readerTool?.sentenceId === focusedRow.sentence.id && readerTool.kind === 'tiles'}
-              aria-label="Ear tiles" title="Ear tiles: rebuild the sentence from what you hear"
-              onClick={() => toggleReaderTool(focusedRow.sentence, 'tiles')}>🧩</button>
-            <button type="button" className="icon-button"
-              aria-pressed={readerTool?.sentenceId === focusedRow.sentence.id && readerTool.kind === 'meaning'}
-              aria-label="Word check" title="Word check: recall a word's meaning"
-              onClick={() => toggleReaderTool(focusedRow.sentence, 'meaning')}>💭</button>
+            {narrow ? null : studyToolButtons(focusedRow.sentence, false)}
             <button type="button" className="icon-button" aria-pressed={revealedStructures.has(focusedRow.sentence.id)}
               aria-label={revealedStructures.has(focusedRow.sentence.id) ? 'Hide structure' : 'Show structure'}
               title={revealedStructures.has(focusedRow.sentence.id) ? 'Hide structure' : 'Show structure'}
