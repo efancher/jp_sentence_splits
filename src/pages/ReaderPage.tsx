@@ -9,8 +9,10 @@ import {
   DictationBlankLine,
   DictationBlankPanel,
   ReadCheckPanel,
+  WordFeedbackPanel,
   WordMeaningPanel,
   type ReaderToolOutcome,
+  type ReaderWord,
 } from '../components/ReaderTools';
 import { EarTilesBank, EarTilesSlots, particleGlossDecisions } from '../components/EarTilesCheck';
 import {
@@ -25,7 +27,7 @@ import {
   type EarTilesPuzzle,
 } from '../lib/earTiles';
 import { createId } from '../lib/ids';
-import { meaningCheckTargetKey } from '../lib/wordEvidence';
+import { meaningCheckTargetKey, readingFeedbackTargetKey } from '../lib/wordEvidence';
 import { SentenceWalkthrough, walkthroughChunks } from '../components/SentenceWalkthrough';
 import { glossesFromWords } from '../lib/chunkGlosses';
 import { mergeChapterConstructionDrafts, mergeChapterWalkthroughs } from '../lib/contextWalkthrough';
@@ -128,6 +130,7 @@ export function ReaderPage() {
     { sentenceId: string; kind: 'meaning'; visitId: string } |
     { sentenceId: string; kind: 'recall'; visitId: string; revealed: boolean } |
     { sentenceId: string; kind: 'shadow'; visitId: string } |
+    { sentenceId: string; kind: 'word'; visitId: string; vocabularyItemId: string } |
     { sentenceId: string; kind: 'tiles'; visitId: string; puzzle: EarTilesPuzzle; progress: EarTilesProgress } |
     undefined
   >();
@@ -192,11 +195,34 @@ export function ReaderPage() {
       ),
     ];
     const { savedMeanings, knownExpressions } = await getSavedWordStatus(contentExpressions);
+    // The words a learner can tap in each sentence: its linked content words, in sentence order.
+    const links = await db.sentenceVocabulary.where('sentenceId').anyOf(rows.map((row) => row.sentence.id)).toArray();
+    const linkedWords = await db.vocabularyItems.bulkGet([...new Set(links.map((link) => link.vocabularyItemId))]);
+    const wordById = new Map(linkedWords.flatMap((word) => (word ? [[word.id, word] as const] : [])));
+    const wordsBySentence = new Map<string, ReaderWord[]>();
+    for (const row of rows) {
+      const content = new Map(row.sentence.vocabularySuggestions.filter((item) => item.selectedByDefault).map((item) => [item.surface, item]));
+      const seen = new Set<string>();
+      const words: Array<ReaderWord & { at: number }> = [];
+      for (const link of links) {
+        if (link.sentenceId !== row.sentence.id || !link.surfaceForm || seen.has(link.vocabularyItemId)) continue;
+        const word = wordById.get(link.vocabularyItemId);
+        const suggestion = content.get(link.surfaceForm);
+        const at = row.sentence.japanese.indexOf(link.surfaceForm);
+        if (!word || !suggestion || at < 0) continue;
+        seen.add(link.vocabularyItemId);
+        words.push({
+          vocabularyItemId: word.id, surface: link.surfaceForm, expression: word.expression, reading: word.reading,
+          meaning: word.meaning.trim() || suggestion.english?.trim() || '', at,
+        });
+      }
+      wordsBySentence.set(row.sentence.id, words.sort((a, b) => a.at - b.at).map(({ at: _at, ...word }) => word));
+    }
     // Drafts are keyed by sentence id, so reading the whole book (no ?chapter=) still finds them.
     const structureDrafts = Object.assign({}, ...book.chapters.map((item) => item.structureDrafts ?? {})) as Record<string, StructureDraftChunk[]>;
     const contextWalkthroughs = mergeChapterWalkthroughs(book.chapters);
     const constructionDrafts = mergeChapterConstructionDrafts(book.chapters);
-    return { book, chapter, rows, audioRows, chunksBySentence, particleChecksBySentence, structureDrafts, contextWalkthroughs, constructionDrafts, savedMeanings, knownExpressions };
+    return { book, chapter, rows, audioRows, chunksBySentence, particleChecksBySentence, structureDrafts, contextWalkthroughs, constructionDrafts, savedMeanings, knownExpressions, wordsBySentence };
   }, [bookId, chapterId]);
 
   const openedLessonRef = useRef<string | undefined>(undefined);
@@ -369,6 +395,55 @@ export function ReaderPage() {
         void logGlossDecision({ ...decision, bookId });
       }
     }
+  }
+
+  /** Whether a word's reading / meaning was hidden from the learner on this sentence right now (decides recall vs recognition). */
+  function wordHelpHidden(sentence: Sentence, word: ReaderWord): { readingHidden: boolean; meaningHidden: boolean } {
+    const known = data?.knownExpressions.has(word.expression) ?? false;
+    const readingHidden = displayMode === 'plain' || (displayMode === 'new' && known);
+    const help = sentenceWordHelp(sentence.vocabularySuggestions, data?.knownExpressions ?? new Set(), data?.savedMeanings);
+    const override = wordHelpOverride.get(sentence.id);
+    const shown = override === 'all' ? help.allWords : override === 'none' ? [] : help.newWords;
+    const meaningHidden = !shown.some((item) => item.expression === word.expression);
+    return { readingHidden, meaningHidden };
+  }
+
+  /** The learner's own "I knew it / I didn't" on one facet of a word they tapped: evidence only, never a rating. */
+  function recordWordFeedback(
+    sentenceId: string,
+    visitId: string,
+    word: ReaderWord,
+    facet: 'reading' | 'meaning',
+    hidden: boolean,
+    outcome: ReaderToolOutcome,
+  ) {
+    void logSentenceLearningEvent({
+      id: createId('sl_event'),
+      visitId,
+      action: 'target_practice',
+      sentenceId,
+      bookId,
+      chapterId,
+      target: {
+        kind: 'vocabulary',
+        key: facet === 'reading' ? readingFeedbackTargetKey(word.vocabularyItemId) : meaningCheckTargetKey(word.vocabularyItemId),
+        label: word.surface,
+      },
+      support: hidden ? 'target_masked' : 'explanation_hidden',
+      outcome,
+      assessmentSource: 'self',
+      quietMode: settings?.quietMode ?? false,
+      inventoryRevision: preparation?.sentenceFingerprint,
+    });
+  }
+
+  function toggleWordFeedback(sentence: Sentence, word: ReaderWord) {
+    setToolNotice(undefined);
+    if (readerTool?.kind === 'word' && readerTool.sentenceId === sentence.id && readerTool.vocabularyItemId === word.vocabularyItemId) {
+      setReaderTool(undefined);
+      return;
+    }
+    setReaderTool({ sentenceId: sentence.id, kind: 'word', visitId: createId('visit'), vocabularyItemId: word.vocabularyItemId });
   }
 
   /** A Read check's self-judged call: the same `gist_check` evidence the walkthrough logs, so the sentence journey and its spacing see it. */
@@ -864,6 +939,30 @@ export function ReaderPage() {
                     return tile ? <DictationBlankLine tile={tile} /> : sentenceLine(row.sentence, isActive, audio);
                   })()}
                   {(() => {
+                    // Tap a word to say whether you knew it. Hidden while a tool that would reveal words is open.
+                    const words = data.wordsBySentence.get(row.sentence.id) ?? [];
+                    const tool = readerTool?.sentenceId === row.sentence.id ? readerTool : undefined;
+                    const hidesWords =
+                      tool?.kind === 'meaning' || tool?.kind === 'tiles' || tool?.kind === 'dictate' || (tool?.kind === 'recall' && !tool.revealed);
+                    if (!chapterMode || row.sentence.id !== focusedId || words.length === 0 || hidesWords) return null;
+                    return (
+                      <div className="row" role="group" aria-label="Words in this sentence" style={{ gap: '0.3rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                        <span className="muted" style={{ fontSize: '0.8rem' }}>Tap a word:</span>
+                        {words.map((word) => (
+                          <button
+                            key={word.vocabularyItemId}
+                            type="button"
+                            className="ghost jp"
+                            aria-pressed={tool?.kind === 'word' && tool.vocabularyItemId === word.vocabularyItemId}
+                            onClick={() => toggleWordFeedback(row.sentence, word)}
+                          >
+                            {word.surface}
+                          </button>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                  {(() => {
                     if (readerTool?.sentenceId !== row.sentence.id) return null;
                     if (readerTool.kind === 'dictate') {
                       const tile = buildTileDictation(row.sentence, readerTool.tile);
@@ -914,6 +1013,24 @@ export function ReaderPage() {
                             finish={<button type="button" onClick={() => setReaderTool(undefined)}>Done</button>}
                           />
                         </div>
+                      );
+                    }
+                    if (readerTool.kind === 'word') {
+                      const tool = readerTool;
+                      const word = (data.wordsBySentence.get(row.sentence.id) ?? []).find((item) => item.vocabularyItemId === tool.vocabularyItemId);
+                      if (!word) return null;
+                      const hidden = wordHelpHidden(row.sentence, word);
+                      return (
+                        <WordFeedbackPanel
+                          key={`${tool.visitId}:${word.vocabularyItemId}`}
+                          word={word}
+                          readingHidden={hidden.readingHidden}
+                          meaningHidden={hidden.meaningHidden}
+                          onRecord={(facet, outcome) =>
+                            recordWordFeedback(row.sentence.id, tool.visitId, word, facet, facet === 'reading' ? hidden.readingHidden : hidden.meaningHidden, outcome)
+                          }
+                          onClose={() => setReaderTool(undefined)}
+                        />
                       );
                     }
                     if (readerTool.kind === 'shadow') {

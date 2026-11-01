@@ -8,7 +8,7 @@ import { getDb, getWordMeaningCheckTarget } from '../src/db/repository';
 import type { Sentence, VocabularySuggestion } from '../src/domain/types';
 import { buildCheckPuzzle } from '../src/lib/earTiles';
 import { createId } from '../src/lib/ids';
-import { buildWordEvidence, meaningCheckTargetKey } from '../src/lib/wordEvidence';
+import { buildWordEvidence, meaningCheckTargetKey, readingFeedbackTargetKey } from '../src/lib/wordEvidence';
 import { ReaderPage } from '../src/pages/ReaderPage';
 import { withAppProviders } from '../src/test/providers';
 
@@ -280,6 +280,28 @@ describe('reader study tools', () => {
     expect(screen.queryByRole('region', { name: 'Sentence walkthrough' })).not.toBeInTheDocument();
   });
 
+  it('lets the learner tap a word and say whether they knew its reading and meaning, as evidence only', async () => {
+    const user = userEvent.setup();
+    renderReader();
+    const chips = await screen.findByRole('group', { name: 'Words in this sentence' });
+    await user.click(within(chips).getByRole('button', { name: '猫' }));
+    const panel = await screen.findByRole('group', { name: 'Word feedback' });
+    const buttons = within(panel).getAllByRole('button', { name: 'I knew it' });
+    await user.click(buttons[0]!);
+    await user.click(within(panel).getByRole('button', { name: 'I didn’t' }));
+
+    await waitFor(async () => {
+      const events = await getDb().sentenceLearningEvents.toArray();
+      expect(events).toHaveLength(2);
+      const byKey = new Map(events.map((event) => [event.target?.key, event]));
+      // Plain text mode hides the reading (recall); a new word's gloss is showing, so its meaning is only recognition.
+      expect(byKey.get(readingFeedbackTargetKey('v-cat'))).toMatchObject({ action: 'target_practice', support: 'target_masked', outcome: 'got_it', assessmentSource: 'self' });
+      expect(byKey.get(meaningCheckTargetKey('v-cat'))).toMatchObject({ support: 'explanation_hidden', outcome: 'needed_help', assessmentSource: 'self' });
+    });
+    expect(await getDb().reviews.count()).toBe(0);
+    expect(await getDb().studyItems.count()).toBe(0);
+  });
+
   it('closes the tool when another sentence is chosen', async () => {
     const user = userEvent.setup();
     renderReader();
@@ -309,8 +331,24 @@ describe('meaning check evidence', () => {
       ],
     });
     expect(map.get('w1')).toEqual([{ wordId: 'w1', facet: 'meaning', kind: 'recall', at: Date.parse(at), success: true }]);
-    expect(map.has('w2')).toBe(false);
-    expect(map.size).toBe(1);
+    // Shown with the answer on screen is only recognition.
+    expect(map.get('w2')).toEqual([{ wordId: 'w2', facet: 'meaning', kind: 'recognition', at: Date.parse(at), success: true }]);
+    expect(map.size).toBe(2);
+  });
+
+  it('turns reader word feedback into reading evidence: masked is recall, shown is recognition', () => {
+    const at = '2026-10-30T00:00:00.000Z';
+    const map = buildWordEvidence({
+      reviews: [],
+      studyItems: [],
+      wordsBySentence: new Map(),
+      learningEvents: [
+        { sentenceId: 's', timestamp: at, action: 'target_practice', support: 'target_masked', outcome: 'needed_help', target: { kind: 'vocabulary', key: readingFeedbackTargetKey('w1'), label: '猫' } },
+        { sentenceId: 's', timestamp: at, action: 'target_practice', support: 'explanation_hidden', outcome: 'got_it', target: { kind: 'vocabulary', key: readingFeedbackTargetKey('w2'), label: '魚' } },
+      ],
+    });
+    expect(map.get('w1')).toEqual([{ wordId: 'w1', facet: 'reading', kind: 'recall', at: Date.parse(at), success: false }]);
+    expect(map.get('w2')).toEqual([{ wordId: 'w2', facet: 'reading', kind: 'recognition', at: Date.parse(at), success: true }]);
   });
 
   it('asks about the word whose meaning is weaker, and moves on once it has been recalled', async () => {

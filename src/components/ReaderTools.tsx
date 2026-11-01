@@ -151,6 +151,77 @@ export function ReadCheckPanel({
   );
 }
 
+/** A content word of the selected sentence the learner can tap to say whether they knew it. */
+export interface ReaderWord {
+  vocabularyItemId: string;
+  surface: string;
+  expression: string;
+  reading: string;
+  meaning: string;
+}
+
+/**
+ * The learner taps a word and says, in their own words, whether they knew its reading and meaning.
+ * Nothing is graded: each answer is evidence for the word-strength model (recall when the answer was
+ * hidden while they read, recognition when it was showing). Looking a word up records nothing.
+ */
+export function WordFeedbackPanel({
+  word,
+  readingHidden,
+  meaningHidden,
+  onRecord,
+  onClose,
+}: {
+  word: ReaderWord;
+  /** Whether the reading / meaning was hidden (no furigana, no word help) when the learner read the word. */
+  readingHidden: boolean;
+  meaningHidden: boolean;
+  onRecord: (facet: 'reading' | 'meaning', outcome: ReaderToolOutcome) => void;
+  onClose: () => void;
+}) {
+  const [shown, setShown] = useState(false);
+  const [given, setGiven] = useState<{ reading?: ReaderToolOutcome; meaning?: ReaderToolOutcome }>({});
+  const record = (facet: 'reading' | 'meaning', outcome: ReaderToolOutcome) => {
+    if (given[facet]) return;
+    onRecord(facet, outcome);
+    setGiven((current) => ({ ...current, [facet]: outcome }));
+    setShown(true);
+  };
+  const row = (facet: 'reading' | 'meaning', label: string, hidden: boolean) => (
+    <div className="row" style={{ gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}>
+      <span style={{ minWidth: '4.5rem' }}>{label}</span>
+      {given[facet] ? (
+        <span className="muted">{given[facet] === 'got_it' ? 'You knew it' : 'You didn’t know it'}</span>
+      ) : (
+        <>
+          <button type="button" onClick={() => record(facet, 'got_it')}>I knew it</button>
+          <button type="button" onClick={() => record(facet, 'needed_help')}>I didn’t</button>
+          <span className="muted" style={{ fontSize: '0.8rem' }}>{hidden ? 'was hidden' : 'was showing'}</span>
+        </>
+      )}
+    </div>
+  );
+  return (
+    <div className="stack" style={{ gap: '0.35rem' }} role="group" aria-label="Word feedback">
+      <p style={{ margin: 0 }}>
+        How well did you know <strong className="jp">{word.surface}</strong>?
+      </p>
+      {row('reading', 'Reading', readingHidden)}
+      {row('meaning', 'Meaning', meaningHidden)}
+      {shown ? (
+        <p style={{ margin: 0 }}>
+          <span className="jp">{word.expression}</span>
+          {word.reading ? <span className="muted"> ({word.reading})</span> : null}
+          {word.meaning ? <> — {word.meaning}</> : null}
+        </p>
+      ) : (
+        <div><button type="button" onClick={() => setShown(true)}>Show reading and meaning</button></div>
+      )}
+      <div><button type="button" onClick={onClose}>Close</button></div>
+    </div>
+  );
+}
+
 type MeaningTarget = Awaited<ReturnType<typeof getWordMeaningCheckTarget>>;
 
 export function WordMeaningPanel({

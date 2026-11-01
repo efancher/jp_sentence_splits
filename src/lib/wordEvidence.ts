@@ -14,9 +14,10 @@ import type { WordEvidence } from './wordStrength';
  * - `cloze` is retired and ignored. Sentence-level comprehension checks are
  *   not attributable to one word, so they add no recognition evidence.
  *
- * There is no meaning-recall evidence yet: meaning stays at zero until a
- * surface asks for typed meaning recall, so callers should not read a low
- * meaning strength as a finding.
+ * - Reader word feedback (the learner taps a word and says whether they knew its
+ *   reading or meaning): recall when the answer was hidden, recognition when it
+ *   was showing. Meaning evidence comes only from Word checks and this feedback,
+ *   so callers should not read a low meaning strength as a finding.
  */
 export interface WordEvidenceInput {
   reviews: readonly Pick<Review, 'studyItemId' | 'timestamp' | 'rating' | 'contextSentenceId'>[];
@@ -74,11 +75,20 @@ export function buildWordEvidence(input: WordEvidenceInput): Map<string, WordEvi
     const at = Date.parse(event.timestamp);
     if (Number.isNaN(at)) continue;
     if (event.action === 'walkthrough_completed') exposeSentence(event.sentenceId, at);
-    else if (event.action === 'target_practice') {
-      const wordId = meaningCheckWordId(event.target?.key);
-      // The learner's own call after the meaning was hidden, so it is genuine meaning recall.
-      if (wordId && event.support === 'target_masked' && event.outcome) {
-        add({ wordId, facet: 'meaning', kind: 'recall', at, success: event.outcome === 'got_it' });
+    else if (event.action === 'target_practice' && event.outcome) {
+      const key = event.target?.key;
+      const meaningId = meaningCheckWordId(key);
+      const readingId = readingFeedbackWordId(key);
+      const wordId = meaningId ?? readingId;
+      if (!wordId) continue;
+      const facet = meaningId ? 'meaning' : 'reading';
+      const success = event.outcome === 'got_it';
+      if (event.support === 'target_masked') {
+        // The learner's own call while the answer was hidden: genuine recall.
+        add({ wordId, facet, kind: 'recall', at, success });
+      } else if (event.support === 'explanation_hidden') {
+        // Reader word feedback given with the answer on screen: only recognition.
+        add({ wordId, facet, kind: 'recognition', at, success });
       }
     }
   }
@@ -90,6 +100,21 @@ export const MEANING_CHECK_KEY_PREFIX = 'vocab:';
 
 export function meaningCheckTargetKey(vocabularyItemId: string): string {
   return `${MEANING_CHECK_KEY_PREFIX}${vocabularyItemId}`;
+}
+
+/**
+ * Key prefix for the learner's own "I knew / didn't know the reading of this word" feedback from the reader
+ * (`target_practice`, `target.key = vocab-read:<vocabularyItemId>`). `target_masked` support means the reading was hidden
+ * when they judged (recall); `explanation_hidden` means it was showing (recognition).
+ */
+export const READING_FEEDBACK_KEY_PREFIX = 'vocab-read:';
+
+export function readingFeedbackTargetKey(vocabularyItemId: string): string {
+  return `${READING_FEEDBACK_KEY_PREFIX}${vocabularyItemId}`;
+}
+
+function readingFeedbackWordId(key: string | undefined): string | undefined {
+  return key?.startsWith(READING_FEEDBACK_KEY_PREFIX) ? key.slice(READING_FEEDBACK_KEY_PREFIX.length) : undefined;
 }
 
 function meaningCheckWordId(key: string | undefined): string | undefined {
