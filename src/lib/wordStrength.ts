@@ -201,3 +201,39 @@ export function chooseSentencesForWeakWords(
   }
   return chosen;
 }
+
+export interface WeakWordSentencePlan {
+  /** Sentence ids in pick order: the first covers the most weakness, each next adds the most still-uncovered. */
+  order: string[];
+  /** For each picked sentence, its weak word ids, weakest first, capped at `maxWordsListed`. */
+  weakWordsBySentence: Map<string, string[]>;
+}
+
+/**
+ * Chooses which of `sentences` to surface for their weak words. Only words at
+ * or above `minWeakness` (`1 - strength`) count, so a sentence of mostly known
+ * words is never picked just because one is slightly shaky. Selection only: it
+ * says nothing about when a sentence is due.
+ */
+export function planWeakWordSentences(
+  sentences: readonly SentenceWords[],
+  strengthByWord: ReadonlyMap<string, number>,
+  options: { limit?: number; minWeakness?: number; maxWordsListed?: number } = {},
+): WeakWordSentencePlan {
+  const minWeakness = options.minWeakness ?? 0.7;
+  const maxWordsListed = options.maxWordsListed ?? 3;
+  const weakness = new Map<string, number>();
+  for (const [wordId, strength] of strengthByWord) {
+    if (1 - strength >= minWeakness) weakness.set(wordId, 1 - strength);
+  }
+  const order = chooseSentencesForWeakWords(sentences, weakness, options.limit ?? sentences.length);
+  const bySentence = new Map(sentences.map((sentence) => [sentence.sentenceId, sentence]));
+  const weakWordsBySentence = new Map<string, string[]>();
+  for (const sentenceId of order) {
+    const words = [...new Set(bySentence.get(sentenceId)!.wordIds)]
+      .filter((wordId) => weakness.has(wordId))
+      .sort((a, b) => weakness.get(b)! - weakness.get(a)! || a.localeCompare(b));
+    weakWordsBySentence.set(sentenceId, words.slice(0, maxWordsListed));
+  }
+  return { order, weakWordsBySentence };
+}

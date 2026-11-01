@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   chooseSentencesForWeakWords,
+  planWeakWordSentences,
   rankAtRiskWords,
   wordStrength,
   type WordEvidence,
@@ -87,6 +88,26 @@ describe('rankAtRiskWords', () => {
     expect(ranked[0]).toMatchObject({ wordId: 'new', strength: 0 });
     expect(ranked.at(-1)!.wordId).toBe('strong');
     expect(rankAtRiskWords(['strong', 'new'], byWord, NOW, { facets: ['reading'], limit: 1 })).toHaveLength(1);
+  });
+});
+
+describe('planWeakWordSentences', () => {
+  const strength = new Map([['a', 0], ['b', 0.1], ['c', 0.8], ['d', 0.95]]);
+  const sentences = [
+    { sentenceId: 's1', wordIds: ['c', 'd'] },
+    { sentenceId: 's2', wordIds: ['a', 'c'] },
+    { sentenceId: 's3', wordIds: ['b', 'd'] },
+  ];
+
+  it('ignores slightly shaky words and lists the weakest words first', () => {
+    const plan = planWeakWordSentences(sentences, strength, { limit: 5 });
+    expect(plan.order).toEqual(['s2', 's3']);
+    expect(plan.weakWordsBySentence.get('s2')).toEqual(['a']);
+    expect(plan.weakWordsBySentence.get('s3')).toEqual(['b']);
+  });
+
+  it('returns nothing when no word is weak enough', () => {
+    expect(planWeakWordSentences(sentences, new Map([['a', 0.9]])).order).toEqual([]);
   });
 });
 

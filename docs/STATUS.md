@@ -54,7 +54,14 @@ and possible extensions. This snapshot does not certify a live deployment.
   retired. Typed-match feedback never chooses the FSRS rating.
   Ear Tiles accepts up to nine tiles and merges splits of ten to twelve tiles
   down to nine by joining the shortest neighbours, retaining inner punctuation.
-  Single-tile dictation keeps the raw split and its nine-tile limit.
+  Single-tile dictation keeps the raw split and its nine-tile limit. A sentence
+  now seeds only one new dictation tile (the first whose phrase no other
+  sentence already dictates); earlier dictation cards keep surfacing, and the
+  older nine-per-sentence cards have not been retired.
+- Shadowing candidates are ordered by weak vocabulary after explicit sound flags
+  and missed cloze cards, ahead of fewest attempts (`getWeakWordSentenceSignal`,
+  selection only, local history). Meaning has no recall evidence yet and the
+  frequency prior is diagnostic-only; see AI_OVERVIEW for the model.
 - Reader, Analyze, review and Shadow support chapter layouts. The reader has
   per-sentence play/loop, new-word furigana and optional phrase/construction
   explanations. Episode preparation accepts the main JSON and structure lines

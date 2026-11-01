@@ -397,6 +397,22 @@ keyed off the miss review's `contextSentenceId` — every `QueueCard` records
 the sentence it displayed there, not just `pitch_accent`) — cross-activity
 error routing's cloze/shadowing half.
 
+After those (a flagged sound, a missed cloze) and ahead of fewest-attempts,
+`findShadowCandidates` orders sentences by the learner's weak vocabulary
+(2026-11-01). `getWeakWordSentenceSignal` builds per-word reading strength
+from local history (`src/lib/wordEvidence.ts` → `src/lib/wordStrength.ts`:
+word `reading_retrieval`/`reading_production` reviews count as recall,
+walkthroughs and sentence reviews as exposure counted over distinct sentences
+with a cap, a right multiple-choice pick as almost nothing; failures fade in
+about two weeks and are capped; words with no evidence are unseen, not weak)
+and greedily picks the sentences that cover the most uncovered weak words
+(`planWeakWordSentences`, words with strength under 0.3 only). The step's
+reason line names them ("Practises words that haven't stuck: …"). This is
+selection only: no due dates, no FSRS effect, and the sentence schedule stays
+the only "when". The model has no meaning-recall evidence yet and the
+JMdict-frequency prior (`scripts/lib/jmdictFrequency.ts`) is used only by
+`npm run diagnose:word-strength`, not in the app.
+
 **Quiet mode** (`settings.quietMode`, per-device, toggle on both Settings
 and Home): when the learner can't speak aloud, `getSessionPlannerInput`
 returns an empty `shadowCandidates` list, so no shadowing steps are drafted

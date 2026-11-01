@@ -1,5 +1,7 @@
 import { openContentReports, type OpenContentReport } from '../lib/contentReports';
 import { isSentenceLedFlow } from '../lib/sentenceLed';
+import { buildWordEvidence } from '../lib/wordEvidence';
+import { planWeakWordSentences, wordStrength } from '../lib/wordStrength';
 import { buildSentenceLessonReport, type SentenceLessonReport } from '../lib/sentenceLessonReport';
 import { parkedSentenceIds } from '../lib/glossSkill';
 import { getMeaningBank } from '../lib/meaningChoices';
@@ -10988,6 +10990,49 @@ async function getRecentlyMissedClozeSentenceIds(): Promise<Set<string>> {
  * cloze reviews can clear a stale "missed twice" state, so it would pin the
  * same sentences to the front of every session.
  */
+/**
+ * Which of `sentenceIds` cover the learner's weakest words, from local review
+ * and walkthrough history (`wordStrength.ts`; selection only, no due dates).
+ * `order` is the pick order and `labels` names each pick's weak words for the
+ * planner's reason line. Empty when no word is weak enough.
+ */
+export async function getWeakWordSentenceSignal(
+  sentenceIds: string[],
+): Promise<{ order: string[]; labels: Map<string, string[]> }> {
+  if (sentenceIds.length === 0) return { order: [], labels: new Map() };
+  const db = getDb();
+  const [links, studyItems, reviews, events, vocab] = await Promise.all([
+    db.sentenceVocabulary.toArray(),
+    db.studyItems.toArray(),
+    db.reviews.toArray(),
+    db.sentenceLearningEvents.toArray(),
+    db.vocabularyItems.toArray(),
+  ]);
+  const wordsBySentence = new Map<string, string[]>();
+  for (const link of links) {
+    const list = wordsBySentence.get(link.sentenceId);
+    if (list) list.push(link.vocabularyItemId);
+    else wordsBySentence.set(link.sentenceId, [link.vocabularyItemId]);
+  }
+  const evidence = buildWordEvidence({ reviews, studyItems, wordsBySentence, learningEvents: events });
+  const now = Date.now();
+  const strengthByWord = new Map<string, number>();
+  for (const wordId of new Set(sentenceIds.flatMap((id) => wordsBySentence.get(id) ?? []))) {
+    // Words with no evidence at all are unseen, not weak — leave them out.
+    if (evidence.has(wordId)) strengthByWord.set(wordId, wordStrength(evidence.get(wordId)!, 'reading', now));
+  }
+  const plan = planWeakWordSentences(
+    sentenceIds.map((sentenceId) => ({ sentenceId, wordIds: wordsBySentence.get(sentenceId) ?? [] })),
+    strengthByWord,
+  );
+  const expressionById = new Map(vocab.map((item) => [item.id, item.expression]));
+  const labels = new Map<string, string[]>();
+  for (const [sentenceId, wordIds] of plan.weakWordsBySentence) {
+    labels.set(sentenceId, wordIds.map((id) => expressionById.get(id)).filter((x): x is string => Boolean(x)));
+  }
+  return { order: plan.order, labels };
+}
+
 async function findShadowCandidates(
   limit: number,
   activeSentenceIds: Set<string>,
@@ -11023,6 +11068,8 @@ async function findShadowCandidates(
       .map(([id]) => id),
   );
   const bookIdBySentenceId = new Map(bookSentences.map((item) => [item.sentenceId, item.bookId]));
+  const weakWords = await getWeakWordSentenceSignal(sentenceIdsWithAudio);
+  const weakRank = new Map(weakWords.order.map((id, rank) => [id, rank]));
 
   return sentenceIdsWithAudio
     .map((sentenceId, index) => ({
@@ -11031,25 +11078,37 @@ async function findShadowCandidates(
       attemptCount: attemptCountBySentenceId.get(sentenceId) ?? 0,
       recentlyMissedCloze: recentlyMissedClozeSentenceIds.has(sentenceId),
       requested: requestedSentenceIds.has(sentenceId),
+      weakRank: weakRank.get(sentenceId),
     }))
     .filter((candidate): candidate is typeof candidate & { sentence: Sentence } => Boolean(candidate.sentence))
     .filter((candidate) => !snoozedSentenceIds.has(candidate.sentenceId))
     .sort((a, b) => {
       if (a.requested !== b.requested) return a.requested ? -1 : 1;
       if (a.recentlyMissedCloze !== b.recentlyMissedCloze) return a.recentlyMissedCloze ? -1 : 1;
+      // Sentences covering the weakest words come next, in coverage order, ahead of the plain fewest-attempts fallback.
+      if (a.weakRank !== b.weakRank) {
+        if (a.weakRank === undefined) return 1;
+        if (b.weakRank === undefined) return -1;
+        return a.weakRank - b.weakRank;
+      }
       return a.attemptCount - b.attemptCount;
     })
     .slice(0, limit)
-    .map((candidate) => ({
-      sentenceId: candidate.sentenceId,
-      bookId: bookIdBySentenceId.get(candidate.sentenceId),
-      label: candidate.sentence.japanese.slice(0, 24),
-      reason: candidate.requested
-        ? `You flagged the sound in review — ${shadowAttemptSummary(candidate.attemptCount).toLowerCase()}`
-        : candidate.recentlyMissedCloze
-        ? `Missed in review — ${shadowAttemptSummary(candidate.attemptCount).toLowerCase()}`
-        : shadowAttemptSummary(candidate.attemptCount),
-    }));
+    .map((candidate) => {
+      const weakLabels = weakWords.labels.get(candidate.sentenceId) ?? [];
+      return {
+        sentenceId: candidate.sentenceId,
+        bookId: bookIdBySentenceId.get(candidate.sentenceId),
+        label: candidate.sentence.japanese.slice(0, 24),
+        reason: candidate.requested
+          ? `You flagged the sound in review — ${shadowAttemptSummary(candidate.attemptCount).toLowerCase()}`
+          : candidate.recentlyMissedCloze
+          ? `Missed in review — ${shadowAttemptSummary(candidate.attemptCount).toLowerCase()}`
+          : weakLabels.length > 0
+          ? `Practises words that haven't stuck: ${weakLabels.join('、')} — ${shadowAttemptSummary(candidate.attemptCount).toLowerCase()}`
+          : shadowAttemptSummary(candidate.attemptCount),
+      };
+    });
 }
 
 /**
