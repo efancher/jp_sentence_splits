@@ -90,6 +90,9 @@ export function KaraokeSentenceText({
   vocabularySuggestions,
   targetVocabulary,
   rubySegments,
+  isWordTappable,
+  onWordTap,
+  selectedWordStart,
 }: {
   japanese: string;
   readingOnly?: string;
@@ -97,6 +100,11 @@ export function KaraokeSentenceText({
   targetVocabulary?: TargetVocabulary[];
   /** Furigana to draw over the tokens (e.g. only the words not yet learned). */
   rubySegments?: PositionedSegment[];
+  /** Tokens the caller handles itself (instead of the gloss popup, which would show the answer). */
+  isWordTappable?: (token: SentenceToken) => boolean;
+  onWordTap?: (token: SentenceToken) => void;
+  /** Start offset of the token the caller currently has selected. */
+  selectedWordStart?: number;
 }) {
   const wordRefs = useRef<Array<HTMLSpanElement | null>>([]);
   const [glossPopup, setGlossPopup] = useState<{ text: string; left: number; top: number } | null>(
@@ -135,8 +143,19 @@ export function KaraokeSentenceText({
             ref={(el) => {
               wordRefs.current[index] = el;
             }}
-            className={`karaoke-word${index === displayedTokenIndex ? ' karaoke-word-active' : ''}${token.gloss ? ' karaoke-word-tappable' : ''}`}
-            {...(token.gloss
+            className={`karaoke-word${index === displayedTokenIndex || (selectedWordStart !== undefined && token.start === selectedWordStart && isWordTappable?.(token)) ? ' karaoke-word-active' : ''}${token.gloss || isWordTappable?.(token) ? ' karaoke-word-tappable' : ''}`}
+            {...(isWordTappable?.(token) && onWordTap
+              ? {
+                  role: 'button',
+                  tabIndex: 0,
+                  onClick: () => onWordTap(token),
+                  onKeyDown: (event: KeyboardEvent) => {
+                    if (event.key !== 'Enter' && event.key !== ' ') return;
+                    event.preventDefault();
+                    onWordTap(token);
+                  },
+                }
+              : token.gloss
               ? {
                   role: 'button',
                   tabIndex: 0,

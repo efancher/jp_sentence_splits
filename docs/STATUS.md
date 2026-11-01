@@ -83,14 +83,18 @@ and possible extensions. This snapshot does not certify a live deployment.
   covered (its test contexts refuse the audio Blob; a later change runs the spec in WebKit through a
   disk-backed profile). Word check hides the word
   help and translation while it is open so they do not answer it.
-- **Tap-a-word feedback (2026-11-01).** In chapter mode the focused sentence lists its content
-  words ("Tap a word:"). Tapping one asks separately about its reading and meaning ("I knew it" /
-  "I didn't"), then shows both. It logs `target_practice` events (`vocab-read:<id>` for reading,
-  `vocab:<id>` for meaning, `assessmentSource: 'self'`): `target_masked` when that facet was hidden
-  at the time (plain text / known word / no word help) counts as recall, `explanation_hidden` when
-  it was showing counts as recognition. Evidence only: no `Review`, no study item, no FSRS.
-  The chips hide while Word check, Ear tiles, Dictation or an unrevealed Read check is open. The
-  study tools sit in a sticky side rail at every width.
+- **Tap-a-word feedback (2026-11-01).** On the selected sentence each content word in the
+  sentence line is itself a button (plain, new-word-furigana and furigana text modes; the
+  walkthrough's "Words in this sentence" list items are buttons too). Tapping one asks separately
+  about its reading and meaning ("I knew it" / "I didn't"), then shows both; the panel sits under
+  the line, or under the walkthrough while one is open, and works during shadowing because the
+  line stays above the docked panel. It logs `target_practice` events (`vocab-read:<id>` for
+  reading, `vocab:<id>` for meaning, `assessmentSource: 'self'`): `target_masked` when that facet
+  was hidden at the time (plain text / known word / no word help) counts as recall,
+  `explanation_hidden` when it was showing counts as recognition. Evidence only: no `Review`, no
+  study item, no FSRS. Taps are ignored (and the panel hidden) while Word check, Ear tiles,
+  Dictation or an unrevealed Read check is open. The study tools sit in a sticky side rail at
+  every width.
 - **Read checks and docked shadowing (2026-11-01).** The reader's 📖 Read check shows the
   sentence plain, reveals help and meaning on request, and logs the learner's own call as a
   `gist_check` event (no `Review`, no FSRS). `sentencesDueForReadCheck` (`src/lib/readCheck.ts`)

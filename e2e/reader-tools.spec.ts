@@ -247,9 +247,10 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 
     await page.setViewportSize(viewport);
     await seed(page);
     await page.goto('/#/books/book/read?chapter=ch');
-    const chips = page.getByRole('group', { name: 'Words in this sentence' });
-    await expect(chips).toBeVisible();
-    await chips.getByRole('button', { name: '猫' }).click();
+    // The word in the sentence line is itself the button.
+    const word = page.getByRole('button', { name: '猫', exact: true });
+    await expect(word).toBeVisible();
+    await word.click();
 
     const panel = page.getByRole('group', { name: 'Word feedback' });
     await expect(panel).toBeVisible();
@@ -272,8 +273,9 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 
     expect(stored.reviews).toBe(0);
     expect(stored.studyItems).toBe(0);
 
-    // The word chips step aside while a tool that would reveal words is open.
+    // Taps step aside while a tool that would reveal words is open.
     await page.getByRole('button', { name: 'Word check' }).click();
-    await expect(chips).toHaveCount(0);
+    await expect(panel).toHaveCount(0);
+    await expect(word).toHaveCount(0);
   });
 }

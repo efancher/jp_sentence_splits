@@ -130,10 +130,11 @@ export function ReaderPage() {
     { sentenceId: string; kind: 'meaning'; visitId: string } |
     { sentenceId: string; kind: 'recall'; visitId: string; revealed: boolean } |
     { sentenceId: string; kind: 'shadow'; visitId: string } |
-    { sentenceId: string; kind: 'word'; visitId: string; vocabularyItemId: string } |
     { sentenceId: string; kind: 'tiles'; visitId: string; puzzle: EarTilesPuzzle; progress: EarTilesProgress } |
     undefined
   >();
+  /** The word the learner tapped for "did you know it" feedback; independent of the study tools so it works during a walkthrough or shadowing. */
+  const [tappedWord, setTappedWord] = useState<{ sentenceId: string; vocabularyItemId: string; visitId: string } | undefined>();
   /** Per-sentence override of the default word help: show every word, or none. */
   const [wordHelpOverride, setWordHelpOverride] = useState<Map<string, 'all' | 'none'>>(() => new Map());
   const rowRefs = useRef<Array<HTMLDivElement | null>>([]);
@@ -439,11 +440,37 @@ export function ReaderPage() {
 
   function toggleWordFeedback(sentence: Sentence, word: ReaderWord) {
     setToolNotice(undefined);
-    if (readerTool?.kind === 'word' && readerTool.sentenceId === sentence.id && readerTool.vocabularyItemId === word.vocabularyItemId) {
-      setReaderTool(undefined);
+    if (tappedWord?.sentenceId === sentence.id && tappedWord.vocabularyItemId === word.vocabularyItemId) {
+      setTappedWord(undefined);
       return;
     }
-    setReaderTool({ sentenceId: sentence.id, kind: 'word', visitId: createId('visit'), vocabularyItemId: word.vocabularyItemId });
+    setTappedWord({ sentenceId: sentence.id, vocabularyItemId: word.vocabularyItemId, visitId: createId('visit') });
+  }
+
+  /** Whether a tool that would give a word away is open on the sentence (taps are then ignored). */
+  function wordTapsBlocked(sentenceId: string): boolean {
+    const tool = readerTool?.sentenceId === sentenceId ? readerTool : undefined;
+    return tool?.kind === 'meaning' || tool?.kind === 'tiles' || tool?.kind === 'dictate' || (tool?.kind === 'recall' && !tool.revealed);
+  }
+
+  /** The tap-a-word feedback panel for a sentence, or null. */
+  function wordFeedbackPanel(sentence: Sentence) {
+    if (tappedWord?.sentenceId !== sentence.id || wordTapsBlocked(sentence.id)) return null;
+    const word = (data?.wordsBySentence.get(sentence.id) ?? []).find((item) => item.vocabularyItemId === tappedWord.vocabularyItemId);
+    if (!word) return null;
+    const hidden = wordHelpHidden(sentence, word);
+    return (
+      <WordFeedbackPanel
+        key={`${tappedWord.visitId}:${word.vocabularyItemId}`}
+        word={word}
+        readingHidden={hidden.readingHidden}
+        meaningHidden={hidden.meaningHidden}
+        onRecord={(facet, outcome) =>
+          recordWordFeedback(sentence.id, tappedWord.visitId, word, facet, facet === 'reading' ? hidden.readingHidden : hidden.meaningHidden, outcome)
+        }
+        onClose={() => setTappedWord(undefined)}
+      />
+    );
   }
 
   /** A Read check's self-judged call: the same `gist_check` evidence the walkthrough logs, so the sentence journey and its spacing see it. */
@@ -602,15 +629,29 @@ export function ReaderPage() {
       displayMode === 'new'
         ? newWordSegments(sentence.japanese, sentence.inlineReading, sentence.vocabularySuggestions, data?.knownExpressions ?? new Set())
         : null;
-    if ((displayMode === 'plain' || displayMode === 'new') && isActive && audio) {
-      return (
-        <KaraokeSentenceText
-          japanese={sentence.japanese}
-          vocabularySuggestions={sentence.vocabularySuggestions}
-          targetVocabulary={sentence.targetVocabulary}
-          rubySegments={newWordRuby ?? undefined}
-        />
-      );
+    // On the selected sentence each content word is itself the "did you know it" button.
+    const words = chapterMode && sentence.id === focusedId && !wordTapsBlocked(sentence.id) ? data?.wordsBySentence.get(sentence.id) ?? [] : [];
+    const wordAt = (token: { text: string }) => words.find((word) => word.surface === token.text);
+    const tappable = words.length > 0 && (displayMode === 'plain' || displayMode === 'new' || displayMode === 'furigana');
+    if (tappable || ((displayMode === 'plain' || displayMode === 'new') && isActive && audio)) {
+      const ruby =
+        displayMode === 'furigana'
+          ? newWordSegments(sentence.japanese, sentence.inlineReading, sentence.vocabularySuggestions, new Set())
+          : newWordRuby;
+      if (displayMode !== 'furigana' || ruby) {
+        const selectedWord = tappedWord?.sentenceId === sentence.id ? words.find((word) => word.vocabularyItemId === tappedWord.vocabularyItemId) : undefined;
+        return (
+          <KaraokeSentenceText
+            japanese={sentence.japanese}
+            vocabularySuggestions={sentence.vocabularySuggestions}
+            targetVocabulary={sentence.targetVocabulary}
+            rubySegments={ruby ?? undefined}
+            isWordTappable={tappable ? (token) => wordAt(token) !== undefined : undefined}
+            onWordTap={tappable ? (token) => { const word = wordAt(token); if (word) toggleWordFeedback(sentence, word); } : undefined}
+            selectedWordStart={selectedWord ? sentence.japanese.indexOf(selectedWord.surface) : undefined}
+          />
+        );
+      }
     }
     if (newWordRuby) {
       return (
@@ -938,30 +979,7 @@ export function ReaderPage() {
                     const tile = dictating ? buildTileDictation(row.sentence, readerTool.tile) : null;
                     return tile ? <DictationBlankLine tile={tile} /> : sentenceLine(row.sentence, isActive, audio);
                   })()}
-                  {(() => {
-                    // Tap a word to say whether you knew it. Hidden while a tool that would reveal words is open.
-                    const words = data.wordsBySentence.get(row.sentence.id) ?? [];
-                    const tool = readerTool?.sentenceId === row.sentence.id ? readerTool : undefined;
-                    const hidesWords =
-                      tool?.kind === 'meaning' || tool?.kind === 'tiles' || tool?.kind === 'dictate' || (tool?.kind === 'recall' && !tool.revealed);
-                    if (!chapterMode || row.sentence.id !== focusedId || words.length === 0 || hidesWords) return null;
-                    return (
-                      <div className="row" role="group" aria-label="Words in this sentence" style={{ gap: '0.3rem', flexWrap: 'wrap', alignItems: 'center' }}>
-                        <span className="muted" style={{ fontSize: '0.8rem' }}>Tap a word:</span>
-                        {words.map((word) => (
-                          <button
-                            key={word.vocabularyItemId}
-                            type="button"
-                            className="ghost jp"
-                            aria-pressed={tool?.kind === 'word' && tool.vocabularyItemId === word.vocabularyItemId}
-                            onClick={() => toggleWordFeedback(row.sentence, word)}
-                          >
-                            {word.surface}
-                          </button>
-                        ))}
-                      </div>
-                    );
-                  })()}
+                  {walkthroughId === row.sentence.id ? null : wordFeedbackPanel(row.sentence)}
                   {(() => {
                     if (readerTool?.sentenceId !== row.sentence.id) return null;
                     if (readerTool.kind === 'dictate') {
@@ -1013,24 +1031,6 @@ export function ReaderPage() {
                             finish={<button type="button" onClick={() => setReaderTool(undefined)}>Done</button>}
                           />
                         </div>
-                      );
-                    }
-                    if (readerTool.kind === 'word') {
-                      const tool = readerTool;
-                      const word = (data.wordsBySentence.get(row.sentence.id) ?? []).find((item) => item.vocabularyItemId === tool.vocabularyItemId);
-                      if (!word) return null;
-                      const hidden = wordHelpHidden(row.sentence, word);
-                      return (
-                        <WordFeedbackPanel
-                          key={`${tool.visitId}:${word.vocabularyItemId}`}
-                          word={word}
-                          readingHidden={hidden.readingHidden}
-                          meaningHidden={hidden.meaningHidden}
-                          onRecord={(facet, outcome) =>
-                            recordWordFeedback(row.sentence.id, tool.visitId, word, facet, facet === 'reading' ? hidden.readingHidden : hidden.meaningHidden, outcome)
-                          }
-                          onClose={() => setReaderTool(undefined)}
-                        />
                       );
                     }
                     if (readerTool.kind === 'shadow') {
@@ -1203,6 +1203,10 @@ export function ReaderPage() {
                       focusTargets={walkthroughFocus}
                       episodeSentences={episodeSentences}
                       compareAids={compareAids}
+                      onWordTap={(expression) => {
+                        const word = (data.wordsBySentence.get(row.sentence.id) ?? []).find((item) => item.expression === expression);
+                        if (word && !wordTapsBlocked(row.sentence.id)) toggleWordFeedback(row.sentence, word);
+                      }}
                       constructionDrafts={data.constructionDrafts}
                       contextWalkthrough={data.contextWalkthroughs[row.sentence.id]}
                       importTarget={row.membership.chapterId ? { bookId, chapterId: row.membership.chapterId } : undefined}
@@ -1229,6 +1233,7 @@ export function ReaderPage() {
                       onClose={() => setWalkthroughId(undefined)}
                     />
                   ) : null}
+                  {walkthroughId === row.sentence.id ? wordFeedbackPanel(row.sentence) : null}
                   {revealedStructures.has(row.sentence.id)
                     ? (() => {
                         const { chunks: shown, source } = walkthroughChunks(

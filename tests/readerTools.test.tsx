@@ -283,8 +283,9 @@ describe('reader study tools', () => {
   it('lets the learner tap a word and say whether they knew its reading and meaning, as evidence only', async () => {
     const user = userEvent.setup();
     renderReader();
-    const chips = await screen.findByRole('group', { name: 'Words in this sentence' });
-    await user.click(within(chips).getByRole('button', { name: '猫' }));
+    // The word in the sentence line is itself the button; there is no second list of words.
+    expect(screen.queryByRole('group', { name: 'Words in this sentence' })).not.toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: '猫' }));
     const panel = await screen.findByRole('group', { name: 'Word feedback' });
     const buttons = within(panel).getAllByRole('button', { name: 'I knew it' });
     await user.click(buttons[0]!);
@@ -300,6 +301,11 @@ describe('reader study tools', () => {
     });
     expect(await getDb().reviews.count()).toBe(0);
     expect(await getDb().studyItems.count()).toBe(0);
+
+    // A tool that would give the word away stops the line from taking taps and drops the panel.
+    await user.click(screen.getByRole('button', { name: 'Word check' }));
+    expect(screen.queryByRole('group', { name: 'Word feedback' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '猫' })).not.toBeInTheDocument();
   });
 
   it('closes the tool when another sentence is chosen', async () => {

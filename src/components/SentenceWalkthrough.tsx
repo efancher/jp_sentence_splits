@@ -128,6 +128,7 @@ export function SentenceWalkthrough({
   focusTargets,
   episodeSentences = [],
   compareAids,
+  onWordTap,
   constructionDrafts,
   contextWalkthrough,
   importTarget,
@@ -152,6 +153,8 @@ export function SentenceWalkthrough({
   episodeSentences?: CompareSentence[];
   /** Translation, word glosses and native audio per episode sentence, shown under Compare uses excerpts. */
   compareAids?: ReadonlyMap<string, CompareAids>;
+  /** Tapping a word in the word list asks the host to open its "did you know it" feedback. */
+  onWordTap?: (expression: string) => void;
   /** AI-drafted construction layers per sentence id (validated against the live text here). */
   constructionDrafts?: Record<string, ConstructionLayer[]>;
   /** AI-drafted contextual walkthrough for this sentence; the main content when it still matches the text. */
@@ -507,7 +510,7 @@ export function SentenceWalkthrough({
       {compareAids?.get(sentence.id)?.words.length ? (
         <div className="stack" style={{ gap: '0.15rem' }}>
           <span className="muted">Words in this sentence:</span>
-          <WordGlossList words={compareAids.get(sentence.id)!.words} />
+          <WordGlossList words={compareAids.get(sentence.id)!.words} onWordTap={onWordTap} />
         </div>
       ) : null}
       <div className="row">
