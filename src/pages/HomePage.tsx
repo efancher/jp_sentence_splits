@@ -92,8 +92,8 @@ function WeakWordRevisitExplainer() {
       }}
     >
       <summary>Why no Word check?</summary>
-      {rows === undefined || rows === 'loading' ? (
-        <p className="muted">Loading…</p>
+      {rows === undefined ? null : rows === 'loading' ? (
+        <p className="muted">Checking…</p>
       ) : rows.length === 0 ? (
         <p className="muted">No sentence has a completed walkthrough yet, so nothing can be brought back.</p>
       ) : (
