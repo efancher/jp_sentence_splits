@@ -4,6 +4,7 @@ import { isReadingAnswerCorrect, surfaceReadingFromInline } from '../lib/reading
 import { buildWordEvidence } from '../lib/wordEvidence';
 import { loadWordFrequency, lookupWordBand } from '../lib/wordFrequency';
 import { frequencyBandPrior, planWeakWordSentences, READER_KNOWN_STRENGTH, wordStrength } from '../lib/wordStrength';
+import { explainWeakWordSentences, type WeakWordExplanation } from '../lib/weakWordExplain';
 import { buildSentenceLessonReport, type SentenceLessonReport } from '../lib/sentenceLessonReport';
 import { parkedSentenceIds } from '../lib/glossSkill';
 import { getMeaningBank } from '../lib/meaningChoices';
@@ -11132,6 +11133,38 @@ export async function getWeakWordSentenceSignal(
     );
   }
   return { order: plan.order, labels };
+}
+
+/**
+ * Read-only explanation for the Home planner: for the walked-through sentences
+ * (those with a completed walkthrough), whether each is waiting on a weak word,
+ * on the spacing gap, or has nothing weak. Uses the same strengths and
+ * thresholds as `findWeakWordRevisits`; changes nothing.
+ */
+export async function explainWeakWordRevisits(now: Date = new Date(), limit = 12): Promise<WeakWordExplanation[]> {
+  const db = getDb();
+  const walks = (await db.sentenceLearningEvents.toArray()).filter((event) => event.action === 'walkthrough_completed');
+  const lastWalk = new Map<string, string>();
+  for (const event of walks) {
+    const seen = lastWalk.get(event.sentenceId);
+    if (seen === undefined || event.timestamp > seen) lastWalk.set(event.sentenceId, event.timestamp);
+  }
+  if (lastWalk.size === 0) return [];
+  const ids = [...lastWalk.keys()];
+  const [rows, { strengthByWord, wordsBySentence, vocabById }] = await Promise.all([
+    db.sentences.bulkGet(ids),
+    loadWordReadingStrengths(),
+  ]);
+  const previews = new Map(ids.map((id, i) => [id, rows[i]?.japanese.slice(0, 24) ?? '']));
+  return explainWeakWordSentences({
+    sentences: ids.map((sentenceId) => ({ sentenceId, preview: previews.get(sentenceId)!, lastWalkedAt: lastWalk.get(sentenceId)! })),
+    wordsBySentence,
+    strengthByWord,
+    expressionOf: (id) => vocabById.get(id)?.expression,
+    now,
+    minGapDays: WEAK_WORD_REVISIT_MIN_GAP_DAYS,
+    minWeakness: 0.7,
+  }).slice(0, limit);
 }
 
 /**

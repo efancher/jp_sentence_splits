@@ -8,10 +8,12 @@ import {
   addMinutesToTodaySession,
   computeLearningBalance,
   deleteTodayPlannerSession,
+  explainWeakWordRevisits,
   getTodayPlannerSession,
   updateSettings,
 } from '../db/repository';
 import type { PlannerStepStatus, SessionBucket } from '../domain/types';
+import type { WeakWordExplanation } from '../lib/weakWordExplain';
 import { ALL_SESSION_BUCKETS } from '../lib/sessionPlanner';
 import { SESSION_STEP_CATEGORY_LABELS, sessionStepCategory } from '../lib/sessionStepCategory';
 import {
@@ -75,6 +77,38 @@ function formatDaysSince(days: number | null): string {
   if (days < 1) return 'today';
   const rounded = Math.round(days);
   return `${rounded}d ago`;
+}
+
+/** Why walked-through sentences are (or are not) being brought back for weak words, loaded only when opened. */
+function WeakWordRevisitExplainer() {
+  const [rows, setRows] = useState<WeakWordExplanation[] | 'loading' | undefined>();
+  return (
+    <details
+      className="panel"
+      onToggle={(event) => {
+        if (!event.currentTarget.open || rows !== undefined) return;
+        setRows('loading');
+        void explainWeakWordRevisits().then(setRows, () => setRows([]));
+      }}
+    >
+      <summary>Why no Word check?</summary>
+      {rows === undefined || rows === 'loading' ? (
+        <p className="muted">Loading…</p>
+      ) : rows.length === 0 ? (
+        <p className="muted">No sentence has a completed walkthrough yet, so nothing can be brought back.</p>
+      ) : (
+        <ul className="stack" style={{ gap: '0.4rem', paddingLeft: '1.1rem', margin: '0.4rem 0 0' }}>
+          {rows.map((row) => (
+            <li key={row.sentenceId}>
+              <span className="jp">{row.preview}</span>{' '}
+              <strong>{row.verdict === 'eligible' ? 'can be revisited' : row.verdict === 'too_soon' ? 'too soon' : 'nothing weak'}</strong>
+              <div className="muted" style={{ fontSize: '0.85rem' }}>{row.detail}</div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </details>
+  );
 }
 
 export function HomePage() {
@@ -312,6 +346,8 @@ export function HomePage() {
       </section>
 
       <DailyPracticePanel />
+
+      <WeakWordRevisitExplainer />
 
       <section className="panel stack">
         <h3 style={{ margin: 0 }}>Learning balance (last 14 days)</h3>

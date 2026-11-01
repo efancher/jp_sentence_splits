@@ -75,7 +75,7 @@ and possible extensions. This snapshot does not certify a live deployment.
   per-sentence play/loop, new-word furigana (a word counts as known from card
   proficiency or reading strength of at least 0.6, so furigana and word help fade
   as a word strengthens), optional phrase/construction explanations, and
-  in-place Dictation (blanked phrase) and Word check (self-judged meaning) tools
+  in-place Dictation (blanked phrase), Ear Tiles (slots in the sentence line) and Word check (self-judged meaning) tools
   that log lesson evidence and feed the word-strength model's meaning facet.
   The two new tools have component tests and a Chromium browser spec
   (`e2e/reader-tools.spec.ts`, 390px and 1280px: no horizontal overflow, rail

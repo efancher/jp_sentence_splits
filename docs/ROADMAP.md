@@ -695,7 +695,7 @@ control).
   then shadowing last, keeping the old pages working throughout.
   *Progress (2026-11-01):* (1) and (2) shipped; the dictation blank and a
   self-judged word-meaning check now run in the reader, and the walkthrough was
-  already hosted there. Left: Ear Tiles placed in the episode text, shadowing as
+  already hosted there. Ear Tiles now run in place (slots in the sentence line, bank below; same day). Left: shadowing as
   a docked panel (pitch contour, recording; iOS gesture-gated audio), Word
   checks beyond weak-word revisits (the planner only drafts them beside those,
   max 2 a plan, and not yet in a browser spec for the step route), and a

@@ -7,6 +7,7 @@ import {
   createBook,
   ensureStudyItem,
   ensureVocabularyItem,
+  explainWeakWordRevisits,
   getDb,
   getSessionPlannerInput,
   updateSettings,
@@ -136,6 +137,16 @@ describe('weak words bring walked-through sentences back for a walkthrough', () 
     const report = buildSentenceLessonReport([], [session]);
     expect(session.steps.some((step) => step.wordCheck)).toBe(true);
     expect(report.planned.lessons).toBe(lessons.length);
+  });
+
+  it('explains the same decisions the planner makes, without changing anything', async () => {
+    const { weak, tooSoon, plain } = await setup();
+    const rows = await explainWeakWordRevisits();
+    const verdict = new Map(rows.map((row) => [row.sentenceId, row.verdict]));
+    expect(verdict.get(weak.id)).toBe('eligible');
+    expect(verdict.get(tooSoon.id)).toBe('too_soon');
+    expect(verdict.get(plain.id)).toBe('no_words');
+    expect(await getDb().plannerSessions.count()).toBe(0);
   });
 
   it('names the weak words in the drafted step', async () => {
