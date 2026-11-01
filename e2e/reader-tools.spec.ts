@@ -241,3 +241,39 @@ test('a planner shadowing step opens the docked shadowing panel in the reader', 
   await page.getByRole('button', { name: 'Close shadowing' }).click();
   await expect(panel).toHaveCount(0);
 });
+
+for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 }]) {
+  test(`tapping a word logs your own reading and meaning calls at ${viewport.width}px`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await seed(page);
+    await page.goto('/#/books/book/read?chapter=ch');
+    const chips = page.getByRole('group', { name: 'Words in this sentence' });
+    await expect(chips).toBeVisible();
+    await chips.getByRole('button', { name: '猫' }).click();
+
+    const panel = page.getByRole('group', { name: 'Word feedback' });
+    await expect(panel).toBeVisible();
+    await expect(panel).not.toContainText('cat');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.screenshot({ path: test.info().outputPath(`word-feedback-${viewport.width}.png`), fullPage: true });
+    await panel.getByRole('button', { name: 'I knew it' }).first().click();
+    await panel.getByRole('button', { name: 'I didn’t' }).click();
+    await expect(panel).toContainText('cat');
+
+    await expect.poll(async () => (await storedCounts(page)).events.length).toBe(2);
+    const stored = await storedCounts(page);
+    const reading = stored.events.find((event) => event.target?.key === 'vocab-read:v-cat')!;
+    const meaning = stored.events.find((event) => event.target?.key === 'vocab:v-cat')!;
+    expect([reading.action, reading.outcome]).toEqual(['target_practice', 'got_it']);
+    expect([meaning.action, meaning.outcome]).toEqual(['target_practice', 'needed_help']);
+    expect(['target_masked', 'explanation_hidden']).toContain(reading.support);
+    expect(['target_masked', 'explanation_hidden']).toContain(meaning.support);
+    // Evidence only: no review or study item.
+    expect(stored.reviews).toBe(0);
+    expect(stored.studyItems).toBe(0);
+
+    // The word chips step aside while a tool that would reveal words is open.
+    await page.getByRole('button', { name: 'Word check' }).click();
+    await expect(chips).toHaveCount(0);
+  });
+}
