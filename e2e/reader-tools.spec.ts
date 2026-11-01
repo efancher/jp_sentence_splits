@@ -1,6 +1,21 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test as base, type Page } from '@playwright/test';
 
 import { buildCheckPuzzle } from '../src/lib/earTiles';
+
+// WebKit's ephemeral contexts cannot persist Blob data in IndexedDB (see e2e/AGENTS.md), so every
+// test runs in a disk-backed profile, the same way native-pitch-practice.spec.ts does.
+const test = base.extend({
+  context: async ({ playwright, browserName, baseURL, viewport, isMobile, deviceScaleFactor, hasTouch, userAgent }, provideContext, testInfo) => {
+    const context = await playwright[browserName].launchPersistentContext(testInfo.outputPath('browser-profile'), {
+      baseURL, viewport, isMobile, deviceScaleFactor, hasTouch, userAgent,
+    });
+    try {
+      await provideContext(context);
+    } finally {
+      await context.close();
+    }
+  },
+});
 
 const PIECES: [string, string, boolean][] = [
   ['私', '代名詞', false],

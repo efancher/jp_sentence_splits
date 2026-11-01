@@ -25,9 +25,6 @@ export default defineConfig({
     {
       name: 'webkit',
       use: { ...devices['iPhone 13'] },
-      // Needs real Blob storage for the dictation audio, which WebKit's ephemeral contexts refuse (see e2e/AGENTS.md).
-      // A project-level testIgnore replaces the top-level one, so the performance specs are listed again.
-      testIgnore: ['**/performance/**', 'reader-tools.spec.ts'],
     },
   ],
 });
