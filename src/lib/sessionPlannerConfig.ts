@@ -225,6 +225,14 @@ export const EXPLORE_SENTENCE_PREVIEW_LIMIT = 20;
 /** Sentence-first: most automatic "fresh try" revisits drafted per book in one plan, so revisits never crowd out new lessons. Learner-requested ones (review-card button) are exempt. */
 export const EXPLORE_REVISITS_PER_BOOK = 2;
 
+/**
+ * A walked-through sentence is only brought back for its weak words after this
+ * many days since its last walkthrough. A repeat walk of the same sentence adds
+ * no new reading exposure (exposure counts distinct sentences), so without a gap
+ * a still-weak word would pull the same sentence back every day.
+ */
+export const WEAK_WORD_REVISIT_MIN_GAP_DAYS = 3;
+
 /** How many not-yet-tracked grammar patterns to consider as candidates. */
 export const UNDERSTAND_CANDIDATE_LIMIT = 8;
 

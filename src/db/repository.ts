@@ -313,6 +313,7 @@ import {
   SHADOWING_MIN_INTRODUCED_RATIO,
   EXPLORE_CANDIDATE_LIMIT,
   EXPLORE_REVISITS_PER_BOOK,
+  WEAK_WORD_REVISIT_MIN_GAP_DAYS,
   isPausedLegacyDrillSubject,
   EXPLORE_SENTENCE_PREVIEW_LIMIT,
   GRAMMAR_NOTICING_CANDIDATE_LIMIT,
@@ -10630,6 +10631,32 @@ async function floatGrowthEligibleFirst<T extends { sentenceId: string }>(items:
   ];
 }
 
+/**
+ * Walked-through sentences worth another walkthrough for the weak words they
+ * contain: last walked at least WEAK_WORD_REVISIT_MIN_GAP_DAYS ago, not already
+ * `excluded`, ranked by `getWeakWordSentenceSignal`. Returns sentence id → the
+ * weak words to name in the step's reason, in pick order. Selection only.
+ */
+async function findWeakWordRevisits(
+  events: SentenceLearningEvent[],
+  excluded: ReadonlySet<string>,
+  limit: number,
+  now: Date = new Date(),
+): Promise<Map<string, string[]>> {
+  const lastWalk = new Map<string, string>();
+  for (const event of events) {
+    if (event.action !== 'walkthrough_completed') continue;
+    const seen = lastWalk.get(event.sentenceId);
+    if (seen === undefined || event.timestamp > seen) lastWalk.set(event.sentenceId, event.timestamp);
+  }
+  const cutoff = now.getTime() - WEAK_WORD_REVISIT_MIN_GAP_DAYS * 86_400_000;
+  const candidates = [...lastWalk]
+    .filter(([id, at]) => !excluded.has(id) && Date.parse(at) <= cutoff)
+    .map(([id]) => id);
+  const signal = await getWeakWordSentenceSignal(candidates);
+  return new Map(signal.order.slice(0, limit).map((id) => [id, signal.labels.get(id) ?? []]));
+}
+
 /** Explore candidates: books with sentences not yet started, most-recently-opened first ("continue where you left off" reusing Book.lastOpenedAt, the same signal BookDetailPage's touchBookOpened already maintains). */
 async function findExploreCandidates(
   limit: number,
@@ -10714,12 +10741,21 @@ async function findExploreCandidates(
     const shelvedIds = new Set(memberships.filter((item) => !notShelved(item)).map((item) => item.sentenceId));
     // The cap only keeps revisits from crowding out new lessons: with none waiting there is nothing to protect.
     const automaticRevisitCap = unstarted.length > 0 ? EXPLORE_REVISITS_PER_BOOK : EXPLORE_SENTENCE_PREVIEW_LIMIT;
+    // Walked-through sentences holding words that haven't stuck: the lowest-priority revisit source,
+    // so they only fill whatever room the learner's requests, parked checks and spaced tries leave.
+    const weakWordRevisits = sentenceFirst
+      ? await findWeakWordRevisits(
+          bookEvents,
+          new Set([...requestedIds, ...shelvedIds]),
+          automaticRevisitCap,
+        )
+      : new Map<string, string[]>();
     const revisitIds = sentenceFirst
       ? [
           ...new Set([
             ...requestedIds,
             // The per-book cap only throttles automatic revisits; ones the learner asked for are all kept.
-            ...[...new Set([...parkedGlossIds, ...sentencesDueForFreshTry(bookEvents)])]
+            ...[...new Set([...parkedGlossIds, ...sentencesDueForFreshTry(bookEvents), ...weakWordRevisits.keys()])]
               .filter((id) => !requestedIds.includes(id) && !shelvedIds.has(id))
               .slice(0, automaticRevisitCap),
           ]),
@@ -10748,6 +10784,9 @@ async function findExploreCandidates(
         vocabularyConfirmed: analysisRows[index]?.vocabularyReviewStatus === 'confirmed',
         ...(revisitSet.has(item.sentenceId) ? { revisit: true } : {}),
         ...(parkedGlossSet.has(item.sentenceId) ? { parkedGloss: true } : {}),
+        ...(revisitSet.has(item.sentenceId) && weakWordRevisits.get(item.sentenceId)?.length
+          ? { weakWords: weakWordRevisits.get(item.sentenceId) }
+          : {}),
         // Patched below, once readiness is known for every candidate
         // sentence at once (batched, not N+1) — see classifyExploreSentences
         // in sessionPlanner.ts for why continue_book waits on this too.

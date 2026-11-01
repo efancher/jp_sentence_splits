@@ -383,6 +383,8 @@ export interface ExploreCandidate {
     revisit?: boolean;
     /** A structure check was parked in this sentence; the revisit re-asks only that. */
     parkedGloss?: true;
+    /** Words in this walked-through sentence the learner hasn't retained; why it was brought back (`getWeakWordSentenceSignal`). */
+    weakWords?: string[];
   }[];
 }
 
@@ -665,6 +667,8 @@ function exploreStepFor(entry: ExploreSentenceEntry): PlannerStepDraft {
       estimatedMinutes: exploreEntryCost(entry),
       reason: sentence.parkedGloss
         ? `You parked a structure check in this sentence in ${candidate.label} — try it again`
+        : sentence.revisit && sentence.weakWords?.length
+        ? `Has words that haven't stuck: ${sentence.weakWords.join('、')} — walk through it again`
         : sentence.revisit
         ? `You walked through this in ${candidate.label} on an earlier day — try saying it without cues`
         : `Next sentence in ${candidate.label} — walk through it, practise a target, then try saying it`,
