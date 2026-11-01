@@ -534,6 +534,18 @@ export function buildTileDictation(
   };
 }
 
+/** First tile index at or after `from` that the sentence can be dictated from, wrapping; null when it has none. */
+export function nextDictationTile(
+  sentence: Pick<Sentence, 'japanese' | 'vocabularySuggestions'>,
+  from: number,
+): number | null {
+  for (let step = 0; step < CHECK_MAX_TILES; step += 1) {
+    const index = (from + step) % CHECK_MAX_TILES;
+    if (buildTileDictation(sentence, index)) return index;
+  }
+  return null;
+}
+
 /** A tile's text with whitespace and punctuation removed, so the same phrase compares equal across sentences. */
 export function dictationTileKey(text: string): string {
   return text.replace(/[\s、。，．！？!?「」『』（）()・…〜~ー]/g, '');

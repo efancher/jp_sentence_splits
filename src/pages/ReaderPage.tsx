@@ -5,6 +5,15 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ChunkPuzzleStrip } from '../components/ChunkPuzzleStrip';
 import { EpisodePreparationPanel } from '../components/EpisodePreparationPanel';
 import { KaraokeSentenceText } from '../components/KaraokeSentenceText';
+import {
+  DictationBlankLine,
+  DictationBlankPanel,
+  WordMeaningPanel,
+  type ReaderToolOutcome,
+} from '../components/ReaderTools';
+import { buildTileDictation, nextDictationTile } from '../lib/earTiles';
+import { createId } from '../lib/ids';
+import { meaningCheckTargetKey } from '../lib/wordEvidence';
 import { SentenceWalkthrough, walkthroughChunks } from '../components/SentenceWalkthrough';
 import { glossesFromWords } from '../lib/chunkGlosses';
 import { mergeChapterConstructionDrafts, mergeChapterWalkthroughs } from '../lib/contextWalkthrough';
@@ -90,6 +99,12 @@ export function ReaderPage() {
     () => new Set(),
   );
   const [walkthroughId, setWalkthroughId] = useState<string>();
+  /** The in-place study tool open on a sentence: a dictation blank (with its tile) or a word-meaning check. */
+  const [readerTool, setReaderTool] = useState<
+    { sentenceId: string; kind: 'dictate'; tile: number; visitId: string } |
+    { sentenceId: string; kind: 'meaning'; visitId: string } |
+    undefined
+  >();
   /** Per-sentence override of the default word help: show every word, or none. */
   const [wordHelpOverride, setWordHelpOverride] = useState<Map<string, 'all' | 'none'>>(() => new Map());
   const rowRefs = useRef<Array<HTMLDivElement | null>>([]);
@@ -272,6 +287,44 @@ export function ReaderPage() {
   function selectLine(id: string) {
     setSelectedId(id);
     if (walkthroughId && walkthroughId !== id) setWalkthroughId(undefined);
+    if (readerTool && readerTool.sentenceId !== id) setReaderTool(undefined);
+  }
+
+  function toggleReaderTool(sentence: Sentence, kind: 'dictate' | 'meaning') {
+    if (readerTool?.sentenceId === sentence.id && readerTool.kind === kind) {
+      setReaderTool(undefined);
+      return;
+    }
+    const visitId = createId('visit');
+    if (kind === 'meaning') {
+      setReaderTool({ sentenceId: sentence.id, kind, visitId });
+      return;
+    }
+    const tile = nextDictationTile(sentence, 0);
+    if (tile !== null) setReaderTool({ sentenceId: sentence.id, kind, tile, visitId });
+  }
+
+  /** The learner's own call from a reader tool, logged like every other lesson practice: evidence, never a rating. */
+  function recordReaderTool(
+    sentenceId: string,
+    visitId: string,
+    target: { kind: 'vocabulary' | 'expression'; key: string; label: string },
+    outcome: ReaderToolOutcome,
+  ) {
+    void logSentenceLearningEvent({
+      id: createId('sl_event'),
+      visitId,
+      action: 'target_practice',
+      sentenceId,
+      bookId,
+      chapterId,
+      target,
+      support: 'target_masked',
+      outcome,
+      assessmentSource: 'self',
+      quietMode: settings?.quietMode ?? false,
+      inventoryRevision: preparation?.sentenceFingerprint,
+    });
   }
   function translationDefaultShown(sentence: Sentence) {
     const help = sentenceWordHelp(sentence.vocabularySuggestions, data!.knownExpressions, data!.savedMeanings);
@@ -683,7 +736,57 @@ export function ReaderPage() {
                 ) : null}
                 <div className="stack" style={{ flex: 1, gap: '0.35rem' }}>
                   {chapterMode && audio ? playbackBar(index, audio) : null}
-                  {sentenceLine(row.sentence, isActive, audio)}
+                  {(() => {
+                    const dictating = readerTool?.kind === 'dictate' && readerTool.sentenceId === row.sentence.id;
+                    const tile = dictating ? buildTileDictation(row.sentence, readerTool.tile) : null;
+                    return tile ? <DictationBlankLine tile={tile} /> : sentenceLine(row.sentence, isActive, audio);
+                  })()}
+                  {(() => {
+                    if (readerTool?.sentenceId !== row.sentence.id) return null;
+                    if (readerTool.kind === 'dictate') {
+                      const tile = buildTileDictation(row.sentence, readerTool.tile);
+                      if (!tile) return null;
+                      const tool = readerTool;
+                      return (
+                        <DictationBlankPanel
+                          key={`${tool.visitId}:${tool.tile}`}
+                          tile={tile}
+                          hasAudio={Boolean(audio)}
+                          playing={isSequencePlaying && singleIndexRef.current === index}
+                          onPlay={() => toggleSentencePlay(index)}
+                          onAnotherPhrase={() => {
+                            const next = nextDictationTile(row.sentence, tool.tile + 1);
+                            if (next !== null) setReaderTool({ ...tool, tile: next });
+                          }}
+                          onRecord={(outcome) =>
+                            recordReaderTool(
+                              row.sentence.id,
+                              tool.visitId,
+                              { kind: 'expression', key: `dictation:${row.sentence.id}:${tool.tile}`, label: tile.text },
+                              outcome,
+                            )
+                          }
+                          onClose={() => setReaderTool(undefined)}
+                        />
+                      );
+                    }
+                    const tool = readerTool;
+                    return (
+                      <WordMeaningPanel
+                        key={tool.visitId}
+                        sentence={row.sentence}
+                        onRecord={(outcome, word) =>
+                          recordReaderTool(
+                            row.sentence.id,
+                            tool.visitId,
+                            { kind: 'vocabulary', key: meaningCheckTargetKey(word.vocabularyItemId), label: word.expression },
+                            outcome,
+                          )
+                        }
+                        onClose={() => setReaderTool(undefined)}
+                      />
+                    );
+                  })()}
                   {(() => {
                     const here = walkthroughFocus.filter((target) => target.sentenceIds.includes(row.sentence.id));
                     return here.length > 0 ? (
@@ -757,6 +860,12 @@ export function ReaderPage() {
                     >
                       {revealedStructures.has(row.sentence.id) ? 'Hide structure' : 'Show structure'}
                     </button>
+                    {audio ? (
+                      <button type="button" aria-pressed={readerTool?.sentenceId === row.sentence.id && readerTool.kind === 'dictate'}
+                        onClick={() => toggleReaderTool(row.sentence, 'dictate')}>Dictation</button>
+                    ) : null}
+                    <button type="button" aria-pressed={readerTool?.sentenceId === row.sentence.id && readerTool.kind === 'meaning'}
+                      onClick={() => toggleReaderTool(row.sentence, 'meaning')}>Word check</button>
                     </>)}
                   </div>
                   {(() => {
@@ -876,6 +985,15 @@ export function ReaderPage() {
             <button type="button" className="icon-button" aria-pressed={walking} aria-expanded={walking}
               aria-label="Walk through" title="Walk through this sentence"
               onClick={() => setWalkthroughId(walking ? undefined : focusedRow.sentence.id)}>🚶</button>
+            <button type="button" className="icon-button"
+              aria-pressed={readerTool?.sentenceId === focusedRow.sentence.id && readerTool.kind === 'dictate'}
+              aria-label="Dictation" title="Dictation: type a blanked phrase from what you hear"
+              disabled={!audioByRow[focusedIndex]}
+              onClick={() => toggleReaderTool(focusedRow.sentence, 'dictate')}>🎧</button>
+            <button type="button" className="icon-button"
+              aria-pressed={readerTool?.sentenceId === focusedRow.sentence.id && readerTool.kind === 'meaning'}
+              aria-label="Word check" title="Word check: recall a word's meaning"
+              onClick={() => toggleReaderTool(focusedRow.sentence, 'meaning')}>💭</button>
             <button type="button" className="icon-button" aria-pressed={revealedStructures.has(focusedRow.sentence.id)}
               aria-label={revealedStructures.has(focusedRow.sentence.id) ? 'Hide structure' : 'Show structure'}
               title={revealedStructures.has(focusedRow.sentence.id) ? 'Hide structure' : 'Show structure'}

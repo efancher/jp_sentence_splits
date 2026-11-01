@@ -11031,6 +11031,7 @@ async function getRecentlyMissedClozeSentenceIds(): Promise<Set<string>> {
  */
 async function loadWordReadingStrengths(): Promise<{
   strengthByWord: Map<string, number>;
+  meaningStrengthOf: (wordId: string) => number;
   wordsBySentence: Map<string, string[]>;
   links: SentenceVocabulary[];
   vocabById: Map<string, VocabularyItem>;
@@ -11096,12 +11097,17 @@ async function loadWordReadingStrengths(): Promise<{
   // General-language frequency is a small starting score; the learner's own evidence moves a word off it.
   const frequency = await loadWordFrequency();
   const strengthByWord = new Map<string, number>();
-  for (const [wordId, items] of evidence) {
+  const priorOf = (wordId: string) => {
     const word = vocabById.get(wordId);
-    const prior = frequencyBandPrior(word ? lookupWordBand(frequency, word.expression, word.reading) : null);
-    strengthByWord.set(wordId, wordStrength(items, 'reading', now, { prior }));
+    return frequencyBandPrior(word ? lookupWordBand(frequency, word.expression, word.reading) : null);
+  };
+  for (const [wordId, items] of evidence) {
+    strengthByWord.set(wordId, wordStrength(items, 'reading', now, { prior: priorOf(wordId) }));
   }
-  return { strengthByWord, wordsBySentence, links, vocabById };
+  // Meaning strength for any word, met or not: it only learns from meaning recall, so it starts at the prior.
+  const meaningStrengthOf = (wordId: string) =>
+    wordStrength(evidence.get(wordId) ?? [], 'meaning', now, { prior: priorOf(wordId) });
+  return { strengthByWord, meaningStrengthOf, wordsBySentence, links, vocabById };
 }
 
 /**
@@ -11149,6 +11155,53 @@ export async function getWeakWordRecallTarget(
     const expectedReading = surfaceReadingFromInline(sentence.inlineReading, link.surfaceForm!);
     if (expectedReading) {
       return { japanese: link.surfaceForm!, expectedReading, vocabularyItemId: link.vocabularyItemId };
+    }
+  }
+  return undefined;
+}
+
+/**
+ * The word in a sentence whose meaning the learner is least sure of, for the
+ * reader's "What does this mean?" check: among the sentence's linked content
+ * words, the lowest meaning strength (ties go to the weaker reading, then id).
+ * Meaning only learns from recall, so a word never checked before ranks by its
+ * frequency prior alone. The check is self-judged and logged as evidence by
+ * `meaningCheckTargetKey`; it never touches FSRS.
+ */
+export async function getWordMeaningCheckTarget(
+  sentence: Pick<Sentence, 'id' | 'japanese' | 'vocabularySuggestions'>,
+): Promise<
+  { vocabularyItemId: string; expression: string; surface: string; reading: string; meaning: string } | undefined
+> {
+  const { strengthByWord, meaningStrengthOf, links, vocabById } = await loadWordReadingStrengths();
+  const contentSurfaces = new Map(
+    sentence.vocabularySuggestions.filter((item) => item.selectedByDefault).map((item) => [item.surface, item]),
+  );
+  const candidates = links
+    .filter((link) => link.sentenceId === sentence.id && !!link.surfaceForm && sentence.japanese.includes(link.surfaceForm))
+    .map((link) => ({ link, suggestion: contentSurfaces.get(link.surfaceForm!), word: vocabById.get(link.vocabularyItemId) }))
+    .filter((entry) => entry.word && entry.suggestion)
+    .map((entry) => ({
+      ...entry,
+      meaningStrength: meaningStrengthOf(entry.link.vocabularyItemId),
+      readingStrength: strengthByWord.get(entry.link.vocabularyItemId) ?? 0,
+    }))
+    .sort(
+      (a, b) =>
+        a.meaningStrength - b.meaningStrength ||
+        a.readingStrength - b.readingStrength ||
+        a.link.id.localeCompare(b.link.id),
+    );
+  for (const { link, suggestion, word } of candidates) {
+    const meaning = word!.meaning.trim() || suggestion!.english?.trim() || '';
+    if (meaning) {
+      return {
+        vocabularyItemId: link.vocabularyItemId,
+        expression: word!.expression,
+        surface: link.surfaceForm!,
+        reading: word!.reading,
+        meaning,
+      };
     }
   }
   return undefined;

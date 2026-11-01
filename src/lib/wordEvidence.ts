@@ -23,7 +23,8 @@ export interface WordEvidenceInput {
   studyItems: readonly Pick<StudyItem, 'id' | 'subjectType' | 'subjectId' | 'activityType'>[];
   /** Sentence id → ids of the vocabulary items linked to it. */
   wordsBySentence: ReadonlyMap<string, readonly string[]>;
-  learningEvents?: readonly Pick<SentenceLearningEvent, 'sentenceId' | 'timestamp' | 'action'>[];
+  learningEvents?: readonly (Pick<SentenceLearningEvent, 'sentenceId' | 'timestamp' | 'action'> &
+    Partial<Pick<SentenceLearningEvent, 'target' | 'support' | 'outcome'>>)[];
   /**
    * Typed reading answers given on `reading_in_context` cards, already matched
    * to the word they asked about (the repository resolves the word from the
@@ -70,9 +71,27 @@ export function buildWordEvidence(input: WordEvidenceInput): Map<string, WordEvi
   }
 
   for (const event of input.learningEvents ?? []) {
-    if (event.action !== 'walkthrough_completed') continue;
     const at = Date.parse(event.timestamp);
-    if (!Number.isNaN(at)) exposeSentence(event.sentenceId, at);
+    if (Number.isNaN(at)) continue;
+    if (event.action === 'walkthrough_completed') exposeSentence(event.sentenceId, at);
+    else if (event.action === 'target_practice') {
+      const wordId = meaningCheckWordId(event.target?.key);
+      // The learner's own call after the meaning was hidden, so it is genuine meaning recall.
+      if (wordId && event.support === 'target_masked' && event.outcome) {
+        add({ wordId, facet: 'meaning', kind: 'recall', at, success: event.outcome === 'got_it' });
+      }
+    }
   }
   return out;
+}
+
+/** Key prefix for a word-meaning check logged from the reader (`target_practice`, `target.key = vocab:<vocabularyItemId>`). */
+export const MEANING_CHECK_KEY_PREFIX = 'vocab:';
+
+export function meaningCheckTargetKey(vocabularyItemId: string): string {
+  return `${MEANING_CHECK_KEY_PREFIX}${vocabularyItemId}`;
+}
+
+function meaningCheckWordId(key: string | undefined): string | undefined {
+  return key?.startsWith(MEANING_CHECK_KEY_PREFIX) ? key.slice(MEANING_CHECK_KEY_PREFIX.length) : undefined;
 }

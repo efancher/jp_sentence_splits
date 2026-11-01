@@ -693,6 +693,12 @@ control).
   furigana/gloss by word strength as a cheap test of the idea. (3) Migrate tools
   one at a time, simplest first (dictation blank, Ear Tiles), then walkthrough,
   then shadowing last, keeping the old pages working throughout.
+  *Progress (2026-11-01):* (1) and (2) shipped; the dictation blank and a
+  self-judged word-meaning check now run in the reader, and the walkthrough was
+  already hosted there. Left: Ear Tiles placed in the episode text, shadowing as
+  a docked panel (pitch contour, recording; iOS gesture-gated audio), a
+  meaning check that is not just the weakest word (the planner does not yet
+  steer to it), and a browser/phone layout pass on the new tools.
 - **Costs and constraints.** Shadowing needs a docked panel and its iOS
   gesture-gated audio setup, so it cannot fully dissolve into the text. Review
   behavior (self-rating, sibling burying, gates) is tuned inside `ReviewPage`
