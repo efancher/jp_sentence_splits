@@ -546,6 +546,30 @@ export function nextDictationTile(
   return null;
 }
 
+/**
+ * Why Dictation or Ear Tiles can't run on this sentence, in words for the learner, or null when it can.
+ * Both split the sentence into phrases ("tiles") from its stored word analysis, so a sentence with no
+ * usable analysis, or too few or too many phrases, can't be used. Dictation needs 3–9 phrases and
+ * Ear Tiles 3–12 (long ones are merged down to 9).
+ */
+export function tileToolUnavailableReason(
+  sentence: Pick<Sentence, 'japanese' | 'vocabularySuggestions'>,
+  tool: 'dictate' | 'tiles',
+  hasAudio: boolean,
+): string | null {
+  if (!hasAudio) return 'This sentence has no audio, so there is nothing to listen to.';
+  const label = tool === 'dictate' ? 'Dictation' : 'Ear tiles';
+  const tiles = chunkSentenceIntoTileDetails(sentence);
+  if (!tiles) return `${label} needs the sentence's word analysis, and this sentence's is missing or does not line up with its text.`;
+  const max = tool === 'dictate' ? CHECK_MAX_TILES : CHECK_MAX_MERGEABLE_TILES;
+  if (tiles.length < CHECK_MIN_TILES) return `${label} needs at least ${CHECK_MIN_TILES} phrases; this sentence has ${tiles.length}.`;
+  if (tiles.length > max) return `${label} works on sentences of up to ${max} phrases; this one has ${tiles.length}.`;
+  if (tool === 'dictate' ? nextDictationTile(sentence, 0) === null : buildCheckPuzzle(sentence as never, 'probe') === null) {
+    return `${label} could not find a phrase to use in this sentence.`;
+  }
+  return null;
+}
+
 /** A tile's text with whitespace and punctuation removed, so the same phrase compares equal across sentences. */
 export function dictationTileKey(text: string): string {
   return text.replace(/[\s、。，．！？!?「」『』（）()・…〜~ー]/g, '');

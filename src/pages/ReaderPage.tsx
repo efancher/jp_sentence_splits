@@ -20,6 +20,7 @@ import {
   earTilesDone,
   nextDictationTile,
   tapEarTile,
+  tileToolUnavailableReason,
   type EarTilesProgress,
   type EarTilesPuzzle,
 } from '../lib/earTiles';
@@ -119,6 +120,8 @@ export function ReaderPage() {
     () => new Set(),
   );
   const [walkthroughId, setWalkthroughId] = useState<string>();
+  /** Why a tool that was just tapped could not open on a sentence (shown under it, so a tap never does nothing silently). */
+  const [toolNotice, setToolNotice] = useState<{ sentenceId: string; text: string } | undefined>();
   /** The in-place study tool open on a sentence: a dictation blank (with its tile), a word-meaning check or an Ear Tiles round. */
   const [readerTool, setReaderTool] = useState<
     { sentenceId: string; kind: 'dictate'; tile: number; visitId: string } |
@@ -314,12 +317,23 @@ export function ReaderPage() {
     setSelectedId(id);
     if (walkthroughId && walkthroughId !== id) setWalkthroughId(undefined);
     if (readerTool && readerTool.sentenceId !== id) setReaderTool(undefined);
+    setToolNotice(undefined);
   }
 
   function toggleReaderTool(sentence: Sentence, kind: 'dictate' | 'meaning' | 'tiles' | 'recall' | 'shadow') {
     if (readerTool?.sentenceId === sentence.id && readerTool.kind === kind) {
       setReaderTool(undefined);
       return;
+    }
+    setToolNotice(undefined);
+    if (kind === 'dictate' || kind === 'tiles') {
+      const hasAudio = data?.audioRows.some((audio) => audio.sentenceId === sentence.id) ?? false;
+      const reason = tileToolUnavailableReason(sentence, kind, hasAudio);
+      if (reason) {
+        setReaderTool(undefined);
+        setToolNotice({ sentenceId: sentence.id, text: reason });
+        return;
+      }
     }
     const visitId = createId('visit');
     if (kind === 'meaning') {
@@ -919,6 +933,9 @@ export function ReaderPage() {
                       />
                     );
                   })()}
+                  {toolNotice?.sentenceId === row.sentence.id ? (
+                    <p className="muted" role="status" style={{ margin: 0 }}>{toolNotice.text}</p>
+                  ) : null}
                   {(() => {
                     const here = walkthroughFocus.filter((target) => target.sentenceIds.includes(row.sentence.id));
                     return here.length > 0 ? (
@@ -995,14 +1012,10 @@ export function ReaderPage() {
                     >
                       {revealedStructures.has(row.sentence.id) ? 'Hide structure' : 'Show structure'}
                     </button>
-                    {audio ? (
-                      <button type="button" aria-pressed={readerTool?.sentenceId === row.sentence.id && readerTool.kind === 'dictate'}
-                        onClick={() => toggleReaderTool(row.sentence, 'dictate')}>Dictation</button>
-                    ) : null}
-                    {audio && buildCheckPuzzle(row.sentence, 'probe') ? (
-                      <button type="button" aria-pressed={readerTool?.sentenceId === row.sentence.id && readerTool.kind === 'tiles'}
-                        onClick={() => toggleReaderTool(row.sentence, 'tiles')}>Ear tiles</button>
-                    ) : null}
+                    <button type="button" aria-pressed={readerTool?.sentenceId === row.sentence.id && readerTool.kind === 'dictate'}
+                      onClick={() => toggleReaderTool(row.sentence, 'dictate')}>Dictation</button>
+                    <button type="button" aria-pressed={readerTool?.sentenceId === row.sentence.id && readerTool.kind === 'tiles'}
+                      onClick={() => toggleReaderTool(row.sentence, 'tiles')}>Ear tiles</button>
                     <button type="button" aria-pressed={readerTool?.sentenceId === row.sentence.id && readerTool.kind === 'shadow'}
                       onClick={() => toggleReaderTool(row.sentence, 'shadow')}>Shadowing</button>
                     <button type="button" aria-pressed={readerTool?.sentenceId === row.sentence.id && readerTool.kind === 'recall'}
@@ -1131,7 +1144,6 @@ export function ReaderPage() {
             <button type="button" className="icon-button"
               aria-pressed={readerTool?.sentenceId === focusedRow.sentence.id && readerTool.kind === 'dictate'}
               aria-label="Dictation" title="Dictation: type a blanked phrase from what you hear"
-              disabled={!audioByRow[focusedIndex]}
               onClick={() => toggleReaderTool(focusedRow.sentence, 'dictate')}>🎧</button>
             <button type="button" className="icon-button"
               aria-pressed={readerTool?.sentenceId === focusedRow.sentence.id && readerTool.kind === 'shadow'}
@@ -1144,7 +1156,6 @@ export function ReaderPage() {
             <button type="button" className="icon-button"
               aria-pressed={readerTool?.sentenceId === focusedRow.sentence.id && readerTool.kind === 'tiles'}
               aria-label="Ear tiles" title="Ear tiles: rebuild the sentence from what you hear"
-              disabled={!audioByRow[focusedIndex] || !buildCheckPuzzle(focusedRow.sentence, 'probe')}
               onClick={() => toggleReaderTool(focusedRow.sentence, 'tiles')}>🧩</button>
             <button type="button" className="icon-button"
               aria-pressed={readerTool?.sentenceId === focusedRow.sentence.id && readerTool.kind === 'meaning'}

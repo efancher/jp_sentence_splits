@@ -179,6 +179,19 @@ describe('reader study tools', () => {
     expect(await getDb().studyItems.count()).toBe(0);
   });
 
+  it('says why Ear tiles and Dictation cannot open on a sentence that does not split into phrases', async () => {
+    await getDb().sentences.update('sent-1', { vocabularySuggestions: [] });
+    const user = userEvent.setup();
+    renderReader();
+    await user.click(await screen.findByRole('button', { name: 'Ear tiles' }));
+    expect(await screen.findByRole('status')).toHaveTextContent(/word analysis/);
+    expect(screen.queryByRole('group', { name: 'Ear tiles' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Dictation' }));
+    expect(await screen.findByText(/Dictation needs the sentence's word analysis/)).toBeInTheDocument();
+    expect(screen.queryByLabelText('Sentence with a phrase blanked')).not.toBeInTheDocument();
+  });
+
   it('hides all help until a Read check is revealed, then logs only the learner’s own call as a gist check', async () => {
     const user = userEvent.setup();
     renderReader();

@@ -18,6 +18,7 @@ import {
   isCorrectTile,
   scoreEarTiles,
   tokenSurfaceReading,
+  tileToolUnavailableReason,
 } from '../src/lib/earTiles';
 
 type Piece = [surface: string, pos: string, expression?: string];
@@ -339,5 +340,28 @@ describe('single-tile dictation', () => {
     expect(earTilesKnownWell({ reps: 1, state: 'review' })).toBe(false);
     expect(earTilesKnownWell({ reps: 3, state: 'relearning' })).toBe(false);
     expect(earTilesKnownWell({ reps: 2, state: 'review' })).toBe(true);
+  });
+});
+
+describe('tileToolUnavailableReason', () => {
+  const token = (surface: string, start: number, pos: string) => ({
+    id: `t${start}`, surface, start, end: start + surface.length, expression: surface, reading: surface, pos,
+    source: 'morphology' as const, selectedByDefault: false,
+  });
+  const whole = { japanese: '猫が魚を食べました。', vocabularySuggestions: [
+    token('猫', 0, '名詞/普通名詞/一般'), token('が', 1, '助詞/格助詞'), token('魚', 2, '名詞/普通名詞/一般'),
+    token('を', 3, '助詞/格助詞'), token('食べ', 4, '動詞/一般'), token('ました', 6, '助動詞'), token('。', 9, '補助記号/句点'),
+  ] };
+
+  it('is null when the sentence splits into usable phrases and has audio', () => {
+    expect(tileToolUnavailableReason(whole, 'dictate', true)).toBeNull();
+    expect(tileToolUnavailableReason(whole, 'tiles', true)).toBeNull();
+  });
+
+  it('names the reason otherwise', () => {
+    expect(tileToolUnavailableReason(whole, 'tiles', false)).toMatch(/no audio/);
+    expect(tileToolUnavailableReason({ japanese: whole.japanese, vocabularySuggestions: [] }, 'tiles', true)).toMatch(/word analysis/);
+    const short = { japanese: '猫が。', vocabularySuggestions: [token('猫', 0, '名詞/普通名詞/一般'), token('が', 1, '助詞/格助詞'), token('。', 2, '補助記号/句点')] };
+    expect(tileToolUnavailableReason(short, 'dictate', true)).toMatch(/at least 3 phrases; this sentence has 1/);
   });
 });
