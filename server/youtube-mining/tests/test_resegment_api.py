@@ -163,3 +163,14 @@ def test_tokenize_reads_ichigo_ichie_with_rendaku() -> None:
     assert reading_of(sentence, "期") == "ご"
     assert "いちごいちえ" in (generate_reading(sentence) or "")
     assert reading_of("期待しています。", "期待") == "きたい"
+
+
+def test_tokenize_reads_wagashi_with_rendaku() -> None:
+    """unidic-lite splits 和菓子 into 和/菓子 and reads 菓子 as かし; after 和 it
+    is がし (wagashi_override). お菓子 is untouched."""
+    if not reading_engine_available():
+        return
+    from app.morphology import tokenize_japanese
+
+    tokens = tokenize_japanese("和菓子は日本のお菓子。")
+    assert [t.reading for t in tokens if t.surface == "菓子"] == ["がし", "かし"]

@@ -69,6 +69,14 @@ def ichigo_override(surface: str, prev_surface: str, next_surface: str) -> Optio
     return None
 
 
+def wagashi_override(surface: str, prev_surface: str) -> Optional[str]:
+    """unidic-lite splits 和菓子 into 和 / 菓子 and reads 菓子 as かし; after 和
+    it is がし (rendaku). お菓子 / 洋菓子 / 菓子 elsewhere keep their default."""
+    if surface == "菓子" and prev_surface == "和":
+        return "がし"
+    return None
+
+
 _MAE_PREV_POS = ("連体詞", "数詞", "接尾辞")
 
 
@@ -123,6 +131,7 @@ def generate_reading(text: str) -> Optional[str]:
         override = (
             nani_override(surface, next_surface)
             or ichigo_override(surface, prev_surface, next_surface)
+            or wagashi_override(surface, prev_surface)
             or mae_override(surface, prev_pos, next_surface)
             or READING_OVERRIDES.get(surface)
         )
