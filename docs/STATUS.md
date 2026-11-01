@@ -72,8 +72,12 @@ and possible extensions. This snapshot does not certify a live deployment.
 - Reader, Analyze, review and Shadow support chapter layouts. The reader has
   per-sentence play/loop, new-word furigana (a word counts as known from card
   proficiency or reading strength of at least 0.6, so furigana and word help fade
-  as a word strengthens) and optional phrase/construction explanations. Episode preparation accepts the main JSON and structure lines
-  together. Source-matched extras live in `sentence_extras`, with a read-only
+  as a word strengthens), optional phrase/construction explanations, and
+  in-place Dictation (blanked phrase) and Word check (self-judged meaning) tools
+  that log lesson evidence and feed the word-strength model's meaning facet.
+  The two new tools are covered by component tests but have not been checked in
+  a browser on phone or desktop. Episode preparation accepts the main JSON and
+  structure lines together. Source-matched extras live in `sentence_extras`, with a read-only
   overlay for older inline book data.
 - Progressive glossing and ungraded clause questions are available. Source
   matching invalidates stale questions and review notes. Reactions now sync via
