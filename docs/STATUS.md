@@ -95,6 +95,15 @@ and possible extensions. This snapshot does not certify a live deployment.
   study item, no FSRS. Taps are ignored (and the panel hidden) while Word check, Ear tiles,
   Dictation or an unrevealed Read check is open. The study tools sit in a sticky side rail at
   every width.
+- **Tap-a-pattern feedback (2026-11-01).** Grammar patterns linked to a sentence (book assistant
+  or hand tagged, `sentenceGrammar` with its text position) are tappable in the selected sentence
+  line and the walkthrough's highlighted sentence (dashed accent underline; text a tappable word
+  claims stays a word tap). The panel asks "Spotting it" and "What it does" ("I knew it" / "I
+  didn't"), then names the pattern and its meaning here. Events are `target_practice`, target
+  kind `grammar`, keys `grammar-spot:<id>` / `grammar-use:<id>`, `target_masked` (the pattern is
+  not explained on screen when they judge), self-assessed; `buildGrammarEvidence` /
+  `grammarStrength` (`src/lib/grammarEvidence.ts`) reuse the word-strength weights. Evidence only,
+  not yet read by the planner or Home (next step).
 - **Read checks and docked shadowing (2026-11-01).** The reader's 📖 Read check shows the
   sentence plain, reveals help and meaning on request, and logs the learner's own call as a
   `gist_check` event (no `Review`, no FSRS). `sentencesDueForReadCheck` (`src/lib/readCheck.ts`)

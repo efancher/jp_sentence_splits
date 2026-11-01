@@ -130,6 +130,8 @@ export function SentenceWalkthrough({
   compareAids,
   onWordTap,
   canTapWord,
+  tappablePatterns,
+  onPatternTap,
   constructionDrafts,
   contextWalkthrough,
   importTarget,
@@ -158,6 +160,9 @@ export function SentenceWalkthrough({
   onWordTap?: (expression: string) => void;
   /** Which listed words can be tapped (others stay plain text). */
   canTapWord?: (expression: string) => boolean;
+  /** Grammar patterns in this sentence that take a "did you know it" tap in the highlighted sentence. */
+  tappablePatterns?: ReadonlyArray<{ start: number; end: number; id: string }>;
+  onPatternTap?: (patternId: string) => void;
   /** AI-drafted construction layers per sentence id (validated against the live text here). */
   constructionDrafts?: Record<string, ConstructionLayer[]>;
   /** AI-drafted contextual walkthrough for this sentence; the main content when it still matches the text. */
@@ -418,6 +423,8 @@ export function SentenceWalkthrough({
             inlineReading={showFurigana ? sentence.inlineReading : undefined}
             tappableWords={canTapWord ? sentence.vocabularySuggestions.filter((item) => item.selectedByDefault && item.end > item.start && canTapWord(item.expression)).map((item) => ({ start: item.start, end: item.end, expression: item.expression })) : undefined}
             onWordTap={onWordTap}
+            tappablePatterns={tappablePatterns}
+            onPatternTap={onPatternTap}
           />
           <details>
             <summary className="muted">Chunk view (generic roles)</summary>

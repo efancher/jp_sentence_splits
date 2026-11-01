@@ -627,6 +627,15 @@ strong.jp {
   text-underline-offset: 0.18em;
 }
 
+/* A grammar pattern in the selected sentence that takes a "did you know it" tap: dashed accent underline. */
+.karaoke-pattern-checkable {
+  cursor: pointer;
+  text-decoration: underline dashed;
+  text-decoration-color: var(--accent);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.3em;
+}
+
 /* Words in the walkthrough list that take a "did you know it" tap. */
 .word-check-button {
   min-height: 0;

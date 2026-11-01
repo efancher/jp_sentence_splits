@@ -8,6 +8,7 @@ import { getDb, getWordMeaningCheckTarget } from '../src/db/repository';
 import type { Sentence, VocabularySuggestion } from '../src/domain/types';
 import { buildCheckPuzzle } from '../src/lib/earTiles';
 import { createId } from '../src/lib/ids';
+import { grammarFeedbackTargetKey } from '../src/lib/grammarEvidence';
 import { buildWordEvidence, meaningCheckTargetKey, readingFeedbackTargetKey } from '../src/lib/wordEvidence';
 import { ReaderPage } from '../src/pages/ReaderPage';
 import { withAppProviders } from '../src/test/providers';
@@ -328,6 +329,42 @@ describe('reader study tools', () => {
     expect(await getDb().sentenceVocabulary.count()).toBe(0);
     expect(await getDb().studyItems.count()).toBe(0);
     expect(await getDb().reviews.count()).toBe(0);
+  });
+
+  it('lets the learner tap a grammar pattern in the sentence and records spot/use calls as evidence only', async () => {
+    const db = getDb();
+    const now = new Date().toISOString();
+    await db.grammarPatterns.add({
+      id: 'g-mashita', canonicalName: '〜ました', normalizedKey: 'mashita', aliases: [], shortMeaning: 'polite past', provenance: 'manual', createdAt: now, updatedAt: now,
+    });
+    await db.sentenceGrammar.add({
+      id: 'sg-1', sentenceId: 'sent-1', grammarPatternId: 'g-mashita', surfaceForm: '食べました', start: 6, end: 11,
+      confirmedByLearner: true, source: 'manual', createdAt: now, updatedAt: now,
+    });
+    const user = userEvent.setup();
+    renderReader();
+    // 食べ is not a tappable word, so it carries the pattern's tap.
+    await user.click(await screen.findByRole('button', { name: '食べ' }));
+    const panel = await screen.findByRole('group', { name: 'Grammar feedback' });
+    expect(panel).not.toHaveTextContent('polite past');
+    await user.click(within(panel).getAllByRole('button', { name: 'I knew it' })[0]!);
+    await user.click(within(panel).getByRole('button', { name: 'I didn’t' }));
+    expect(panel).toHaveTextContent('polite past');
+
+    await waitFor(async () => {
+      const events = await getDb().sentenceLearningEvents.toArray();
+      expect(events).toHaveLength(2);
+      const byKey = new Map(events.map((event) => [event.target?.key, event]));
+      expect(byKey.get(grammarFeedbackTargetKey('g-mashita', 'spot'))).toMatchObject({ action: 'target_practice', support: 'target_masked', outcome: 'got_it', assessmentSource: 'self', target: { kind: 'grammar' } });
+      expect(byKey.get(grammarFeedbackTargetKey('g-mashita', 'use'))).toMatchObject({ support: 'target_masked', outcome: 'needed_help' });
+    });
+    expect(await getDb().reviews.count()).toBe(0);
+    expect(await getDb().studyItems.count()).toBe(0);
+
+    // Tapping a word instead swaps the panel; the two never show together.
+    await user.click(screen.getByRole('button', { name: '猫' }));
+    expect(await screen.findByRole('group', { name: 'Word feedback' })).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Grammar feedback' })).not.toBeInTheDocument();
   });
 
   it('closes the tool when another sentence is chosen', async () => {

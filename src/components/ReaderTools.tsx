@@ -222,6 +222,74 @@ export function WordFeedbackPanel({
   );
 }
 
+/** A grammar pattern linked to a sentence, with where it sits in the text. */
+export interface ReaderPattern {
+  patternId: string;
+  name: string;
+  shortMeaning: string;
+  /** What the construction does in this very sentence, when the link records it. */
+  occurrenceExplanation?: string;
+  surface: string;
+  start: number;
+  end: number;
+}
+
+/**
+ * The learner taps a grammar pattern in the sentence and says whether they spotted it as a construction and
+ * whether they understood what it does here. Evidence only, like the word panel; the pattern's name and meaning
+ * stay hidden until they have answered (or asked to see them).
+ */
+export function PatternFeedbackPanel({
+  pattern,
+  onRecord,
+  onClose,
+}: {
+  pattern: ReaderPattern;
+  onRecord: (facet: 'spot' | 'use', outcome: ReaderToolOutcome) => void;
+  onClose: () => void;
+}) {
+  const [shown, setShown] = useState(false);
+  const [given, setGiven] = useState<{ spot?: ReaderToolOutcome; use?: ReaderToolOutcome }>({});
+  const record = (facet: 'spot' | 'use', outcome: ReaderToolOutcome) => {
+    if (given[facet]) return;
+    onRecord(facet, outcome);
+    setGiven((current) => ({ ...current, [facet]: outcome }));
+    setShown(true);
+  };
+  const row = (facet: 'spot' | 'use', label: string, hint: string) => (
+    <div className="row" style={{ gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}>
+      <span style={{ minWidth: '6.5rem' }}>{label}</span>
+      {given[facet] ? (
+        <span className="muted">{given[facet] === 'got_it' ? 'You knew it' : 'You didn’t know it'}</span>
+      ) : (
+        <>
+          <button type="button" onClick={() => record(facet, 'got_it')}>I knew it</button>
+          <button type="button" onClick={() => record(facet, 'needed_help')}>I didn’t</button>
+          <span className="muted" style={{ fontSize: '0.8rem' }}>{hint}</span>
+        </>
+      )}
+    </div>
+  );
+  return (
+    <div className="stack" style={{ gap: '0.35rem' }} role="group" aria-label="Grammar feedback">
+      <p style={{ margin: 0 }}>
+        How well did you know the grammar in <strong className="jp">{pattern.surface}</strong>?
+      </p>
+      {row('spot', 'Spotting it', 'saw it as a pattern')}
+      {row('use', 'What it does', 'understood it here')}
+      {shown ? (
+        <p style={{ margin: 0 }}>
+          <strong className="jp">{pattern.name}</strong>
+          {pattern.occurrenceExplanation || pattern.shortMeaning ? <> — {pattern.occurrenceExplanation || pattern.shortMeaning}</> : null}
+        </p>
+      ) : (
+        <div><button type="button" onClick={() => setShown(true)}>Show the pattern</button></div>
+      )}
+      <div><button type="button" onClick={onClose}>Close</button></div>
+    </div>
+  );
+}
+
 type MeaningTarget = Awaited<ReturnType<typeof getWordMeaningCheckTarget>>;
 
 export function WordMeaningPanel({

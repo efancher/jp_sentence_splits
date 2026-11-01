@@ -309,3 +309,40 @@ test('a word in the walkthrough list can be tapped even when its sentence has no
   expect(stored.reviews).toBe(0);
   expect(stored.studyItems).toBe(0);
 });
+
+test('tapping a grammar pattern in the sentence logs spot and use calls, evidence only', async ({ page }) => {
+  await seed(page);
+  await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('satori-glossbook');
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const now = new Date().toISOString();
+    const tx = db.transaction(['grammarPatterns', 'sentenceGrammar'], 'readwrite');
+    tx.objectStore('grammarPatterns').put({ id: 'g-mashita', canonicalName: '〜ました', normalizedKey: 'mashita', aliases: [],
+      shortMeaning: 'polite past', provenance: 'manual', createdAt: now, updatedAt: now });
+    tx.objectStore('sentenceGrammar').put({ id: 'sg-1', sentenceId: 's-0', grammarPatternId: 'g-mashita', surfaceForm: '食べました',
+      start: 6, end: 11, confirmedByLearner: true, source: 'manual', createdAt: now, updatedAt: now });
+    await new Promise<void>((resolve, reject) => { tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error); });
+    db.close();
+  });
+  await page.goto('/#/books/book/read?chapter=ch');
+  await page.getByRole('button', { name: '食べ', exact: true }).click();
+
+  const panel = page.getByRole('group', { name: 'Grammar feedback' });
+  await expect(panel).toBeVisible();
+  await expect(panel).not.toContainText('polite past');
+  await panel.getByRole('button', { name: 'I knew it' }).first().click();
+  await panel.getByRole('button', { name: 'I didn’t' }).click();
+  await expect(panel).toContainText('polite past');
+
+  await expect.poll(async () => (await storedCounts(page)).events.filter((event) => event.target?.key.startsWith('grammar-')).length).toBe(2);
+  const stored = await storedCounts(page);
+  const spot = stored.events.find((event) => event.target?.key === 'grammar-spot:g-mashita')!;
+  const use = stored.events.find((event) => event.target?.key === 'grammar-use:g-mashita')!;
+  expect([spot.action, spot.support, spot.outcome]).toEqual(['target_practice', 'target_masked', 'got_it']);
+  expect([use.action, use.support, use.outcome]).toEqual(['target_practice', 'target_masked', 'needed_help']);
+  expect(stored.reviews).toBe(0);
+  expect(stored.studyItems).toBe(0);
+});

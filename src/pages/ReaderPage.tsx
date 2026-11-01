@@ -8,9 +8,11 @@ import { KaraokeSentenceText } from '../components/KaraokeSentenceText';
 import {
   DictationBlankLine,
   DictationBlankPanel,
+  PatternFeedbackPanel,
   ReadCheckPanel,
   WordFeedbackPanel,
   WordMeaningPanel,
+  type ReaderPattern,
   type ReaderToolOutcome,
   type ReaderWord,
 } from '../components/ReaderTools';
@@ -28,11 +30,12 @@ import {
 } from '../lib/earTiles';
 import { createId } from '../lib/ids';
 import { meaningCheckTargetKey, readingFeedbackTargetKey } from '../lib/wordEvidence';
+import { grammarFeedbackTargetKey } from '../lib/grammarEvidence';
 import { SentenceWalkthrough, walkthroughChunks } from '../components/SentenceWalkthrough';
 import { glossesFromWords } from '../lib/chunkGlosses';
 import { mergeChapterConstructionDrafts, mergeChapterWalkthroughs } from '../lib/contextWalkthrough';
 import { WordGlossList, type CompareAids } from '../components/TargetLessonCard';
-import { ensureDefaultBookChapter, getBookWithExtras, getDb, getEpisodeFocus, getSavedWordStatus, listGlossDecisions, listSentenceLearningEvents, logGlossDecision, logSentenceLearningEvent, ensureVocabularyItem, readSettings, updateSettings } from '../db/repository';
+import { ensureDefaultBookChapter, getBookWithExtras, getDb, getEpisodeFocus, getSavedWordStatus, listGlossDecisions, listSentenceLearningEvents, logGlossDecision, logSentenceLearningEvent, ensureVocabularyItem, readSettings, updateSettings, withoutUnseenAiLinks } from '../db/repository';
 import { registerReportContext } from '../lib/reportContext';
 import type { BookSentence, Sentence, SentenceAudio, StructureDraftChunk, TextDisplayMode } from '../domain/types';
 import { useNativeAudio } from '../hooks/useNativeAudio';
@@ -135,6 +138,8 @@ export function ReaderPage() {
   >();
   /** The word the learner tapped for "did you know it" feedback; independent of the study tools so it works during a walkthrough or shadowing. */
   const [tappedWord, setTappedWord] = useState<{ sentenceId: string; expression: string; visitId: string } | undefined>();
+  /** The grammar pattern the learner tapped for feedback; like `tappedWord`, independent of the study tools. */
+  const [tappedPattern, setTappedPattern] = useState<{ sentenceId: string; patternId: string; visitId: string } | undefined>();
   /** Per-sentence override of the default word help: show every word, or none. */
   const [wordHelpOverride, setWordHelpOverride] = useState<Map<string, 'all' | 'none'>>(() => new Map());
   const rowRefs = useRef<Array<HTMLDivElement | null>>([]);
@@ -224,11 +229,34 @@ export function ReaderPage() {
       }
       wordsBySentence.set(row.sentence.id, words);
     }
+    // Grammar patterns linked to each sentence, positioned in its text, so they can be tapped like words.
+    const grammarLinks = await withoutUnseenAiLinks(await db.sentenceGrammar.where('sentenceId').anyOf(rows.map((row) => row.sentence.id)).toArray());
+    const patternRows = await db.grammarPatterns.bulkGet([...new Set(grammarLinks.map((link) => link.grammarPatternId))]);
+    const patternById = new Map(patternRows.flatMap((pattern) => (pattern ? [[pattern.id, pattern] as const] : [])));
+    const patternsBySentence = new Map<string, ReaderPattern[]>();
+    for (const row of rows) {
+      const japanese = row.sentence.japanese;
+      const found: ReaderPattern[] = [];
+      for (const link of grammarLinks) {
+        if (link.sentenceId !== row.sentence.id) continue;
+        const pattern = patternById.get(link.grammarPatternId);
+        if (!pattern || found.some((item) => item.patternId === pattern.id)) continue;
+        const surface = link.surfaceForm?.trim() ?? '';
+        const exact = link.start !== undefined && link.end !== undefined && link.end > link.start && japanese.slice(link.start, link.end) === surface;
+        const start = exact ? link.start! : surface ? japanese.indexOf(surface) : -1;
+        if (start < 0 || !surface) continue;
+        found.push({
+          patternId: pattern.id, name: pattern.canonicalName, shortMeaning: pattern.shortMeaning,
+          occurrenceExplanation: link.occurrenceExplanation, surface, start, end: start + surface.length,
+        });
+      }
+      patternsBySentence.set(row.sentence.id, found.sort((a, b) => a.start - b.start));
+    }
     // Drafts are keyed by sentence id, so reading the whole book (no ?chapter=) still finds them.
     const structureDrafts = Object.assign({}, ...book.chapters.map((item) => item.structureDrafts ?? {})) as Record<string, StructureDraftChunk[]>;
     const contextWalkthroughs = mergeChapterWalkthroughs(book.chapters);
     const constructionDrafts = mergeChapterConstructionDrafts(book.chapters);
-    return { book, chapter, rows, audioRows, chunksBySentence, particleChecksBySentence, structureDrafts, contextWalkthroughs, constructionDrafts, savedMeanings, knownExpressions, wordsBySentence };
+    return { book, chapter, rows, audioRows, chunksBySentence, particleChecksBySentence, structureDrafts, contextWalkthroughs, constructionDrafts, savedMeanings, knownExpressions, wordsBySentence, patternsBySentence };
   }, [bookId, chapterId]);
 
   const openedLessonRef = useRef<string | undefined>(undefined);
@@ -451,7 +479,51 @@ export function ReaderPage() {
       setTappedWord(undefined);
       return;
     }
+    setTappedPattern(undefined);
     setTappedWord({ sentenceId: sentence.id, expression: word.expression, visitId: createId('visit') });
+  }
+
+  function togglePatternFeedback(sentence: Sentence, pattern: ReaderPattern) {
+    setToolNotice(undefined);
+    if (tappedPattern?.sentenceId === sentence.id && tappedPattern.patternId === pattern.patternId) {
+      setTappedPattern(undefined);
+      return;
+    }
+    setTappedWord(undefined);
+    setTappedPattern({ sentenceId: sentence.id, patternId: pattern.patternId, visitId: createId('visit') });
+  }
+
+  /** The learner's own call on a grammar pattern: evidence only. The pattern is not explained on screen when they judge. */
+  function recordPatternFeedback(sentenceId: string, visitId: string, pattern: ReaderPattern, facet: 'spot' | 'use', outcome: ReaderToolOutcome) {
+    void logSentenceLearningEvent({
+      id: createId('sl_event'),
+      visitId,
+      action: 'target_practice',
+      sentenceId,
+      bookId,
+      chapterId,
+      target: { kind: 'grammar', key: grammarFeedbackTargetKey(pattern.patternId, facet), label: pattern.name },
+      support: 'target_masked',
+      outcome,
+      assessmentSource: 'self',
+      quietMode: settings?.quietMode ?? false,
+      inventoryRevision: preparation?.sentenceFingerprint,
+    });
+  }
+
+  /** The tap-a-pattern feedback panel for a sentence, or null. */
+  function patternFeedbackPanel(sentence: Sentence) {
+    if (tappedPattern?.sentenceId !== sentence.id || wordTapsBlocked(sentence.id)) return null;
+    const pattern = (data?.patternsBySentence.get(sentence.id) ?? []).find((item) => item.patternId === tappedPattern.patternId);
+    if (!pattern) return null;
+    return (
+      <PatternFeedbackPanel
+        key={`${tappedPattern.visitId}:${pattern.patternId}`}
+        pattern={pattern}
+        onRecord={(facet, outcome) => recordPatternFeedback(sentence.id, tappedPattern.visitId, pattern, facet, outcome)}
+        onClose={() => setTappedPattern(undefined)}
+      />
+    );
   }
 
   /** Whether a tool that would give a word away is open on the sentence (taps are then ignored). */
@@ -639,7 +711,8 @@ export function ReaderPage() {
     // On the selected sentence each content word is itself the "did you know it" button.
     const words = chapterMode && sentence.id === focusedId && !wordTapsBlocked(sentence.id) ? data?.wordsBySentence.get(sentence.id) ?? [] : [];
     const wordAt = (token: { text: string }) => words.find((word) => word.surface === token.text);
-    const tappable = words.length > 0 && (displayMode === 'plain' || displayMode === 'new' || displayMode === 'furigana');
+    const patterns = chapterMode && sentence.id === focusedId && !wordTapsBlocked(sentence.id) ? data?.patternsBySentence.get(sentence.id) ?? [] : [];
+    const tappable = (words.length > 0 || patterns.length > 0) && (displayMode === 'plain' || displayMode === 'new' || displayMode === 'furigana');
     if (tappable || ((displayMode === 'plain' || displayMode === 'new') && isActive && audio)) {
       const ruby =
         displayMode === 'furigana'
@@ -656,6 +729,9 @@ export function ReaderPage() {
             isWordTappable={tappable ? (token) => wordAt(token) !== undefined : undefined}
             onWordTap={tappable ? (token) => { const word = wordAt(token); if (word) toggleWordFeedback(sentence, word); } : undefined}
             selectedWordStart={selectedWord ? sentence.japanese.indexOf(selectedWord.surface) : undefined}
+            patternSpans={tappable ? patterns.map((item) => ({ id: item.patternId, start: item.start, end: item.end })) : undefined}
+            onPatternTap={tappable ? (id) => { const pattern = patterns.find((item) => item.patternId === id); if (pattern) togglePatternFeedback(sentence, pattern); } : undefined}
+            selectedPatternId={tappedPattern?.sentenceId === sentence.id ? tappedPattern.patternId : undefined}
           />
         );
       }
@@ -987,6 +1063,7 @@ export function ReaderPage() {
                     return tile ? <DictationBlankLine tile={tile} /> : sentenceLine(row.sentence, isActive, audio);
                   })()}
                   {walkthroughId === row.sentence.id ? null : wordFeedbackPanel(row.sentence)}
+                  {walkthroughId === row.sentence.id ? null : patternFeedbackPanel(row.sentence)}
                   {(() => {
                     if (readerTool?.sentenceId !== row.sentence.id) return null;
                     if (readerTool.kind === 'dictate') {
@@ -1214,6 +1291,11 @@ export function ReaderPage() {
                         const word = (data.wordsBySentence.get(row.sentence.id) ?? []).find((item) => item.expression === expression);
                         if (word && !wordTapsBlocked(row.sentence.id)) toggleWordFeedback(row.sentence, word);
                       }}
+                      tappablePatterns={(data.patternsBySentence.get(row.sentence.id) ?? []).map((item) => ({ id: item.patternId, start: item.start, end: item.end }))}
+                      onPatternTap={(id) => {
+                        const pattern = (data.patternsBySentence.get(row.sentence.id) ?? []).find((item) => item.patternId === id);
+                        if (pattern && !wordTapsBlocked(row.sentence.id)) togglePatternFeedback(row.sentence, pattern);
+                      }}
                       canTapWord={(expression) => (data.wordsBySentence.get(row.sentence.id) ?? []).some((item) => item.expression === expression)}
                       constructionDrafts={data.constructionDrafts}
                       contextWalkthrough={data.contextWalkthroughs[row.sentence.id]}
@@ -1242,6 +1324,7 @@ export function ReaderPage() {
                     />
                   ) : null}
                   {walkthroughId === row.sentence.id ? wordFeedbackPanel(row.sentence) : null}
+                  {walkthroughId === row.sentence.id ? patternFeedbackPanel(row.sentence) : null}
                   {revealedStructures.has(row.sentence.id)
                     ? (() => {
                         const { chunks: shown, source } = walkthroughChunks(

@@ -27,6 +27,24 @@ describe('HighlightedSentence word taps', () => {
     expect(screen.getAllByRole('button')).toHaveLength(3);
   });
 
+  it('draws a grammar pattern as a button around the text a word does not claim', async () => {
+    const user = userEvent.setup();
+    const onPatternTap = vi.fn();
+    const { container } = render(
+      <HighlightedSentence
+        japanese={japanese}
+        tappableWords={[{ start: japanese.lastIndexOf('学ぶ'), end: japanese.lastIndexOf('学ぶ') + 2, expression: '学ぶ' }]}
+        onWordTap={vi.fn()}
+        tappablePatterns={[{ ...at('学ぶことができます'), id: 'g1' }]}
+        onPatternTap={onPatternTap}
+      />,
+    );
+    expect(container.textContent).toBe(japanese);
+    // The 学ぶ at the start of the pattern is a word, so only ことができます takes the pattern tap.
+    await user.click(screen.getByRole('button', { name: 'Check grammar ことができます' }));
+    expect(onPatternTap).toHaveBeenCalledWith('g1');
+  });
+
   it('renders plain text with no buttons when taps are not offered', () => {
     const { container } = render(<HighlightedSentence japanese={japanese} tappableWords={[at('文化')]} />);
     expect(container.textContent).toBe(japanese);

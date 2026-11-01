@@ -40,6 +40,8 @@ export function HighlightedSentence({
   inlineReading,
   tappableWords,
   onWordTap,
+  tappablePatterns,
+  onPatternTap,
 }: {
   japanese: string;
   main?: { start: number; end: number };
@@ -49,41 +51,56 @@ export function HighlightedSentence({
   /** Words in the sentence (offsets into `japanese`) that take a "did you know it" tap. */
   tappableWords?: ReadonlyArray<{ start: number; end: number; expression: string }>;
   onWordTap?: (expression: string) => void;
+  /** Grammar patterns in the sentence (offsets into `japanese`); text outside a tappable word that lies in one takes its tap. */
+  tappablePatterns?: ReadonlyArray<{ start: number; end: number; id: string }>;
+  onPatternTap?: (patternId: string) => void;
 }) {
   let offset = 0;
   /** The text of [from, from+text.length), with each tappable word inside it drawn as a button. */
   const withWords = (from: number, text: string): ReactNode => {
-    if (!onWordTap || !tappableWords?.length) return rubySlice(japanese, inlineReading, from, text);
-    const to = from + text.length;
-    const inside = tappableWords.filter((word) => word.start < to && word.end > from).sort((a, b) => a.start - b.start);
-    if (inside.length === 0) return rubySlice(japanese, inlineReading, from, text);
+    const words = onWordTap ? tappableWords ?? [] : [];
+    const patterns = onPatternTap ? tappablePatterns ?? [] : [];
+    if (words.length === 0 && patterns.length === 0) return rubySlice(japanese, inlineReading, from, text);
+    // Classify each character: a tappable word wins over a grammar pattern; everything else is plain.
+    const keyAt = (position: number): string | undefined => {
+      const word = words.find((item) => position >= item.start && position < item.end);
+      if (word) return `w:${word.start}:${word.expression}`;
+      const pattern = patterns.find((item) => position >= item.start && position < item.end);
+      return pattern ? `p:${pattern.start}:${pattern.id}` : undefined;
+    };
     const out: ReactNode[] = [];
-    let cursor = from;
-    inside.forEach((word, index) => {
-      const start = Math.max(word.start, cursor);
-      const end = Math.min(word.end, to);
-      if (end <= start) return;
-      if (start > cursor) out.push(<span key={`t${index}`}>{rubySlice(japanese, inlineReading, cursor, japanese.slice(cursor, start))}</span>);
-      out.push(
-        <span
-          key={`w${index}`}
-          role="button"
-          tabIndex={0}
-          className="karaoke-word-checkable"
-          aria-label={`Check ${word.expression}`}
-          onClick={() => onWordTap(word.expression)}
-          onKeyDown={(event) => {
-            if (event.key !== 'Enter' && event.key !== ' ') return;
-            event.preventDefault();
-            onWordTap(word.expression);
-          }}
-        >
-          {rubySlice(japanese, inlineReading, start, japanese.slice(start, end))}
-        </span>,
-      );
-      cursor = end;
-    });
-    if (cursor < to) out.push(<span key="tail">{rubySlice(japanese, inlineReading, cursor, japanese.slice(cursor, to))}</span>);
+    const to = from + text.length;
+    let runStart = from;
+    for (let position = from + 1; position <= to; position += 1) {
+      const key = keyAt(runStart);
+      if (position < to && keyAt(position) === key) continue;
+      const piece = rubySlice(japanese, inlineReading, runStart, japanese.slice(runStart, position));
+      if (key === undefined) {
+        out.push(<span key={runStart}>{piece}</span>);
+      } else {
+        const isWord = key.startsWith('w:');
+        const target = key.slice(key.indexOf(':', 2) + 1);
+        const fire = () => (isWord ? onWordTap?.(target) : onPatternTap?.(target));
+        out.push(
+          <span
+            key={runStart}
+            role="button"
+            tabIndex={0}
+            className={isWord ? 'karaoke-word-checkable' : 'karaoke-pattern-checkable'}
+            aria-label={isWord ? `Check ${target}` : `Check grammar ${japanese.slice(runStart, position)}`}
+            onClick={fire}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter' && event.key !== ' ') return;
+              event.preventDefault();
+              fire();
+            }}
+          >
+            {piece}
+          </span>,
+        );
+      }
+      runStart = position;
+    }
     return out;
   };
   return (

@@ -93,6 +93,9 @@ export function KaraokeSentenceText({
   isWordTappable,
   onWordTap,
   selectedWordStart,
+  patternSpans,
+  onPatternTap,
+  selectedPatternId,
 }: {
   japanese: string;
   readingOnly?: string;
@@ -105,7 +108,15 @@ export function KaraokeSentenceText({
   onWordTap?: (token: SentenceToken) => void;
   /** Start offset of the token the caller currently has selected. */
   selectedWordStart?: number;
+  /** Grammar pattern spans (offsets into `japanese`); tokens inside one that are not tappable words take its tap. */
+  patternSpans?: ReadonlyArray<{ id: string; start: number; end: number }>;
+  onPatternTap?: (patternId: string) => void;
+  selectedPatternId?: string;
 }) {
+  const patternOf = (token: SentenceToken) =>
+    onPatternTap && !isWordTappable?.(token)
+      ? patternSpans?.find((span) => token.start >= span.start && token.end <= span.end)?.id
+      : undefined;
   const wordRefs = useRef<Array<HTMLSpanElement | null>>([]);
   const [glossPopup, setGlossPopup] = useState<{ text: string; left: number; top: number } | null>(
     null,
@@ -143,8 +154,19 @@ export function KaraokeSentenceText({
             ref={(el) => {
               wordRefs.current[index] = el;
             }}
-            className={`karaoke-word${index === displayedTokenIndex || (selectedWordStart !== undefined && token.start === selectedWordStart && isWordTappable?.(token)) ? ' karaoke-word-active' : ''}${token.gloss ? ' karaoke-word-tappable' : ''}${isWordTappable?.(token) && onWordTap ? ' karaoke-word-checkable' : ''}`}
-            {...(isWordTappable?.(token) && onWordTap
+            className={`karaoke-word${index === displayedTokenIndex || (selectedWordStart !== undefined && token.start === selectedWordStart && isWordTappable?.(token)) ? ' karaoke-word-active' : ''}${token.gloss ? ' karaoke-word-tappable' : ''}${isWordTappable?.(token) && onWordTap ? ' karaoke-word-checkable' : ''}${patternOf(token) !== undefined ? ' karaoke-pattern-checkable' : ''}${selectedPatternId !== undefined && patternOf(token) === selectedPatternId ? ' karaoke-word-active' : ''}`}
+            {...(patternOf(token) !== undefined
+              ? {
+                  role: 'button',
+                  tabIndex: 0,
+                  onClick: () => onPatternTap!(patternOf(token)!),
+                  onKeyDown: (event: KeyboardEvent) => {
+                    if (event.key !== 'Enter' && event.key !== ' ') return;
+                    event.preventDefault();
+                    onPatternTap!(patternOf(token)!);
+                  },
+                }
+              : isWordTappable?.(token) && onWordTap
               ? {
                   role: 'button',
                   tabIndex: 0,
