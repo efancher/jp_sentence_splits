@@ -211,3 +211,33 @@ test('a planner Word check step opens the meaning check, not the walkthrough', a
   expect(stored.reviews).toBe(0);
   expect(stored.studyItems).toBe(0);
 });
+
+test('a planner Read check step shows the plain sentence, then logs the learner’s own call', async ({ page }) => {
+  await seed(page);
+  await page.goto('/#/books/book/recall/s-0');
+  const check = page.getByRole('group', { name: 'Read check' });
+  await expect(check).toBeVisible();
+  // Unrevealed: nothing answers the check.
+  await expect(page.getByText('I ate the cat’s fish.')).toHaveCount(0);
+  await expect(page.getByText('猫 — cat', { exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Show help and meaning' }).click();
+  await expect(page.getByText('I ate the cat’s fish.')).toBeVisible();
+  await page.getByRole('button', { name: 'Got it' }).click();
+
+  await expect.poll(async () => (await storedCounts(page)).events.length).toBe(1);
+  const stored = await storedCounts(page);
+  expect([stored.events[0]!.action, stored.events[0]!.outcome]).toEqual(['gist_check', 'got_it']);
+  expect(stored.reviews).toBe(0);
+  expect(stored.studyItems).toBe(0);
+});
+
+test('a planner shadowing step opens the docked shadowing panel in the reader', async ({ page }) => {
+  await seed(page);
+  await page.goto('/#/books/book/speak/s-0');
+  const panel = page.getByRole('region', { name: 'Shadowing' });
+  await expect(panel).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'Record attempt' })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.getByRole('button', { name: 'Close shadowing' }).click();
+  await expect(panel).toHaveCount(0);
+});

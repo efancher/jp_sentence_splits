@@ -109,6 +109,27 @@ function formatDuration(ms: number): string {
 
 export function ShadowPage() {
   const { bookId = '', sentenceId = '' } = useParams();
+  return <ShadowWorkspace bookId={bookId} sentenceId={sentenceId} />;
+}
+
+/**
+ * The shadowing practice surface: close-shadow loop, recording, pitch contour and attempt analysis.
+ * `ShadowPage` is the whole page; `embedded` (the reader's docked Shadowing tool) drops the page chrome
+ * — book title, layout switch, chapter transcript, back and delete controls — because the reader already
+ * shows the sentence and owns navigation. The practice logic and iOS gesture-gated audio setup are shared.
+ */
+export function ShadowWorkspace({
+  bookId,
+  sentenceId,
+  embedded = false,
+  onSnoozed,
+}: {
+  bookId: string;
+  sentenceId: string;
+  embedded?: boolean;
+  /** Called after a snooze; defaults to going back a page. */
+  onSnoozed?: () => void;
+}) {
   const navigate = useNavigate();
   const [confirmDeleteSentence, setConfirmDeleteSentence] = useState(false);
   const shadowing = useShadowing();
@@ -719,7 +740,7 @@ export function ShadowPage() {
         </section>
       ) : null}
       {sentenceId ? (
-        <ShadowSnoozeButtons sentenceId={sentenceId} onSnoozed={() => navigate(-1)} />
+        <ShadowSnoozeButtons sentenceId={sentenceId} onSnoozed={onSnoozed ?? (() => navigate(-1))} />
       ) : null}
       {quietMode ? (
         <section className="panel stack" style={{ gap: '0.4rem' }}>
@@ -739,7 +760,8 @@ export function ShadowPage() {
         </section>
       ) : null}
 
-      <section className="panel stack shadow-compact">
+      <section className={embedded ? 'stack shadow-compact' : 'panel stack shadow-compact'} aria-label={embedded ? 'Shadowing' : undefined}>
+        {embedded ? null : (
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <div>
             <div className="muted">{book?.title} · Shadow</div>
@@ -754,6 +776,7 @@ export function ShadowPage() {
             </label>
           </div>
         </div>
+        )}
         {referenceAudio && !hideTranscript ? <NativePitchPractice
           audio={referenceAudio}
           japanese={sentence.japanese}
@@ -766,7 +789,21 @@ export function ShadowPage() {
           }}
         /> : null}
         {practiceBar}
-        {chapterMode ? (
+        {embedded ? (
+          <>
+            <div className="row" style={{ justifyContent: 'flex-end' }}>
+              <button type="button" onClick={() => setShowMeaningInstead((value) => !value)} disabled={!sentence.translation}>
+                {showMeaningInstead ? 'Show Japanese' : 'Show meaning instead'}
+              </button>
+              <button type="button" onClick={() => setHideTranscript((value) => !value)}>
+                {hideTranscript ? 'Show transcript' : 'Hide transcript'}
+              </button>
+            </div>
+            <div className="row" style={{ alignItems: 'center' }}>
+              {transcriptNode}
+            </div>
+          </>
+        ) : chapterMode ? (
           <>
             <div className="gloss-workbench">
               {hideTranscript ? (
@@ -894,7 +931,7 @@ export function ShadowPage() {
             ) : null}
             <SpeedControl speed={speed} onChange={setSpeed} />
             <div className="row" style={{ alignItems: 'center' }} ref={targetControlsRef}>
-              {chapterMode ? null : (
+              {chapterMode && !embedded ? null : (
                 <>
                   <button type="button" onClick={handleMarkStart}>
                     Mark start
@@ -910,7 +947,7 @@ export function ShadowPage() {
                     Target: {formatDuration(targetRange.startMs)}–
                     {formatDuration(targetRange.endMs)}
                   </span>
-                  {chapterMode ? null : (
+                  {chapterMode && !embedded ? null : (
                     <>
                       <button
                         type="button"

@@ -80,8 +80,22 @@ and possible extensions. This snapshot does not certify a live deployment.
   The two new tools have component tests and a Chromium browser spec
   (`e2e/reader-tools.spec.ts`, 390px and 1280px: no horizontal overflow, rail
   reachable, events persisted, no review or study item created); WebKit is not
-  covered (its test contexts refuse the audio Blob). Word check hides the word
-  help and translation while it is open so they do not answer it. Episode preparation accepts the main JSON and
+  covered (its test contexts refuse the audio Blob; a later change runs the spec in WebKit through a
+  disk-backed profile). Word check hides the word
+  help and translation while it is open so they do not answer it.
+- **Read checks and docked shadowing (2026-11-01).** The reader's 📖 Read check shows the
+  sentence plain, reveals help and meaning on request, and logs the learner's own call as a
+  `gist_check` event (no `Review`, no FSRS). `sentencesDueForReadCheck` (`src/lib/readCheck.ts`)
+  spaces them from the sentence's evidence: 1, 2, 4, 8, 16, 32, 64 days per consecutive got-it day,
+  reset by "needed help", measured from the last walkthrough, gist check or say-it attempt. The
+  planner drafts up to 8 one-minute "Read check:" steps in the `review` bucket
+  (`/books/:bookId/recall/:sentenceId`), most urgent first, with the waiting count in the first
+  reason; a sentence drafted a Fresh try the same day is skipped. Settings → "Pause sentence review
+  cards" (`sentenceCardsPaused`, default off, reversible, nothing deleted) withholds the
+  reading/listening/Ear Tiles/dictation cards from Review and from the planner's batches.
+  🎙 Shadowing opens `ShadowWorkspace` (`embedded`) under the sentence, and shadowing planner steps
+  now open `/books/:bookId/speak/:sentenceId` in the reader; the standalone `/shadow/:sentenceId`
+  page is unchanged. Episode preparation accepts the main JSON and
   structure lines together. Source-matched extras live in `sentence_extras`, with a read-only
   overlay for older inline book data.
 - Progressive glossing and ungraded clause questions are available. Source
