@@ -32,7 +32,7 @@ import { SentenceWalkthrough, walkthroughChunks } from '../components/SentenceWa
 import { glossesFromWords } from '../lib/chunkGlosses';
 import { mergeChapterConstructionDrafts, mergeChapterWalkthroughs } from '../lib/contextWalkthrough';
 import { WordGlossList, type CompareAids } from '../components/TargetLessonCard';
-import { ensureDefaultBookChapter, getBookWithExtras, getDb, getEpisodeFocus, getSavedWordStatus, listGlossDecisions, listSentenceLearningEvents, logGlossDecision, logSentenceLearningEvent, readSettings, updateSettings } from '../db/repository';
+import { ensureDefaultBookChapter, getBookWithExtras, getDb, getEpisodeFocus, getSavedWordStatus, listGlossDecisions, listSentenceLearningEvents, logGlossDecision, logSentenceLearningEvent, ensureVocabularyItem, readSettings, updateSettings } from '../db/repository';
 import { registerReportContext } from '../lib/reportContext';
 import type { BookSentence, Sentence, SentenceAudio, StructureDraftChunk, TextDisplayMode } from '../domain/types';
 import { useNativeAudio } from '../hooks/useNativeAudio';
@@ -134,7 +134,7 @@ export function ReaderPage() {
     undefined
   >();
   /** The word the learner tapped for "did you know it" feedback; independent of the study tools so it works during a walkthrough or shadowing. */
-  const [tappedWord, setTappedWord] = useState<{ sentenceId: string; vocabularyItemId: string; visitId: string } | undefined>();
+  const [tappedWord, setTappedWord] = useState<{ sentenceId: string; expression: string; visitId: string } | undefined>();
   /** Per-sentence override of the default word help: show every word, or none. */
   const [wordHelpOverride, setWordHelpOverride] = useState<Map<string, 'all' | 'none'>>(() => new Map());
   const rowRefs = useRef<Array<HTMLDivElement | null>>([]);
@@ -196,28 +196,33 @@ export function ReaderPage() {
       ),
     ];
     const { savedMeanings, knownExpressions } = await getSavedWordStatus(contentExpressions);
-    // The words a learner can tap in each sentence: its linked content words, in sentence order.
+    // The words a learner can tap in each sentence: its content words, in sentence order. A word that has no
+    // vocabulary item yet (an unconfirmed AI draft) gets one on the first answer, so '' marks "not created yet".
     const links = await db.sentenceVocabulary.where('sentenceId').anyOf(rows.map((row) => row.sentence.id)).toArray();
-    const linkedWords = await db.vocabularyItems.bulkGet([...new Set(links.map((link) => link.vocabularyItemId))]);
-    const wordById = new Map(linkedWords.flatMap((word) => (word ? [[word.id, word] as const] : [])));
+    const expressions = [...new Set(rows.flatMap((row) => row.sentence.vocabularySuggestions.filter((item) => item.selectedByDefault).map((item) => item.expression)))];
+    const existingItems = expressions.length ? await db.vocabularyItems.where('expression').anyOf(expressions).toArray() : [];
+    const linkedItems = await db.vocabularyItems.bulkGet([...new Set(links.map((link) => link.vocabularyItemId))]);
+    const itemById = new Map(linkedItems.flatMap((item) => (item ? [[item.id, item] as const] : [])));
     const wordsBySentence = new Map<string, ReaderWord[]>();
     for (const row of rows) {
-      const content = new Map(row.sentence.vocabularySuggestions.filter((item) => item.selectedByDefault).map((item) => [item.surface, item]));
       const seen = new Set<string>();
-      const words: Array<ReaderWord & { at: number }> = [];
-      for (const link of links) {
-        if (link.sentenceId !== row.sentence.id || !link.surfaceForm || seen.has(link.vocabularyItemId)) continue;
-        const word = wordById.get(link.vocabularyItemId);
-        const suggestion = content.get(link.surfaceForm);
-        const at = row.sentence.japanese.indexOf(link.surfaceForm);
-        if (!word || !suggestion || at < 0) continue;
-        seen.add(link.vocabularyItemId);
+      const words: ReaderWord[] = [];
+      const sentenceLinks = links.filter((link) => link.sentenceId === row.sentence.id);
+      for (const suggestion of [...row.sentence.vocabularySuggestions].sort((a, b) => a.start - b.start)) {
+        if (!suggestion.selectedByDefault || !suggestion.expression || seen.has(suggestion.expression)) continue;
+        seen.add(suggestion.expression);
+        const linked = sentenceLinks.find((link) => link.surfaceForm === suggestion.surface && itemById.get(link.vocabularyItemId)?.expression === suggestion.expression);
+        const item = (linked ? itemById.get(linked.vocabularyItemId) : undefined)
+          ?? existingItems.find((candidate) => candidate.expression === suggestion.expression && candidate.reading === suggestion.reading);
         words.push({
-          vocabularyItemId: word.id, surface: link.surfaceForm, expression: word.expression, reading: word.reading,
-          meaning: word.meaning.trim() || suggestion.english?.trim() || '', at,
+          vocabularyItemId: item?.id ?? '',
+          surface: suggestion.surface,
+          expression: suggestion.expression,
+          reading: item?.reading ?? suggestion.reading,
+          meaning: item?.meaning.trim() || suggestion.english?.trim() || '',
         });
       }
-      wordsBySentence.set(row.sentence.id, words.sort((a, b) => a.at - b.at).map(({ at: _at, ...word }) => word));
+      wordsBySentence.set(row.sentence.id, words);
     }
     // Drafts are keyed by sentence id, so reading the whole book (no ?chapter=) still finds them.
     const structureDrafts = Object.assign({}, ...book.chapters.map((item) => item.structureDrafts ?? {})) as Record<string, StructureDraftChunk[]>;
@@ -410,7 +415,7 @@ export function ReaderPage() {
   }
 
   /** The learner's own "I knew it / I didn't" on one facet of a word they tapped: evidence only, never a rating. */
-  function recordWordFeedback(
+  async function recordWordFeedback(
     sentenceId: string,
     visitId: string,
     word: ReaderWord,
@@ -418,6 +423,8 @@ export function ReaderPage() {
     hidden: boolean,
     outcome: ReaderToolOutcome,
   ) {
+    // Evidence is keyed by vocabulary item; make just that item (no link, no card) when the word has none yet.
+    const vocabularyItemId = word.vocabularyItemId || (await ensureVocabularyItem(word.expression, word.reading, { meaning: word.meaning })).id;
     void logSentenceLearningEvent({
       id: createId('sl_event'),
       visitId,
@@ -427,7 +434,7 @@ export function ReaderPage() {
       chapterId,
       target: {
         kind: 'vocabulary',
-        key: facet === 'reading' ? readingFeedbackTargetKey(word.vocabularyItemId) : meaningCheckTargetKey(word.vocabularyItemId),
+        key: facet === 'reading' ? readingFeedbackTargetKey(vocabularyItemId) : meaningCheckTargetKey(vocabularyItemId),
         label: word.surface,
       },
       support: hidden ? 'target_masked' : 'explanation_hidden',
@@ -440,11 +447,11 @@ export function ReaderPage() {
 
   function toggleWordFeedback(sentence: Sentence, word: ReaderWord) {
     setToolNotice(undefined);
-    if (tappedWord?.sentenceId === sentence.id && tappedWord.vocabularyItemId === word.vocabularyItemId) {
+    if (tappedWord?.sentenceId === sentence.id && tappedWord.expression === word.expression) {
       setTappedWord(undefined);
       return;
     }
-    setTappedWord({ sentenceId: sentence.id, vocabularyItemId: word.vocabularyItemId, visitId: createId('visit') });
+    setTappedWord({ sentenceId: sentence.id, expression: word.expression, visitId: createId('visit') });
   }
 
   /** Whether a tool that would give a word away is open on the sentence (taps are then ignored). */
@@ -456,12 +463,12 @@ export function ReaderPage() {
   /** The tap-a-word feedback panel for a sentence, or null. */
   function wordFeedbackPanel(sentence: Sentence) {
     if (tappedWord?.sentenceId !== sentence.id || wordTapsBlocked(sentence.id)) return null;
-    const word = (data?.wordsBySentence.get(sentence.id) ?? []).find((item) => item.vocabularyItemId === tappedWord.vocabularyItemId);
+    const word = (data?.wordsBySentence.get(sentence.id) ?? []).find((item) => item.expression === tappedWord.expression);
     if (!word) return null;
     const hidden = wordHelpHidden(sentence, word);
     return (
       <WordFeedbackPanel
-        key={`${tappedWord.visitId}:${word.vocabularyItemId}`}
+        key={`${tappedWord.visitId}:${word.expression}`}
         word={word}
         readingHidden={hidden.readingHidden}
         meaningHidden={hidden.meaningHidden}
@@ -639,7 +646,7 @@ export function ReaderPage() {
           ? newWordSegments(sentence.japanese, sentence.inlineReading, sentence.vocabularySuggestions, new Set())
           : newWordRuby;
       if (displayMode !== 'furigana' || ruby) {
-        const selectedWord = tappedWord?.sentenceId === sentence.id ? words.find((word) => word.vocabularyItemId === tappedWord.vocabularyItemId) : undefined;
+        const selectedWord = tappedWord?.sentenceId === sentence.id ? words.find((word) => word.expression === tappedWord.expression) : undefined;
         return (
           <KaraokeSentenceText
             japanese={sentence.japanese}
@@ -1207,6 +1214,7 @@ export function ReaderPage() {
                         const word = (data.wordsBySentence.get(row.sentence.id) ?? []).find((item) => item.expression === expression);
                         if (word && !wordTapsBlocked(row.sentence.id)) toggleWordFeedback(row.sentence, word);
                       }}
+                      canTapWord={(expression) => (data.wordsBySentence.get(row.sentence.id) ?? []).some((item) => item.expression === expression)}
                       constructionDrafts={data.constructionDrafts}
                       contextWalkthrough={data.contextWalkthroughs[row.sentence.id]}
                       importTarget={row.membership.chapterId ? { bookId, chapterId: row.membership.chapterId } : undefined}

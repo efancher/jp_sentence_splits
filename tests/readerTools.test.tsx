@@ -308,6 +308,28 @@ describe('reader study tools', () => {
     expect(screen.queryByRole('button', { name: '猫' })).not.toBeInTheDocument();
   });
 
+  it('works on a word that has no vocabulary item yet, creating just that item', async () => {
+    // An unconfirmed AI draft: the sentence has word suggestions but nothing linked or saved.
+    await getDb().sentenceVocabulary.clear();
+    await getDb().vocabularyItems.clear();
+    const user = userEvent.setup();
+    renderReader();
+    await user.click(await screen.findByRole('button', { name: '猫' }));
+    const panel = await screen.findByRole('group', { name: 'Word feedback' });
+    await user.click(within(panel).getAllByRole('button', { name: 'I knew it' })[0]!);
+
+    await waitFor(async () => {
+      const [item] = await getDb().vocabularyItems.toArray();
+      expect(item).toMatchObject({ expression: '猫' });
+      const events = await getDb().sentenceLearningEvents.toArray();
+      expect(events).toHaveLength(1);
+      expect(events[0]!.target!.key).toBe(readingFeedbackTargetKey(item!.id));
+    });
+    expect(await getDb().sentenceVocabulary.count()).toBe(0);
+    expect(await getDb().studyItems.count()).toBe(0);
+    expect(await getDb().reviews.count()).toBe(0);
+  });
+
   it('closes the tool when another sentence is chosen', async () => {
     const user = userEvent.setup();
     renderReader();

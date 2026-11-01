@@ -23,13 +23,13 @@ export function Highlighted({ excerpt }: { excerpt: CompareExcerpt }) {
   );
 }
 
-export function WordGlossList({ words, onWordTap }: { words: CompareAids['words']; onWordTap?: (expression: string) => void }) {
+export function WordGlossList({ words, onWordTap, canTapWord }: { words: CompareAids['words']; onWordTap?: (expression: string) => void; canTapWord?: (expression: string) => boolean }) {
   if (words.length === 0) return null;
   return (
     <ul className="muted" aria-label="Words in this sentence" style={{ margin: 0, paddingLeft: '1.1rem', fontSize: '0.85em' }}>
       {words.map((word) => (
         <li key={word.expression}>
-          {onWordTap ? (
+          {onWordTap && (canTapWord?.(word.expression) ?? true) ? (
             <button type="button" className="ghost jp" aria-label={`Check ${word.expression}`} onClick={() => onWordTap(word.expression)}>{word.expression}</button>
           ) : (
             <span className="jp">{word.expression}</span>

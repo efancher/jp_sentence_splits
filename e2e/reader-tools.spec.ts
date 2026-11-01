@@ -279,3 +279,33 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 
     await expect(word).toHaveCount(0);
   });
 }
+
+test('a word in the walkthrough list can be tapped even when its sentence has no vocabulary items yet', async ({ page }) => {
+  await seed(page);
+  // An unconfirmed AI draft: suggestions only, nothing linked or saved.
+  await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('satori-glossbook');
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const tx = db.transaction(['sentenceVocabulary', 'vocabularyItems'], 'readwrite');
+    tx.objectStore('sentenceVocabulary').clear();
+    tx.objectStore('vocabularyItems').clear();
+    await new Promise<void>((resolve, reject) => { tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error); });
+    db.close();
+  });
+  await page.goto('/#/books/book/learn/s-0?skipCheck=1');
+  const word = page.getByRole('button', { name: 'Check 猫' });
+  await word.scrollIntoViewIfNeeded();
+  await word.click();
+
+  const panel = page.getByRole('group', { name: 'Word feedback' });
+  await expect(panel).toBeVisible();
+  await panel.getByRole('button', { name: 'I knew it' }).first().click();
+  await expect.poll(async () => (await storedCounts(page)).events.length).toBe(1);
+  const stored = await storedCounts(page);
+  expect(stored.events[0]!.target!.key).toMatch(/^vocab-read:/);
+  expect(stored.reviews).toBe(0);
+  expect(stored.studyItems).toBe(0);
+});
