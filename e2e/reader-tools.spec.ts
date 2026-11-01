@@ -212,7 +212,7 @@ test('a planner Word check step opens the meaning check, not the walkthrough', a
   expect(stored.studyItems).toBe(0);
 });
 
-test('a planner Read check step shows the plain sentence, then logs the learner’s own call', async ({ page }) => {
+test('a planner Read check step shows the plain sentence, then logs your own call', async ({ page }) => {
   await seed(page);
   await page.goto('/#/books/book/recall/s-0');
   const check = page.getByRole('group', { name: 'Read check' });
