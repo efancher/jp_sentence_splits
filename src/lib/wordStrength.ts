@@ -54,6 +54,14 @@ export const WORD_STRENGTH_CONFIG = {
   readingExposureSentenceCap: 5,
   /** Half-lives in days; older evidence counts for less. */
   halfLifeDays: { exposure: 21, recognition: 7, recall: 30 } as Record<EvidenceKind, number>,
+  /**
+   * Failures are remembered for a shorter time than successes, and the total
+   * penalty is capped, so a word failed many times long ago recovers toward
+   * its prior instead of staying pinned at zero (the clamp would hide the
+   * recovery otherwise). Recent failures still weigh in full.
+   */
+  failureHalfLifeDays: 14,
+  failurePenaltyCap: 1.5,
 } as const;
 
 const DAY_MS = 86_400_000;
@@ -71,9 +79,12 @@ export function wordStrength(
   evidence: readonly WordEvidence[],
   facet: WordFacet,
   now: number,
-  config = WORD_STRENGTH_CONFIG,
+  options: { config?: typeof WORD_STRENGTH_CONFIG; prior?: number } = {},
 ): number {
-  let score = 0;
+  const config = options.config ?? WORD_STRENGTH_CONFIG;
+  // The prior is a starting score that never decays; evidence moves the word away from it.
+  let score = options.prior ?? 0;
+  let failurePenalty = 0;
   // Exposure counts distinct sentences, each at its most recent sighting.
   const exposureBySentence = new Map<string, number>();
   for (const item of evidence) {
@@ -84,21 +95,36 @@ export function wordStrength(
       if (seen === undefined || item.at > seen) exposureBySentence.set(item.sentenceId, item.at);
       continue;
     }
-    const weight =
-      item.kind === 'recall'
-        ? item.success
-          ? config.recallSuccess
-          : -config.recallFailure
-        : item.success
-          ? config.recognitionSuccess
-          : -config.recognitionFailure;
-    score += weight * decay(now - item.at, config.halfLifeDays[item.kind]);
+    if (item.success) {
+      const weight = item.kind === 'recall' ? config.recallSuccess : config.recognitionSuccess;
+      score += weight * decay(now - item.at, config.halfLifeDays[item.kind]);
+    } else {
+      const weight = item.kind === 'recall' ? config.recallFailure : config.recognitionFailure;
+      failurePenalty += weight * decay(now - item.at, config.failureHalfLifeDays);
+    }
   }
+  score -= Math.min(failurePenalty, config.failurePenaltyCap);
   const newestFirst = [...exposureBySentence.values()].sort((a, b) => b - a);
   for (const at of newestFirst.slice(0, config.readingExposureSentenceCap)) {
     score += config.readingExposurePerSentence * decay(now - at, config.halfLifeDays.exposure);
   }
   return 1 - Math.exp(-Math.max(0, score));
+}
+
+/**
+ * A starting score from a word's general-language frequency, so common words
+ * begin stronger than rare ones before any of the learner's own evidence
+ * exists. `band` is a JMdict `nf` band (1 = the ~500 most frequent words ...
+ * 48 = ~24,000th), `'priority'` is a JMdict priority tag without a band
+ * (news1/ichi1/spec1/gai1 and similar), and null/undefined is no tag at all.
+ * Kept small on purpose: a single failed recall (-1) outweighs the largest
+ * prior (0.8), so the learner's own history wins.
+ */
+export function frequencyBandPrior(band: number | 'priority' | null | undefined): number {
+  if (band === 'priority') return 0.3;
+  if (band === null || band === undefined || band < 1) return 0;
+  if (band > 48) return 0;
+  return (0.8 * (49 - band)) / 48;
 }
 
 export interface AtRiskWord {
@@ -115,14 +141,20 @@ export function rankAtRiskWords(
   wordIds: readonly string[],
   evidenceByWord: ReadonlyMap<string, readonly WordEvidence[]>,
   now: number,
-  options: { facets?: readonly WordFacet[]; limit?: number } = {},
+  options: {
+    facets?: readonly WordFacet[];
+    limit?: number;
+    /** Starting score per word, e.g. from `frequencyBandPrior`; missing words start at 0. */
+    priorByWord?: ReadonlyMap<string, number>;
+  } = {},
 ): AtRiskWord[] {
   const facets = options.facets ?? (['reading', 'meaning'] as const);
   const ranked: AtRiskWord[] = [];
   for (const wordId of wordIds) {
     const evidence = evidenceByWord.get(wordId) ?? [];
     for (const facet of facets) {
-      ranked.push({ wordId, facet, strength: wordStrength(evidence, facet, now) });
+      const prior = options.priorByWord?.get(wordId);
+      ranked.push({ wordId, facet, strength: wordStrength(evidence, facet, now, { prior }) });
     }
   }
   ranked.sort((a, b) => a.strength - b.strength || a.wordId.localeCompare(b.wordId) || a.facet.localeCompare(b.facet));

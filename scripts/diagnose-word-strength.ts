@@ -11,7 +11,8 @@
  */
 import type { ReviewRating } from '../src/domain/types';
 import { buildWordEvidence } from '../src/lib/wordEvidence';
-import { chooseSentencesForWeakWords, rankAtRiskWords } from '../src/lib/wordStrength';
+import { chooseSentencesForWeakWords, frequencyBandPrior, rankAtRiskWords } from '../src/lib/wordStrength';
+import { ensureFrequencyIndex, lookupFrequency, type FrequencyBand } from './lib/jmdictFrequency';
 import { fetchAll, requireAuthedUser } from './lib/scriptHelpers';
 import { createScriptSupabaseClient } from './lib/scriptSupabaseClient';
 
@@ -62,10 +63,24 @@ async function main() {
   const evidence = buildWordEvidence({ reviews, studyItems, wordsBySentence, learningEvents: events });
   const now = Date.now();
   // Words with no evidence sit in sentences the learner has not met; they are unseen, not weak.
-  const wordIds = [...sentencesByWord.keys()].filter((id) => evidence.has(id));
-  console.log(`${sentencesByWord.size - wordIds.length} linked words have no evidence yet (unseen) and are excluded`);
-  const ranked = rankAtRiskWords(wordIds, evidence, now, { facets: ['reading'] });
   const byId = new Map(vocab.map((v) => [v.id, v]));
+  // Numerals and symbols (％, 25) are not words to learn; keep only entries with kana or kanji.
+  const isWord = (id: string) => /[぀-ヿ一-鿿]/.test(byId.get(id)?.expression ?? '');
+  const wordIds = [...sentencesByWord.keys()].filter((id) => evidence.has(id) && isWord(id));
+  console.log(`${sentencesByWord.size - wordIds.length} linked entries excluded (no evidence yet, or numerals/symbols)`);
+  console.log('Loading JMdict frequency bands (downloads + caches on first run)...');
+  const frequency = await ensureFrequencyIndex();
+  const bandByWord = new Map<string, FrequencyBand | null>();
+  for (const wordId of wordIds) {
+    const word = byId.get(wordId);
+    bandByWord.set(wordId, word ? lookupFrequency(frequency, word.expression, word.reading) : null);
+  }
+  const priorByWord = new Map([...bandByWord].map(([id, band]) => [id, frequencyBandPrior(band)]));
+  const ranked = rankAtRiskWords(wordIds, evidence, now, { facets: ['reading'], priorByWord });
+  const bandLabel = (id: string) => {
+    const band = bandByWord.get(id);
+    return band === null || band === undefined ? 'no tag' : band === 'priority' ? 'common' : `nf${String(band).padStart(2, '0')}`;
+  };
   const recallCount = (wordId: string) => (evidence.get(wordId) ?? []).filter((e) => e.kind === 'recall').length;
 
   console.log(`${wordIds.length} linked words, ${reviews.length} reviews, ${events.length} lesson events`);
@@ -74,7 +89,7 @@ async function main() {
     const word = byId.get(entry.wordId);
     console.log(
       `  ${entry.strength.toFixed(2)}  ${(word?.expression ?? entry.wordId).padEnd(12)} ${(word?.reading ?? '').padEnd(12)} ` +
-        `in ${sentencesByWord.get(entry.wordId)?.size ?? 0} sentence(s), ${recallCount(entry.wordId)} recall(s)`,
+        `${bandLabel(entry.wordId).padEnd(7)} in ${sentencesByWord.get(entry.wordId)?.size ?? 0} sentence(s), ${recallCount(entry.wordId)} recall(s)`,
     );
   }
 

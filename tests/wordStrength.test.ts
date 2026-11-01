@@ -59,6 +59,15 @@ describe('wordStrength', () => {
     expect(wrongThenRecall).toBeLessThan(recall);
   });
 
+  it('lets many old failures fade back toward the prior instead of pinning at zero', () => {
+    const failures = (ageDays: number) =>
+      Array.from({ length: 15 }, () => ev({ kind: 'recall', facet: 'reading', success: false, at: NOW - ageDays * DAY }));
+    const recent = wordStrength(failures(1), 'reading', NOW, { prior: 0.8 });
+    const old = wordStrength(failures(90), 'reading', NOW, { prior: 0.8 });
+    expect(recent).toBe(0);
+    expect(old).toBeGreaterThan(0.4);
+  });
+
   it('never drops below zero after failures, and keeps facets separate', () => {
     const evidence = [
       ev({ kind: 'recall', facet: 'reading', success: false }),
