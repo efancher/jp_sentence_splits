@@ -56,8 +56,10 @@ and possible extensions. This snapshot does not certify a live deployment.
   down to nine by joining the shortest neighbours, retaining inner punctuation.
   Single-tile dictation keeps the raw split and its nine-tile limit. A sentence
   now seeds only one new dictation tile (the first whose phrase no other
-  sentence already dictates); earlier dictation cards keep surfacing, and the
-  older nine-per-sentence cards have not been retired.
+  sentence already dictates). The older multi-tile sentences were trimmed to
+  the most-reviewed card each on 2026-11-01 (`npm run retire:extra-dictation-tiles`:
+  38 of 48 soft-deleted, reviews untouched; applied to the production database,
+  reversible by clearing `deleted_at`).
 - Shadowing candidates are ordered by weak vocabulary after explicit sound flags
   and missed cloze cards, ahead of fewest attempts (`getWeakWordSentenceSignal`,
   selection only, local history). Sentence-first planning also revisits

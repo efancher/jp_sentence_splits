@@ -81,6 +81,7 @@
     "diagnose:routing-evidence": "tsx scripts/diagnose-routing-evidence.ts",
     "diagnose:word-strength": "tsx scripts/diagnose-word-strength.ts",
     "build:word-frequency": "tsx scripts/build-word-frequency.ts",
+    "retire:extra-dictation-tiles": "tsx scripts/retire-extra-dictation-tiles.ts",
     "diagnose:conjugation-cards": "tsx scripts/diagnose-conjugation-cards.ts",
     "diagnose:grammar-links": "tsx scripts/diagnose-grammar-links.ts",
     "merge:grammar-patterns": "tsx scripts/merge-grammar-patterns.ts",
