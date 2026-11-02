@@ -306,6 +306,27 @@ export function lookupJmdict(
   reading?: string,
   pos?: string,
 ): GlossEntry | null {
+  const found = lookupJmdictRaw(index, expression, reading, pos);
+  const override = found && GLOSS_OVERRIDES.get(`${found.expression}|${found.reading}`);
+  return found && override ? { ...found, gloss: override } : found;
+}
+
+/**
+ * JMDict lists the first sense of some very common words as the rarer one.
+ * よく is "nicely; well" first, but in the learner's material it almost
+ * always means "often" (reported 2026-11-02, sent_0c8d8006).
+ */
+export const GLOSS_OVERRIDES = new Map<string, string>([
+  ['良く|よく', 'often, frequently'],
+  ['よく|よく', 'often, frequently'],
+]);
+
+function lookupJmdictRaw(
+  index: JmdictIndex,
+  expression: string,
+  reading?: string,
+  pos?: string,
+): GlossEntry | null {
   const posClass = resolvePosClass(pos);
   if (reading) {
     const exact = pickCandidate(index.byKey.get(`${expression}|${reading}`) ?? [], posClass);
