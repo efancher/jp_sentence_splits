@@ -32,14 +32,16 @@ export interface ReadingFlagFix {
  * same rule `checkSentenceReading` now applies at import). Every ruby span
  * matching the flag's base and furigana is corrected. Returns null when the
  * flag isn't one, nothing matches (already fixed, or the sentence changed),
- * or the markup can't be rebuilt exactly.
+ * or the markup can't be rebuilt exactly. `force` skips the sound-change
+ * test, for a learner who listened and chose the assistant's reading.
  */
 export function applyReadingFlagFix(
   sentence: { inlineReading?: string | null; readingOnly?: string | null },
   flag: ReadingFlag,
+  options: { force?: boolean } = {},
 ): ReadingFlagFix | null {
   const inline = sentence.inlineReading;
-  if (!inline || flag.hasAudio) return null;
+  if (!inline || (flag.hasAudio && !options.force)) return null;
   const segments = parseInlineReadings(inline);
   const fixes: SpanReadings = new Map();
   segments.forEach((seg, index) => {
@@ -48,7 +50,7 @@ export function applyReadingFlagFix(
       before: isWordChar(Array.from(segments[index - 1]?.base ?? '').pop()),
       after: isWordChar(Array.from(segments[index + 1]?.base ?? '')[0]),
     };
-    if (isCompoundSoundChange(flag.furigana, flag.assistant, near)) fixes.set(index, flag.assistant);
+    if (options.force || isCompoundSoundChange(flag.furigana, flag.assistant, near)) fixes.set(index, flag.assistant);
   });
   if (fixes.size === 0) return null;
   const rewritten = applyReadingFixes(inline, fixes);

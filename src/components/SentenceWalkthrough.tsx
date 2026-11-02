@@ -29,6 +29,7 @@ import { GlossDecisionPanel, planGlossDecisions, type GlossDecisionInput } from 
 import { SentenceExpressionCard, meaningUnits } from './SentenceExpressionCard';
 import { NativeAudioButton } from './NativeAudioButton';
 import { PhraseConstructionSection } from './PhraseConstructionSection';
+import { ReadingFlagsPanel } from './ReadingFlagsPanel';
 import { SentencePatterns } from './SentencePatterns';
 import { TargetLessonCard, WordGlossList, type CompareAids, type LessonEventInput } from './TargetLessonCard';
 
@@ -602,6 +603,7 @@ export function SentenceWalkthrough({
           Can&rsquo;t speak right now
         </label>
       </div>
+      <ReadingFlagsPanel sentence={sentence} />
     </section>
   );
 }

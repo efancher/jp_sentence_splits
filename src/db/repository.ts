@@ -314,6 +314,7 @@ import {
 } from '../lib/sessionPlanner';
 import { normalizeTroubleTags, routeTroubleTags } from '../lib/reviewTroubleTags';
 import { activeShadowSnoozeIds, shadowSnoozeUntil } from '../lib/shadowSnooze';
+import { applyReadingFlagFix, parseReadingFlagNote } from '../lib/readingFlagFix';
 import {
   CONTINUE_BOOK_MIN_INTRODUCED_RATIO,
   SHADOWING_MIN_INTRODUCED_RATIO,
@@ -8855,6 +8856,32 @@ export async function settleChunkIssueReports(
     await db.chunkIssueReports.put(updated);
     notifySync('chunk_issue_reports', updated.id, updated);
   }
+}
+
+/** Open reading-check flags (and other meaning-check issues) filed against one sentence. */
+export async function listOpenMeaningCheckIssues(sentenceId: string): Promise<ChunkIssueReport[]> {
+  const rows = await getDb().chunkIssueReports.where('sentenceId').equals(sentenceId).toArray();
+  return rows
+    .filter((row) => row.status === 'open' && row.source === 'meaning_checks')
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+
+/**
+ * The learner listened and chose the assistant's reading for a flagged span:
+ * rewrite the sentence's furigana (and `readingOnly` when it was the plain
+ * kana of the old furigana) and mark the report resolved. A report whose span
+ * no longer matches the sentence (already edited) is just resolved.
+ */
+export async function applyReadingFlagChoice(reportId: string): Promise<boolean> {
+  const db = getDb();
+  const report = await db.chunkIssueReports.get(reportId);
+  if (!report || report.status !== 'open') return false;
+  const flag = parseReadingFlagNote(report.note);
+  const sentence = report.sentenceId ? await db.sentences.get(report.sentenceId) : undefined;
+  const fix = flag && sentence ? applyReadingFlagFix(sentence, flag, { force: true }) : null;
+  if (fix && sentence) await updateSentenceText(sentence.id, fix);
+  await settleChunkIssueReports([reportId], 'resolved');
+  return fix != null;
 }
 
 export async function reportSyncIssue(input: {

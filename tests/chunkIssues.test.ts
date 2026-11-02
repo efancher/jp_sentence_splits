@@ -1,7 +1,14 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { resetDbForTests } from '../src/db/database';
-import { listChunkIssueReports, reportChunkIssues, settleChunkIssueReports } from '../src/db/repository';
+import { getDb, resetDbForTests } from '../src/db/database';
+import type { Sentence } from '../src/domain/types';
+import {
+  applyReadingFlagChoice,
+  listChunkIssueReports,
+  listOpenMeaningCheckIssues,
+  reportChunkIssues,
+  settleChunkIssueReports,
+} from '../src/db/repository';
 import { chunkIssueKey } from '../src/lib/chunkIssues';
 import { createId } from '../src/lib/ids';
 
@@ -34,6 +41,25 @@ describe('reportChunkIssues dismissal', () => {
       await reportChunkIssues('particle_checks', [{ sentenceId: 's9', chunks: ['y'], note: 'に | なる → になる (different reason)' }]),
     ).toBe(0);
     expect(await reportChunkIssues('particle_checks', [{ sentenceId: 's9', chunks: ['y'], note: 'も | ちろん → もちろん' }])).toBe(1);
+  });
+
+  it('applies the assistant reading to the sentence when the learner picks it', async () => {
+    const sentenceId = createId('sent');
+    await getDb().sentences.put({
+      id: sentenceId,
+      japanese: '体全体が温まる',
+      inlineReading: '体[たい]全体[ぜんたい]が温[あたた]まる',
+      readingOnly: 'たいぜんたいがあたたまる',
+    } as Sentence);
+    await reportChunkIssues('meaning_checks', [
+      { sentenceId, chunks: [], note: 'Reading check — 体: furigana たい, assistant からだ' },
+    ]);
+    const [issue] = await listOpenMeaningCheckIssues(sentenceId);
+    expect(await applyReadingFlagChoice(issue!.id)).toBe(true);
+    const updated = await getDb().sentences.get(sentenceId);
+    expect(updated?.inlineReading).toBe('体[からだ]全体[ぜんたい]が温[あたた]まる');
+    expect(updated?.readingOnly).toBe('からだぜんたいがあたたまる');
+    expect(await listOpenMeaningCheckIssues(sentenceId)).toEqual([]);
   });
 
   it('refiles a resolved pattern if it recurs', async () => {
