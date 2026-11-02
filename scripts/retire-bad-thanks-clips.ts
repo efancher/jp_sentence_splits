@@ -1,7 +1,7 @@
 /**
  * One-off: soft-delete the mis-attached "ご視聴ありがとうございました" clips
- * (Slow Japanese Ep 4 / 5 / 17). Their audio is "ではまた来週" plus the English
- * outro, not the Japanese phrase; Ep 22's clip is the good one and is kept.
+ * (Slow Japanese Ep 4 / 5 / 17 / 22). Their audio is the English
+ * outro (Ep 4 also has "ではまた来週"); none contains the spoken Japanese phrase.
  *
  * Soft-delete only (`deleted_at`) so clients learn of it on next pull.
  * Dry-run by default.
@@ -12,7 +12,7 @@ import { parseApplyFlag, requireAuthedUser } from './lib/scriptHelpers';
 import { createScriptSupabaseClient } from './lib/scriptSupabaseClient';
 
 const SENTENCE_ID = 'sent_d51e885f';
-const BAD_AUDIO_IDS = ['audio_69f4009e', 'audio_57691bf6', 'audio_48db9355'];
+const BAD_AUDIO_IDS = ['audio_69f4009e', 'audio_57691bf6', 'audio_48db9355', 'audio_baa54e8f'];
 
 async function main() {
   const apply = parseApplyFlag(process.argv.slice(2));
@@ -32,7 +32,6 @@ async function main() {
     console.log(`  ${BAD_AUDIO_IDS.includes(r.id) ? 'RETIRE' : 'keep  '} ${r.id} ${r.source_title} (${r.duration_ms}ms)`);
   }
   const targets = live.filter((r) => BAD_AUDIO_IDS.includes(r.id));
-  if (live.length - targets.length < 1) throw new Error('Refusing: would leave the sentence with no clip.');
   if (!apply) {
     console.log(`\nDry run — ${targets.length} row(s) would be soft-deleted. Re-run with --apply.`);
     return;
