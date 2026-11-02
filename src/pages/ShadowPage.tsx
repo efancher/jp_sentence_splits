@@ -144,6 +144,8 @@ export function ShadowWorkspace({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [speed, setSpeed] = useState(1);
   const [targetRange, setTargetRange] = useState<TimeRangeMs | null>(null);
+  /** Loop-window sliders only: bounds the close-shadow loop, never attempt analysis/compare. */
+  const [loopWindow, setLoopWindow] = useState<TimeRangeMs | null>(null);
   const [isLoopingTarget, setIsLoopingTarget] = useState(false);
   const [calibrating, setCalibrating] = useState(false);
   const [calibration, setCalibration] = useState<CalibrationResult | null>(null);
@@ -239,7 +241,9 @@ export function ShadowWorkspace({
 
   /** Valid loop-point range (both marks set, end after start), else the clip's own trim, else null. */
   const loopRange =
-    (targetRange && targetRange.endMs > targetRange.startMs ? targetRange : null) ?? referenceTrimRange;
+    (loopWindow && loopWindow.endMs > loopWindow.startMs ? loopWindow : null) ??
+    (targetRange && targetRange.endMs > targetRange.startMs ? targetRange : null) ??
+    referenceTrimRange;
 
   // Pick up recordings that finished either by the Stop button or by hitting
   // the max-duration auto-stop. A just-ended rep loop also lands a final take
@@ -296,6 +300,7 @@ export function ShadowWorkspace({
     setPendingAttempt(null);
     setDraftNotes('');
     setTargetRange(null);
+    setLoopWindow(null);
     setAnalyzingAttemptId(null);
     setReferenceError(null);
     setEphemeralTake(null);
@@ -687,10 +692,10 @@ export function ShadowWorkspace({
           range={loopRange ?? { startMs: 0, endMs: referenceAudio.durationMs }}
           gapMs={loopGapMs}
           leadInMs={loopLeadInMs}
-          onRangeChange={setTargetRange}
+          onRangeChange={setLoopWindow}
           onGapChange={changeLoopGap}
           onLeadInChange={changeLoopLeadIn}
-          onReset={handleClearTarget}
+          onReset={() => setLoopWindow(null)}
         />
       ) : null}
       {referenceAudio && !hideTranscript && !showMeaningInstead ? (
