@@ -1,14 +1,19 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 
 import { APP_NAME, APP_SHORT_NAME } from '../appConfig';
 import { MigrationModal } from '../components/MigrationModal';
 import { ReportIssueButton } from '../components/ReportIssueButton';
 import { SessionBar } from '../components/SessionBar';
+import { SlowPageBanner } from '../components/SlowPageBanner';
 import { SyncStatusBadge } from '../components/SyncStatusBadge';
 import { expireStalePlannerSessions } from '../db/repository';
 import { useActiveSession } from '../hooks/useActiveSession';
 import { autoGenerateMeaningChecks } from '../lib/meaningCheckAutogen';
+import { summarizePageTimings, trackPageLoad } from '../lib/pageTiming';
+import { registerReportContext } from '../lib/reportContext';
+import { getRecentSyncLogs } from '../sync/logger';
+import { getSyncProgress } from '../sync/progress';
 
 const NAV = [
   { to: '/', label: 'Home', end: true },
@@ -65,6 +70,37 @@ export function AppShell() {
     setMenuOpen(false);
   }, [location.pathname]);
 
+  // Time each navigation until its "Loading…" placeholders are gone.
+  const mainRef = useRef<HTMLElement>(null);
+  const firstNavigation = useRef(true);
+  useEffect(() => {
+    const initial = firstNavigation.current;
+    firstNavigation.current = false;
+    return trackPageLoad({
+      path: location.pathname,
+      root: mainRef.current,
+      initial,
+      startedAt: initial ? 0 : performance.now(),
+      syncState: () => {
+        const progress = getSyncProgress();
+        return { running: progress.running, stage: progress.stage };
+      },
+    });
+  }, [location.pathname]);
+
+  useEffect(
+    () =>
+      registerReportContext('pageTimings', () => ({
+        recent: summarizePageTimings(),
+        syncLastCycle: getSyncProgress().lastCycle,
+        syncLogs: getRecentSyncLogs()
+          .filter((event) => event.code === 'PULL_TIMING' || event.code === 'AUDIO_HYDRATE')
+          .slice(-15)
+          .map((event) => `${event.at} ${event.message}`),
+      })),
+    [],
+  );
+
   useEffect(() => {
     if (!menuOpen) return;
     function handleKeyDown(event: KeyboardEvent) {
@@ -100,7 +136,8 @@ export function AppShell() {
           <SyncStatusBadge />
         </div>
       </header>
-      <main className={showSessionBar ? 'app-main has-session-bar' : 'app-main'}>
+      <main ref={mainRef} className={showSessionBar ? 'app-main has-session-bar' : 'app-main'}>
+        <SlowPageBanner />
         <Outlet />
       </main>
       {showSessionBar ? <SessionBar /> : null}
