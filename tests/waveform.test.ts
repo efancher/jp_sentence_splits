@@ -13,7 +13,7 @@ import {
   livePeaksFromAmplitudes,
   peakMagnitude,
   peaksToPolyline,
-  pitchBucketsToPolyline,
+  pitchBucketsToRuns,
   pitchFramesToBucketSemitones,
   trimmedSampleRange,
 } from '../src/lib/waveform';
@@ -156,15 +156,28 @@ describe('pitchFramesToBucketSemitones', () => {
   });
 });
 
-describe('pitchBucketsToPolyline', () => {
-  it('maps values to y within [min, max], skipping nulls', () => {
-    const line = pitchBucketsToPolyline([0, null, -8, 8], 100, 100, -8, 8);
-    const points = line.split(' ');
-    expect(points).toHaveLength(3); // the null bucket is skipped
+describe('pitchBucketsToRuns', () => {
+  it('breaks the line into separate runs at null buckets instead of bridging them', () => {
+    const runs = pitchBucketsToRuns([0, 4, null, null, -8, 8], 100, 100, -8, 8);
+    expect(runs).toHaveLength(2);
+    expect(runs[0]!.split(' ')).toHaveLength(2);
+    expect(runs[1]!.split(' ')).toHaveLength(2);
   });
 
-  it('returns empty string for no values', () => {
-    expect(pitchBucketsToPolyline([], 100, 100, -8, 8)).toBe('');
+  it('draws a lone voiced bucket as a two-point dot segment', () => {
+    const runs = pitchBucketsToRuns([null, 0, null], 100, 100, -8, 8);
+    expect(runs).toHaveLength(1);
+    expect(runs[0]!.split(' ')).toHaveLength(2);
+  });
+
+  it('stops at upToIndex', () => {
+    const runs = pitchBucketsToRuns([0, 1, 2, 3], 100, 100, -8, 8, 1);
+    expect(runs).toHaveLength(1);
+    expect(runs[0]!.split(' ')).toHaveLength(2);
+  });
+
+  it('returns no runs for no values', () => {
+    expect(pitchBucketsToRuns([], 100, 100, -8, 8)).toEqual([]);
   });
 });
 

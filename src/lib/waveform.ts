@@ -2,7 +2,7 @@
  * Ported from
  * ~/projects/shadowing/web/src/{analysis/audio.ts,analysis/waveform.ts,services/media.ts,services/analysis.ts}.
  * Amplitude-only subset landed in Phase 8.3; the pitch-bucket functions
- * (pitchFramesToBucketSemitones, pitchBucketsToPolyline,
+ * (pitchFramesToBucketSemitones, pitchBucketsToRuns,
  * emptyLivePitchBuckets) landed in Phase 8.4a; the alignment helpers
  * (energyEnvelope, detectOnsetSeconds, crossCorrelateOffset,
  * analyzeAlignment — the last a simplified, uncached
@@ -202,26 +202,40 @@ export function pitchFramesToBucketSemitones(
   );
 }
 
-export function pitchBucketsToPolyline(
+export function pitchBucketsToRuns(
   values: Array<number | null>,
   width: number,
   height: number,
   min: number,
   max: number,
   upToIndex?: number,
-): string {
-  if (values.length === 0) return '';
+): string[] {
+  if (values.length === 0) return [];
   const span = Math.max(0.001, max - min);
   const last = Math.min(values.length - 1, upToIndex ?? values.length - 1);
-  const points: string[] = [];
+  const runs: string[] = [];
+  let current: string[] = [];
+  const flush = () => {
+    // A lone voiced bucket becomes a near-zero-length segment so a round line cap draws a dot.
+    if (current.length === 1) {
+      const [px, py] = current[0]!.split(',');
+      current.push(`${Number(px) + 0.01},${py}`);
+    }
+    if (current.length > 0) runs.push(current.join(' '));
+    current = [];
+  };
   for (let index = 0; index <= last; index += 1) {
     const value = values[index];
-    if (value === null || value === undefined) continue;
+    if (value === null || value === undefined) {
+      flush();
+      continue;
+    }
     const x = (index / Math.max(1, values.length - 1)) * width;
     const y = height - ((value - min) / span) * (height - 12) - 6;
-    points.push(`${x},${y}`);
+    current.push(`${x},${y}`);
   }
-  return points.join(' ');
+  flush();
+  return runs;
 }
 
 export function energyEnvelope(samples: Float32Array, windowSize = 256): Float32Array {

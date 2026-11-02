@@ -157,40 +157,51 @@ function PitchCanvas({
   /** Shared y-axis min/max (semitones), so contour *magnitude* is comparable between the two canvases and a flat delivery reads as flat rather than being stretched to full height. */
   valueRange?: { min: number; max: number };
 }) {
-  const path = useMemo(() => {
-    if (!pitch || pitch.frames.length === 0) return '';
+  const runs = useMemo(() => {
+    if (!pitch || pitch.frames.length === 0) return [];
     const values = pitch.frames
       .map((frame) => (mode === 'hz' ? frame.hz : frame.relativeSemitones))
       .filter((value): value is number => value !== null);
-    if (values.length === 0) return '';
+    if (values.length === 0) return [];
     const min = valueRange ? valueRange.min : Math.min(...values);
     const max = valueRange ? valueRange.max : Math.max(...values);
     const span = Math.max(0.001, max - min);
     const windowSpan = timeWindow ? Math.max(0.001, timeWindow.end - timeWindow.start) : 0;
-    return pitch.frames
-      .map((frame, index) => {
-        const value = mode === 'hz' ? frame.hz : frame.relativeSemitones;
-        if (value === null || !frame.voiced) return null;
-        if (
-          timeWindow &&
-          (frame.timeSeconds < timeWindow.start || frame.timeSeconds > timeWindow.end)
-        ) {
-          return null;
-        }
-        const x = timeWindow
-          ? ((frame.timeSeconds - timeWindow.start) / windowSpan) * PITCH_WIDTH
-          : (index / Math.max(1, pitch.frames.length - 1)) * PITCH_WIDTH;
-        const y = PITCH_HEIGHT - ((value - min) / span) * (PITCH_HEIGHT - 12) - 6;
-        return `${x},${y}`;
-      })
-      .filter(Boolean)
-      .join(' ');
+    // Unvoiced / out-of-window frames break the line into separate runs so the
+    // contour is left empty there rather than bridged across the gap.
+    const result: string[] = [];
+    let current: string[] = [];
+    const flush = () => {
+      if (current.length === 1) {
+        const [px, py] = current[0]!.split(',');
+        current.push(`${Number(px) + 0.01},${py}`);
+      }
+      if (current.length > 0) result.push(current.join(' '));
+      current = [];
+    };
+    pitch.frames.forEach((frame, index) => {
+      const value = mode === 'hz' ? frame.hz : frame.relativeSemitones;
+      const outOfWindow =
+        timeWindow !== undefined &&
+        (frame.timeSeconds < timeWindow.start || frame.timeSeconds > timeWindow.end);
+      if (value === null || !frame.voiced || outOfWindow) {
+        flush();
+        return;
+      }
+      const x = timeWindow
+        ? ((frame.timeSeconds - timeWindow.start) / windowSpan) * PITCH_WIDTH
+        : (index / Math.max(1, pitch.frames.length - 1)) * PITCH_WIDTH;
+      const y = PITCH_HEIGHT - ((value - min) / span) * (PITCH_HEIGHT - 12) - 6;
+      current.push(`${x},${y}`);
+    });
+    flush();
+    return result;
   }, [pitch, mode, timeWindow, valueRange]);
 
   return (
     <div className="stack">
       <span className="muted">{label}</span>
-      {path ? (
+      {runs.length > 0 ? (
         <svg
           viewBox={`0 0 ${PITCH_WIDTH} ${PITCH_HEIGHT}`}
           preserveAspectRatio="none"
@@ -198,13 +209,18 @@ function PitchCanvas({
           aria-label={`${label} pitch contour`}
           style={{ width: '100%', height: PITCH_HEIGHT, color: 'var(--text-muted)' }}
         >
-          <polyline
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeDasharray={dashed ? '6 4' : undefined}
-            points={path}
-          />
+          {runs.map((points, runIndex) => (
+            <polyline
+              key={runIndex}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeDasharray={dashed ? '6 4' : undefined}
+              points={points}
+            />
+          ))}
         </svg>
       ) : (
         <span className="muted" style={{ fontSize: '0.8em' }}>
@@ -213,7 +229,7 @@ function PitchCanvas({
             : 'Audio for this clip couldn’t be read on this device.'}
         </span>
       )}
-      {kana && path ? <KanaTimelineRow entries={kana} label={`${label} syllables`} /> : null}
+      {kana && runs.length > 0 ? <KanaTimelineRow entries={kana} label={`${label} syllables`} /> : null}
     </div>
   );
 }

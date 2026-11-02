@@ -17,7 +17,7 @@ import {
   livePeaksFromAmplitudes,
   peakMagnitude,
   peaksToPolyline,
-  pitchBucketsToPolyline,
+  pitchBucketsToRuns,
   pitchFramesToBucketSemitones,
   sliceCanonicalAudio,
   type WavePeak,
@@ -289,7 +289,7 @@ export function LiveShadowWaveform({
     const widthFrac = (to - from) / bucketsPerRow;
     const rowWidth = VIEW_WIDTH * widthFrac;
     const line = (values: Array<number | null>, upTo?: number) =>
-      pitchBucketsToPolyline(
+      pitchBucketsToRuns(
         values.slice(from, to),
         rowWidth,
         pitchHeight,
@@ -305,9 +305,9 @@ export function LiveShadowWaveform({
     return {
       widthFrac,
       rowWidth,
-      referenceLine: line(referencePitchBuckets),
+      referenceRuns: line(referencePitchBuckets),
       // Rows after the playhead stay empty so a rep redraws top-to-bottom.
-      livePitchLine: liveUpTo >= from ? line(livePitchBuckets, liveUpTo) : '',
+      liveRuns: liveUpTo >= from ? line(livePitchBuckets, liveUpTo) : [],
       playhead,
     };
   });
@@ -360,10 +360,28 @@ export function LiveShadowWaveform({
             }
             style={{ width: `${row.widthFrac * 100}%`, height: pitchHeight, color: 'var(--text-muted)' }}
           >
-            <polyline fill="none" stroke="currentColor" strokeWidth="2" points={row.referenceLine} />
-            {row.livePitchLine && (
-              <polyline fill="none" stroke="var(--accent)" strokeWidth="2.5" points={row.livePitchLine} />
-            )}
+            {row.referenceRuns.map((points, runIndex) => (
+              <polyline
+                key={`r${runIndex}`}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                points={points}
+              />
+            ))}
+            {row.liveRuns.map((points, runIndex) => (
+              <polyline
+                key={`l${runIndex}`}
+                fill="none"
+                stroke="var(--accent)"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                points={points}
+              />
+            ))}
             {row.playhead !== null && (
               <line
                 x1={row.playhead}
