@@ -9,6 +9,8 @@ import {
   getBookVocabularyCoverage,
   getDb,
 } from '../db/repository';
+import { readSettings } from '../db/database';
+import { isSentenceLedFlow } from '../lib/sentenceLed';
 import { StageProgressBar } from '../components/StageProgressBar';
 import { coveragePercent } from '../lib/bookCoverage';
 import { isBookInStudyRotation } from '../lib/suspendedBooks';
@@ -21,16 +23,20 @@ export function BooksPage() {
   const [sortMode, setSortMode] = useState<SortMode>('recent');
   const books = useLiveQuery(async () => {
     const db = getDb();
+    // Card-based vocabulary coverage is a paused signal under the sentence-led
+    // flow (and the costliest scan here), so only compute it for the legacy flow.
+    const legacyFlow = !isSentenceLedFlow(await readSettings());
     const [all, coverageByBookId, stagesByBookId] = await Promise.all([
       db.books.toArray(),
-      getBookVocabularyCoverage(),
+      legacyFlow ? getBookVocabularyCoverage() : Promise.resolve(null),
       getBookStageCounts(),
     ]);
     const withProgress = await Promise.all(
       all.map(async (book) => ({
         book,
         progress: await getBookProgress(book.id),
-        coverage: coverageByBookId.get(book.id) ?? null,
+        coverage: coverageByBookId?.get(book.id) ?? null,
+        legacyFlow,
         stages: stagesByBookId.get(book.id),
       })),
     );
@@ -87,6 +93,7 @@ export function BooksPage() {
         </form>
       </section>
 
+      {books?.[0]?.legacyFlow ? (
       <section className="row" style={{ justifyContent: 'flex-end', gap: '0.4rem' }}>
         <span className="muted" style={{ fontSize: '0.85rem' }}>Sort:</span>
         <button
@@ -104,9 +111,10 @@ export function BooksPage() {
           Easiest first
         </button>
       </section>
+      ) : null}
 
       <section className="stack">
-        {(books ?? []).map(({ book, progress, coverage, stages }) => {
+        {(books ?? []).map(({ book, progress, coverage, legacyFlow, stages }) => {
           const percent = coverage ? coveragePercent(coverage) : null;
           return (
             <article key={book.id} className="list-card">
@@ -137,11 +145,13 @@ export function BooksPage() {
                   ) : null}
                 </>
               ) : null}
-              <div className="muted" style={{ fontSize: '0.85rem' }}>
-                {percent === null
-                  ? 'Vocabulary not confirmed yet'
-                  : `~${percent}% known vocabulary (${coverage!.knownCount}/${coverage!.totalCount} words)`}
-              </div>
+              {legacyFlow ? (
+                <div className="muted" style={{ fontSize: '0.85rem' }}>
+                  {percent === null
+                    ? 'Vocabulary not confirmed yet'
+                    : `~${percent}% known vocabulary (${coverage!.knownCount}/${coverage!.totalCount} words)`}
+                </div>
+              ) : null}
               <div className="muted" style={{ fontSize: '0.85rem' }}>
                 Last opened:{' '}
                 {book.lastOpenedAt
