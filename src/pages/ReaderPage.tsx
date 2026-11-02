@@ -1221,7 +1221,9 @@ export function ReaderPage() {
                       // Mostly-unknown sentences show their translation by default; the toggle flips the default either way.
                       const mostlyUnknown = help.total > 0 && help.unknownCount * 2 > help.total;
                       const wordChecking = (readerTool?.kind === 'meaning' || (readerTool?.kind === 'recall' && !readerTool.revealed)) && readerTool.sentenceId === row.sentence.id;
-                      const shown = !wordChecking && mostlyUnknown !== revealedTranslations.has(row.sentence.id);
+                      // A revealed Read check always shows the meaning, even for sentences made only of known words.
+                      const readCheckRevealed = readerTool?.kind === 'recall' && readerTool.revealed && readerTool.sentenceId === row.sentence.id;
+                      const shown = readCheckRevealed || (!wordChecking && mostlyUnknown !== revealedTranslations.has(row.sentence.id));
                       return shown ? (
                         <>
                           <div className="muted">{row.sentence.translation || '(no translation)'}</div>
