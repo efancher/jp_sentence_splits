@@ -21,6 +21,7 @@ import { transcribeAudio } from '../lib/analysisApi';
 import type { TimeRangeMs } from '../lib/recording';
 import type { PitchAnalysisPayload } from '../lib/pitch';
 import { extractPitch, voicedTimeSpan } from '../lib/pitch';
+import { RawPitchOverlay } from './RawPitchOverlay';
 import { buildTimingObservations, confidenceFromSignal } from '../lib/timingObservations';
 import type { TimingObservation } from '../lib/timingObservations';
 import { buildPitchTimingObservations } from '../lib/pitchTimingObservations';
@@ -277,7 +278,7 @@ export function AnalysisPanel({
   onProposeSegment?: (range: TimeRangeMs) => void;
 }) {
   const [mode, setMode] = useState<AlignmentMode>('original');
-  const [pitchMode, setPitchMode] = useState<'hz' | 'semitones'>('semitones');
+  const [pitchMode, setPitchMode] = useState<'hz' | 'semitones' | 'raw'>('semitones');
   /** The "All observations" list only mounts once opened — collapsed really means absent, not just visually hidden (matters for cross-recording occurrence counts elsewhere in this panel). */
   const [allObservationsOpen, setAllObservationsOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -1072,24 +1073,38 @@ export function AnalysisPanel({
         >
           Hertz
         </button>
+        <button
+          type="button"
+          className={pitchMode === 'raw' ? 'primary' : undefined}
+          aria-pressed={pitchMode === 'raw'}
+          onClick={() => setPitchMode('raw')}
+        >
+          Raw overlay
+        </button>
       </div>
-      <PitchCanvas
-        pitch={referencePitch}
-        label="Reference pitch"
-        mode={pitchMode}
-        kana={referenceKanaTimeline}
-        timeWindow={referencePitchWindow}
-        valueRange={sharedPitchRange}
-      />
-      <PitchCanvas
-        pitch={learnerPitch}
-        label="Learner pitch"
-        mode={pitchMode}
-        dashed
-        kana={learnerKanaTimeline}
-        timeWindow={learnerPitchWindow}
-        valueRange={sharedPitchRange}
-      />
+      {pitchMode === 'raw' ? (
+        <RawPitchOverlay reference={referencePitch} learner={learnerPitch} />
+      ) : (
+        <>
+          <PitchCanvas
+            pitch={referencePitch}
+            label="Reference pitch"
+            mode={pitchMode}
+            kana={referenceKanaTimeline}
+            timeWindow={referencePitchWindow}
+            valueRange={sharedPitchRange}
+          />
+          <PitchCanvas
+            pitch={learnerPitch}
+            label="Learner pitch"
+            mode={pitchMode}
+            dashed
+            kana={learnerKanaTimeline}
+            timeWindow={learnerPitchWindow}
+            valueRange={sharedPitchRange}
+          />
+        </>
+      )}
       {timingLane ? (
         <TimingLane lane={timingLane} matchSpeed={matchLaneSpeed} onMatchSpeedChange={setMatchLaneSpeed} />
       ) : null}
