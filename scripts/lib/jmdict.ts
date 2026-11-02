@@ -307,19 +307,39 @@ export function lookupJmdict(
   pos?: string,
 ): GlossEntry | null {
   const found = lookupJmdictRaw(index, expression, reading, pos);
-  const override = found && GLOSS_OVERRIDES.get(`${found.expression}|${found.reading}`);
+  const override = found && glossOverride(found.expression, found.reading, pos);
   return found && override ? { ...found, gloss: override } : found;
 }
 
+interface GlossOverride {
+  gloss: string;
+  /** UniDic POS prefix the caller's token must have; omitted = any POS. */
+  posPrefix?: string;
+}
+
 /**
- * JMDict lists the first sense of some very common words as the rarer one.
- * よく is "nicely; well" first, but in the learner's material it almost
- * always means "often" (reported 2026-11-02, sent_0c8d8006).
+ * JMDict lists the first sense of some very common words as the rarer one,
+ * or as a different word class than the learner's token. Keyed
+ * `expression|reading`. Reported 2026-11-02: よく "nicely" (sent_0c8d8006);
+ * a follow-up scan found まあ "just (e.g. "just wait here")", 結構 "splendid",
+ * あまり/あんまり "remainder" and 好き "liking" on adverb / na-adjective tokens.
  */
-export const GLOSS_OVERRIDES = new Map<string, string>([
-  ['良く|よく', 'often, frequently'],
-  ['よく|よく', 'often, frequently'],
+export const GLOSS_OVERRIDES = new Map<string, GlossOverride>([
+  ['良く|よく', { gloss: 'often, frequently' }],
+  ['よく|よく', { gloss: 'often, frequently' }],
+  ['まあ|まあ', { gloss: 'well, I suppose', posPrefix: '副詞' }],
+  ['結構|けっこう', { gloss: 'quite, fairly, considerably', posPrefix: '副詞' }],
+  ['あまり|あまり', { gloss: 'not very / not much', posPrefix: '副詞' }],
+  ['あんまり|あんまり', { gloss: 'not very / not much', posPrefix: '副詞' }],
+  ['好き|すき', { gloss: 'to like / fond of', posPrefix: '形状詞' }],
 ]);
+
+function glossOverride(expression: string, reading: string, pos?: string): string | undefined {
+  const o = GLOSS_OVERRIDES.get(`${expression}|${reading}`);
+  if (!o) return undefined;
+  if (o.posPrefix && !pos?.startsWith(o.posPrefix)) return undefined;
+  return o.gloss;
+}
 
 function lookupJmdictRaw(
   index: JmdictIndex,

@@ -1,6 +1,7 @@
 /**
- * One-off: sentences.vocabulary_suggestions entries for よく/良く (adverb) that
- * carry JMDict's first sense "nicely" get "often, frequently" instead.
+ * One-off: corrects sentences.vocabulary_suggestions glosses where JMDict's
+ * first sense was the wrong one (よく "nicely", まあ "just", 結構 "splendid",
+ * あまり/あんまり "remainder", 好き "liking").
  * Dry-run by default; --apply to write. Idempotent.
  *
  * Usage: npx tsx scripts/fix-yoku-suggestion-gloss.ts [--apply]
@@ -14,12 +15,20 @@ import { createScriptSupabaseClient } from './lib/scriptSupabaseClient';
 const KEEP_SENTENCES = new Set(['sent_4ec33cf9', 'sent_bd8eeb24']);
 const NEW_GLOSS = 'often, frequently';
 
-function isStaleYoku(s: VocabularySuggestion): boolean {
-  return (
-    (s.expression === 'よく' || s.expression === '良く') &&
-    s.pos.startsWith('副詞') &&
-    /^(nicely|well)\b/i.test(s.english ?? '')
-  );
+/** Glosses JMDict's first sense got wrong (see GLOSS_OVERRIDES in lib/jmdict.ts). */
+const STALE: Array<{ expression: string; posPrefix: string; stale: RegExp; gloss: string }> = [
+  { expression: 'よく', posPrefix: '副詞', stale: /^(nicely|well)\b/i, gloss: NEW_GLOSS },
+  { expression: '良く', posPrefix: '副詞', stale: /^(nicely|well)\b/i, gloss: NEW_GLOSS },
+  { expression: 'まあ', posPrefix: '副詞', stale: /^just\b/i, gloss: 'well, I suppose' },
+  { expression: '結構', posPrefix: '副詞', stale: /^splendid/i, gloss: 'quite, fairly, considerably' },
+  { expression: 'あまり', posPrefix: '副詞', stale: /^remainder/i, gloss: 'not very / not much' },
+  { expression: 'あんまり', posPrefix: '副詞', stale: /^remainder/i, gloss: 'not very / not much' },
+  { expression: '好き', posPrefix: '形状詞', stale: /^liking$/i, gloss: 'to like / fond of' },
+];
+
+function fixedGloss(s: VocabularySuggestion): string | null {
+  const rule = STALE.find((r) => r.expression === s.expression && s.pos.startsWith(r.posPrefix));
+  return rule && rule.stale.test(s.english ?? '') ? rule.gloss : null;
 }
 
 async function main() {
@@ -32,11 +41,13 @@ async function main() {
     suggestions: (row.vocabulary_suggestions as VocabularySuggestion[] | null) ?? [],
   }));
   let n = 0;
-  for (const row of rows.filter((r) => !KEEP_SENTENCES.has(r.id) && r.suggestions.some(isStaleYoku))) {
+  for (const row of rows.filter((r) => !KEEP_SENTENCES.has(r.id) && r.suggestions.some((x) => fixedGloss(x)))) {
     n += 1;
     console.log(`${row.id}  ${row.japanese}`);
     if (!apply) continue;
-    const next = row.suggestions.map((s) => (isStaleYoku(s) ? { ...s, english: NEW_GLOSS } : s));
+    const next = row.suggestions.map((s) => {
+      const g = fixedGloss(s); return g ? { ...s, english: g } : s;
+    });
     const { error } = await supabase.from('sentences').update({ vocabulary_suggestions: next }).eq('id', row.id);
     if (error) throw new Error(`${row.id}: ${error.message}`);
   }
