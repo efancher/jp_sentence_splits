@@ -58,6 +58,7 @@
     "fix:morphology-batch-vocab-readings": "tsx scripts/fix-morphology-batch-vocab-readings.ts",
     "fix:delete-garbled-combined-vocabulary": "tsx scripts/delete-garbled-combined-vocabulary.ts",
     "fix:numeral-readings": "tsx scripts/fix-numeral-readings.ts",
+    "fix:flagged-sound-change-readings": "tsx scripts/fix-flagged-sound-change-readings.ts",
     "fix:vocabulary-numeral-readings": "tsx scripts/fix-vocabulary-numeral-readings.ts",
     "fix:caption-artifacts": "tsx scripts/fix-caption-artifacts.ts",
     "fix:pronoun-readings": "tsx scripts/fix-pronoun-readings.ts",
