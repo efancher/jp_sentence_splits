@@ -81,6 +81,8 @@ function storedTextMode(): ReaderTextMode | undefined {
   }
 }
 
+const NO_AUDIO_ROWS: SentenceAudio[] = [];
+
 export function ReaderPage() {
   const { bookId = '', sentenceId: lessonSentenceId } = useParams();
   const [searchParams] = useSearchParams();
@@ -184,11 +186,6 @@ export function ReaderPage() {
         const sentence = sentences[index];
         if (sentence) rows.push({ membership, sentence });
       });
-      const audioRows = await db.sentenceAudio
-        .where('sentenceId')
-        .anyOf(rows.map((row) => row.sentence.id))
-        .toArray();
-      timer.mark('audio');
       const chapter = chapterId
         ? book.chapters.find((item) => item.id === chapterId) ?? null
         : null;
@@ -268,11 +265,26 @@ export function ReaderPage() {
       const structureDrafts = Object.assign({}, ...book.chapters.map((item) => item.structureDrafts ?? {})) as Record<string, StructureDraftChunk[]>;
       const contextWalkthroughs = mergeChapterWalkthroughs(book.chapters);
       const constructionDrafts = mergeChapterConstructionDrafts(book.chapters);
-      return { book, chapter, rows, audioRows, chunksBySentence, particleChecksBySentence, structureDrafts, contextWalkthroughs, constructionDrafts, savedMeanings, knownExpressions, wordsBySentence, patternsBySentence };
+      return { book, chapter, rows, chunksBySentence, particleChecksBySentence, structureDrafts, contextWalkthroughs, constructionDrafts, savedMeanings, knownExpressions, wordsBySentence, patternsBySentence };
     } finally {
       timer.done();
     }
   }, [bookId, chapterId]);
+
+  // Clip blobs are the heaviest read on this page, so they load on their own: the text renders
+  // without waiting for them, and an audio change doesn't re-run the whole data query.
+  const audioSentenceKey = (data?.rows ?? []).map((row) => row.sentence.id).join(',');
+  const loadedAudioRows =
+    useLiveQuery(async () => {
+      if (!audioSentenceKey) return undefined; // rows not loaded yet: stay "unloaded", not "no audio"
+      const timer = stepTimer('reader.audio');
+      try {
+        return await getDb().sentenceAudio.where('sentenceId').anyOf(audioSentenceKey.split(',')).toArray();
+      } finally {
+        timer.done();
+      }
+    }, [audioSentenceKey]);
+  const audioRows = loadedAudioRows ?? NO_AUDIO_ROWS;
 
   const openedLessonRef = useRef<string | undefined>(undefined);
   useEffect(() => {
@@ -329,7 +341,7 @@ export function ReaderPage() {
   const audioByRow = useMemo(() => {
     if (!data) return [];
     return data.rows.map((row) => {
-      const candidates = data.audioRows.filter(
+      const candidates = audioRows.filter(
         (audio) => audio.sentenceId === row.sentence.id,
       );
       return (
@@ -337,7 +349,7 @@ export function ReaderPage() {
         candidates[0]
       );
     });
-  }, [data, matchingSourceId]);
+  }, [data, audioRows, matchingSourceId]);
 
   const compareAids = useMemo(() => {
     const map = new Map<string, CompareAids>();
@@ -395,14 +407,30 @@ export function ReaderPage() {
     setToolNotice(undefined);
   }
 
-  function toggleReaderTool(sentence: Sentence, kind: 'dictate' | 'meaning' | 'tiles' | 'recall' | 'shadow') {
+  function toggleReaderTool(
+    sentence: Sentence,
+    kind: 'dictate' | 'meaning' | 'tiles' | 'recall' | 'shadow',
+    knownHasAudio?: boolean,
+  ) {
     if (readerTool?.sentenceId === sentence.id && readerTool.kind === kind) {
       setReaderTool(undefined);
       return;
     }
     setToolNotice(undefined);
     if (kind === 'dictate' || kind === 'tiles') {
-      const hasAudio = data?.audioRows.some((audio) => audio.sentenceId === sentence.id) ?? false;
+      let hasAudio = knownHasAudio;
+      if (hasAudio === undefined && loadedAudioRows) {
+        hasAudio = loadedAudioRows.some((audio) => audio.sentenceId === sentence.id);
+      }
+      if (hasAudio === undefined) {
+        // Clips are still loading: count them directly rather than wrongly reporting none.
+        void getDb()
+          .sentenceAudio.where('sentenceId')
+          .equals(sentence.id)
+          .count()
+          .then((count) => toggleReaderTool(sentence, kind, count > 0));
+        return;
+      }
       const reason = tileToolUnavailableReason(sentence, kind, hasAudio);
       if (reason) {
         setReaderTool(undefined);

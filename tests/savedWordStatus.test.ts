@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { resetDbForTests } from '../src/db/database';
-import { getDb, getSavedWordStatus } from '../src/db/repository';
+import { getDb, getSavedWordStatus, resetWordStrengthCache } from '../src/db/repository';
 
 const now = '2026-09-30T00:00:00.000Z';
 const fsrs = (state: 'new' | 'review') => ({
@@ -11,6 +11,7 @@ const fsrs = (state: 'new' | 'review') => ({
 describe('getSavedWordStatus', () => {
   beforeEach(async () => {
     await resetDbForTests();
+    resetWordStrengthCache();
   });
 
   it('marks an expression known only when its reading/meaning card is at review, and returns saved meanings', async () => {
@@ -50,6 +51,7 @@ describe('getSavedWordStatus', () => {
       { id: 'r3', studyItemId: 'c9', timestamp: at, rating: 'again' },
       { id: 'r4', studyItemId: 'c9', timestamp: at, rating: 'again' },
     ]);
+    resetWordStrengthCache(); // the Reader reuses strengths for a minute
     expect([...(await getSavedWordStatus(['紙'])).knownExpressions]).toEqual([]);
   });
 });

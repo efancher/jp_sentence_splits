@@ -4825,6 +4825,9 @@ export async function getProficientVocabularyItemIds(
   );
 }
 
+/** How long the Reader may reuse word strengths; "known" shading doesn't need to track each review live. */
+const READER_STRENGTH_CACHE_MS = 60_000;
+
 /**
  * Saved meanings and "known" status for surface expressions. An expression is
  * known when a saved vocabulary item with it is reading-proficient on its
@@ -4841,7 +4844,7 @@ export async function getSavedWordStatus(
   const savedMeanings = new Map<string, string>();
   for (const item of items) if (item.meaning.trim() && !savedMeanings.has(item.expression)) savedMeanings.set(item.expression, item.meaning);
   const proficientIds = await getProficientReadingVocabularyItemIds(items.map((item) => item.id));
-  const { strengthByWord } = items.length ? await loadWordReadingStrengths() : { strengthByWord: new Map<string, number>() };
+  const { strengthByWord } = items.length ? await loadWordReadingStrengths(READER_STRENGTH_CACHE_MS) : { strengthByWord: new Map<string, number>() };
   const isKnown = (id: string) =>
     proficientIds.has(id) || (strengthByWord.get(id) ?? 0) >= READER_KNOWN_STRENGTH;
   return { savedMeanings, knownExpressions: new Set(items.filter((item) => isKnown(item.id)).map((item) => item.expression)) };
@@ -11081,13 +11084,36 @@ type WordReadingStrengths = {
   vocabById: Map<string, VocabularyItem>;
 };
 
-async function loadWordReadingStrengths(): Promise<WordReadingStrengths> {
+/** Clears the Reader's short-lived word-strength reuse (tests). */
+export function resetWordStrengthCache(): void {
+  strengthsCache = undefined;
+}
+
+let strengthsCache: { at: number; value: Promise<WordReadingStrengths> } | undefined;
+
+/**
+ * `maxAgeMs` reuses a recent result instead of re-reading five whole tables. Only
+ * for callers that show it (the Reader's "known" words) rather than plan from it;
+ * reading from the cache also keeps that caller's live query from re-running on
+ * every review or learning event.
+ */
+async function loadWordReadingStrengths(maxAgeMs = 0): Promise<WordReadingStrengths> {
+  if (maxAgeMs > 0 && strengthsCache && Date.now() - strengthsCache.at < maxAgeMs) return strengthsCache.value;
   const timer = stepTimer('wordStrengths');
-  try {
-    return await computeWordReadingStrengths(timer);
-  } finally {
-    timer.done();
+  const value = (async () => {
+    try {
+      return await computeWordReadingStrengths(timer);
+    } finally {
+      timer.done();
+    }
+  })();
+  if (maxAgeMs > 0) {
+    strengthsCache = { at: Date.now(), value };
+    value.catch(() => {
+      if (strengthsCache?.value === value) strengthsCache = undefined;
+    });
   }
+  return value;
 }
 
 async function computeWordReadingStrengths(timer: ReturnType<typeof stepTimer>): Promise<WordReadingStrengths> {

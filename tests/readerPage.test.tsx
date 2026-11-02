@@ -342,7 +342,8 @@ describe('ReaderPage (always-available chapter read-along)', () => {
 
     await screen.findByText('本を読みます。');
     // The focused sentence's own button plus the toolbar's.
-    expect(screen.getAllByRole('button', { name: 'Play sentence' })).toHaveLength(2);
+    // Clips load separately from the text, so wait for them.
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Play sentence' })).toHaveLength(2));
   });
 
   it('plays a single sentence and stops at its end, looping only when asked', async () => {
