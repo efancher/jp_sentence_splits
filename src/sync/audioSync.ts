@@ -415,6 +415,28 @@ export function hydrateMissingReferenceAudio(): Promise<number> {
   return hydrateInFlight;
 }
 
+/** After a scan that found nothing to download, cycle-triggered hydration sleeps this long. */
+const CYCLE_HYDRATE_QUIET_MS = 10 * 60_000;
+/** First cycle-triggered scan waits this long after launch so it doesn't contend with the first screens. */
+const CYCLE_HYDRATE_STARTUP_DELAY_MS = 20_000;
+const moduleLoadedAt = Date.now();
+let lastCleanScanAt = 0;
+
+/**
+ * Hydration as run at the end of a sync cycle. The scan reads every
+ * `sentenceAudio` row *including its blob* (IndexedDB cannot skip values), so
+ * doing it after each save-triggered cycle kept IndexedDB busy and stalled page
+ * loads. Skip it shortly after launch and for a while after a scan that found
+ * nothing missing; explicit callers (Settings, resync) use
+ * `hydrateMissingReferenceAudio` and always scan.
+ */
+export async function hydrateReferenceAudioAfterCycle(): Promise<number> {
+  const now = Date.now();
+  if (now - moduleLoadedAt < CYCLE_HYDRATE_STARTUP_DELAY_MS) return 0;
+  if (now - lastCleanScanAt < CYCLE_HYDRATE_QUIET_MS) return 0;
+  return hydrateMissingReferenceAudio();
+}
+
 async function hydrateOnce(): Promise<number> {
   const meta = await ensureSyncMeta();
   if (!meta.syncReferenceAudio) return 0;
@@ -423,10 +445,15 @@ async function hydrateOnce(): Promise<number> {
   if (!supabase) return 0;
 
   const db = getDb();
+  const scanStart = Date.now();
   const missing = (await db.sentenceAudio.toArray()).filter(
     (row) => !row.blob || row.blob.size === 0,
   );
-  if (missing.length === 0) return 0;
+  syncLog('debug', `Hydrate scan: ${missing.length} missing, ${Date.now() - scanStart}ms`, 'AUDIO_HYDRATE');
+  if (missing.length === 0) {
+    lastCleanScanAt = Date.now();
+    return 0;
+  }
 
   // Chunked: a single `.in()` over a whole cleared cache overflows the URL limit.
   const byId = new Map<string, { storage_path?: string; mime_type?: string }>();

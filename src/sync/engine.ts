@@ -48,7 +48,7 @@ import {
   remoteToVocabularyKanji,
   toRemoteRow,
 } from './mappers';
-import { hydrateMissingReferenceAudio } from './audioSync';
+import { hydrateMissingReferenceAudio, hydrateReferenceAudioAfterCycle } from './audioSync';
 import { getSupabase } from './supabaseClient';
 import { conflictContentsMatch } from './conflictDiff';
 import { syncLog } from './logger';
@@ -127,7 +127,7 @@ export async function runSyncCycle(options: { throttlePull?: boolean } = {}): Pr
       // Best-effort, and deliberately NOT awaited: after a cleared cache this is
       // hundreds of downloads, and holding the cycle open kept the status on
       // "syncing" (and Sync now disabled) for minutes. Never fails the cycle.
-      void hydrateMissingReferenceAudio().catch((error) => {
+      void hydrateReferenceAudioAfterCycle().catch((error) => {
         syncLog('warn', 'Reference-audio hydration failed', 'AUDIO_HYDRATE', {
           message: error instanceof Error ? error.message : String(error),
         });
