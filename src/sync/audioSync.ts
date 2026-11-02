@@ -1,11 +1,11 @@
 import { getDb } from '../db/database';
-import { ensureSyncMeta } from './queue';
+import { ensureSyncMeta, getRecordMeta, putRecordMeta } from './queue';
 import { getSupabase } from './supabaseClient';
 import { getAudioObject, putAudioObject } from './audioStorage';
 import { syncLog } from './logger';
 import { setAudioProgress } from './progress';
 import { trackLocalMutation } from './track';
-import { sentenceAudioToReferenceMeta } from './mappers';
+import { remoteToReferenceAudio, sentenceAudioToReferenceMeta } from './mappers';
 import type { SentenceAudio } from '../domain/types';
 
 const MAX_AUDIO_BYTES = 50 * 1024 * 1024;
@@ -312,6 +312,90 @@ export async function resyncReferenceAudio(): Promise<number> {
     syncLog('warn', error instanceof Error ? error.message : String(error), 'AUDIO_HYDRATE');
   });
   return (data ?? []).length;
+}
+
+/**
+ * Re-sync one sentence's reference clips from the cloud, for when a clip was
+ * re-cut, replaced or retired elsewhere and this device still plays the old
+ * one. The per-sentence counterpart of "Re-download everything": cloud rows
+ * refresh local metadata (a blob whose size no longer matches is blanked and
+ * re-downloaded), and a local clip the cloud no longer lists is dropped — but
+ * only one that was synced before and has no push queued, so a clip recorded
+ * on this device and not yet uploaded is never lost. Returns null when offline
+ * or signed out, else how many clips were refreshed and removed.
+ */
+export async function refreshSentenceAudioFromCloud(
+  sentenceId: string,
+): Promise<{ refreshed: number; removed: number } | null> {
+  const supabase = getSupabase();
+  if (!supabase) return null;
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const userId = session?.user?.id;
+  if (!userId) return null;
+
+  const { data, error } = await supabase
+    .from('reference_audio')
+    .select('*')
+    .eq('owner_id', userId)
+    .eq('sentence_id', sentenceId)
+    .is('deleted_at', null);
+  if (error) {
+    syncLog('warn', error.message, 'AUDIO_REFRESH');
+    return null;
+  }
+
+  const db = getDb();
+  const pushQueued = async (id: string) =>
+    (await db.syncQueue.where('[entity+recordId]').equals(['reference_audio', id]).count()) > 0;
+  const cloudRows = (data ?? []) as Record<string, unknown>[];
+  const cloudIds = new Set(cloudRows.map((row) => String(row.id)));
+
+  let refreshed = 0;
+  for (const row of cloudRows) {
+    const meta = remoteToReferenceAudio(row);
+    if (await pushQueued(meta.id)) continue;
+    const existing = await db.sentenceAudio.get(meta.id);
+    const staleBlob =
+      !!existing && meta.sizeBytes! > 0 && existing.blob.size > 0 && existing.blob.size !== meta.sizeBytes;
+    await db.sentenceAudio.put({
+      ...(existing ?? { blob: new Blob([], { type: meta.mimeType }), importedAt: meta.importedAt }),
+      ...(staleBlob ? { blob: new Blob([], { type: meta.mimeType }) } : {}),
+      id: meta.id,
+      sentenceId: meta.sentenceId,
+      sourceId: meta.sourceId,
+      sourceSentenceId: meta.sourceSentenceId,
+      sourceTitle: meta.sourceTitle,
+      sourceUrl: meta.sourceUrl,
+      mimeType: meta.mimeType,
+      durationMs: meta.durationMs,
+      startMs: meta.startMs,
+      endMs: meta.endMs,
+      trimStartMs: meta.trimStartMs,
+      trimEndMs: meta.trimEndMs,
+    });
+    const version = Number(row.version ?? 1);
+    await putRecordMeta({
+      entity: 'reference_audio',
+      recordId: meta.id,
+      version,
+      syncedVersion: version,
+      updatedAt: String(row.updated_at ?? new Date().toISOString()),
+    });
+    refreshed += 1;
+  }
+
+  let removed = 0;
+  for (const local of await db.sentenceAudio.where('sentenceId').equals(sentenceId).toArray()) {
+    if (cloudIds.has(local.id) || (await pushQueued(local.id))) continue;
+    if (!(await getRecordMeta('reference_audio', local.id))) continue;
+    await db.sentenceAudio.delete(local.id);
+    removed += 1;
+  }
+
+  await hydrateMissingReferenceAudio();
+  return { refreshed, removed };
 }
 
 /**

@@ -48,6 +48,7 @@ import { buildSentenceJourney, sentencesReadyToRevisit } from '../lib/sentenceJo
 import { describeSentenceProgress, glossableWords, sentenceWordHelp, summariseSentenceProgress } from '../lib/sentenceLearning';
 import { PLAYBACK_SPEEDS } from '../lib/recording';
 import { SentenceAudioAdjuster } from '../components/SentenceAudioAdjuster';
+import { ReloadSentenceAudioButton } from '../components/ReloadSentenceAudioButton';
 
 // The shadowing workspace (recording, pitch analysis) is heavy; load it only when the tool is opened.
 const ShadowWorkspace = lazy(() => import('./ShadowPage').then((module) => ({ default: module.ShadowWorkspace })));
@@ -813,11 +814,10 @@ export function ReaderPage() {
             <span className="muted" style={{ fontSize: '0.8em' }}>−{contextBefore} / +{contextAfter}</span>
           ) : null}
         </div>
-        {sourceUrl ? (
-          <div className="row" style={{ gap: '0.3rem', flexWrap: 'wrap', alignItems: 'center' }}>
-            <SentenceAudioAdjuster audio={audio} sourceUrl={sourceUrl} />
-          </div>
-        ) : null}
+        <div className="row" style={{ gap: '0.3rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          {sourceUrl ? <SentenceAudioAdjuster audio={audio} sourceUrl={sourceUrl} /> : null}
+          <ReloadSentenceAudioButton sentenceId={audio.sentenceId} />
+        </div>
         {barMenuOpen ? (
           <div className="stack" style={{ gap: '0.4rem' }}>
             <div className="row" style={{ gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
