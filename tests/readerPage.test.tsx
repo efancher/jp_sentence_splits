@@ -355,6 +355,8 @@ describe('ReaderPage (always-available chapter read-along)', () => {
     await screen.findByText('本を読みます。');
     const toolbar = screen.getByRole('toolbar', { name: 'Sentence tools' });
 
+    // The button enables once the clip has loaded.
+    await waitFor(() => expect(within(toolbar).getByRole('button', { name: 'Play sentence' })).toBeEnabled());
     await user.click(within(toolbar).getByRole('button', { name: 'Play sentence' }));
     expect(play).toHaveBeenCalledTimes(1);
     expect(play.mock.calls[0]![2]).toMatchObject({ loop: false });

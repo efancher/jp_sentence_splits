@@ -33,8 +33,17 @@ async function readBookExtras(bookId: string): Promise<SentenceExtras[]> {
   }
 }
 
-export async function withChapterExtras(book: Book): Promise<Book> {
-  const rows = await readBookExtras(book.id);
+/**
+ * Extras rows for just these sentences (their ids are the rows' primary keys). A chapter view uses
+ * this instead of reading every extras row in the book, which for a long book is thousands.
+ */
+export async function readExtrasForSentences(sentenceIds: string[]): Promise<SentenceExtras[]> {
+  const rows = await getDb().sentenceExtras.bulkGet(sentenceIds);
+  return rows.filter((row): row is SentenceExtras => Boolean(row));
+}
+
+export async function withChapterExtras(book: Book, preloadedRows?: SentenceExtras[]): Promise<Book> {
+  const rows = preloadedRows ?? (await readBookExtras(book.id));
   if (rows.length === 0) return book;
   const chapterIds = new Set(book.chapters.map((chapter) => chapter.id));
   const firstChapterId = book.chapters[0]?.id;

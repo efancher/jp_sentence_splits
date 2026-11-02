@@ -28,6 +28,7 @@ import {
   type EarTilesProgress,
   type EarTilesPuzzle,
 } from '../lib/earTiles';
+import { readExtrasForSentences, withChapterExtras } from '../db/sentenceExtras';
 import { createId } from '../lib/ids';
 import { stepTimer } from '../lib/pageTiming';
 import { meaningCheckTargetKey, readingFeedbackTargetKey } from '../lib/wordEvidence';
@@ -36,7 +37,7 @@ import { SentenceWalkthrough, walkthroughChunks } from '../components/SentenceWa
 import { glossesFromWords } from '../lib/chunkGlosses';
 import { mergeChapterConstructionDrafts, mergeChapterWalkthroughs } from '../lib/contextWalkthrough';
 import { WordGlossList, type CompareAids } from '../components/TargetLessonCard';
-import { ensureDefaultBookChapter, getBookWithExtras, getDb, getEpisodeFocus, getSavedWordStatus, listGlossDecisions, listSentenceLearningEvents, logGlossDecision, logSentenceLearningEvent, ensureVocabularyItem, readSettings, updateSettings, withoutUnseenAiLinks } from '../db/repository';
+import { ensureDefaultBookChapter, getDb, getEpisodeFocus, getSavedWordStatus, listGlossDecisions, listSentenceLearningEvents, logGlossDecision, logSentenceLearningEvent, ensureVocabularyItem, readSettings, updateSettings, withoutUnseenAiLinks } from '../db/repository';
 import { registerReportContext } from '../lib/reportContext';
 import type { BookSentence, Sentence, SentenceAudio, StructureDraftChunk, TextDisplayMode } from '../domain/types';
 import { useNativeAudio } from '../hooks/useNativeAudio';
@@ -163,12 +164,15 @@ export function ReaderPage() {
   }, [settings]);
 
   const data = useLiveQuery(async () => {
+    // A lesson route learns its chapter from the query above. Until then `chapterId` is unset, which
+    // would load the whole book (1,900+ sentences) only for it to be discarded and redone for the chapter.
+    if (lessonSentenceId && !searchParams.get('chapter') && lessonChapterId === undefined) return undefined;
     const timer = stepTimer('reader.data');
     try {
       const db = getDb();
-      const book = await getBookWithExtras(bookId);
+      const rawBook = await db.books.get(bookId);
       timer.mark('book');
-      if (!book) return null;
+      if (!rawBook) return null;
       const allMemberships = await db.bookSentences
         .where('bookId')
         .equals(bookId)
@@ -186,6 +190,12 @@ export function ReaderPage() {
         const sentence = sentences[index];
         if (sentence) rows.push({ membership, sentence });
       });
+      // A chapter view needs only its own sentences' extras, not every row in the book.
+      const book = await withChapterExtras(
+        rawBook,
+        chapterId ? await readExtrasForSentences(rows.map((row) => row.sentence.id)) : undefined,
+      );
+      timer.mark('extras');
       const chapter = chapterId
         ? book.chapters.find((item) => item.id === chapterId) ?? null
         : null;
@@ -269,7 +279,7 @@ export function ReaderPage() {
     } finally {
       timer.done();
     }
-  }, [bookId, chapterId]);
+  }, [bookId, chapterId, lessonSentenceId, lessonChapterId]);
 
   // Clip blobs are the heaviest read on this page, so they load on their own: the text renders
   // without waiting for them, and an audio change doesn't re-run the whole data query.

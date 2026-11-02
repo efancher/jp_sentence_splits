@@ -3417,7 +3417,7 @@ export async function exportFullBackup(): Promise<BackupPayload> {
   const db = getDb();
   const settings = await ensureSettings(db);
   const bundle: BackupBundle = {
-    books: await Promise.all((await db.books.toArray()).map(withChapterExtras)),
+    books: await Promise.all((await db.books.toArray()).map((book) => withChapterExtras(book))),
     sentences: await db.sentences.toArray(),
     bookSentences: await db.bookSentences.toArray(),
     analyses: await db.analyses.toArray(),
