@@ -39,6 +39,10 @@ export function lookupWordBand(
 
 let cached: Promise<WordFrequencyData> | undefined;
 
+/** How long a caller that only wants a small prior waits for the table before going without it. */
+export const FREQUENCY_WAIT_MS = 1_500;
+const FETCH_TIMEOUT_MS = 15_000;
+
 /** Forgets the loaded table so the next load fetches again (tests). */
 export function resetWordFrequencyCache(): void {
   cached = undefined;
@@ -47,10 +51,14 @@ export function resetWordFrequencyCache(): void {
 /**
  * Loads the frequency data once per session. It is served from `public/` and
  * fetched on demand (not bundled or precached: ~780 KB). A failed or offline
- * load resolves to an empty table, meaning no prior, and is retried next time.
+ * load resolves to an empty table, meaning no prior, and is retried next time. The fetch is aborted after 15s so it can never hang a caller, and
+ * `waitMs` caps how long this call itself waits: past it the caller proceeds
+ * without a prior while the download carries on for the next call.
  */
-export function loadWordFrequency(): Promise<WordFrequencyData> {
-  cached ??= fetch(`${import.meta.env.BASE_URL}wordFrequency.json`)
+export function loadWordFrequency(waitMs?: number): Promise<WordFrequencyData> {
+  cached ??= fetch(`${import.meta.env.BASE_URL}wordFrequency.json`, {
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  })
     .then((response) => {
       if (!response.ok) throw new Error(`wordFrequency.json: ${response.status}`);
       return response.json() as Promise<WordFrequencyData>;
@@ -59,5 +67,13 @@ export function loadWordFrequency(): Promise<WordFrequencyData> {
       cached = undefined;
       return {} as WordFrequencyData;
     });
-  return cached;
+  if (waitMs === undefined) return cached;
+  const table = cached;
+  return new Promise<WordFrequencyData>((resolve) => {
+    const timer = setTimeout(() => resolve({}), waitMs);
+    void table.then((data) => {
+      clearTimeout(timer);
+      resolve(data);
+    });
+  });
 }

@@ -117,3 +117,50 @@ export function trackPageLoad(options: {
 export function summarizePageTimings(): PageTiming[] {
   return timings.slice(-10);
 }
+
+// --- Step timing inside slow loaders -----------------------------------------
+// A page-level number says a page was slow; marks inside its data query say
+// which await was. Runs still in flight are reported too, so a load that hangs
+// shows where it is stuck.
+
+export interface StepRun {
+  name: string;
+  totalMs: number;
+  steps: Record<string, number>;
+  at: string;
+}
+
+const STEP_RUN_MIN_MS = 300;
+const MAX_STEP_RUNS = 15;
+const finishedRuns: StepRun[] = [];
+const inFlight = new Set<{ name: string; startedAt: number; steps: Record<string, number>; last: number }>();
+
+export function stepTimer(name: string): { mark: (label: string) => void; done: () => void } {
+  const startedAt = performance.now();
+  const run = { name, startedAt, steps: {} as Record<string, number>, last: startedAt };
+  inFlight.add(run);
+  return {
+    mark(label) {
+      const now = performance.now();
+      run.steps[label] = (run.steps[label] ?? 0) + Math.round(now - run.last);
+      run.last = now;
+    },
+    done() {
+      inFlight.delete(run);
+      const totalMs = Math.round(performance.now() - startedAt);
+      if (totalMs < STEP_RUN_MIN_MS) return;
+      finishedRuns.push({ name, totalMs, steps: run.steps, at: new Date().toISOString() });
+      if (finishedRuns.length > MAX_STEP_RUNS) finishedRuns.shift();
+    },
+  };
+}
+
+export function summarizeStepRuns(): { finished: StepRun[]; inFlight: unknown[] } {
+  const now = performance.now();
+  return {
+    finished: [...finishedRuns],
+    inFlight: [...inFlight]
+      .filter((run) => now - run.startedAt >= STEP_RUN_MIN_MS)
+      .map((run) => ({ name: run.name, runningMs: Math.round(now - run.startedAt), stepsSoFar: run.steps })),
+  };
+}

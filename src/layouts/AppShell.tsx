@@ -10,7 +10,8 @@ import { SyncStatusBadge } from '../components/SyncStatusBadge';
 import { expireStalePlannerSessions } from '../db/repository';
 import { useActiveSession } from '../hooks/useActiveSession';
 import { autoGenerateMeaningChecks } from '../lib/meaningCheckAutogen';
-import { summarizePageTimings, trackPageLoad } from '../lib/pageTiming';
+import { summarizePageTimings, summarizeStepRuns, trackPageLoad } from '../lib/pageTiming';
+import { loadWordFrequency } from '../lib/wordFrequency';
 import { registerReportContext } from '../lib/reportContext';
 import { getRecentSyncLogs } from '../sync/logger';
 import { getSyncProgress } from '../sync/progress';
@@ -56,6 +57,12 @@ export function AppShell() {
     return () => window.clearInterval(timer);
   }, []);
 
+  // Warm the word-frequency table so readers rarely wait on its download.
+  useEffect(() => {
+    const timer = window.setTimeout(() => void loadWordFrequency(), 3000);
+    return () => window.clearTimeout(timer);
+  }, []);
+
   useEffect(() => {
     const run = () => void autoGenerateMeaningChecks().catch(() => undefined);
     const first = window.setTimeout(run, 15 * 1000);
@@ -92,6 +99,7 @@ export function AppShell() {
     () =>
       registerReportContext('pageTimings', () => ({
         recent: summarizePageTimings(),
+        stepRuns: summarizeStepRuns(),
         syncLastCycle: getSyncProgress().lastCycle,
         syncLogs: getRecentSyncLogs()
           .filter((event) => event.code === 'PULL_TIMING' || event.code === 'AUDIO_HYDRATE')

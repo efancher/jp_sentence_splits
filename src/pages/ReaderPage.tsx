@@ -29,6 +29,7 @@ import {
   type EarTilesPuzzle,
 } from '../lib/earTiles';
 import { createId } from '../lib/ids';
+import { stepTimer } from '../lib/pageTiming';
 import { meaningCheckTargetKey, readingFeedbackTargetKey } from '../lib/wordEvidence';
 import { grammarFeedbackTargetKey } from '../lib/grammarEvidence';
 import { SentenceWalkthrough, walkthroughChunks } from '../components/SentenceWalkthrough';
@@ -160,104 +161,117 @@ export function ReaderPage() {
   }, [settings]);
 
   const data = useLiveQuery(async () => {
-    const db = getDb();
-    const book = await getBookWithExtras(bookId);
-    if (!book) return null;
-    const allMemberships = await db.bookSentences
-      .where('bookId')
-      .equals(bookId)
-      .sortBy('position');
-    const memberships = chapterId
-      ? allMemberships.filter((item) => item.chapterId === chapterId)
-      : allMemberships;
-    const sentences = await db.sentences.bulkGet(
-      memberships.map((item) => item.sentenceId),
-    );
-    const rows: { membership: BookSentence; sentence: Sentence }[] = [];
-    memberships.forEach((membership, index) => {
-      const sentence = sentences[index];
-      if (sentence) rows.push({ membership, sentence });
-    });
-    const audioRows = await db.sentenceAudio
-      .where('sentenceId')
-      .anyOf(rows.map((row) => row.sentence.id))
-      .toArray();
-    const chapter = chapterId
-      ? book.chapters.find((item) => item.id === chapterId) ?? null
-      : null;
-    const analyses = await db.analyses.bulkGet(rows.map((row) => row.sentence.id));
-    const chunksBySentence = new Map(
-      analyses.flatMap((analysis) => (analysis ? [[analysis.sentenceId, analysis.chunks] as const] : [])),
-    );
-    const particleChecksBySentence = new Map(
-      analyses.flatMap((analysis) => (analysis?.particleChecks ? [[analysis.sentenceId, analysis.particleChecks] as const] : [])),
-    );
-    const contentExpressions = [
-      ...new Set(
-        rows.flatMap((row) =>
-          row.sentence.vocabularySuggestions
-            .filter((suggestion) => suggestion.selectedByDefault)
-            .map((suggestion) => suggestion.expression),
+    const timer = stepTimer('reader.data');
+    try {
+      const db = getDb();
+      const book = await getBookWithExtras(bookId);
+      timer.mark('book');
+      if (!book) return null;
+      const allMemberships = await db.bookSentences
+        .where('bookId')
+        .equals(bookId)
+        .sortBy('position');
+      timer.mark('memberships');
+      const memberships = chapterId
+        ? allMemberships.filter((item) => item.chapterId === chapterId)
+        : allMemberships;
+      const sentences = await db.sentences.bulkGet(
+        memberships.map((item) => item.sentenceId),
+      );
+      timer.mark('sentences');
+      const rows: { membership: BookSentence; sentence: Sentence }[] = [];
+      memberships.forEach((membership, index) => {
+        const sentence = sentences[index];
+        if (sentence) rows.push({ membership, sentence });
+      });
+      const audioRows = await db.sentenceAudio
+        .where('sentenceId')
+        .anyOf(rows.map((row) => row.sentence.id))
+        .toArray();
+      timer.mark('audio');
+      const chapter = chapterId
+        ? book.chapters.find((item) => item.id === chapterId) ?? null
+        : null;
+      const analyses = await db.analyses.bulkGet(rows.map((row) => row.sentence.id));
+      timer.mark('analyses');
+      const chunksBySentence = new Map(
+        analyses.flatMap((analysis) => (analysis ? [[analysis.sentenceId, analysis.chunks] as const] : [])),
+      );
+      const particleChecksBySentence = new Map(
+        analyses.flatMap((analysis) => (analysis?.particleChecks ? [[analysis.sentenceId, analysis.particleChecks] as const] : [])),
+      );
+      const contentExpressions = [
+        ...new Set(
+          rows.flatMap((row) =>
+            row.sentence.vocabularySuggestions
+              .filter((suggestion) => suggestion.selectedByDefault)
+              .map((suggestion) => suggestion.expression),
+          ),
         ),
-      ),
-    ];
-    const { savedMeanings, knownExpressions } = await getSavedWordStatus(contentExpressions);
-    // The words a learner can tap in each sentence: its content words, in sentence order. A word that has no
-    // vocabulary item yet (an unconfirmed AI draft) gets one on the first answer, so '' marks "not created yet".
-    const links = await db.sentenceVocabulary.where('sentenceId').anyOf(rows.map((row) => row.sentence.id)).toArray();
-    const expressions = [...new Set(rows.flatMap((row) => row.sentence.vocabularySuggestions.filter((item) => item.selectedByDefault).map((item) => item.expression)))];
-    const existingItems = expressions.length ? await db.vocabularyItems.where('expression').anyOf(expressions).toArray() : [];
-    const linkedItems = await db.vocabularyItems.bulkGet([...new Set(links.map((link) => link.vocabularyItemId))]);
-    const itemById = new Map(linkedItems.flatMap((item) => (item ? [[item.id, item] as const] : [])));
-    const wordsBySentence = new Map<string, ReaderWord[]>();
-    for (const row of rows) {
-      const seen = new Set<string>();
-      const words: ReaderWord[] = [];
-      const sentenceLinks = links.filter((link) => link.sentenceId === row.sentence.id);
-      for (const suggestion of [...row.sentence.vocabularySuggestions].sort((a, b) => a.start - b.start)) {
-        if (!suggestion.selectedByDefault || !suggestion.expression || seen.has(suggestion.expression)) continue;
-        seen.add(suggestion.expression);
-        const linked = sentenceLinks.find((link) => link.surfaceForm === suggestion.surface && itemById.get(link.vocabularyItemId)?.expression === suggestion.expression);
-        const item = (linked ? itemById.get(linked.vocabularyItemId) : undefined)
-          ?? existingItems.find((candidate) => candidate.expression === suggestion.expression && candidate.reading === suggestion.reading);
-        words.push({
-          vocabularyItemId: item?.id ?? '',
-          surface: suggestion.surface,
-          expression: suggestion.expression,
-          reading: item?.reading ?? suggestion.reading,
-          meaning: item?.meaning.trim() || suggestion.english?.trim() || '',
-        });
+      ];
+      const { savedMeanings, knownExpressions } = await getSavedWordStatus(contentExpressions);
+      timer.mark('savedWordStatus');
+      // The words a learner can tap in each sentence: its content words, in sentence order. A word that has no
+      // vocabulary item yet (an unconfirmed AI draft) gets one on the first answer, so '' marks "not created yet".
+      const links = await db.sentenceVocabulary.where('sentenceId').anyOf(rows.map((row) => row.sentence.id)).toArray();
+      const expressions = [...new Set(rows.flatMap((row) => row.sentence.vocabularySuggestions.filter((item) => item.selectedByDefault).map((item) => item.expression)))];
+      const existingItems = expressions.length ? await db.vocabularyItems.where('expression').anyOf(expressions).toArray() : [];
+      const linkedItems = await db.vocabularyItems.bulkGet([...new Set(links.map((link) => link.vocabularyItemId))]);
+      timer.mark('vocabulary');
+      const itemById = new Map(linkedItems.flatMap((item) => (item ? [[item.id, item] as const] : [])));
+      const wordsBySentence = new Map<string, ReaderWord[]>();
+      for (const row of rows) {
+        const seen = new Set<string>();
+        const words: ReaderWord[] = [];
+        const sentenceLinks = links.filter((link) => link.sentenceId === row.sentence.id);
+        for (const suggestion of [...row.sentence.vocabularySuggestions].sort((a, b) => a.start - b.start)) {
+          if (!suggestion.selectedByDefault || !suggestion.expression || seen.has(suggestion.expression)) continue;
+          seen.add(suggestion.expression);
+          const linked = sentenceLinks.find((link) => link.surfaceForm === suggestion.surface && itemById.get(link.vocabularyItemId)?.expression === suggestion.expression);
+          const item = (linked ? itemById.get(linked.vocabularyItemId) : undefined)
+            ?? existingItems.find((candidate) => candidate.expression === suggestion.expression && candidate.reading === suggestion.reading);
+          words.push({
+            vocabularyItemId: item?.id ?? '',
+            surface: suggestion.surface,
+            expression: suggestion.expression,
+            reading: item?.reading ?? suggestion.reading,
+            meaning: item?.meaning.trim() || suggestion.english?.trim() || '',
+          });
+        }
+        wordsBySentence.set(row.sentence.id, words);
       }
-      wordsBySentence.set(row.sentence.id, words);
-    }
-    // Grammar patterns linked to each sentence, positioned in its text, so they can be tapped like words.
-    const grammarLinks = await withoutUnseenAiLinks(await db.sentenceGrammar.where('sentenceId').anyOf(rows.map((row) => row.sentence.id)).toArray());
-    const patternRows = await db.grammarPatterns.bulkGet([...new Set(grammarLinks.map((link) => link.grammarPatternId))]);
-    const patternById = new Map(patternRows.flatMap((pattern) => (pattern ? [[pattern.id, pattern] as const] : [])));
-    const patternsBySentence = new Map<string, ReaderPattern[]>();
-    for (const row of rows) {
-      const japanese = row.sentence.japanese;
-      const found: ReaderPattern[] = [];
-      for (const link of grammarLinks) {
-        if (link.sentenceId !== row.sentence.id) continue;
-        const pattern = patternById.get(link.grammarPatternId);
-        if (!pattern || found.some((item) => item.patternId === pattern.id)) continue;
-        const surface = link.surfaceForm?.trim() ?? '';
-        const exact = link.start !== undefined && link.end !== undefined && link.end > link.start && japanese.slice(link.start, link.end) === surface;
-        const start = exact ? link.start! : surface ? japanese.indexOf(surface) : -1;
-        if (start < 0 || !surface) continue;
-        found.push({
-          patternId: pattern.id, name: pattern.canonicalName, shortMeaning: pattern.shortMeaning,
-          occurrenceExplanation: link.occurrenceExplanation, surface, start, end: start + surface.length,
-        });
+      // Grammar patterns linked to each sentence, positioned in its text, so they can be tapped like words.
+      const grammarLinks = await withoutUnseenAiLinks(await db.sentenceGrammar.where('sentenceId').anyOf(rows.map((row) => row.sentence.id)).toArray());
+      const patternRows = await db.grammarPatterns.bulkGet([...new Set(grammarLinks.map((link) => link.grammarPatternId))]);
+      timer.mark('grammar');
+      const patternById = new Map(patternRows.flatMap((pattern) => (pattern ? [[pattern.id, pattern] as const] : [])));
+      const patternsBySentence = new Map<string, ReaderPattern[]>();
+      for (const row of rows) {
+        const japanese = row.sentence.japanese;
+        const found: ReaderPattern[] = [];
+        for (const link of grammarLinks) {
+          if (link.sentenceId !== row.sentence.id) continue;
+          const pattern = patternById.get(link.grammarPatternId);
+          if (!pattern || found.some((item) => item.patternId === pattern.id)) continue;
+          const surface = link.surfaceForm?.trim() ?? '';
+          const exact = link.start !== undefined && link.end !== undefined && link.end > link.start && japanese.slice(link.start, link.end) === surface;
+          const start = exact ? link.start! : surface ? japanese.indexOf(surface) : -1;
+          if (start < 0 || !surface) continue;
+          found.push({
+            patternId: pattern.id, name: pattern.canonicalName, shortMeaning: pattern.shortMeaning,
+            occurrenceExplanation: link.occurrenceExplanation, surface, start, end: start + surface.length,
+          });
+        }
+        patternsBySentence.set(row.sentence.id, found.sort((a, b) => a.start - b.start));
       }
-      patternsBySentence.set(row.sentence.id, found.sort((a, b) => a.start - b.start));
+      // Drafts are keyed by sentence id, so reading the whole book (no ?chapter=) still finds them.
+      const structureDrafts = Object.assign({}, ...book.chapters.map((item) => item.structureDrafts ?? {})) as Record<string, StructureDraftChunk[]>;
+      const contextWalkthroughs = mergeChapterWalkthroughs(book.chapters);
+      const constructionDrafts = mergeChapterConstructionDrafts(book.chapters);
+      return { book, chapter, rows, audioRows, chunksBySentence, particleChecksBySentence, structureDrafts, contextWalkthroughs, constructionDrafts, savedMeanings, knownExpressions, wordsBySentence, patternsBySentence };
+    } finally {
+      timer.done();
     }
-    // Drafts are keyed by sentence id, so reading the whole book (no ?chapter=) still finds them.
-    const structureDrafts = Object.assign({}, ...book.chapters.map((item) => item.structureDrafts ?? {})) as Record<string, StructureDraftChunk[]>;
-    const contextWalkthroughs = mergeChapterWalkthroughs(book.chapters);
-    const constructionDrafts = mergeChapterConstructionDrafts(book.chapters);
-    return { book, chapter, rows, audioRows, chunksBySentence, particleChecksBySentence, structureDrafts, contextWalkthroughs, constructionDrafts, savedMeanings, knownExpressions, wordsBySentence, patternsBySentence };
   }, [bookId, chapterId]);
 
   const openedLessonRef = useRef<string | undefined>(undefined);

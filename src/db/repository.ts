@@ -2,7 +2,8 @@ import { openContentReports, type OpenContentReport } from '../lib/contentReport
 import { isSentenceLedFlow } from '../lib/sentenceLed';
 import { isReadingAnswerCorrect, surfaceReadingFromInline } from '../lib/readingAnswer';
 import { buildWordEvidence } from '../lib/wordEvidence';
-import { loadWordFrequency, lookupWordBand } from '../lib/wordFrequency';
+import { stepTimer } from '../lib/pageTiming';
+import { FREQUENCY_WAIT_MS, loadWordFrequency, lookupWordBand } from '../lib/wordFrequency';
 import { frequencyBandPrior, planWeakWordSentences, READER_KNOWN_STRENGTH, wordStrength } from '../lib/wordStrength';
 import { readCheckReason, sentencesDueForReadCheck } from '../lib/readCheck';
 import { explainWeakWordSentences, type WeakWordExplanation } from '../lib/weakWordExplain';
@@ -11072,13 +11073,24 @@ async function getRecentlyMissedClozeSentenceIds(): Promise<Set<string>> {
  * out — unseen is not weak), from local review, typed-recall and walkthrough
  * history. Selection input only (`wordStrength.ts`): no due dates, no FSRS effect.
  */
-async function loadWordReadingStrengths(): Promise<{
+type WordReadingStrengths = {
   strengthByWord: Map<string, number>;
   meaningStrengthOf: (wordId: string) => number;
   wordsBySentence: Map<string, string[]>;
   links: SentenceVocabulary[];
   vocabById: Map<string, VocabularyItem>;
-}> {
+};
+
+async function loadWordReadingStrengths(): Promise<WordReadingStrengths> {
+  const timer = stepTimer('wordStrengths');
+  try {
+    return await computeWordReadingStrengths(timer);
+  } finally {
+    timer.done();
+  }
+}
+
+async function computeWordReadingStrengths(timer: ReturnType<typeof stepTimer>): Promise<WordReadingStrengths> {
   const db = getDb();
   const [links, studyItems, reviews, events, vocab] = await Promise.all([
     db.sentenceVocabulary.toArray(),
@@ -11087,6 +11099,7 @@ async function loadWordReadingStrengths(): Promise<{
     db.sentenceLearningEvents.toArray(),
     db.vocabularyItems.toArray(),
   ]);
+  timer.mark(`tables(${links.length}/${studyItems.length}/${reviews.length}/${events.length}/${vocab.length})`);
   const wordsBySentence = new Map<string, string[]>();
   const linksBySentence = new Map<string, SentenceVocabulary[]>();
   for (const link of links) {
@@ -11138,7 +11151,9 @@ async function loadWordReadingStrengths(): Promise<{
   const now = Date.now();
   const vocabById = new Map(vocab.map((item) => [item.id, item]));
   // General-language frequency is a small starting score; the learner's own evidence moves a word off it.
-  const frequency = await loadWordFrequency();
+  timer.mark('typedRecalls');
+  const frequency = await loadWordFrequency(FREQUENCY_WAIT_MS);
+  timer.mark('frequency');
   const strengthByWord = new Map<string, number>();
   const priorOf = (wordId: string) => {
     const word = vocabById.get(wordId);
