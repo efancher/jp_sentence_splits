@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { applyReadingFlagFix, parseReadingFlagNote } from './readingFlagFix';
+import { applyReadingFlagFix, parseReadingFlagNote, readingFlagIsApplied } from './readingFlagFix';
 
 describe('readingFlagFix', () => {
   it('parses a flag note, with and without audio', () => {
@@ -22,6 +22,13 @@ describe('readingFlagFix', () => {
     );
     expect(fix?.inlineReading).toBe('そして4月[しがつ]頃[ごろ]からポプラが飛び[とび]始め[はじめ]、');
     expect(fix?.readingOnly).toBe('そしてしがつごろからポプラがとびはじめ、');
+  });
+
+  it('recognises a flag whose fix is already in the sentence', () => {
+    const flag = { base: '頃', furigana: 'ころ', assistant: 'ごろ', hasAudio: false };
+    expect(readingFlagIsApplied({ inlineReading: '4月[しがつ]頃[ごろ]' }, flag)).toBe(true);
+    expect(readingFlagIsApplied({ inlineReading: '4月[しがつ]頃[ころ]' }, flag)).toBe(false);
+    expect(readingFlagIsApplied({ inlineReading: '4月[しがつ]頃[ごろ]、5月[ごがつ]頃[ころ]' }, flag)).toBe(false);
   });
 
   it('leaves non-sound-change, audio-backed, and already-fixed flags alone', () => {

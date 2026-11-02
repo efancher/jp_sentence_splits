@@ -21,6 +21,12 @@ export function parseReadingFlagNote(note: string): ReadingFlag | null {
 
 const isWordChar = (char: string | undefined) => char !== undefined && /[\p{L}\p{N}々]/u.test(char);
 
+/** True once the sentence carries the assistant's reading for the flagged word and no longer the stale one. */
+export function readingFlagIsApplied(sentence: { inlineReading?: string | null }, flag: ReadingFlag): boolean {
+  const spans = parseInlineReadings(sentence.inlineReading ?? '').filter((seg) => seg.kind === 'ruby' && seg.base === flag.base);
+  return spans.some((seg) => seg.reading === flag.assistant) && !spans.some((seg) => seg.reading === flag.furigana);
+}
+
 export interface ReadingFlagFix {
   inlineReading: string;
   /** Set only when `readingOnly` was the plain kana of the old furigana. */
