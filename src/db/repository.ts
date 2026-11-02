@@ -4840,15 +4840,32 @@ const READER_STRENGTH_CACHE_MS = 60_000;
  */
 export async function getSavedWordStatus(
   expressions: string[],
+  options: { skipStrength?: boolean } = {},
 ): Promise<{ savedMeanings: Map<string, string>; knownExpressions: Set<string> }> {
   const items = expressions.length ? await getDb().vocabularyItems.where('expression').anyOf(expressions).toArray() : [];
   const savedMeanings = new Map<string, string>();
   for (const item of items) if (item.meaning.trim() && !savedMeanings.has(item.expression)) savedMeanings.set(item.expression, item.meaning);
   const proficientIds = await getProficientReadingVocabularyItemIds(items.map((item) => item.id));
-  const { strengthByWord } = items.length ? await loadWordReadingStrengths(READER_STRENGTH_CACHE_MS) : { strengthByWord: new Map<string, number>() };
+  // `skipStrength` leaves out the slow whole-table strength scan; `getStrengthKnownExpressions` supplies it later.
+  const { strengthByWord } = items.length && !options.skipStrength
+    ? await loadWordReadingStrengths(READER_STRENGTH_CACHE_MS)
+    : { strengthByWord: new Map<string, number>() };
   const isKnown = (id: string) =>
     proficientIds.has(id) || (strengthByWord.get(id) ?? 0) >= READER_KNOWN_STRENGTH;
   return { savedMeanings, knownExpressions: new Set(items.filter((item) => isKnown(item.id)).map((item) => item.expression)) };
+}
+
+/**
+ * The strength-based half of `getSavedWordStatus`'s "known": expressions whose reading strength has
+ * reached READER_KNOWN_STRENGTH. Split out so the Reader can show its text first and shade these words
+ * once the five-table strength scan finishes, instead of waiting for it.
+ */
+export async function getStrengthKnownExpressions(expressions: string[]): Promise<Set<string>> {
+  if (expressions.length === 0) return new Set();
+  const items = await getDb().vocabularyItems.where('expression').anyOf(expressions).toArray();
+  if (items.length === 0) return new Set();
+  const { strengthByWord } = await loadWordReadingStrengths(READER_STRENGTH_CACHE_MS);
+  return new Set(items.filter((item) => (strengthByWord.get(item.id) ?? 0) >= READER_KNOWN_STRENGTH).map((item) => item.expression));
 }
 
 /**

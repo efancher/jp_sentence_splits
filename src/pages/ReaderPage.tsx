@@ -37,7 +37,7 @@ import { SentenceWalkthrough, walkthroughChunks } from '../components/SentenceWa
 import { glossesFromWords } from '../lib/chunkGlosses';
 import { mergeChapterConstructionDrafts, mergeChapterWalkthroughs } from '../lib/contextWalkthrough';
 import { WordGlossList, type CompareAids } from '../components/TargetLessonCard';
-import { ensureDefaultBookChapter, getDb, getEpisodeFocus, getSavedWordStatus, listGlossDecisions, listSentenceLearningEvents, logGlossDecision, logSentenceLearningEvent, ensureVocabularyItem, readSettings, updateSettings, withoutUnseenAiLinks } from '../db/repository';
+import { ensureDefaultBookChapter, getDb, getEpisodeFocus, getSavedWordStatus, getStrengthKnownExpressions, listGlossDecisions, listSentenceLearningEvents, logGlossDecision, logSentenceLearningEvent, ensureVocabularyItem, readSettings, updateSettings, withoutUnseenAiLinks } from '../db/repository';
 import { registerReportContext } from '../lib/reportContext';
 import type { BookSentence, Sentence, SentenceAudio, StructureDraftChunk, TextDisplayMode } from '../domain/types';
 import { useNativeAudio } from '../hooks/useNativeAudio';
@@ -163,7 +163,7 @@ export function ReaderPage() {
     }
   }, [settings]);
 
-  const data = useLiveQuery(async () => {
+  const loadedData = useLiveQuery(async () => {
     // A lesson route learns its chapter from the query above. Until then `chapterId` is unset, which
     // would load the whole book (1,900+ sentences) only for it to be discarded and redone for the chapter.
     if (lessonSentenceId && !searchParams.get('chapter') && lessonChapterId === undefined) return undefined;
@@ -216,7 +216,7 @@ export function ReaderPage() {
           ),
         ),
       ];
-      const { savedMeanings, knownExpressions } = await getSavedWordStatus(contentExpressions);
+      const { savedMeanings, knownExpressions } = await getSavedWordStatus(contentExpressions, { skipStrength: true });
       timer.mark('savedWordStatus');
       // The words a learner can tap in each sentence: its content words, in sentence order. A word that has no
       // vocabulary item yet (an unconfirmed AI draft) gets one on the first answer, so '' marks "not created yet".
@@ -281,9 +281,27 @@ export function ReaderPage() {
     }
   }, [bookId, chapterId, lessonSentenceId, lessonChapterId]);
 
+  // Strength-based "known" words arrive after the text: the five-table scan behind them is the slowest
+  // read here, and the page reads fine (just without that shading) before it lands.
+  const strengthExpressionsKey = [
+    ...new Set(
+      (loadedData?.rows ?? []).flatMap((row) =>
+        row.sentence.vocabularySuggestions.filter((item) => item.selectedByDefault).map((item) => item.expression),
+      ),
+    ),
+  ].join('\n');
+  const strengthKnown = useLiveQuery(
+    () => (strengthExpressionsKey ? getStrengthKnownExpressions(strengthExpressionsKey.split('\n')) : undefined),
+    [strengthExpressionsKey],
+  );
+  const data = useMemo(() => {
+    if (!loadedData || !strengthKnown || strengthKnown.size === 0) return loadedData;
+    return { ...loadedData, knownExpressions: new Set([...loadedData.knownExpressions, ...strengthKnown]) };
+  }, [loadedData, strengthKnown]);
+
   // Clip blobs are the heaviest read on this page, so they load on their own: the text renders
   // without waiting for them, and an audio change doesn't re-run the whole data query.
-  const audioSentenceKey = (data?.rows ?? []).map((row) => row.sentence.id).join(',');
+  const audioSentenceKey = (loadedData?.rows ?? []).map((row) => row.sentence.id).join(',');
   const loadedAudioRows =
     useLiveQuery(async () => {
       if (!audioSentenceKey) return undefined; // rows not loaded yet: stay "unloaded", not "no audio"
