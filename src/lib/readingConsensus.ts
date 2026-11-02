@@ -138,19 +138,69 @@ export type SpanVerdict =
   | { kind: 'flag'; audio?: string; llm?: string }
   | { kind: 'unchecked' };
 
+/** Whether a word (not punctuation or whitespace) sits directly before / after a span. */
+export interface SpanNeighbours {
+  before: boolean;
+  after: boolean;
+}
+
+const VOICED_INITIAL: Record<string, string[]> = {
+  か: ['が'], き: ['ぎ'], く: ['ぐ'], け: ['げ'], こ: ['ご'],
+  さ: ['ざ'], し: ['じ'], す: ['ず'], せ: ['ぜ'], そ: ['ぞ'],
+  た: ['だ'], ち: ['ぢ', 'じ'], つ: ['づ', 'ず'], て: ['で'], と: ['ど'],
+  は: ['ば', 'ぱ'], ひ: ['び', 'ぴ'], ふ: ['ぶ', 'ぷ'], へ: ['べ', 'ぺ'], ほ: ['ぼ', 'ぽ'],
+};
+const GEMINATES = new Set(['く', 'き', 'つ', 'ち']);
+const PROMOTES_GEMINATION = new Set(Array.from('かきくけこさしすせそたちつてとぱぴぷぺぽ'));
+
+/**
+ * The assistant's reading differs from the tokenizer's only by a compound
+ * sound change: rendaku (頃 ころ→ごろ after a noun) or gemination (六 ろく→ろっ
+ * before けい). The tokenizer splits compounds and reads each part in
+ * isolation, so these are its characteristic misses; the reverse direction
+ * (assistant un-voices or un-geminates) is not trusted.
+ */
+export function isCompoundSoundChange(tokenizer: string, llm: string, near: SpanNeighbours): boolean {
+  const tok = Array.from(toHiragana(tokenizer));
+  const out = Array.from(toHiragana(llm));
+  if (tok.length === 0 || tok.length !== out.length) return false;
+  const rest = (chars: string[], from: number) => normalizeKanaForCompare(chars.slice(from).join(''));
+  if (near.before && VOICED_INITIAL[tok[0]!]?.includes(out[0]!) && rest(tok, 1) === rest(out, 1)) return true;
+  for (let i = 1; i < tok.length; i += 1) {
+    if (!GEMINATES.has(tok[i]!) || out[i] !== 'っ') continue;
+    if (tok.slice(0, i).join('') !== out.slice(0, i).join('')) continue;
+    const next = out[i + 1];
+    if (next === undefined ? near.after : tok.slice(i + 1).join('') === out.slice(i + 1).join('') && PROMOTES_GEMINATION.has(next)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
  * One span, up to two independent opinions against the tokenizer's reading.
  * Auto-fix only when audio and the LLM both disagree with the tokenizer and
  * agree with each other; a lone dissent (or a split one) is flagged for a
  * human, because each signal has its own failure mode (aligner picks an odd
  * dictionary pronunciation; the LLM guesses a reading it can't hear).
+ *
+ * Exception: with no audio to consult, an LLM dissent that is exactly a
+ * compound sound change (`isCompoundSoundChange`) is trusted on its own.
  */
-export function judgeSpan(tokenizer: string, audio?: string, llm?: string): SpanVerdict {
+export function judgeSpan(
+  tokenizer: string,
+  audio?: string,
+  llm?: string,
+  near: SpanNeighbours = { before: false, after: false },
+): SpanVerdict {
   if (audio === undefined && llm === undefined) return { kind: 'unchecked' };
   const audioAgrees = audio === undefined || sameReading(audio, tokenizer);
   const llmAgrees = llm === undefined || sameReading(llm, tokenizer);
   if (audioAgrees && llmAgrees) return { kind: 'agree' };
   if (audio !== undefined && llm !== undefined && sameReading(audio, llm)) {
+    return { kind: 'fix', reading: llm };
+  }
+  if (audio === undefined && llm !== undefined && isCompoundSoundChange(tokenizer, llm, near)) {
     return { kind: 'fix', reading: llm };
   }
   return { kind: 'flag', audio: audioAgrees ? undefined : audio, llm: llmAgrees ? undefined : llm };

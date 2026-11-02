@@ -186,9 +186,15 @@ export async function checkSentenceReading(
     : new Map<number, string>();
 
   const fixes: SpanReadings = new Map();
-  parseInlineReadings(inline).forEach((seg, index) => {
+  const segments = parseInlineReadings(inline);
+  const isWordChar = (char: string | undefined) => char !== undefined && /[\p{L}\p{N}々]/u.test(char);
+  segments.forEach((seg, index) => {
     if (seg.kind !== 'ruby' || !seg.reading) return;
-    const verdict = judgeSpan(seg.reading, audio.get(index), llm.get(index));
+    const near = {
+      before: isWordChar(Array.from(segments[index - 1]?.base ?? '').pop()),
+      after: isWordChar(Array.from(segments[index + 1]?.base ?? '')[0]),
+    };
+    const verdict = judgeSpan(seg.reading, audio.get(index), llm.get(index), near);
     if (verdict.kind === 'fix') fixes.set(index, verdict.reading);
     else if (verdict.kind === 'flag') {
       const heard = [

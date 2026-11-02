@@ -4,6 +4,7 @@ import { formatBatchMeaningBankPromptForAI, parseBatchMeaningBankReply } from '.
 import {
   applyReadingFixes,
   inlineKana,
+  isCompoundSoundChange,
   judgeSpan,
   llmSpanReadings,
   sameReading,
@@ -40,6 +41,29 @@ describe('readingConsensus', () => {
     expect(judgeSpan('ぜん', 'まえ', 'さき')).toMatchObject({ kind: 'flag', audio: 'まえ', llm: 'さき' });
     expect(judgeSpan('まえ', 'まえ', 'まえ')).toEqual({ kind: 'agree' });
     expect(judgeSpan('まえ')).toEqual({ kind: 'unchecked' });
+  });
+
+  it('trusts the LLM alone on a compound sound change when there is no audio', () => {
+    const mid = { before: true, after: true };
+    expect(judgeSpan('ころ', undefined, 'ごろ', mid)).toEqual({ kind: 'fix', reading: 'ごろ' }); // 4月頃
+    expect(judgeSpan('かし', undefined, 'がし', mid)).toEqual({ kind: 'fix', reading: 'がし' }); // 茶菓子
+    expect(judgeSpan('ひん', undefined, 'ぴん', mid)).toEqual({ kind: 'fix', reading: 'ぴん' }); // 一品
+    expect(judgeSpan('ろく', undefined, 'ろっ', mid)).toEqual({ kind: 'fix', reading: 'ろっ' }); // 三十六景
+    expect(judgeSpan('じゅうはちさい', undefined, 'じゅうはっさい', mid)).toMatchObject({ kind: 'fix' });
+    // Not sound changes: a different word, or a different reading family.
+    expect(judgeSpan('た', undefined, 'ほか', mid)).toMatchObject({ kind: 'flag' });
+    expect(judgeSpan('とおし', undefined, 'つうじ', mid)).toMatchObject({ kind: 'flag' });
+    expect(judgeSpan('ゆう', undefined, 'いう', mid)).toMatchObject({ kind: 'flag' });
+    // The reverse direction (assistant un-geminates) is not trusted.
+    expect(judgeSpan('はっかげつ', undefined, 'はちかげつ', mid)).toMatchObject({ kind: 'flag' });
+    // Audio present: the audio decides, so the shortcut is off.
+    expect(judgeSpan('ころ', 'ころ', 'ごろ', mid)).toMatchObject({ kind: 'flag', llm: 'ごろ' });
+  });
+
+  it('needs a neighbouring word for rendaku and for a word-final gemination', () => {
+    expect(isCompoundSoundChange('ころ', 'ごろ', { before: false, after: true })).toBe(false);
+    expect(isCompoundSoundChange('ろく', 'ろっ', { before: true, after: false })).toBe(false);
+    expect(isCompoundSoundChange('ろく', 'ろっ', { before: true, after: true })).toBe(true);
   });
 
   it('rewrites only the fixed spans and refuses markup that does not round-trip', () => {
