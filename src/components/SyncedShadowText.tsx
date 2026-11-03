@@ -7,6 +7,7 @@ import {
   saveReferencePitchTrack,
 } from '../db/repository';
 import type { SentenceAudio } from '../domain/types';
+import { useNativeAudio } from '../hooks/useNativeAudio';
 import { loadOrComputeAlignment } from '../lib/alignmentCache';
 import { alignerCharCount, alignerRangeToRawIndices, verifiedTokenCharRange } from '../lib/isolatedWordRange';
 import type { MoraUnit } from '../lib/mora';
@@ -92,6 +93,11 @@ export function SyncedShadowText({
   const [isPlaying, setIsPlaying] = useState(false);
   const [pitchTrack, setPitchTrack] = useState<PitchAnalysisPayload>();
   const [pitchProgress, setPitchProgress] = useState<number | null>(null);
+  // The reader's own play button plays this clip through the shared
+  // nativeAudioController rather than `audioRef`; follow it too.
+  const native = useNativeAudio();
+  const nativePlaying = Boolean(referenceAudio) && native.isPlaying && native.activeItemId === referenceAudio?.id;
+  const { getCurrentTime: getNativeTime } = native;
 
   useEffect(() => {
     let cancelled = false;
@@ -146,20 +152,20 @@ export function SyncedShadowText({
   }, [audioRef, words.length]);
 
   useEffect(() => {
-    if (!isPlaying || words.length === 0) {
+    if ((!isPlaying && !nativePlaying) || words.length === 0) {
       setActiveIndex(-1);
       return;
     }
     let frame: number;
     const tick = () => {
-      const t = audioRef.current?.currentTime ?? 0;
+      const t = nativePlaying ? getNativeTime() : audioRef.current?.currentTime ?? 0;
       const index = words.findIndex((word) => t >= word.start && t < word.end);
       setActiveIndex((prev) => (prev === index ? prev : index));
       frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [isPlaying, words, audioRef]);
+  }, [isPlaying, nativePlaying, getNativeTime, words, audioRef]);
 
   // Playhead for the measured-pitch contour — tracked off the reference
   // <audio> element directly (independent of forced alignment, so it works
@@ -195,6 +201,21 @@ export function SyncedShadowText({
       audio.removeEventListener('ended', stop);
     };
   }, [audioRef, referenceAudio]);
+
+  useEffect(() => {
+    const duration = pitchTrack?.durationSeconds;
+    if (!nativePlaying || !duration) return;
+    let frame = 0;
+    const tick = () => {
+      setPitchProgress(Math.max(0, Math.min(1, getNativeTime() / duration)));
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(frame);
+      setPitchProgress(null);
+    };
+  }, [nativePlaying, getNativeTime, pitchTrack]);
 
   // While reciting from memory (no reference audio playing), drive the
   // playhead off elapsed recording time instead: `currentTime` on a real
