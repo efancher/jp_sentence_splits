@@ -234,11 +234,11 @@ export function QuickMinePage() {
   const [rows, setRows] = useState<QuickRow[]>([]);
   const [promptOptions, setPromptOptions] = useState<Required<CombinedPromptOptions>>({
     targets: true,
-    constructions: false,
+    constructions: true,
     walkthroughs: true,
-    structure: false,
+    structure: true,
     comprehension: false,
-    particles: true,
+    particles: false,
     grammar: false,
   });
   const [extras, setExtras] = useState<CombinedReplySections | null>(null);
