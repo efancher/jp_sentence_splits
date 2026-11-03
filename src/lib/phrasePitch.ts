@@ -10,8 +10,9 @@ import { SET_EXPRESSIONS } from './setExpressions';
  * by mora. Japanese accent is realised over the phrase, not the bare word, so this
  * is the unit a learner actually hears and has to produce.
  *
- * Deliberately no H/L labels and no accent-type (heiban, atamadaka, …) fitting: the
- * native *recording* is the answer key and its measured pitch is shown as it is.
+ * Deliberately no accent-type (heiban, atamadaka, …) fitting: the native *recording* is
+ * the answer key and its measured pitch is shown as it is. The H/L under each mora
+ * (`moraHighLow`) is read per mora from that measurement, never matched to a pattern.
  * `levels` is each mora's mean height within the phrase (0..1), drawn as a line, so a
  * contour that is not a textbook pattern — or a native that does not follow the
  * dictionary — reads honestly instead of being snapped to a shape (a fit once forced
@@ -221,6 +222,41 @@ export function sampleContour(pitch: PitchAnalysisPayload, from: number, to: num
     if (out[i] === null && out[i - 1] !== null && out[i + 1] !== null) out[i] = (out[i - 1]! + out[i + 1]!) / 2;
   }
   return out;
+}
+
+/**
+ * High/low per mora, read from the measured pitch: a mora is high when its mean pitch is at or above the
+ * phrase's own mean (the same rule `classifyLearnerMorae` uses for single words, so the labels agree across
+ * the app). An unvoiced mora carries the previous class forward ('l' before the first voiced one). Uses the
+ * measured contour when it covers every mora, else the per-mora `levels` (high at 0.5 and above). Null when
+ * fewer than two morae have a pitch — one point carries no shape.
+ */
+export function moraHighLow(
+  contour: readonly (number | null)[] | null | undefined,
+  levels: readonly (number | null)[] | null | undefined,
+  moraCount: number,
+): ('h' | 'l')[] | null {
+  let means: (number | null)[];
+  let overall: number;
+  if (contour && contour.length === moraCount * CONTOUR_POINTS_PER_MORA) {
+    means = Array.from({ length: moraCount }, (_, m) => {
+      const pts = contour.slice(m * CONTOUR_POINTS_PER_MORA, (m + 1) * CONTOUR_POINTS_PER_MORA).filter((v): v is number => v !== null);
+      return pts.length ? pts.reduce((a, b) => a + b, 0) / pts.length : null;
+    });
+    const all = contour.filter((v): v is number => v !== null);
+    overall = all.length ? all.reduce((a, b) => a + b, 0) / all.length : 0;
+  } else if (levels && levels.length === moraCount) {
+    means = levels.slice();
+    overall = 0.5;
+  } else {
+    return null;
+  }
+  if (means.filter((m) => m !== null).length < 2) return null;
+  let last: 'h' | 'l' = 'l';
+  return means.map((m) => {
+    if (m !== null) last = m >= overall ? 'h' : 'l';
+    return last;
+  });
 }
 
 /** Heights 0..1 within the phrase (0 = its lowest voiced mora). All-equal → 0.5. */

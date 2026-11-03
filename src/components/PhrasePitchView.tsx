@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 import { levelsToRuns, selfScaledLevels } from '../lib/attemptPitchGrid';
-import { CONTOUR_POINTS_PER_MORA, type PhrasePitchResult, type PhraseRow } from '../lib/phrasePitch';
+import { CONTOUR_POINTS_PER_MORA, moraHighLow, type PhrasePitchResult, type PhraseRow } from '../lib/phrasePitch';
 
 const UNAVAILABLE_TEXT: Record<NonNullable<PhrasePitchResult['unavailable']>, string> = {
   'no-reference-timing':
@@ -30,6 +30,8 @@ function PhraseBlock({ row, showLearner }: { row: PhraseRow; showLearner: boolea
   const native = contourOf(row.nativeContour, row.nativeLevels);
   const learner = showLearner ? contourOf(row.learnerContour, row.learnerLevels) : null;
   const learnerLevels = learner?.levels ?? null;
+  const nativeHl = moraHighLow(row.nativeContour, row.nativeLevels, row.kana.length);
+  const learnerHl = learner ? moraHighLow(row.learnerContour, row.learnerLevels, row.kana.length) : null;
   return (
     <div className="pp-block">
       <strong className="jp">{row.text}</strong>
@@ -58,6 +60,30 @@ function PhraseBlock({ row, showLearner }: { row: PhraseRow; showLearner: boolea
           </span>
         ))}
       </div>
+      {nativeHl ? (
+        <div className="row pp-hl-row" style={{ gap: 0 }} aria-label={`High and low, native: ${nativeHl.join(' ').toUpperCase()}`}>
+          {nativeHl.map((c, index) => (
+            <span key={index} className="pa-hl" data-c={c} style={{ width: SLOT_W, textAlign: 'center' }}>
+              {c.toUpperCase()}
+            </span>
+          ))}
+        </div>
+      ) : null}
+      {nativeHl && learnerHl ? (
+        <div className="row pp-hl-row" style={{ gap: 0 }} aria-label={`High and low, you: ${learnerHl.join(' ').toUpperCase()}`}>
+          {learnerHl.map((c, index) => (
+            <span
+              key={index}
+              className="pa-hl pa-hl-learner"
+              data-c={c}
+              data-mismatch={c !== nativeHl[index] ? '' : undefined}
+              style={{ width: SLOT_W, textAlign: 'center' }}
+            >
+              {c.toUpperCase()}
+            </span>
+          ))}
+        </div>
+      ) : null}
       {showLearner && learnerLevels === null ? (
         <div className="muted pp-feedback">
           {row.learnerVoicedMorae === null
@@ -124,8 +150,8 @@ function ReportProblem({ onReport }: { onReport: (note: string) => Promise<void>
 
 /**
  * Phrase-level pitch, native vs you (`buildPhrasePitch`). Each phrase — a content word plus its
- * particles/endings — is drawn as the native's measured contour with yours over it. No H/L labels or
- * accent types: you compare the lines.
+ * particles/endings — is drawn as the native's measured contour with yours over it, with H/L read from
+ * that same measurement under the kana (native, then yours; a differing mora of yours is flagged).
  */
 export function PhrasePitchView({
   result,
@@ -172,7 +198,7 @@ export function PhrasePitchView({
       {onReport ? <ReportProblem onReport={onReport} /> : null}
       <p className="muted" style={{ fontSize: '0.8em', margin: 0 }}>
         Each line is the measured pitch of that phrase’s sounds, scaled from its lowest to its highest — compare the
-        shapes, not absolute pitch. The native recording is the answer key.
+        shapes, not absolute pitch. H/L under the sounds is read from the same measurement (above or below the phrase’s own average), not a dictionary accent. The native recording is the answer key.
       </p>
     </div>
   );

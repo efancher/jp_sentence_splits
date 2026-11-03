@@ -22,13 +22,33 @@ const result = (rows: PhraseRow[], extra: Partial<PhrasePitchResult> = {}): Phra
 });
 
 describe('PhrasePitchView', () => {
-  it('draws the native and your contour for a phrase, with the kana under it and no H/L labels', () => {
+  it('writes H/L under the kana for the native and for you, flagging where yours differs', () => {
+    const { container } = render(<PhrasePitchView result={result([row()])} hasLearner />);
+    expect(screen.getByLabelText('High and low, native: L H L')).toBeInTheDocument();
+    expect(screen.getByLabelText('High and low, you: H H L')).toBeInTheDocument();
+    const mismatches = container.querySelectorAll('.pa-hl-learner[data-mismatch]');
+    expect(mismatches).toHaveLength(1);
+    expect(mismatches[0]!.textContent).toBe('H');
+  });
+
+  it('reads H/L from the measured contour: a low わ then a high たしは is L H H H', () => {
+    const contour = [-5, -5, -4, -4, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2];
+    render(
+      <PhrasePitchView
+        result={result([row({ text: '私は', kana: ['わ', 'た', 'し', 'は'], nativeContour: contour, nativeLevels: [0, 1, 1, 1], learnerLevels: null, learnerVoicedMorae: null })])}
+        hasLearner={false}
+      />,
+    );
+    expect(screen.getByLabelText('High and low, native: L H H H')).toBeInTheDocument();
+    expect(screen.queryByLabelText(/High and low, you/)).toBeNull();
+  });
+
+  it('draws the native and your contour for a phrase, with the kana under it', () => {
     const { container } = render(<PhrasePitchView result={result([row()])} hasLearner />);
     expect(screen.getByRole('img', { name: 'Pitch of はしが, native and yours' })).toBeInTheDocument();
     expect(container.querySelectorAll('polyline.apg-line-native')).toHaveLength(1);
     expect(container.querySelectorAll('polyline.apg-line-attempt')).toHaveLength(1);
     expect(['は', 'し', 'が'].every((k) => screen.getAllByText(k).length > 0)).toBe(true);
-    expect(screen.queryByText('H')).toBeNull();
     expect(screen.queryByText(/phrases match/)).toBeNull();
   });
 

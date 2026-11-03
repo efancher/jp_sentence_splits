@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { PhoneAlignment, WordAlignment } from '../src/domain/types';
 import type { PitchAnalysisPayload, PitchFrame } from '../src/lib/pitch';
-import { buildPhrasePitch, groupIntoPhrases } from '../src/lib/phrasePitch';
+import { buildPhrasePitch, groupIntoPhrases, moraHighLow } from '../src/lib/phrasePitch';
 
 /** A token whose morae are consecutive CV pairs of `moraMs` each, starting at `startMs`. */
 function token(text: string, startMs: number, cvs: [string, string][], moraMs = 100): WordAlignment {
@@ -183,5 +183,18 @@ describe('buildPhrasePitch', () => {
     const silent = pitchFor([null, null, null, 0, 4, 4, 0, 0]);
     const result = buildPhrasePitch({ reference: { words: words(), pitch: silent } });
     expect(result.rows.map((r) => r.text)).toEqual(['たかいです']); // [はしが] had nothing voiced
+  });
+});
+
+describe('moraHighLow', () => {
+  it('compares each mora with the phrase mean, carrying the class across an unvoiced mora', () => {
+    const contour = [-4, -4, -4, -4, null, null, null, null, 3, 3, 3, 3];
+    expect(moraHighLow(contour, null, 3)).toEqual(['l', 'l', 'h']);
+  });
+
+  it('falls back to per-mora levels, and is null when under two morae are voiced', () => {
+    expect(moraHighLow(null, [0, 1, 0.4], 3)).toEqual(['l', 'h', 'l']);
+    expect(moraHighLow([1, 1, 1, 1, null, null, null, null], null, 2)).toBeNull();
+    expect(moraHighLow(null, null, 3)).toBeNull();
   });
 });

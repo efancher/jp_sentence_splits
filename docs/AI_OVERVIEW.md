@@ -2280,8 +2280,10 @@ a self-hosted pronunciation-analysis backend. Capabilities:
 - **Phrase pitch (contours only, 2026-10-17)** — after Analyze, `AnalysisPanel`
   shows `PhrasePitchView`: per phrase (content word + its particles/endings), the
   native recording's measured pitch contour drawn as a thick line with yours as a
-  thin line over it, the kana under each point. No H/L labels, no accent-type
-  (heiban/atamadaka…) fitting, no match score — the line is each mora's mean
+  thin line over it, the kana under each point, then an H/L row for the native
+  and one for you (2026-11-03; read per mora from the measurement — at or above
+  the phrase's own mean pitch is H — with a differing mora of yours flagged, via
+  `moraHighLow`). No accent-type (heiban/atamadaka…) fitting, no match score — the line is each mora's mean
   pitch scaled within the phrase, over exact phone-derived mora intervals; the
   native audio is the answer key. (A valid-shape fit used to label these and once
   forced について to HLLL when it was said LLLH.) Withheld (with a message) when
