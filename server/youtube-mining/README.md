@@ -116,7 +116,9 @@ Tailscale exit node, the service routes each download through it — yt-dlp
 then sees that device's residential IP. `app/exit_node.py` flips the box's
 exit node on just around the audio/subtitle/info fetches and clears it
 after, so the rest of the box's traffic only detours for a minute or two
-per job. Concurrent jobs are serialized.
+per job. Concurrent jobs are serialized. Every source type is routed, not
+just YouTube: podcast CDNs can block the box too (Buzzsprout's CloudFront
+returns 403 to this IP — 2026-11-03).
 
 Setup:
 

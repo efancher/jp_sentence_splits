@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from app import asr_client, clip, jobs, source_cache, youtube
+from app import asr_client, clip, exit_node, jobs, source_cache, youtube
 from app.main import app
 
 JA_VTT = """WEBVTT
@@ -153,6 +153,41 @@ def test_podcast_job_uses_title_override_and_source_type(client: TestClient) -> 
     assert status["status"] == "ready"
     assert status["source"]["title"] == "#1581「きみちゃんが新しい生徒を探しています！！」"
     assert status["source"]["type"] == "podcast"
+
+
+def test_podcast_job_downloads_through_exit_node(client: TestClient, monkeypatch) -> None:
+    """Podcast CDNs can block the box's datacenter IP too (Buzzsprout's
+    CloudFront 403s it), so non-YouTube jobs take the same exit-node detour."""
+    from contextlib import contextmanager
+
+    events: list[str] = []
+
+    @contextmanager
+    def fake_route():
+        events.append("on")
+        yield
+        events.append("off")
+
+    monkeypatch.setattr(exit_node, "routed_for_download", fake_route)
+    inner_fetch = youtube.fetch_audio
+
+    def fetch_while_routed(url, job_dir):
+        events.append("fetch")
+        return inner_fetch(url, job_dir)
+
+    monkeypatch.setattr(youtube, "fetch_audio", fetch_while_routed)
+
+    create = client.post(
+        "/jobs",
+        json={
+            "url": "https://media.example.com/episode-1.mp3",
+            "title": "Episode 1",
+            "sourceType": "podcast",
+        },
+    )
+    assert create.status_code == 200
+    _wait_until_ready(client, create.json()["jobId"])
+    assert events[:3] == ["on", "fetch", "off"]
 
 
 def test_uses_asr_transcript_over_captions_when_available(

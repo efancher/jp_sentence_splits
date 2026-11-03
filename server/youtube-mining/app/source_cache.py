@@ -21,7 +21,6 @@ import logging
 import os
 import subprocess
 import tempfile
-from contextlib import nullcontext
 from pathlib import Path
 
 from app import clip, config, exit_node, source_backup, youtube
@@ -106,14 +105,14 @@ def ensure(url: str) -> Path:
     """Cached Opus path for `url`'s video, downloading + caching it first if
     absent. Routes the download through the Tailscale exit node."""
     video_id = youtube.extract_video_id(url)
-    is_youtube = video_id is not None
     if not video_id:
         # Podcast enclosure / direct-media URL: the mining job cached it under
         # yt-dlp's generic-extractor id, so resolve the same id here.
         if not url.strip().lower().startswith(("http://", "https://")):
             raise ValueError(f"Could not extract a video id from {url!r}")
         try:
-            video_id = str(youtube.inspect_url(url).get("id") or "")
+            with exit_node.routed_for_download():
+                video_id = str(youtube.inspect_url(url).get("id") or "")
         except Exception as exc:  # noqa: BLE001 - yt_dlp.DownloadError et al.
             raise ValueError(f"Could not extract a video id from {url!r}: {exc}") from exc
         if not video_id:
@@ -127,8 +126,8 @@ def ensure(url: str) -> Path:
         return restored
     with tempfile.TemporaryDirectory(prefix="source-fetch-") as tmp:
         try:
-            # Only YouTube needs the exit-node detour (see jobs._fetch_transcript).
-            with exit_node.routed_for_download() if is_youtube else nullcontext():
+            # Same detour as jobs._fetch_transcript, for every source type.
+            with exit_node.routed_for_download():
                 downloaded = youtube.fetch_audio(url, Path(tmp))
         except Exception as exc:  # noqa: BLE001 - yt_dlp.DownloadError et al.
             raise RuntimeError(f"Source download failed: {exc}") from exc

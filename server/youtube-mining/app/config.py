@@ -143,7 +143,8 @@ SOURCE_BACKUP_BUCKET = os.environ.get("MINING_SOURCE_BACKUP_BUCKET", "source-aud
 # (as in `tailscale status`, e.g. "eds-macbook-pro") or IP. Requires the
 # `tailscale` CLI on PATH and this service's user set as the Tailscale
 # operator (`sudo tailscale set --operator=<user>`, one-time). Unset = no
-# routing (local dev, or a box with a clean egress IP). See app/exit_node.py.
+# routing (local dev, or a box with a clean egress IP). Applies to every
+# source type, not only YouTube. See app/exit_node.py.
 MINING_EXIT_NODE = os.environ.get("MINING_EXIT_NODE") or None
 # Used when MINING_EXIT_NODE is offline / not advertising an exit node
 # (laptop asleep → fall back to the phone). Optional.

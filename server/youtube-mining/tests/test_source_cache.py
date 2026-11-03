@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from app import config, jobs, source_cache, youtube
+from app import config, exit_node, jobs, source_cache, youtube
 from app.main import app
 
 
@@ -218,3 +218,22 @@ def test_backup_disabled_without_credentials(tmp_path, monkeypatch):
     assert source_cache.source_backup.upload("v", f) is False
     assert source_cache.source_backup.restore("v", tmp_path / "b.opus") is False
     assert source_cache.source_backup.status() == {"enabled": False}
+
+
+def test_ensure_routes_non_youtube_url_through_exit_node(client: TestClient, monkeypatch):
+    from contextlib import contextmanager
+
+    events: list[str] = []
+
+    @contextmanager
+    def fake_route():
+        events.append("on")
+        yield
+        events.append("off")
+
+    monkeypatch.setattr(exit_node, "routed_for_download", fake_route)
+    monkeypatch.setattr(youtube, "inspect_url", lambda url: events.append("inspect") or {"id": "ep-1"})
+
+    resp = client.post("/source-audio", json={"url": "https://media.example.com/ep-1.mp3"})
+    assert resp.status_code == 200, resp.text
+    assert events == ["on", "inspect", "off", "on", "off"]
