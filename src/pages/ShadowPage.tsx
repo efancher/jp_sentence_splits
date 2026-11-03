@@ -8,6 +8,8 @@ import { ShadowSentenceHighLow } from '../components/SentenceHighLow';
 import { ShadowSnoozeButtons } from '../components/ShadowSnoozeButtons';
 import { LoopWindowControls, MAX_LOOP_GAP_MS, MAX_LOOP_LEAD_IN_MS } from '../components/LoopWindowControls';
 import { NativePitchPractice } from '../components/NativePitchPractice';
+import { PhraseShadowRating } from '../components/PhraseShadowRating';
+import { isPhraseRange } from '../lib/phraseShadow';
 import { AttemptPitchGrid } from '../components/AttemptPitchGrid';
 import { attemptsNeedingPhraseSnapshot, backfillPhraseSnapshots } from '../lib/backfillPhraseSnapshots';
 import { ChapterReader } from '../components/ChapterReader';
@@ -977,6 +979,16 @@ export function ShadowWorkspace({
                 </>
               ) : null}
             </div>
+            {referenceAudio && isPhraseRange(targetRange, referenceAudio.durationMs) ? (
+              <PhraseShadowRating
+                key={`${referenceAudio.id}:${targetRange!.startMs}:${targetRange!.endMs}`}
+                bookId={bookId}
+                sentenceId={sentenceId}
+                sentenceAudioId={referenceAudio.id}
+                clipDurationMs={referenceAudio.durationMs}
+                range={targetRange!}
+              />
+            ) : null}
             {isLoopingReps ? (
               <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
                 Speed and the target range stay live — adjust them without stopping the loop.

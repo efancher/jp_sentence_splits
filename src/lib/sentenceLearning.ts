@@ -202,7 +202,7 @@ export function summariseSentenceProgress(events: SentenceLearningEvent[], sente
       if (event.modality === 'spoken') progress.spokenAttempts += 1;
       else progress.writtenAttempts += 1;
     }
-    else if (event.action === 'gist_check' && event.outcome && event.timestamp >= latestGist) {
+    else if (event.action === 'gist_check' && event.outcome && event.outcome !== 'close' && event.timestamp >= latestGist) {
       latestGist = event.timestamp;
       progress.gist = event.outcome;
     }

@@ -790,6 +790,14 @@ export interface AppSettings {
    */
   sentenceCardsPaused?: boolean;
   /**
+   * Pauses whole-sentence shadowing in the session planner (no shadowing steps are
+   * drafted) while phrase shadowing (`phrase_shadow` events) builds up data. The
+   * Shadow page, the reader's Shadowing tool and "Shadow this phrase" still work.
+   * Nothing is deleted; turning it off restores the planner's shadowing steps.
+   * Defaults to `false`.
+   */
+  sentenceShadowingPaused?: boolean;
+  /**
    * Short personal reminder shown at the top of the shadowing page (per-device,
    * like `quietMode`). Empty/absent hides it.
    */
@@ -1819,7 +1827,9 @@ export type SentenceLearningAction =
   /** A later-day repeat of `transfer_attempt` for the same target, written from memory. Separate evidence: delayed, not same-visit. */
   | 'transfer_recheck'
   /** Masked recall of a target in a real occurrence the learner has never met in this target's lesson (`exposedSentenceId`). Separate from same-sentence practice. */
-  | 'held_back_check';
+  | 'held_back_check'
+  /** A self-rated pass at a hand-marked span of the reference clip (`rangeStartMs`..`rangeEndMs`); never closes the sentence's own shadowing step. */
+  | 'phrase_shadow';
 
 /**
  * Append-only lesson evidence from inside a passage (sentence-first plan, Phase 2).
@@ -1838,7 +1848,7 @@ export interface SentenceLearningEvent {
   target?: { kind: PreparedTargetKind; key: string; label: string };
   /** What was visible when the learner answered (practice only). */
   support?: 'explanation_hidden' | 'target_masked';
-  outcome?: 'got_it' | 'needed_help';
+  outcome?: 'got_it' | 'needed_help' | 'close';
   /** Practice outcomes are always the learner's own judgement here. */
   assessmentSource?: 'self';
   /**
@@ -1862,6 +1872,9 @@ export interface SentenceLearningEvent {
   helpLevel?: 'full' | 'less' | 'minimal';
   /** report_resolved only: the learner's triage of an earlier content_report for the same sentence+target. Changes no sentence data. */
   resolution?: 'fixed' | 'dismissed';
+  /** phrase_shadow only: the marked span of the reference clip, in ms. `target.label` is its text; `target.key` lists the credited words. */
+  rangeStartMs?: number;
+  rangeEndMs?: number;
   /** Compare uses: the other real occurrence that was shown. */
   exposedSentenceId?: string;
   quietMode?: boolean;

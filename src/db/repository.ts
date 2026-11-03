@@ -6,6 +6,13 @@ import { stepTimer } from '../lib/pageTiming';
 import { FREQUENCY_WAIT_MS, loadWordFrequency, lookupWordBand } from '../lib/wordFrequency';
 import { frequencyBandPrior, planWeakWordSentences, READER_KNOWN_STRENGTH, wordStrength } from '../lib/wordStrength';
 import { readCheckReason, sentencesDueForReadCheck } from '../lib/readCheck';
+import {
+  isPhraseRange,
+  phraseShadowTargetKey,
+  phraseTextFromAlignment,
+  wordIdsInPhrase,
+  type PhraseShadowOutcome,
+} from '../lib/phraseShadow';
 import { explainWeakWordSentences, type WeakWordExplanation } from '../lib/weakWordExplain';
 import { buildSentenceLessonReport, type SentenceLessonReport } from '../lib/sentenceLessonReport';
 import { parkedSentenceIds } from '../lib/glossSkill';
@@ -9709,6 +9716,46 @@ export async function logSentenceLearningEvent(
   return full;
 }
 
+/**
+ * Logs one self-rated phrase shadow: the learner marked a span of the sentence's reference clip, shadowed
+ * it and judged the pass. The span's text and the vocabulary inside it come from the cached forced alignment
+ * and the sentence's own links (no alignment yet: the event still logs, with no text and no words credited).
+ * Evidence only: no Review, no FSRS, and not a whole-sentence shadowing attempt. Returns null when the span
+ * is not a phrase (too short, or essentially the whole clip).
+ */
+export async function logPhraseShadow(input: {
+  bookId: string;
+  chapterId?: string;
+  sentenceId: string;
+  sentenceAudioId: string;
+  clipDurationMs: number;
+  range: { startMs: number; endMs: number };
+  outcome: PhraseShadowOutcome;
+  visitId?: string;
+}): Promise<SentenceLearningEvent | null> {
+  if (!isPhraseRange(input.range, input.clipDurationMs)) return null;
+  const db = getDb();
+  const [alignment, links, settings] = await Promise.all([
+    db.referenceAlignments.get(input.sentenceAudioId),
+    db.sentenceVocabulary.where('sentenceId').equals(input.sentenceId).toArray(),
+    ensureSettings(db),
+  ]);
+  const text = alignment ? phraseTextFromAlignment(alignment.result.words, input.range) : '';
+  return logSentenceLearningEvent({
+    visitId: input.visitId ?? createId('phrase_visit'),
+    action: 'phrase_shadow',
+    bookId: input.bookId,
+    chapterId: input.chapterId,
+    sentenceId: input.sentenceId,
+    target: { kind: 'expression', key: phraseShadowTargetKey(wordIdsInPhrase(text, links)), label: text },
+    rangeStartMs: Math.round(input.range.startMs),
+    rangeEndMs: Math.round(input.range.endMs),
+    outcome: input.outcome,
+    assessmentSource: 'self',
+    quietMode: settings.quietMode ?? false,
+  });
+}
+
 export async function logGlossDecision(
   decision: Omit<GlossDecision, 'id' | 'timestamp'> & { id?: string; timestamp?: string },
 ): Promise<GlossDecision> {
@@ -11759,7 +11806,9 @@ export async function getSessionPlannerInput(
   // nothing and allocateTimeAcrossModes routes the shadowing minutes to the
   // other buckets. Nothing is consumed — the candidates recompute on the
   // next plan once quiet mode is off.
-  const shadowCandidatesRaw = settings.quietMode
+  // "Pause sentence shadowing" (settings.sentenceShadowingPaused) withholds them the same way, while phrase
+  // shadowing builds up its own data; the Shadow page and the reader's Shadowing tool stay available.
+  const shadowCandidatesRaw = settings.quietMode || settings.sentenceShadowingPaused
     ? []
     : await findShadowCandidates(
         SHADOW_CANDIDATE_LIMIT + exclude.sentenceIds.size,

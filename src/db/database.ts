@@ -79,6 +79,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   quietMode: false,
   pitchAccentPaused: false,
   sentenceCardsPaused: false,
+  sentenceShadowingPaused: false,
   recentPodcastFeedUrls: [],
   recentNhkEasyFeedUrls: [],
 };

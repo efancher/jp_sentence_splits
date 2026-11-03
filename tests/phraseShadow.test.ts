@@ -1,0 +1,191 @@
+import { beforeEach, describe, expect, it } from 'vitest';
+
+import { resetDbForTests } from '../src/db/database';
+import {
+  addSentencesToBook,
+  confirmSentenceVocabulary,
+  createBook,
+  getDb,
+  getSessionPlannerInput,
+  logPhraseShadow,
+  setBookSentenceStatus,
+  updateSettings,
+} from '../src/db/repository';
+import type { Sentence } from '../src/domain/types';
+import { createId } from '../src/lib/ids';
+import {
+  isPhraseRange,
+  phraseShadowTargetKey,
+  phraseShadowWordIds,
+  phraseShadowsBySentence,
+  phraseTextFromAlignment,
+  wordIdsInPhrase,
+} from '../src/lib/phraseShadow';
+import { buildWordEvidence } from '../src/lib/wordEvidence';
+import { remoteToSentenceLearningEvent, sentenceLearningEventToRemote } from '../src/sync/mappers';
+
+const words = [
+  { text: '猫', start: 0, end: 0.4 },
+  { text: 'が', start: 0.4, end: 0.5 },
+  { text: '寝て', start: 0.5, end: 1.0 },
+  { text: 'います', start: 1.0, end: 1.6 },
+];
+
+describe('phrase shadow helpers', () => {
+  it('accepts a real sub-span and rejects slivers and the whole clip', () => {
+    expect(isPhraseRange({ startMs: 500, endMs: 1600 }, 2000)).toBe(true);
+    expect(isPhraseRange({ startMs: 500, endMs: 650 }, 2000)).toBe(false);
+    expect(isPhraseRange({ startMs: 0, endMs: 1900 }, 2000)).toBe(false);
+    expect(isPhraseRange(null, 2000)).toBe(false);
+  });
+
+  it('takes the aligned words that sit mostly inside the span', () => {
+    expect(phraseTextFromAlignment(words, { startMs: 450, endMs: 1650 })).toBe('寝ています');
+    // A word clipped to less than half its length is left out.
+    expect(phraseTextFromAlignment(words, { startMs: 800, endMs: 1650 })).toBe('います');
+  });
+
+  it('finds the vocabulary whose surface sits inside the phrase', () => {
+    const links = [
+      { vocabularyItemId: 'v-cat', surfaceForm: '猫' },
+      { vocabularyItemId: 'v-sleep', surfaceForm: '寝て' },
+      { vocabularyItemId: 'v-none' },
+    ];
+    expect(wordIdsInPhrase('寝ています', links)).toEqual(['v-sleep']);
+    expect(wordIdsInPhrase('', links)).toEqual([]);
+    expect(phraseShadowWordIds(phraseShadowTargetKey(['a', 'b']))).toEqual(['a', 'b']);
+    expect(phraseShadowWordIds('vocab:a')).toEqual([]);
+  });
+
+  it('groups phrase passes per sentence in order and ignores other events', () => {
+    const grouped = phraseShadowsBySentence([
+      { action: 'phrase_shadow', sentenceId: 's', timestamp: '2026-11-03T10:00:00Z', outcome: 'got_it', rangeStartMs: 1, rangeEndMs: 2 },
+      { action: 'phrase_shadow', sentenceId: 's', timestamp: '2026-11-03T09:00:00Z', outcome: 'needed_help', rangeStartMs: 1, rangeEndMs: 2 },
+      { action: 'gist_check', sentenceId: 's', timestamp: '2026-11-03T08:00:00Z', outcome: 'got_it' },
+    ]);
+    expect(grouped.get('s')?.map((p) => p.outcome)).toEqual(['needed_help', 'got_it']);
+  });
+});
+
+describe('phrase shadow evidence and sync', () => {
+  const ts = '2026-11-03T10:00:00.000Z';
+  const at = Date.parse(ts);
+  const event = (outcome: 'got_it' | 'close' | 'needed_help') => ({
+    action: 'phrase_shadow' as const,
+    sentenceId: 's1',
+    timestamp: ts,
+    outcome,
+    target: { kind: 'expression' as const, key: phraseShadowTargetKey(['w1', 'w2']), label: '寝ています' },
+  });
+
+  it('credits only the words in the phrase, and stays neutral on Close', () => {
+    const base = { studyItems: [], reviews: [], wordsBySentence: new Map([['s1', ['w1', 'w2', 'w3']]]) };
+    const got = buildWordEvidence({ ...base, learningEvents: [event('got_it')] });
+    expect(got.get('w1')).toEqual([{ wordId: 'w1', facet: 'reading', kind: 'recognition', at, success: true }]);
+    expect(got.has('w3')).toBe(false);
+    const miss = buildWordEvidence({ ...base, learningEvents: [event('needed_help')] });
+    expect(miss.get('w2')?.[0]).toMatchObject({ success: false });
+    expect(buildWordEvidence({ ...base, learningEvents: [event('close')] }).size).toBe(0);
+  });
+
+  it('round-trips the span and the Close outcome through the remote mapper', () => {
+    const full = {
+      id: 'e1', timestamp: ts, visitId: 'v', action: 'phrase_shadow' as const, bookId: 'b', sentenceId: 's',
+      target: { kind: 'expression' as const, key: phraseShadowTargetKey(['w1']), label: '寝ています' },
+      outcome: 'close' as const, assessmentSource: 'self' as const, rangeStartMs: 500, rangeEndMs: 1600,
+    };
+    const remote = sentenceLearningEventToRemote(full, 'owner', 1);
+    expect(remote).toMatchObject({ range_start_ms: 500, range_end_ms: 1600, outcome: 'close' });
+    expect(remoteToSentenceLearningEvent(remote)).toEqual(full);
+  });
+});
+
+function makeSentence(japanese: string): Sentence {
+  const timestamp = new Date().toISOString();
+  const id = createId('sent');
+  return {
+    id, normalizedKey: id, japanese, readingOnly: '', inlineReading: '', translation: 'x', targetVocabulary: [],
+    vocabularySuggestions: [], sourceReferences: [], conflicts: [], firstOccurrenceIndex: 0, importBatchIds: [],
+    createdAt: timestamp, updatedAt: timestamp,
+  };
+}
+
+describe('logPhraseShadow and the shadowing pause', () => {
+  beforeEach(() => {
+    resetDbForTests(`phrase-shadow-${createId('db')}`);
+  });
+
+  async function shadowReadySentence(book: { id: string }, japanese: string) {
+    const db = getDb();
+    const sentence = makeSentence(japanese);
+    await db.sentences.put(sentence);
+    await addSentencesToBook(book.id, [sentence.id]);
+    await setBookSentenceStatus(book.id, sentence.id, 'in_progress');
+    await confirmSentenceVocabulary(sentence.id, []);
+    const audioId = `audio-${sentence.id}`;
+    await db.sentenceAudio.add({
+      id: audioId, sentenceId: sentence.id, sourceId: 'source-1', sourceSentenceId: `src-${sentence.id}`,
+      sourceTitle: 'Test Source', mimeType: 'audio/mp3', durationMs: 2000, startMs: 0, endMs: 2000,
+      blob: new Blob(['fake audio bytes'], { type: 'audio/mp3' }), importedAt: new Date().toISOString(),
+    });
+    return { sentence, audioId };
+  }
+
+  it('logs a self-rated event with the span, text and credited words, and no Review', async () => {
+    const book = await createBook({ title: 'Phrases' });
+    const { sentence, audioId } = await shadowReadySentence(book, '猫が寝ています。');
+    const db = getDb();
+    await db.referenceAlignments.put({
+      id: audioId, alignmentVersion: 1, computedAt: new Date().toISOString(),
+      result: { durationSeconds: 2, words: words.map((w) => ({ ...w, phones: [] })) },
+    });
+    await db.sentenceVocabulary.put({
+      id: 'sv1', sentenceId: sentence.id, vocabularyItemId: 'v-sleep', surfaceForm: '寝て',
+    } as never);
+
+    const logged = await logPhraseShadow({
+      bookId: book.id, sentenceId: sentence.id, sentenceAudioId: audioId, clipDurationMs: 2000,
+      range: { startMs: 450, endMs: 1650 }, outcome: 'close',
+    });
+    expect(logged).toMatchObject({
+      action: 'phrase_shadow', outcome: 'close', assessmentSource: 'self', rangeStartMs: 450, rangeEndMs: 1650,
+      target: { label: '寝ています', key: phraseShadowTargetKey(['v-sleep']) },
+    });
+    expect(await db.sentenceLearningEvents.count()).toBe(1);
+    expect(await db.reviews.count()).toBe(0);
+  });
+
+  it('still logs without a cached alignment, and refuses a whole-clip span', async () => {
+    const book = await createBook({ title: 'Phrases' });
+    const { sentence, audioId } = await shadowReadySentence(book, '猫が寝ています。');
+    const input = { bookId: book.id, sentenceId: sentence.id, sentenceAudioId: audioId, clipDurationMs: 2000, outcome: 'got_it' as const };
+    const noText = await logPhraseShadow({ ...input, range: { startMs: 500, endMs: 1200 } });
+    expect(noText?.target).toEqual({ kind: 'expression', key: phraseShadowTargetKey([]), label: '' });
+    expect(await logPhraseShadow({ ...input, range: { startMs: 0, endMs: 2000 } })).toBeNull();
+  });
+
+  it('does not count as a whole-sentence shadowing attempt', async () => {
+    const book = await createBook({ title: 'Phrases' });
+    const { sentence, audioId } = await shadowReadySentence(book, '猫が寝ています。');
+    await logPhraseShadow({
+      bookId: book.id, sentenceId: sentence.id, sentenceAudioId: audioId, clipDurationMs: 2000,
+      range: { startMs: 500, endMs: 1200 }, outcome: 'got_it',
+    });
+    expect(await getDb().attempts.count()).toBe(0);
+  });
+
+  it('pausing sentence shadowing drops the planner shadow candidates only', async () => {
+    await updateSettings({ sentenceLedFlow: false });
+    const book = await createBook({ title: 'Pause' });
+    const { sentence } = await shadowReadySentence(book, '今日は雨です。');
+    const before = await getSessionPlannerInput(60);
+    expect(before.shadowCandidates.map((c) => c.sentenceId)).toContain(sentence.id);
+
+    await updateSettings({ sentenceShadowingPaused: true });
+    const during = await getSessionPlannerInput(60);
+    expect(during.shadowCandidates).toEqual([]);
+
+    await updateSettings({ sentenceShadowingPaused: false });
+    expect((await getSessionPlannerInput(60)).shadowCandidates.map((c) => c.sentenceId)).toContain(sentence.id);
+  });
+});

@@ -436,6 +436,22 @@ export function SettingsPage() {
         <label className="row">
           <input
             type="checkbox"
+            checked={settings.sentenceShadowingPaused ?? false}
+            onChange={(event) => {
+              void updateSettings({ sentenceShadowingPaused: event.target.checked });
+            }}
+          />
+          Pause sentence shadowing in the daily plan (phrase shadowing only)
+        </label>
+        <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+          Stops the planner drafting whole-sentence shadowing steps while you
+          try phrase shadowing (mark a span on the Shadow page, then rate it).
+          The Shadow page and the reader's Shadowing tool still work. Nothing
+          is deleted; turn it off to get the steps back.
+        </p>
+        <label className="row">
+          <input
+            type="checkbox"
             checked={settings.pitchAccentPaused ?? false}
             onChange={(event) => {
               void updateSettings({ pitchAccentPaused: event.target.checked });

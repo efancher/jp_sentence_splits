@@ -16,6 +16,7 @@ import {
   ensureSentenceGrammar,
   ensureVocabularyItem,
   logGlossDecision,
+  logSentenceLearningEvent,
   updateMiningImportForJob,
 } from '../../src/db/repository';
 import { notifySync } from '../../src/db/syncNotify';
@@ -221,6 +222,23 @@ describe.skipIf(!PG_TESTS_ENABLED)('push against real Postgres + RLS', () => {
     expect(scalar(`select count(*) from gloss_decisions where skill = 'predicate' and help_offered is null and unaided_chosen is null`)).toBe('1');
     expect(() => sql(`update gloss_decisions set help_sequence = array['telepathy'] where skill = 'particle'`)).toThrow();
     expect(() => sql(`update gloss_decisions set help_offered = array['telepathy'] where skill = 'particle'`)).toThrow();
+  });
+
+  it('pushes a phrase shadow with its span and Close outcome, and still rejects an unknown action or outcome', async () => {
+    await device(USER_A);
+    await logSentenceLearningEvent({
+      id: 'sl_phrase_1', visitId: 'v1', action: 'phrase_shadow', bookId: 'b1', sentenceId: 'sent_1',
+      target: { kind: 'expression', key: 'phrase-shadow:w1', label: '寝ています' },
+      outcome: 'close', assessmentSource: 'self', rangeStartMs: 500, rangeEndMs: 1600,
+    });
+
+    expect(await pushOnce()).toBeUndefined();
+
+    expect(scalar(`select action || '|' || outcome || '|' || range_start_ms || '|' || range_end_ms || '|' || target_label from sentence_learning_events where id = 'sl_phrase_1'`))
+      .toBe('phrase_shadow|close|500|1600|寝ています');
+    expect(() => sql(`update sentence_learning_events set outcome = 'perfect' where id = 'sl_phrase_1'`)).toThrow();
+    expect(() => sql(`update sentence_learning_events set action = 'bogus' where id = 'sl_phrase_1'`)).toThrow();
+    expect(() => sql(`update sentence_learning_events set range_start_ms = -1 where id = 'sl_phrase_1'`)).toThrow();
   });
 
   it('a link to a pattern that exists nowhere is dropped without blocking the rest of the queue', async () => {

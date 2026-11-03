@@ -1,4 +1,5 @@
 import type { Review, SentenceLearningEvent, StudyItem } from '../domain/types';
+import { phraseShadowWordIds } from './phraseShadow';
 import type { WordEvidence } from './wordStrength';
 
 /**
@@ -14,6 +15,8 @@ import type { WordEvidence } from './wordStrength';
  * - `cloze` is retired and ignored. Sentence-level comprehension checks are
  *   not attributable to one word, so they add no recognition evidence.
  *
+ * - `phrase_shadow` (a self-rated pass at a marked span of the clip): recognition evidence for the words
+ *   inside the span; "close" adds nothing.
  * - Reader word feedback (the learner taps a word and says whether they knew its
  *   reading or meaning): recall when the answer was hidden, recognition when it
  *   was showing. Meaning evidence comes only from Word checks and this feedback,
@@ -75,7 +78,14 @@ export function buildWordEvidence(input: WordEvidenceInput): Map<string, WordEvi
     const at = Date.parse(event.timestamp);
     if (Number.isNaN(at)) continue;
     if (event.action === 'walkthrough_completed') exposeSentence(event.sentenceId, at);
-    else if (event.action === 'target_practice' && event.outcome) {
+    else if (event.action === 'phrase_shadow' && event.outcome) {
+      // Spoken pass at a marked phrase, self-rated. Credits only the words inside it, as recognition
+      // (the text and audio were on hand): "Got it" is a small success, "Not yet" a failure, "Close" says nothing.
+      if (event.outcome === 'close') continue;
+      for (const wordId of phraseShadowWordIds(event.target?.key)) {
+        add({ wordId, facet: 'reading', kind: 'recognition', at, success: event.outcome === 'got_it' });
+      }
+    } else if (event.action === 'target_practice' && event.outcome) {
       const key = event.target?.key;
       const meaningId = meaningCheckWordId(key);
       const readingId = readingFeedbackWordId(key);
