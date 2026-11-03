@@ -285,7 +285,7 @@ export async function autoGenerateMeaningChecks(
   const summary: AutogenSummary = { saved: 0, attempted: 0 };
   if (inFlight) return summary;
   if (!options.ignoreBackoff && Date.now() < blockedUntil) return summary;
-  if (!options.ignoreBackoff && (await readSettings()).autoMeaningChoices === false) return summary;
+  if (!options.ignoreBackoff && (await readSettings()).autoMeaningChoices !== true) return summary;
   inFlight = true;
   try {
     const mode = options.mode ?? 'missing';

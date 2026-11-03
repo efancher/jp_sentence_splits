@@ -832,7 +832,7 @@ export interface AppSettings {
    * review it by picking its English meaning, and withhold the separate
    * vocabulary/grammar drills (and the vocabulary-proficiency readiness gates
    * that fed them). Nothing is deleted; turning it off restores the previous
-   * gated flow. Treated as on when undefined. See `src/lib/sentenceLed.ts`.
+   * gated flow. Treated as off when undefined (it spends Claude API credit). See `src/lib/sentenceLed.ts`.
    */
   sentenceLedFlow?: boolean;
   /**

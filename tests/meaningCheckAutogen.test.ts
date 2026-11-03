@@ -109,6 +109,7 @@ describe('meaning check auto-generation', () => {
   beforeEach(async () => {
     resetDbForTests(`autogen-${createId('db')}`);
     await ensureSettings();
+    await updateSettings({ autoMeaningChoices: true });
     resetMeaningAutogenBackoff();
   });
 

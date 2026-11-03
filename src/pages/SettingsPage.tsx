@@ -370,7 +370,7 @@ export function SettingsPage() {
         <label className="row">
           <input
             type="checkbox"
-            checked={settings.autoMeaningChoices ?? true}
+            checked={settings.autoMeaningChoices ?? false}
             onChange={(event) => {
               void updateSettings({ autoMeaningChoices: event.target.checked });
             }}
