@@ -28,6 +28,19 @@ and possible extensions. This snapshot does not certify a live deployment.
   `shadowRequests`), which `findShadowCandidates` skips, and skips the sentence's
   open session step. A later Sound flag clears the snooze. Shadowing is not an
   FSRS card (the review-card attempt of 2026-10-30 was reverted the same day).
+- Phrase shadowing (2026-11-03, trial): after marking a span narrower than the clip on
+  the Shadow pane, "How did this phrase go?" offers Not yet / Close / Got it, logged
+  as a `phrase_shadow` `sentence_learning_events` row (`rangeStartMs`/`rangeEndMs`,
+  `target.label` = aligned phrase text, `target.key` = `phrase-shadow:<word ids>`).
+  Evidence only: no Review or FSRS, not a whole-sentence attempt, and the planner
+  does not read it yet. `buildWordEvidence` credits the words inside the phrase as
+  reading recognition (Got it success, Not yet failure, Close nothing). Settings →
+  "Pause sentence shadowing in the daily plan" (`sentenceShadowingPaused`, default off)
+  empties the planner's shadow candidates; the Shadow page and reader tool are
+  unchanged. The Supabase migration `20261103000000_phrase_shadow_events.sql` adds the
+  action, the `close` outcome and the span columns; `npm run test:pg` covers it locally,
+  but it is not confirmed applied to production. Follow-up plan under ROADMAP
+  "Phrase shadowing".
 - Review "Trouble with" chips (Reading, Meaning, Kanji, Sound; prototype,
   2026-10-20): optional, tapped before rating, never choosing the FSRS rating
   or crediting cards. Reading/Meaning/Kanji queue a Fresh try (walked-through

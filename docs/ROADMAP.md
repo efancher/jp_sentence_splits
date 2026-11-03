@@ -47,6 +47,28 @@ The items below retain unfinished work, optional refinements and future ideas.
   whole-episode caching/adjustment improvements as optional follow-ups.
   Design: `docs/mining-pipeline-v2.md` / `docs/mining-wizard-spec.md`.
 
+- [~] **Phrase shadowing (checkpoint ~2026-11-17).** Step 1 shipped 2026-11-03:
+  mark a span on the Shadow pane (Mark start / Mark end), shadow it, self-rate
+  Not yet / Close / Got it → a `phrase_shadow` learning event (span, text, credited
+  words; no Review, no FSRS, never closes the sentence's own shadowing step) that
+  feeds word strength as recognition evidence. `settings.sentenceShadowingPaused`
+  ("Pause sentence shadowing in the daily plan", on for the trial) stops the
+  planner drafting whole-sentence shadowing steps. **Pick up after ~2 weeks of use:**
+  (1) read the data read-only first (counts of `phrase_shadow` by outcome, how many
+  sentences, how many events have an empty phrase text because no alignment was
+  cached, and "Got it" vs the measured timing/pitch of the same take) before
+  changing any gate; (2) feed it into `findShadowCandidates`/the planner as ordering,
+  not a gate: a recent Not yet = phrase pass before the whole sentence, all phrases
+  Got it = sentence more eligible, no phrase data = today's behaviour (per the
+  starved-gate lesson); (3) decide whether to turn the pause off; (4) optional
+  shortcut: "Shadow this phrase" from a reader word flagged Sound / didn't know the
+  reading, pre-setting the range; (5) a `/progress` panel and a planner "Phrase
+  shadow" step, and revisit the evidence weights (Got it is a small recognition
+  success today). `phraseShadowsBySentence` (`src/lib/phraseShadow.ts`) is the
+  unused-by-the-planner reader of the data. Apply `20261103000000_phrase_shadow_events.sql`
+  (pg-tested locally; confirm it is applied to Supabase, since pushes of these events
+  fail on the old constraint until then).
+
 - [~] **Progressive glossing.** Slices 1-2 shipped 2026-10-01 (STATUS), including feasibility script, try-unaided, partial translation, self-report, park-and-prepare, readiness tiers, progress panel, heuristic の attachment skill, planner revisit. Left: AI-verified dependency reference and clause skills. Diagnostic refreshed 2026-10-15: 50/64 analysed sentences have a settled heuristic decision; attachment coverage is 25 の decisions. Pilot drafted 2026-10-16: 12 real sentences, 8 promising, 2 needing chunk repairs, 2 deferred for context/ambiguity; see `research/GLOSS_CLAUSE_PILOT.md`. References are self-reviewed drafts, not independently validated. Opt-in span-based preview shipped and expanded to all active unique sentences (365 questions, 64 reviewed notes as of 2026-10-17, after replacing 46 no-choice questions with connective-link questions and noting 29 too-short ones), including the repaired examples and missing-question notices; independent reference review still required before auto-grading. Helpful/disputed reactions sync as of 2026-10-17 (`clause_question_feedback`; `npm run diagnose:clause-feedback`) so the dispute rate can guide that review.
 
 ## Planned
