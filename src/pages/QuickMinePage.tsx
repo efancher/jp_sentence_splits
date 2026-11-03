@@ -236,7 +236,7 @@ export function QuickMinePage() {
     targets: true,
     constructions: true,
     walkthroughs: true,
-    structure: true,
+    structure: false,
     comprehension: false,
     particles: false,
     grammar: false,
