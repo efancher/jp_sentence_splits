@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { AnalysisPanel } from '../components/AnalysisPanel';
 import { LiveShadowWaveform } from '../components/LiveShadowWaveform';
+import { ShadowSentenceHighLow } from '../components/SentenceHighLow';
 import { ShadowSnoozeButtons } from '../components/ShadowSnoozeButtons';
 import { LoopWindowControls, MAX_LOOP_GAP_MS, MAX_LOOP_LEAD_IN_MS } from '../components/LoopWindowControls';
 import { NativePitchPractice } from '../components/NativePitchPractice';
@@ -731,6 +732,13 @@ export function ShadowWorkspace({
           sampleRate={shadowing.getShadowSampleRate()}
           showWaveform={false}
           wrapSeconds={wrapSeconds}
+        />
+      ) : null}
+      {referenceAudio && !hideTranscript && !showMeaningInstead ? (
+        <ShadowSentenceHighLow
+          referenceAudioId={referenceAudio.id}
+          referenceBlob={referenceAudio.blob}
+          transcript={sentence.japanese}
         />
       ) : null}
       {isLoopingReps && shadowing.error ? <p className="muted">{shadowing.error}</p> : null}

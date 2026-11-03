@@ -2277,6 +2277,15 @@ a self-hosted pronunciation-analysis backend. Capabilities:
   manual `better`/`same` A/B rating on `ShadowPage` is the fallback for when
   the alignment service is off the tailnet. A muted line confirms when it
   fired.
+- **Whole-sentence native H/L on the Shadow page (2026-11-03)** —
+  `ShadowSentenceHighLow` (`components/SentenceHighLow.tsx`) shows the native
+  recording's H/L for every phrase of the sentence in order, kana over H/L,
+  unmeasured phrases as a "–" gap. It reads the cached reference alignment and
+  pitch track (`loadOrComputeAlignment` / `loadOrComputeReferencePitch`, whole
+  clip — the loop window doesn't change it), renders nothing while loading or
+  without exact mora timing, and never blocks the practice loop. Native only: the
+  live shadow pitch has no alignment, so there is no live H/L for you. H/L is
+  relative to each phrase's own mean (`moraHighLow`), not sentence-wide.
 - **Phrase pitch (contours only, 2026-10-17)** — after Analyze, `AnalysisPanel`
   shows `PhrasePitchView`: per phrase (content word + its particles/endings), the
   native recording's measured pitch contour drawn as a thick line with yours as a
