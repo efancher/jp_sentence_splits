@@ -1062,7 +1062,7 @@ export function ShadowWorkspace({
                 >
                   {snapshotBackfill?.running
                     ? `Comparing… ${snapshotBackfill.done}/${snapshotBackfill.total}`
-                    : `Add pitch comparison for ${pendingSnapshots.length} earlier attempt${pendingSnapshots.length === 1 ? '' : 's'}`}
+                    : `Add or refresh pitch comparison for ${pendingSnapshots.length} earlier attempt${pendingSnapshots.length === 1 ? '' : 's'}`}
                 </button>
                 <span className="muted" style={{ fontSize: '0.8rem' }}>
                   Needed for the grid, overlay and pitch line. May take a minute.

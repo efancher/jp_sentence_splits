@@ -9,7 +9,7 @@ import type { Attempt, AttemptAnalysisSummary } from '../domain/types';
 
 import { loadOrComputeAlignment } from './alignmentCache';
 import { toPhraseSnapshot } from './attemptPitchGrid';
-import { extractPitch } from './pitch';
+import { extractPitch, PITCH_TRACK_VERSION } from './pitch';
 import { buildPhrasePitch } from './phrasePitch';
 import { canonicalizeAudioBuffer, decodeAudioBuffer } from './waveform';
 
@@ -19,12 +19,15 @@ export interface PhraseSnapshotBackfillResult {
   skipped: number;
 }
 
-/** Analysed attempts that predate phrase snapshots (or their measured contours) — only those with a saved summary are touched. */
+/**
+ * Analysed attempts that predate phrase snapshots (or their measured contours), or whose snapshot
+ * was measured with an older pitch tracker (`phraseSnapshotPitchVersion`) — only those with a saved summary are touched.
+ */
 export function attemptsNeedingPhraseSnapshot(
   attempts: readonly Attempt[],
   summaries: readonly AttemptAnalysisSummary[],
 ): Attempt[] {
-  const missing = new Set(summaries.filter((s) => !s.phraseSnapshot || s.phraseSnapshot.some((row) => !row.nativeContour || row.phraseIndex === undefined)).map((s) => s.id));
+  const missing = new Set(summaries.filter((s) => !s.phraseSnapshot || s.phraseSnapshotPitchVersion !== PITCH_TRACK_VERSION || s.phraseSnapshot.some((row) => !row.nativeContour || row.phraseIndex === undefined)).map((s) => s.id));
   return attempts.filter((a) => missing.has(a.id));
 }
 

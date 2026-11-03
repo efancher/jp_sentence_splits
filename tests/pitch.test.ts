@@ -242,6 +242,31 @@ describe('correctPitchOutliers', () => {
     expect(frames[15]!.hz).toBeCloseTo(200, 5);
   });
 
+  it('keeps a low word-initial stretch after a silence, whatever preceded it', () => {
+    // High word, gap, then a held low stretch (heiban わ ≈ half the preceding pitch).
+    const high = Array.from({ length: 20 }, (_, i) => 340 + (i % 3));
+    const low = Array.from({ length: 9 }, (_, i) => 172 + (i % 2));
+    const rise = Array.from({ length: 12 }, (_, i) => 262 + i);
+    const gap = Array.from({ length: 6 }, () => null);
+    const frames = track([...high, ...gap, ...low, ...gap, ...rise]);
+    correctPitchOutliers(frames);
+    const lowFrames = frames.slice(high.length + gap.length, high.length + gap.length + low.length);
+    for (const f of lowFrames) expect(f.hz!).toBeLessThan(180);
+  });
+
+  it('gives a clip and a slice of it the same octave', () => {
+    const hzs = [
+      ...Array.from({ length: 20 }, (_, i) => 340 + (i % 3)),
+      ...Array.from({ length: 6 }, () => null),
+      ...Array.from({ length: 12 }, (_, i) => 172 + (i % 2)),
+    ];
+    const whole = track(hzs);
+    correctPitchOutliers(whole);
+    const slice = track(hzs.slice(26));
+    correctPitchOutliers(slice);
+    expect(whole.slice(26).map((f) => f.hz)).toEqual(slice.map((f) => f.hz));
+  });
+
   it('keeps a genuine sustained pitch jump', () => {
     const hzs = [...Array.from({ length: 20 }, () => 150), ...Array.from({ length: 20 }, () => 190)];
     const frames = track(hzs);

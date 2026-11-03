@@ -264,6 +264,12 @@ export interface AttemptAnalysisSummary {
    * present for attempts analysed after it was introduced. Local-only, no Dexie bump.
    */
   phraseSnapshot?: PhraseSnapshotRow[];
+  /**
+   * `PITCH_TRACK_VERSION` the snapshot's contours were measured with. A snapshot
+   * missing this or carrying an older value was drawn from a superseded pitch
+   * tracker and is re-derived by the Shadow page backfill. Local-only, no Dexie bump.
+   */
+  phraseSnapshotPitchVersion?: number;
 }
 
 export interface PhraseSnapshotRow {

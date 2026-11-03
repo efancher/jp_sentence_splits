@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest';
 
 import type { Attempt, AttemptAnalysisSummary } from '../src/domain/types';
 import { attemptsNeedingPhraseSnapshot } from '../src/lib/backfillPhraseSnapshots';
+import { PITCH_TRACK_VERSION } from '../src/lib/pitch';
 
 const attempt = (id: string) => ({ id }) as Attempt;
 const summary = (id: string, withSnapshot: boolean) =>
   ({
     id,
+    phraseSnapshotPitchVersion: PITCH_TRACK_VERSION,
     phraseSnapshot: withSnapshot
       ? [{ text: 'a', kana: 'a', native: 'lh', learner: 'lh', status: 'match', nativeLevels: [], learnerLevels: null, nativeContour: [], phraseIndex: 0 }]
       : undefined,
@@ -19,6 +21,12 @@ describe('attemptsNeedingPhraseSnapshot', () => {
       [summary('a', true), summary('b', false)],
     );
     expect(result.map((x) => x.id)).toEqual(['b']);
+  });
+
+  it('also picks attempts whose snapshot was measured with an older pitch tracker', () => {
+    const stale = { ...summary('a', true), phraseSnapshotPitchVersion: PITCH_TRACK_VERSION - 1 } as AttemptAnalysisSummary;
+    const unversioned = { ...summary('b', true), phraseSnapshotPitchVersion: undefined } as AttemptAnalysisSummary;
+    expect(attemptsNeedingPhraseSnapshot([attempt('a'), attempt('b')], [stale, unversioned]).map((x) => x.id)).toEqual(['a', 'b']);
   });
 
   it('also picks attempts whose snapshot predates the measured contour', () => {

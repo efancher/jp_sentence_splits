@@ -4235,7 +4235,7 @@ export async function setAttemptPhraseSnapshot(
   const db = getDb();
   const row = await db.attemptAnalysisSummaries.get(attemptId);
   if (!row || row.analysisSummaryVersion !== ANALYSIS_SUMMARY_VERSION) return false;
-  await db.attemptAnalysisSummaries.update(attemptId, { phraseSnapshot });
+  await db.attemptAnalysisSummaries.update(attemptId, { phraseSnapshot, phraseSnapshotPitchVersion: PITCH_TRACK_VERSION });
   return true;
 }
 

@@ -20,7 +20,7 @@ import { loadOrComputeAlignment } from '../lib/alignmentCache';
 import { transcribeAudio } from '../lib/analysisApi';
 import type { TimeRangeMs } from '../lib/recording';
 import type { PitchAnalysisPayload } from '../lib/pitch';
-import { extractPitch, voicedTimeSpan } from '../lib/pitch';
+import { extractPitch, PITCH_TRACK_VERSION, voicedTimeSpan } from '../lib/pitch';
 import { RawPitchOverlay } from './RawPitchOverlay';
 import { buildTimingObservations, confidenceFromSignal } from '../lib/timingObservations';
 import type { TimingObservation } from '../lib/timingObservations';
@@ -741,6 +741,7 @@ export function AnalysisPanel({
       primaryIssueSeverity: primary?.severity,
       wordIssues: wordIssues.length > 0 ? wordIssues : undefined,
       phraseSnapshot: phrasePitch && !phrasePitch.learnerUnavailable ? toPhraseSnapshot(phrasePitch) : undefined,
+      phraseSnapshotPitchVersion: PITCH_TRACK_VERSION,
     });
 
     // Bridge to the SRS: when the analysis actually produced signal (server

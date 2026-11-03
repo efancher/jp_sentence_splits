@@ -2328,6 +2328,12 @@ a self-hosted pronunciation-analysis backend. Capabilities:
   contour are normalized to their *own* running median pitch (`medianHz`),
   so a baritone matching a higher-pitched reference compares contour
   *shape* on a shared 0 line rather than being pushed off the display.
+  Octave-error repair (`correctPitchOutliers`) judges each frame only against
+  its own voiced neighbours (v4, 2026-11-03): the earlier running/global
+  reference "corrected" a low word-initial わ up an octave after a higher word,
+  so a clip and a slice of it disagreed on ~8% of frames (now ~1%). Stored
+  phrase snapshots carry `phraseSnapshotPitchVersion`; the Shadow page's
+  "Add or refresh pitch comparison" backfill re-derives stale ones.
 - **Post-hoc `AnalysisPanel`**: reference-vs-saved-attempt comparison
   combining several signal sources into one ranked "Fix One Thing"
   recommendation (`src/lib/feedbackRanking.ts`'s `rankObservations`/

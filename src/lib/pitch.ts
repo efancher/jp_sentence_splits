@@ -30,7 +30,7 @@ export interface PitchAnalysisPayload {
 }
 
 /** Bump when `extractPitch`'s DSP would meaningfully change its output. */
-export const PITCH_TRACK_VERSION = 3;
+export const PITCH_TRACK_VERSION = 4;
 
 /**
  * Cached YIN pitch track of a sentence's reference clip — the *measured*
@@ -144,17 +144,15 @@ export function medianHz(values: number[]): number | null {
   return sorted[Math.floor(sorted.length / 2)] ?? null;
 }
 
-/** Frames further than this (semitones) from the running reference are treated as suspect. */
-const OCTAVE_SUSPECT_ST = 6;
-/** Voiced frames considered when forming the running reference. */
-const REFERENCE_WINDOW = 9;
-/** Consecutive unfoldable far-off frames that are accepted as a genuine pitch jump. */
-const GENUINE_JUMP_FRAMES = 6;
-/** Consecutive folded frames (~0.3s) after which an "octave error" is taken as a real octave move. */
-const SUSTAINED_FOLD_FRAMES = 20;
+/** Voiced neighbours (per side) whose median a frame is judged against when looking for an octave error. */
+const OCTAVE_NEIGHBOURS = 6;
+/** A frame this far (semitones) from its neighbourhood median is a candidate octave error. */
+const OCTAVE_SUSPECT_ST = 8;
+/** An octave-shifted candidate must land this close (semitones) to the neighbourhood median to be accepted. */
+const OCTAVE_FOLD_TOLERANCE_ST = 3;
 /** A frame this far from its local median is replaced by it (short glitches). */
 const SPIKE_ST = 3;
-/** Voiced frames more than this far apart in time are not neighbours for spike removal. */
+/** Voiced frames more than this far apart in time are not neighbours. */
 const NEIGHBOUR_GAP_SECONDS = 0.08;
 
 const semitonesBetween = (hz: number, ref: number): number => 12 * Math.log2(hz / ref);
@@ -162,58 +160,43 @@ const semitonesBetween = (hz: number, ref: number): number => 12 * Math.log2(hz 
 /**
  * Repairs YIN's classic octave errors in a raw track (mutates `frames`).
  *
- * 1. Octave folding — walk the voiced frames in time order against a running
- *    median of recently accepted readings; a frame more than
- *    `OCTAVE_SUSPECT_ST` away whose ×2 or ÷2 lands back near the reference
- *    is corrected to that octave. Far-off frames that can't be folded don't
- *    update the reference, unless `GENUINE_JUMP_FRAMES` in a row agree, in
- *    which case it is a real pitch jump and the reference follows it.
+ * 1. Octave folding — a frame more than `OCTAVE_SUSPECT_ST` from the median of
+ *    its `OCTAVE_NEIGHBOURS` voiced neighbours per side, whose ×2 or ÷2 lands
+ *    back near that median, is moved to that octave. Neighbours only count
+ *    within one contiguous voiced stretch, so the result depends on nothing
+ *    but the frame's immediate surroundings: a clip and a slice of it agree.
+ *    (An earlier running-reference version carried the reference across
+ *    silences and the whole-clip median, and "corrected" a genuinely low
+ *    word-initial わ up an octave because the preceding word was higher.)
+ *    Frames with too few neighbours, at stretch edges, are left as measured.
  * 2. Spike removal — a 5-frame median over contiguous voiced frames replaces
  *    a reading more than `SPIKE_ST` from it (short non-octave glitches).
  */
 export function correctPitchOutliers(frames: PitchFrame[]): void {
   const voiced = frames.filter((frame) => frame.voiced && frame.hz !== null);
   if (voiced.length < 3) return;
-  const globalMedian = medianHz(voiced.map((frame) => frame.hz as number)) as number;
 
-  const accepted: number[] = [];
-  let stray: PitchFrame[] = [];
-  let foldedRun: Array<{ frame: PitchFrame; original: number }> = [];
-  for (const frame of voiced) {
-    const hz = frame.hz as number;
-    const ref =
-      accepted.length >= 3
-        ? (medianHz(accepted.slice(-REFERENCE_WINDOW)) as number)
-        : globalMedian;
-    if (Math.abs(semitonesBetween(hz, ref)) <= OCTAVE_SUSPECT_ST) {
-      accepted.push(hz);
-      stray = [];
-      foldedRun = [];
-      continue;
-    }
-    const folded = [hz * 2, hz / 2].find(
-      (candidate) => Math.abs(semitonesBetween(candidate, ref)) <= OCTAVE_SUSPECT_ST - 2,
-    );
-    if (folded !== undefined) {
-      foldedRun.push({ frame, original: hz });
-      frame.hz = folded;
-      accepted.push(folded);
-      stray = [];
-      if (foldedRun.length >= SUSTAINED_FOLD_FRAMES) {
-        // Too long to be a tracker glitch: the speaker really moved an octave.
-        for (const entry of foldedRun) entry.frame.hz = entry.original;
-        accepted.length = 0;
-        for (const entry of foldedRun) accepted.push(entry.original);
-        foldedRun = [];
+  const measured = voiced.map((frame) => frame.hz as number);
+  voiced.forEach((frame, index) => {
+    const neighbours: number[] = [];
+    for (const direction of [-1, 1]) {
+      let previous = voiced[index]!;
+      for (let step = 1; step <= OCTAVE_NEIGHBOURS; step += 1) {
+        const next = voiced[index + direction * step];
+        if (!next || Math.abs(next.timeSeconds - previous.timeSeconds) > NEIGHBOUR_GAP_SECONDS) break;
+        neighbours.push(measured[index + direction * step]!);
+        previous = next;
       }
-      continue;
     }
-    stray.push(frame);
-    if (stray.length >= GENUINE_JUMP_FRAMES) {
-      for (const strayFrame of stray) accepted.push(strayFrame.hz as number);
-      stray = [];
-    }
-  }
+    if (neighbours.length < OCTAVE_NEIGHBOURS) return;
+    const local = medianHz(neighbours) as number;
+    const hz = measured[index]!;
+    if (Math.abs(semitonesBetween(hz, local)) < OCTAVE_SUSPECT_ST) return;
+    const folded = [hz * 2, hz / 2].find(
+      (candidate) => Math.abs(semitonesBetween(candidate, local)) <= OCTAVE_FOLD_TOLERANCE_ST,
+    );
+    if (folded !== undefined) frame.hz = folded;
+  });
 
   const folded = voiced.map((frame) => frame.hz as number);
   voiced.forEach((frame, index) => {
