@@ -10,6 +10,7 @@ import {
   explainWeakWordRevisits,
   getDb,
   getSessionPlannerInput,
+  resetWordStrengthCache,
   updateSettings,
 } from '../src/db/repository';
 import type { Review, Sentence, SentenceVocabulary } from '../src/domain/types';
@@ -44,6 +45,7 @@ const DAY = 24 * 60 * 60 * 1000;
 describe('weak words bring walked-through sentences back for a walkthrough', () => {
   beforeEach(() => {
     resetDbForTests(`weak-revisit-${createId('db')}`);
+    resetWordStrengthCache();
   });
 
   async function walk(sentence: Sentence, bookId: string, daysAgo: number) {

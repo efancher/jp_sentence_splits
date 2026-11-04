@@ -337,6 +337,7 @@ import {
   GRAMMAR_NOTICING_CANDIDATE_LIMIT,
   NEGLECT_WINDOW_DAYS,
   PRACTICE_ACTIVITY_TYPES,
+  PAUSED_LEGACY_DRILL_SUBJECT_TYPES,
   RETAIN_ACTIVITY_TYPES,
   SESSION_PLANNER_CANDIDATE_POOL_SIZE,
   SHADOW_CANDIDATE_LIMIT,
@@ -4783,15 +4784,25 @@ export async function getDueStudyItems(
      * actually needs and would just miscalibrate FSRS's stability estimate).
      */
     ignoreDue?: boolean;
+    /**
+     * Subject types whose rows are never read. Callers that discard these
+     * subjects afterwards (the planner, while word/grammar drills are paused)
+     * use it to avoid loading thousands of unwanted rows.
+     */
+    excludeSubjectTypes?: readonly string[];
   } = {},
 ): Promise<StudyItem[]> {
   const db = getDb();
   const nowIsoValue = (options.now ?? new Date()).toISOString();
   const subjectIdSet = options.subjectIds ? new Set(options.subjectIds) : null;
-  const candidates = await db.studyItems
-    .where('activityType')
-    .anyOf(activityTypes)
-    .toArray();
+  const activityTypeSet = new Set<string>(activityTypes);
+  const candidates = options.excludeSubjectTypes?.length
+    ? await db.studyItems
+        .where('subjectType')
+        .noneOf([...options.excludeSubjectTypes])
+        .and((item) => activityTypeSet.has(item.activityType))
+        .toArray()
+    : await db.studyItems.where('activityType').anyOf(activityTypes).toArray();
   const isUngraduatedState = (item: StudyItem) =>
     item.fsrsState.state === 'new' || item.fsrsState.state === 'learning';
   const due = candidates
@@ -4853,6 +4864,9 @@ export async function getProficientVocabularyItemIds(
       .map((item) => item.subjectId),
   );
 }
+
+/** How long one planning pass may reuse word strengths across its per-book lookups. */
+const PLANNER_STRENGTH_CACHE_MS = 60_000;
 
 /** How long the Reader may reuse word strengths; "known" shading doesn't need to track each review live. */
 const READER_STRENGTH_CACHE_MS = 60_000;
@@ -10783,7 +10797,8 @@ async function findWeakWordRevisits(
   const candidates = [...lastWalk]
     .filter(([id, at]) => !excluded.has(id) && Date.parse(at) <= cutoff)
     .map(([id]) => id);
-  const signal = await getWeakWordSentenceSignal(candidates);
+  // Planner runs call this once per book; the shared strengths scan reads five whole tables, so reuse it.
+  const signal = await getWeakWordSentenceSignal(candidates, PLANNER_STRENGTH_CACHE_MS);
   return new Map(signal.order.slice(0, limit).map((id) => [id, signal.labels.get(id) ?? []]));
 }
 
@@ -11313,9 +11328,10 @@ async function computeWordReadingStrengths(timer: ReturnType<typeof stepTimer>):
  */
 export async function getWeakWordSentenceSignal(
   sentenceIds: string[],
+  maxAgeMs = 0,
 ): Promise<{ order: string[]; labels: Map<string, string[]> }> {
   if (sentenceIds.length === 0) return { order: [], labels: new Map() };
-  const { strengthByWord, wordsBySentence, vocabById } = await loadWordReadingStrengths();
+  const { strengthByWord, wordsBySentence, vocabById } = await loadWordReadingStrengths(maxAgeMs);
   const plan = planWeakWordSentences(
     sentenceIds.map((sentenceId) => ({ sentenceId, wordIds: wordsBySentence.get(sentenceId) ?? [] })),
     strengthByWord,
@@ -11485,7 +11501,7 @@ async function findShadowCandidates(
       .map(([id]) => id),
   );
   const bookIdBySentenceId = new Map(bookSentences.map((item) => [item.sentenceId, item.bookId]));
-  const weakWords = await getWeakWordSentenceSignal(sentenceIdsWithAudio);
+  const weakWords = await getWeakWordSentenceSignal(sentenceIdsWithAudio, PLANNER_STRENGTH_CACHE_MS);
   const weakRank = new Map(weakWords.order.map((id, rank) => [id, rank]));
 
   return sentenceIdsWithAudio
@@ -11785,12 +11801,15 @@ export async function getSessionPlannerInput(
       getDueStudyItems(RETAIN_ACTIVITY_TYPES, {
         now,
         graduationMinScheduledDays: settings.graduationMinScheduledDays,
+        // unlessLegacyPaused drops these anyway; don't read them.
+        excludeSubjectTypes: legacyPaused ? PAUSED_LEGACY_DRILL_SUBJECT_TYPES : undefined,
       }),
     ),
     timer.time('getDueStudyItems(practice)', () =>
       getDueStudyItems(PRACTICE_ACTIVITY_TYPES, {
         now,
         graduationMinScheduledDays: settings.graduationMinScheduledDays,
+        excludeSubjectTypes: legacyPaused ? PAUSED_LEGACY_DRILL_SUBJECT_TYPES : undefined,
       }),
     ),
     // Over-fetch by the exclusion count so filtering below still leaves a full page of candidates.
