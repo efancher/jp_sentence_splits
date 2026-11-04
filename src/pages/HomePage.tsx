@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
 import { DailyPracticePanel } from '../components/DailyPracticePanel';
@@ -10,8 +10,7 @@ import {
   deleteTodayPlannerSession,
   explainWeakWordRevisits,
   getLastPlannerTiming,
-  measureSerialPlannerPass,
-  probePlannerReadsSerially,
+  warmPlannerReads,
   getTodayPlannerSession,
   updateSettings,
 } from '../db/repository';
@@ -117,6 +116,11 @@ function WeakWordRevisitExplainer() {
 export function HomePage() {
   const navigate = useNavigate();
   const [addingMinutes, setAddingMinutes] = useState<number | null>(null);
+  // Read the tables the planner scans in the background, so the first "add time" tap finds them ready.
+  useEffect(() => {
+    const timer = window.setTimeout(() => void warmPlannerReads(), 1500);
+    return () => window.clearTimeout(timer);
+  }, []);
   // Temporary diagnostic: per-step planner timings, shown on-screen because a phone has no console.
   const [plannerTiming, setPlannerTiming] = useState('');
   const [confirmingClear, setConfirmingClear] = useState(false);
@@ -152,11 +156,7 @@ export function HomePage() {
       // Re-enable by passing `await loadGameBreakCandidates(now)` (src/games/gameBreaks.ts).
       await addMinutesToTodaySession(minutes, now, customSplit ?? undefined);
       if (customSplit) await updateSettings({ sessionAllocation: customSplit });
-      const planned = `Tap to done ${Math.round(performance.now() - tapped)} ms\n${getLastPlannerTiming()}`;
-      setPlannerTiming(`${planned}\n(probing…)`);
-      const probed = `${planned}\n${await probePlannerReadsSerially()}`;
-      setPlannerTiming(`${probed}\n(running serial pass…)`);
-      setPlannerTiming(`${probed}\n${await measureSerialPlannerPass(minutes, now)}`);
+      setPlannerTiming(`Tap to done ${Math.round(performance.now() - tapped)} ms\n${getLastPlannerTiming()}`);
     } finally {
       setAddingMinutes(null);
     }

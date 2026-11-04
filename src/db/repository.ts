@@ -607,7 +607,7 @@ async function rescheduleResumedItems(sentenceIds: Set<string>, now: Date): Prom
  */
 export function loadSuspendedBookIndex(): Promise<SuspendedBookIndex | null> {
   // A planning pass asks for this from five places; each ask re-reads two whole tables.
-  return memoForPlannerPass('suspendedBookIndex', loadSuspendedBookIndexUncached);
+  return plannerShared('suspendedBookIndex', ['books', 'bookSentences', 'sentenceVocabulary'], loadSuspendedBookIndexUncached);
 }
 
 async function loadSuspendedBookIndexUncached(): Promise<SuspendedBookIndex | null> {
@@ -4844,9 +4844,9 @@ export async function getReviewableVocabularyItemIdsBySentence(
   if (sentenceIds.length === 0) return map;
   const db = getDb();
   // Thousands of point lookups cost far more than one pass over this table (about 1.7k rows).
-  const idSet = sentenceIds.length > 500 ? new Set(sentenceIds) : null;
+  const idSet = sentenceIds.length > ANY_OF_SCAN_THRESHOLD || plannerPassMemo ? new Set(sentenceIds) : null;
   const links = idSet
-    ? (await db.sentenceVocabulary.toArray()).filter((link) => idSet.has(link.sentenceId))
+    ? (await readAllSentenceVocabularyForPass()).filter((link) => idSet.has(link.sentenceId))
     : await db.sentenceVocabulary.where('sentenceId').anyOf(sentenceIds).toArray();
   for (const link of links) {
     if (!link.surfaceForm) continue;
@@ -6486,7 +6486,7 @@ export async function getSequentialBookStatus(
     traceStep('sequential: analyses.bulkGet', () => db.analyses.bulkGet(sentenceIds), rowCount),
     traceStep('sequential: book events', () => listSentenceLearningEvents(bookId), rowCount),
     traceStep('sequential: reading_in_context items', () =>
-      memoForPlannerPass('readingInContextItems', () =>
+      plannerShared('readingInContextItems', ['studyItems'], () =>
         db.studyItems
           .where('activityType')
           .equals('reading_in_context')
@@ -11374,6 +11374,14 @@ let strengthsCache: { at: number; value: Promise<WordReadingStrengths> } | undef
  * every review or learning event.
  */
 async function loadWordReadingStrengths(maxAgeMs = 0): Promise<WordReadingStrengths> {
+  if (maxAgeMs === PLANNER_STRENGTH_CACHE_MS && (plannerPassMemo || plannerWarming > 0)) {
+    // Planner callers: reuse across taps until one of the five tables it reads changes.
+    return plannerShared(
+      'wordStrengths',
+      ['sentenceVocabulary', 'studyItems', 'reviews', 'sentenceLearningEvents', 'vocabularyItems'],
+      () => loadWordReadingStrengths(0),
+    );
+  }
   if (maxAgeMs > 0 && strengthsCache && Date.now() - strengthsCache.at < maxAgeMs) return strengthsCache.value;
   const timer = stepTimer('wordStrengths');
   const value = (async () => {
@@ -11807,12 +11815,12 @@ export async function countSentencesSeededSince(activityType: string, sinceIso: 
 
 /** Every learning event, loaded once per planning pass (shadowing and Read checks both scan it). */
 function readAllLearningEventsForPass(): Promise<SentenceLearningEvent[]> {
-  return memoForPlannerPass('sentenceLearningEvents', () => getDb().sentenceLearningEvents.toArray());
+  return plannerShared('sentenceLearningEvents', ['sentenceLearningEvents'], () => getDb().sentenceLearningEvents.toArray());
 }
 
 /** Every book-sentence row, loaded once per planning pass (the planner needs it in two places). */
 function readAllBookSentencesForPass(): Promise<BookSentence[]> {
-  return memoForPlannerPass('bookSentences', () => getDb().bookSentences.toArray());
+  return plannerShared('bookSentences', ['bookSentences'], () => getDb().bookSentences.toArray());
 }
 
 /** The slice of a Dexie table `getRecentActivityEvents` needs: a range count and the newest row by an index. */
@@ -11962,28 +11970,110 @@ function memoForPlannerPass<T>(key: string, load: () => Promise<T>): Promise<T> 
 }
 
 /**
+ * Tables whose whole-table reads the planner keeps between taps. Reading a table costs a row at a
+ * time (0.3-0.5 ms each, more on a phone) and the planner needs the same big tables on every tap, so
+ * a read is reused until a write to a table it depends on.
+ */
+const PLANNER_CACHE_TABLES = [
+  'books',
+  'bookSentences',
+  'sentenceLearningEvents',
+  'reviews',
+  'studyItems',
+  'sentenceVocabulary',
+  'vocabularyItems',
+  'sentenceAudio',
+] as const;
+type PlannerCacheTable = (typeof PLANNER_CACHE_TABLES)[number];
+
+/** Safety net on top of write invalidation: nothing planner-cached is trusted for longer than this. */
+const PLANNER_CACHE_MAX_AGE_MS = 30 * 60_000;
+
+interface PlannerCacheEntry {
+  value: Promise<unknown>;
+  deps: readonly PlannerCacheTable[];
+  counts: number[];
+  at: number;
+}
+
+const plannerReadCaches = new WeakMap<object, Map<string, PlannerCacheEntry>>();
+
+/** > 0 while `warmPlannerReads` runs, so its reads land in the cross-pass cache too. */
+let plannerWarming = 0;
+
+type TableHooks = {
+  hook(event: 'creating' | 'updating' | 'deleting', subscriber: () => void): void;
+  count(): Promise<number>;
+};
+
+function plannerCacheFor(db: ReturnType<typeof getDb>): Map<string, PlannerCacheEntry> {
+  const existing = plannerReadCaches.get(db);
+  if (existing) return existing;
+  const cache = new Map<string, PlannerCacheEntry>();
+  plannerReadCaches.set(db, cache);
+  for (const table of PLANNER_CACHE_TABLES) {
+    // Dexie hooks do not fire for `clear()`; the row-count check in `cachedPlannerRead` covers that.
+    const invalidate = () => {
+      for (const [key, entry] of cache) if (entry.deps.includes(table)) cache.delete(key);
+    };
+    const hooks = db[table] as unknown as TableHooks;
+    hooks.hook('creating', invalidate);
+    hooks.hook('updating', invalidate);
+    hooks.hook('deleting', invalidate);
+  }
+  return cache;
+}
+
+async function cachedPlannerRead<T>(
+  key: string,
+  deps: readonly PlannerCacheTable[],
+  load: () => Promise<T>,
+): Promise<T> {
+  const db = getDb();
+  const cache = plannerCacheFor(db);
+  const counts = await Promise.all(deps.map((table) => (db[table] as unknown as TableHooks).count()));
+  const hit = cache.get(key);
+  if (hit && Date.now() - hit.at < PLANNER_CACHE_MAX_AGE_MS && hit.counts.every((count, i) => count === counts[i])) {
+    return hit.value as Promise<T>;
+  }
+  const value = load();
+  const entry: PlannerCacheEntry = { value, deps, counts, at: Date.now() };
+  cache.set(key, entry);
+  value.catch(() => {
+    if (cache.get(key) === entry) cache.delete(key);
+  });
+  return value;
+}
+
+/**
+ * A whole-table read for the planner: shared within a pass and kept between passes (and by
+ * `warmPlannerReads`). Anywhere else it is a plain read, so other screens never see cached data.
+ */
+function plannerShared<T>(key: string, deps: readonly PlannerCacheTable[], load: () => Promise<T>): Promise<T> {
+  if (plannerPassMemo) return memoForPlannerPass(key, () => cachedPlannerRead(key, deps, load));
+  if (plannerWarming > 0) return cachedPlannerRead(key, deps, load);
+  return load();
+}
+
+/**
  * Above this many ids, `where(...).anyOf(ids)` costs more than reading the whole table once:
  * Dexie issues one index lookup per id, and each is slow on a phone (a 4,000-id lookup took
  * ~38 s while a full scan of the same table takes 1-2 s).
  */
-const ANY_OF_SCAN_THRESHOLD = 200;
+const ANY_OF_SCAN_THRESHOLD = 40;
 
-const audioSentenceIdCache = new WeakMap<object, { count: number; ids: Promise<string[]> }>();
+/** Every sentence id that has a clip. The index scan costs a row per clip (about 1 s for ~4,000 on a phone). */
+function allAudioSentenceIds(): Promise<string[]> {
+  return plannerShared(
+    'audioSentenceIds',
+    ['sentenceAudio'],
+    () => getDb().sentenceAudio.orderBy('sentenceId').uniqueKeys() as Promise<string[]>,
+  );
+}
 
-/**
- * Every sentence id that has a clip. The index scan costs a row per clip (about 1 s for ~4,000 on a
- * phone), so the result is kept per database and reused while the clip count is unchanged; `count()`
- * itself is nearly free.
- */
-async function allAudioSentenceIds(): Promise<string[]> {
-  const db = getDb();
-  const count = await db.sentenceAudio.count();
-  const hit = audioSentenceIdCache.get(db);
-  if (hit && hit.count === count) return hit.ids;
-  const ids = db.sentenceAudio.orderBy('sentenceId').uniqueKeys() as Promise<string[]>;
-  audioSentenceIdCache.set(db, { count, ids });
-  ids.catch(() => audioSentenceIdCache.delete(db));
-  return ids;
+/** Every sentence-vocabulary link (a small table), shared like the other planner scans. */
+function readAllSentenceVocabularyForPass(): Promise<SentenceVocabulary[]> {
+  return plannerShared('sentenceVocabulary', ['sentenceVocabulary'], () => getDb().sentenceVocabulary.toArray());
 }
 
 /**
@@ -11993,7 +12083,7 @@ async function allAudioSentenceIds(): Promise<string[]> {
  */
 async function sentenceIdsWithAudioClip(sentenceIds: string[]): Promise<Set<string>> {
   const table = getDb().sentenceAudio;
-  if (sentenceIds.length <= ANY_OF_SCAN_THRESHOLD) {
+  if (sentenceIds.length <= ANY_OF_SCAN_THRESHOLD && !plannerPassMemo) {
     return new Set((await table.where('sentenceId').anyOf(sentenceIds).keys()) as string[]);
   }
   const wanted = new Set(sentenceIds);
@@ -12018,7 +12108,7 @@ async function bookSentencesForSentences(sentenceIds: string[]): Promise<BookSen
 
 /** Every sentence-subject study item, loaded once per planning pass. */
 function readSentenceStudyItemsForPass(): Promise<StudyItem[]> {
-  return memoForPlannerPass('sentenceStudyItems', () =>
+  return plannerShared('sentenceStudyItems', ['studyItems'], () =>
     getDb().studyItems.where('subjectType').equals('sentence').toArray(),
   );
 }
@@ -12029,48 +12119,29 @@ async function reviewsForStudyItems(studyItemIds: string[]): Promise<Review[]> {
     return getDb().reviews.where('studyItemId').anyOf(studyItemIds).toArray();
   }
   const wanted = new Set(studyItemIds);
-  const all = await memoForPlannerPass('reviews', () => getDb().reviews.toArray());
+  const all = await plannerShared('reviews', ['reviews'], () => getDb().reviews.toArray());
   return all.filter((review) => wanted.has(review.studyItemId));
 }
 
 /**
- * Diagnostic: re-runs a few of the planner's slow reads one at a time, once the
- * planner has finished, so a contended pass (many parallel requests) can be told
- * apart from a database that is slow even when idle.
+ * Reads the tables the planner scans into the cross-tap cache, one after another, so the first "add
+ * time" tap after opening the app finds them ready. Safe to call repeatedly; failures are ignored.
  */
-export async function probePlannerReadsSerially(now: Date = new Date()): Promise<string> {
-  const db = getDb();
-  const cutoffIso = new Date(now.getTime() - NEGLECT_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
-  const lines: string[] = [];
-  const probe = async (label: string, work: () => PromiseLike<unknown[] | number>) => {
-    const begin = performance.now();
-    const value = await work();
-    const rows = typeof value === 'number' ? value : value.length;
-    lines.push(`${String(Math.round(performance.now() - begin)).padStart(6)} ms  ${label} (${rows} rows)`);
-  };
-  await probe('books.toArray', () => db.books.toArray());
-  await probe('attempts since cutoff', () => db.attempts.where('createdAt').above(cutoffIso).toArray());
-  await probe('studyItems.count', () => db.studyItems.count());
-  await probe('studyItems.toArray', () => db.studyItems.toArray());
-  await probe('sentenceGrammar since cutoff', () => db.sentenceGrammar.where('updatedAt').above(cutoffIso).toArray());
-  await probe('bookSentences.toArray', () => db.bookSentences.toArray());
-  await probe('analyses since cutoff', () => db.analyses.where('updatedAt').above(cutoffIso).toArray());
-  await probe('sentenceAudio.count', () => db.sentenceAudio.count());
-  return `--- idle re-run, one at a time ---\n${lines.join('\n')}`;
-}
-
-let plannerSerial = false;
-let serialChain: Promise<void> = Promise.resolve();
-
-/** Diagnostic: one planning pass with every top-level step run strictly one after another. Returns its timing report. */
-export async function measureSerialPlannerPass(minutes: number, now: Date = new Date()): Promise<string> {
-  plannerSerial = true;
-  serialChain = Promise.resolve();
+export async function warmPlannerReads(): Promise<void> {
+  plannerWarming += 1;
   try {
-    await getSessionPlannerInput(minutes, now);
-    return `--- SERIAL pass (steps one after another) ---\n${lastPlannerTiming}`;
+    await readAllBookSentencesForPass();
+    await readAllLearningEventsForPass();
+    await readAllSentenceVocabularyForPass();
+    await loadSuspendedBookIndex();
+    await allAudioSentenceIds();
+    await readSentenceStudyItemsForPass();
+    await loadWordReadingStrengths(PLANNER_STRENGTH_CACHE_MS);
+    await reviewsForStudyItems(Array.from({ length: ANY_OF_SCAN_THRESHOLD + 1 }, (_, i) => `warm-${i}`));
+  } catch {
+    // Warming is best effort; the planner reads what it needs itself.
   } finally {
-    plannerSerial = false;
+    plannerWarming -= 1;
   }
 }
 
@@ -12079,13 +12150,15 @@ function createPlannerTimer() {
   const rows: { step: string; ms: number }[] = [];
   plannerTrace = new Map();
   plannerPassMemo = new Map();
+  // Steps run strictly one after another: on a phone, IndexedDB does not overlap them, and a contended
+  // pass measured about 17 s slower than the same work run serially (2026-11-04).
+  let chain: Promise<void> = Promise.resolve();
   return {
     async time<T>(step: string, work: () => Promise<T>): Promise<T> {
-      // Serial diagnostic mode: steps wait for the previous one, so each duration is its own cost.
-      const previous = serialChain;
+      const previous = chain;
       let release: () => void = () => {};
-      if (plannerSerial) serialChain = new Promise<void>((resolve) => (release = resolve));
-      if (plannerSerial) await previous;
+      chain = new Promise<void>((resolve) => (release = resolve));
+      await previous;
       const begin = performance.now();
       try {
         return await work();
