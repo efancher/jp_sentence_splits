@@ -11691,6 +11691,34 @@ async function filterReadyGrammarDueItems(
 }
 
 /**
+ * Per-step wall-clock timings for the session planner's data gathering, logged
+ * to the console as one table ("[planner timing]") so a slow "add time" tap can
+ * be traced to the step responsible. Steps that run in parallel overlap, so
+ * their durations don't sum to the total.
+ */
+function createPlannerTimer() {
+  const started = performance.now();
+  const rows: { step: string; ms: number }[] = [];
+  return {
+    async time<T>(step: string, work: () => Promise<T>): Promise<T> {
+      const begin = performance.now();
+      try {
+        return await work();
+      } finally {
+        rows.push({ step, ms: Math.round(performance.now() - begin) });
+      }
+    },
+    report() {
+      const total = Math.round(performance.now() - started);
+      console.info(
+        `[planner timing] getSessionPlannerInput ${total} ms`,
+        '\n' + [...rows].sort((a, b) => b.ms - a.ms).map((row) => `${String(row.ms).padStart(6)} ms  ${row.step}`).join('\n'),
+      );
+    },
+  };
+}
+
+/**
  * Gathers everything buildRecommendedSession needs — the only Dexie-touching
  * step of the planning pipeline. `exclude` keeps a top-up from re-suggesting
  * a book/sentence/grammar pattern already sitting in today's step list.
@@ -11705,7 +11733,8 @@ export async function getSessionPlannerInput(
   gameBreakCandidates?: GameBreakCandidate[],
 ): Promise<SessionPlannerInput> {
   const db = getDb();
-  const settings = await readSettings(db);
+  const timer = createPlannerTimer();
+  const settings = await timer.time('readSettings', () => readSettings(db));
 
   const [
     recentActivity,
@@ -11716,36 +11745,46 @@ export async function getSessionPlannerInput(
     grammarNoticingCandidatesRaw,
     newCardBacklogCount,
   ] = await Promise.all([
-    getRecentActivityEvents(now),
+    timer.time('getRecentActivityEvents', () => getRecentActivityEvents(now)),
     // Not capped here: the pool is trimmed after the suspended/paused/readiness
     // filters below, or long-overdue paused-drill items crowd out live ones.
-    getDueStudyItems(RETAIN_ACTIVITY_TYPES, {
-      now,
-      graduationMinScheduledDays: settings.graduationMinScheduledDays,
-    }),
-    getDueStudyItems(PRACTICE_ACTIVITY_TYPES, {
-      now,
-      graduationMinScheduledDays: settings.graduationMinScheduledDays,
-    }),
-    // Over-fetch by the exclusion count so filtering below still leaves a full page of candidates.
-    findExploreCandidates(
-      EXPLORE_CANDIDATE_LIMIT + exclude.bookIds.size,
-      effectiveSentenceFirstPlanning(settings),
-      isSequentialStudyMode(settings),
+    timer.time('getDueStudyItems(retain)', () =>
+      getDueStudyItems(RETAIN_ACTIVITY_TYPES, {
+        now,
+        graduationMinScheduledDays: settings.graduationMinScheduledDays,
+      }),
     ),
-    findUnderstandCandidates(UNDERSTAND_CANDIDATE_LIMIT + exclude.grammarPatternIds.size),
-    findGrammarNoticingCandidates(GRAMMAR_NOTICING_CANDIDATE_LIMIT + exclude.sentenceIds.size),
+    timer.time('getDueStudyItems(practice)', () =>
+      getDueStudyItems(PRACTICE_ACTIVITY_TYPES, {
+        now,
+        graduationMinScheduledDays: settings.graduationMinScheduledDays,
+      }),
+    ),
+    // Over-fetch by the exclusion count so filtering below still leaves a full page of candidates.
+    timer.time('findExploreCandidates', () =>
+      findExploreCandidates(
+        EXPLORE_CANDIDATE_LIMIT + exclude.bookIds.size,
+        effectiveSentenceFirstPlanning(settings),
+        isSequentialStudyMode(settings),
+      ),
+    ),
+    timer.time('findUnderstandCandidates', () =>
+      findUnderstandCandidates(UNDERSTAND_CANDIDATE_LIMIT + exclude.grammarPatternIds.size),
+    ),
+    timer.time('findGrammarNoticingCandidates', () =>
+      findGrammarNoticingCandidates(GRAMMAR_NOTICING_CANDIDATE_LIMIT + exclude.sentenceIds.size),
+    ),
     // NOTE: not filtered for suspended books — a word only met in a suspended
     // book still counts toward the backlog here, so the planner may slightly
     // over-reserve review minutes while a book is shelved. Tolerable; the
     // seeded cards themselves are held back downstream.
-    countNewVocabularyCardBacklog(),
+    timer.time('countNewVocabularyCardBacklog', () => countNewVocabularyCardBacklog()),
   ]);
 
   // Hold back the exclusive review cards of any suspended book — same
   // treatment ReviewPage's global queue gives them (see src/lib/suspendedBooks).
   // `null` (nothing suspended) is the common case and skips all the work.
-  const suspendedIndex = await loadSuspendedBookIndex();
+  const suspendedIndex = await timer.time('loadSuspendedBookIndex', () => loadSuspendedBookIndex());
   const notSuspended = (items: StudyItem[]): StudyItem[] =>
     suspendedIndex
       ? items.filter((item) => !studyItemIsHeldBackBySuspension(item, suspendedIndex))
@@ -11777,27 +11816,37 @@ export async function getSessionPlannerInput(
     ),
   );
   const [retainDueReady, practiceDueReady] = await Promise.all([
-    filterReadyGrammarDueItems(unlessSentenceCardsPaused(unlessLegacyPaused(notSuspended(retainDueItems))), suspendedIndex),
-    filterReadyGrammarDueItems(notSuspended(practiceDueItemsForMode), suspendedIndex),
+    timer.time('filterReadyGrammarDueItems(retain)', () =>
+      filterReadyGrammarDueItems(unlessSentenceCardsPaused(unlessLegacyPaused(notSuspended(retainDueItems))), suspendedIndex),
+    ),
+    timer.time('filterReadyGrammarDueItems(practice)', () =>
+      filterReadyGrammarDueItems(notSuspended(practiceDueItemsForMode), suspendedIndex),
+    ),
   ]);
 
   // retainDueItems/practiceDueItems are ranked/packed together downstream
   // (one shared `review` bucket) — the 'review' tag here is only used for
   // ReviewPriorityInput's informational `mode` field, not for allocation.
-  const recentlyMissedTransformationSentenceIds =
-    await getRecentlyMissedSentenceTransformationSentenceIds();
+  const recentlyMissedTransformationSentenceIds = await timer.time(
+    'getRecentlyMissedSentenceTransformationSentenceIds',
+    () => getRecentlyMissedSentenceTransformationSentenceIds(),
+  );
   const [retainDue, practiceDue] = await Promise.all([
-    buildReviewPriorityInputs(
-      retainDueReady.slice(0, SESSION_PLANNER_CANDIDATE_POOL_SIZE),
-      'review',
-      now,
-      recentlyMissedTransformationSentenceIds,
+    timer.time('buildReviewPriorityInputs(retain)', () =>
+      buildReviewPriorityInputs(
+        retainDueReady.slice(0, SESSION_PLANNER_CANDIDATE_POOL_SIZE),
+        'review',
+        now,
+        recentlyMissedTransformationSentenceIds,
+      ),
     ),
-    buildReviewPriorityInputs(
-      practiceDueReady.slice(0, SESSION_PLANNER_CANDIDATE_POOL_SIZE),
-      'review',
-      now,
-      recentlyMissedTransformationSentenceIds,
+    timer.time('buildReviewPriorityInputs(practice)', () =>
+      buildReviewPriorityInputs(
+        practiceDueReady.slice(0, SESSION_PLANNER_CANDIDATE_POOL_SIZE),
+        'review',
+        now,
+        recentlyMissedTransformationSentenceIds,
+      ),
     ),
   ]);
 
@@ -11810,10 +11859,12 @@ export async function getSessionPlannerInput(
   // shadowing builds up its own data; the Shadow page and the reader's Shadowing tool stay available.
   const shadowCandidatesRaw = settings.quietMode || settings.sentenceShadowingPaused
     ? []
-    : await findShadowCandidates(
-        SHADOW_CANDIDATE_LIMIT + exclude.sentenceIds.size,
-        await activeSentenceIdsForShadowing(5),
-        !legacyPaused,
+    : await timer.time('findShadowCandidates (incl. activeSentenceIdsForShadowing)', async () =>
+        findShadowCandidates(
+          SHADOW_CANDIDATE_LIMIT + exclude.sentenceIds.size,
+          await activeSentenceIdsForShadowing(5),
+          !legacyPaused,
+        ),
       );
 
   const exploreCandidates = exploreCandidatesRaw
@@ -11823,7 +11874,9 @@ export async function getSessionPlannerInput(
     .filter((candidate) => !exclude.grammarPatternIds.has(candidate.grammarPatternId))
     .slice(0, UNDERSTAND_CANDIDATE_LIMIT);
   // The planner drops any sentence it actually drafts a Fresh try for (a full walkthrough already covers it).
-  const readCheckCandidates = await findReadCheckCandidates(READ_CHECK_CANDIDATE_LIMIT, exclude.sentenceIds, now);
+  const readCheckCandidates = await timer.time('findReadCheckCandidates', () =>
+    findReadCheckCandidates(READ_CHECK_CANDIDATE_LIMIT, exclude.sentenceIds, now),
+  );
   const shadowCandidates = shadowCandidatesRaw
     .filter((candidate) => !exclude.sentenceIds.has(candidate.sentenceId))
     .slice(0, SHADOW_CANDIDATE_LIMIT);
@@ -11831,6 +11884,7 @@ export async function getSessionPlannerInput(
     .filter((candidate) => !exclude.sentenceIds.has(candidate.sentenceId))
     .slice(0, GRAMMAR_NOTICING_CANDIDATE_LIMIT);
 
+  timer.report();
   return {
     now,
     totalMinutes,
