@@ -402,15 +402,21 @@ export function ShadowWorkspace({
   >(null);
   const suggestionAudioId = data?.referenceAudio?.id;
   const suggestionDurationMs = data?.referenceAudio?.durationMs ?? 0;
+  // The pane computes and caches the alignment itself (pitch chart / synced text), usually after this first runs:
+  // watching the cache row lets the suggestion appear as soon as it lands instead of on the next visit.
+  const alignmentComputedAt = useLiveQuery(
+    async () => (suggestionAudioId ? (await getDb().referenceAlignments.get(suggestionAudioId))?.computedAt ?? null : null),
+    [suggestionAudioId],
+  );
   useEffect(() => {
     setSuggestedPhrase(null);
-    if (!suggestionAudioId || suggestionDurationMs <= 0) return;
+    if (!suggestionAudioId || suggestionDurationMs <= 0 || !alignmentComputedAt) return;
     let cancelled = false;
     void suggestPhraseShadow({ sentenceId, sentenceAudioId: suggestionAudioId, clipDurationMs: suggestionDurationMs })
       .then((suggestion) => { if (!cancelled) setSuggestedPhrase(suggestion); })
       .catch(() => { /* a missing suggestion just hides the offer */ });
     return () => { cancelled = true; };
-  }, [sentenceId, suggestionAudioId, suggestionDurationMs]);
+  }, [sentenceId, suggestionAudioId, suggestionDurationMs, alignmentComputedAt]);
 
   if (!data?.sentence) return <p className="muted">Loading…</p>;
 
