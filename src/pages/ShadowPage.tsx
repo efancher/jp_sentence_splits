@@ -251,6 +251,11 @@ export function ShadowWorkspace({
     (targetRange && targetRange.endMs > targetRange.startMs ? targetRange : null) ??
     referenceTrimRange;
 
+  /** The span a phrase shadow is rated against: the Loop window sliders when narrowed, else the marked target. */
+  const phraseRange =
+    (loopWindow && loopWindow.endMs > loopWindow.startMs ? loopWindow : null) ??
+    (targetRange && targetRange.endMs > targetRange.startMs ? targetRange : null);
+
   // Pick up recordings that finished either by the Stop button or by hitting
   // the max-duration auto-stop. A just-ended rep loop also lands a final take
   // in `shadowing.lastRecording` — route that to the ephemeral take, not the
@@ -704,6 +709,17 @@ export function ShadowWorkspace({
           onReset={() => setLoopWindow(null)}
         />
       ) : null}
+      {referenceAudio && phraseRange && isPhraseRange(phraseRange, referenceAudio.durationMs) ? (
+        <PhraseShadowRating
+          key={`${referenceAudio.id}:${phraseRange.startMs}:${phraseRange.endMs}`}
+          bookId={bookId}
+          sentenceId={sentenceId}
+          sentenceAudioId={referenceAudio.id}
+          clipDurationMs={referenceAudio.durationMs}
+          range={phraseRange}
+          visitId={visitId}
+        />
+      ) : null}
       {referenceAudio && !hideTranscript && !showMeaningInstead ? (
         <label className="muted" style={{ fontSize: '0.85rem' }}>
           Wrap pitch chart{' '}
@@ -982,17 +998,6 @@ export function ShadowWorkspace({
                 </>
               ) : null}
             </div>
-            {referenceAudio && isPhraseRange(targetRange, referenceAudio.durationMs) ? (
-              <PhraseShadowRating
-                key={`${referenceAudio.id}:${targetRange!.startMs}:${targetRange!.endMs}`}
-                bookId={bookId}
-                sentenceId={sentenceId}
-                sentenceAudioId={referenceAudio.id}
-                clipDurationMs={referenceAudio.durationMs}
-                range={targetRange!}
-                visitId={visitId}
-              />
-            ) : null}
             {isLoopingReps ? (
               <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
                 Speed and the target range stay live — adjust them without stopping the loop.

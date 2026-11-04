@@ -1,7 +1,8 @@
+import { useLiveQuery } from 'dexie-react-hooks';
 import { useState } from 'react';
 
-import { logPhraseShadow } from '../db/repository';
-import { PHRASE_SHADOW_OUTCOMES, type PhraseShadowOutcome } from '../lib/phraseShadow';
+import { getDb, logPhraseShadow } from '../db/repository';
+import { PHRASE_SHADOW_OUTCOMES, phraseTextFromAlignment, type PhraseShadowOutcome } from '../lib/phraseShadow';
 
 /**
  * Self-rating for a phrase shadow: shown under the Shadow pane's target controls once the learner
@@ -43,11 +44,22 @@ export function PhraseShadowRating({
     }
   }
 
+  // The words of the marked span, from the cached alignment, so the learner can see which phrase they are rating.
+  const phraseText = useLiveQuery(async () => {
+    const alignment = await getDb().referenceAlignments.get(sentenceAudioId);
+    return alignment ? phraseTextFromAlignment(alignment.result.words, range) : '';
+  }, [sentenceAudioId, range.startMs, range.endMs]);
+
   const last = logged[logged.length - 1];
   const lastLabel = PHRASE_SHADOW_OUTCOMES.find((entry) => entry.outcome === last)?.label;
 
   return (
     <div className="stack" role="group" aria-label="Rate this phrase" style={{ gap: '0.25rem' }}>
+      <p style={{ margin: 0 }}>
+        <span className="muted">Phrase: </span>
+        {phraseText ? <strong lang="ja">{phraseText}</strong> : <span className="muted">(no word timings yet for this span)</span>}
+        <span className="muted"> · {(range.startMs / 1000).toFixed(1)}–{(range.endMs / 1000).toFixed(1)}s</span>
+      </p>
       <div className="row" style={{ alignItems: 'center', flexWrap: 'wrap' }}>
         <span className="muted">How did this phrase go?</span>
         {PHRASE_SHADOW_OUTCOMES.map((entry) => (

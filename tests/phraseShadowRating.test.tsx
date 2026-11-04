@@ -49,4 +49,28 @@ describe('PhraseShadowRating', () => {
     await waitFor(async () => expect(await getDb().sentenceLearningEvents.count()).toBe(1));
     expect((await getDb().sentenceLearningEvents.toArray())[0]).toMatchObject({ action: 'phrase_shadow', visitId: 'visit-from-reader' });
   });
+
+  it('shows the words of the marked span so the learner knows which phrase they are rating', async () => {
+    await getDb().referenceAlignments.put({
+      id: 'a1', alignmentVersion: 1, computedAt: '2026-11-04T00:00:00.000Z',
+      result: {
+        durationSeconds: 2,
+        words: [
+          { text: '猫', start: 0, end: 0.4, phones: [] },
+          { text: 'が', start: 0.4, end: 0.5, phones: [] },
+          { text: '寝ています', start: 0.5, end: 1.6, phones: [] },
+        ],
+      },
+    });
+    render(
+      <PhraseShadowRating
+        bookId="b1"
+        sentenceId="s1"
+        sentenceAudioId="a1"
+        clipDurationMs={2000}
+        range={{ startMs: 450, endMs: 1650 }}
+      />,
+    );
+    expect(await screen.findByText('寝ています')).toBeTruthy();
+  });
 });
