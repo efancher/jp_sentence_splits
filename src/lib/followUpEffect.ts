@@ -1,6 +1,8 @@
 import type { SentenceLearningEvent } from '../domain/types';
 import { FOLLOW_UP_ASPECT, FOLLOW_UP_LABEL, type FollowUpSource, type FollowUpTool } from './followUpOffer';
 import { nextListeningAttempt, type ListeningAttempt } from './listeningEvidence';
+import { buildPronunciationAttempts } from './pronunciationOutcome';
+import { MEANING_CHECK_KEY_PREFIX } from './wordEvidence';
 
 /**
  * "What happened after each follow-up offer" (docs/ROADMAP.md, "Follow-up offers and
@@ -9,7 +11,11 @@ import { nextListeningAttempt, type ListeningAttempt } from './listeningEvidence
  * looks at two outcomes on the same sentence afterwards:
  * - reading: the next Read check (`gist_check`) within `READ_WINDOW_DAYS`, and whether it was "got it";
  * - listening: the next listening attempt (`listeningEvidence.ts`) within `LISTENING_WINDOW_DAYS`
- *   that happened on a later occasion than the offer.
+ *   that happened on a later occasion than the offer;
+ * - meaning: the next Word check on a word of that sentence (a `vocab:<id>` target_practice event),
+ *   same window and "later occasion" rule;
+ * - pronunciation: the next self-rated shadow of the sentence or a phrase in it
+ *   (`pronunciationOutcome.ts`), same window and rule.
  *
  * Only the `random` rows are a fair comparison between tools: the tool was assigned by chance.
  * `rule` offers are chosen because the sentence had a weak word or no audio problem, so their
@@ -51,12 +57,16 @@ export interface FollowUpEffectRow {
   label: string;
   aspect: string;
   offers: number;
-  /** Offers where the follow-up tool logged an event under the Read check's visit. Shadowing logs none, so it reads low. */
+  /** Offers where the follow-up tool logged an event under the Read check's visit. Shadowing counts only once the learner rates it. */
   taken: number;
   readNext: number;
   readGotIt: number;
   listenNext: number;
   listenGotIt: number;
+  meaningNext: number;
+  meaningGotIt: number;
+  pronNext: number;
+  pronGotIt: number;
 }
 
 export interface FollowUpEffectReport {
@@ -74,10 +84,20 @@ export function buildFollowUpEffect(input: { events: readonly EventLike[]; liste
   });
   const byVisit = new Map<string, EventLike[]>();
   const readChecksBySentence = new Map<string, Array<{ at: number; gotIt: boolean }>>();
+  const wordChecksBySentence = new Map<string, Array<{ at: number; gotIt: boolean }>>();
+  const pronunciation = buildPronunciationAttempts(input.events);
   for (const event of input.events) {
     const list = byVisit.get(event.visitId);
     if (list) list.push(event);
     else byVisit.set(event.visitId, [event]);
+    if (event.action === 'target_practice' && event.outcome && event.target?.key.startsWith(MEANING_CHECK_KEY_PREFIX)) {
+      const at = Date.parse(event.timestamp);
+      if (!Number.isNaN(at)) {
+        const checks = wordChecksBySentence.get(event.sentenceId) ?? [];
+        checks.push({ at, gotIt: event.outcome === 'got_it' });
+        wordChecksBySentence.set(event.sentenceId, checks);
+      }
+    }
     if (event.action === 'gist_check' && event.outcome) {
       const at = Date.parse(event.timestamp);
       if (Number.isNaN(at)) continue;
@@ -101,6 +121,10 @@ export function buildFollowUpEffect(input: { events: readonly EventLike[]; liste
       readGotIt: 0,
       listenNext: 0,
       listenGotIt: 0,
+      meaningNext: 0,
+      meaningGotIt: 0,
+      pronNext: 0,
+      pronGotIt: 0,
     };
     row.offers += 1;
     if ((byVisit.get(offer.visitId) ?? []).some((event) => event.action !== 'gist_check' && event.action !== 'follow_up_offer')) row.taken += 1;
@@ -117,6 +141,20 @@ export function buildFollowUpEffect(input: { events: readonly EventLike[]; liste
     if (nextListen) {
       row.listenNext += 1;
       if (nextListen.success) row.listenGotIt += 1;
+    }
+    const laterStart = offer.at + LATER_OCCASION_MS;
+    const laterEnd = offer.at + LISTENING_WINDOW_DAYS * DAY_MS;
+    const nextWord = (wordChecksBySentence.get(offer.sentenceId) ?? [])
+      .filter((check) => check.at > laterStart && check.at <= laterEnd)
+      .sort((a, b) => a.at - b.at)[0];
+    if (nextWord) {
+      row.meaningNext += 1;
+      if (nextWord.gotIt) row.meaningGotIt += 1;
+    }
+    const nextPron = pronunciation.find((attempt) => attempt.sentenceId === offer.sentenceId && attempt.at > laterStart && attempt.at <= laterEnd);
+    if (nextPron) {
+      row.pronNext += 1;
+      if (nextPron.success) row.pronGotIt += 1;
     }
     rows.set(key, row);
   }

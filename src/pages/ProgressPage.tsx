@@ -797,13 +797,15 @@ export function ProgressPage() {
                   `${row.taken} opened`,
                   `next Read check: ${row.readNext === 0 ? 'none yet' : `${row.readGotIt}/${row.readNext} got it`}`,
                   `next listening: ${row.listenNext === 0 ? 'none yet' : `${row.listenGotIt}/${row.listenNext} clean`}`,
+                  `next Word check: ${row.meaningNext === 0 ? 'none yet' : `${row.meaningGotIt}/${row.meaningNext} got it`}`,
+                  `next shadow: ${row.pronNext === 0 ? 'none yet' : `${row.pronGotIt}/${row.pronNext} good`}`,
                 ].join(' · ')}
               />
             ))}
             <p className="muted" style={{ margin: 0, fontSize: '0.8rem' }}>
               {followUpEffect.totalOffers} offers. Compare tools only on the random-draw rows; by-rule offers
-              were picked for a reason, so they mix the tool with the situation. “Opened” undercounts
-              Shadowing (it logs nothing under the check). Read check looks 14 days ahead, listening 7.
+              were picked for a reason, so they mix the tool with the situation. Shadowing counts as
+              opened only once you rate it. Read check looks 14 days ahead; the others 7.
               Few events from one learner show a hint, not proof.
             </p>
           </>

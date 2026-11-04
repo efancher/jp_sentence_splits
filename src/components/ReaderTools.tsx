@@ -372,3 +372,18 @@ export function WordMeaningPanel({
     </div>
   );
 }
+
+/**
+ * The learner's own call on how a shadowing pass at the whole sentence sounded: "Good" or "Not good".
+ * Evidence only (a `target_practice` event); it grades no card and replaces no measured analysis.
+ */
+export function ShadowSelfRating({ onRecord }: { onRecord: (outcome: ReaderToolOutcome) => void }) {
+  const [given, setGiven] = useState<ReaderToolOutcome | undefined>();
+  return (
+    <div className="row" style={{ gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }} role="group" aria-label="Rate your pronunciation">
+      <span className="muted">How did your pronunciation go?</span>
+      <button type="button" aria-pressed={given === 'needed_help'} onClick={() => { onRecord('needed_help'); setGiven('needed_help'); }}>Not good</button>
+      <button type="button" aria-pressed={given === 'got_it'} onClick={() => { onRecord('got_it'); setGiven('got_it'); }}>Good</button>
+    </div>
+  );
+}

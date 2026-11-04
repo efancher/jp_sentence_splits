@@ -55,7 +55,20 @@ describe('buildFollowUpEffect', () => {
     expect(tiles).toMatchObject({ offers: 2, taken: 1, readNext: 1, readGotIt: 1, listenNext: 1, listenGotIt: 1, aspect: 'listening' });
     const meaning = report.rows.find((row) => row.tool === 'meaning')!;
     expect(meaning).toMatchObject({ source: 'rule', offers: 1, taken: 0, readNext: 1, readGotIt: 0, listenNext: 0 });
+    expect(tiles).toMatchObject({ meaningNext: 0, pronNext: 0 });
     // Random rows come first so the fair comparison is on top.
     expect(report.rows.map((row) => row.source)).toEqual(['random', 'rule']);
+  });
+
+  it('reads the next Word check and the next self-rated shadow on a later occasion within 7 days', () => {
+    const events = [
+      offer('shadow', 'random', T0, { visitId: 'v-s' }),
+      event({ action: 'target_practice', timestamp: iso(T0 + 60_000), visitId: 'v-s', outcome: 'got_it', target: { kind: 'expression', key: 'shadow:s1', label: 'Shadowing' } }), // same occasion: opened, not an outcome
+      event({ action: 'target_practice', timestamp: iso(T0 + 2 * DAY), outcome: 'needed_help', target: { kind: 'vocabulary', key: 'vocab:w1', label: 'w' } }),
+      event({ action: 'phrase_shadow', timestamp: iso(T0 + 3 * DAY), outcome: 'got_it', target: { kind: 'expression', key: 'phrase-shadow:w1', label: 'p' } }),
+      event({ action: 'target_practice', timestamp: iso(T0 + 10 * DAY), outcome: 'got_it', target: { kind: 'expression', key: 'shadow:s1', label: 'Shadowing' } }), // past the window
+    ];
+    const row = buildFollowUpEffect({ events, listening: [] }).rows[0]!;
+    expect(row).toMatchObject({ tool: 'shadow', aspect: 'pronunciation', offers: 1, taken: 1, meaningNext: 1, meaningGotIt: 0, pronNext: 1, pronGotIt: 1 });
   });
 });

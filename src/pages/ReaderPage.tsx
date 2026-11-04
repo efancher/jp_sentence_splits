@@ -10,6 +10,7 @@ import {
   DictationBlankPanel,
   PatternFeedbackPanel,
   ReadCheckPanel,
+  ShadowSelfRating,
   WordFeedbackPanel,
   WordMeaningPanel,
   type ReaderPattern,
@@ -30,6 +31,7 @@ import {
 } from '../lib/earTiles';
 import { readExtrasForSentences, withChapterExtras } from '../db/sentenceExtras';
 import { createId } from '../lib/ids';
+import { shadowTargetKey } from '../lib/pronunciationOutcome';
 import { earTilesOutcome, earTilesTargetKey } from '../lib/listeningEvidence';
 import { chooseFollowUp, FOLLOW_UP_ASPECT, type FollowUpChoice, type FollowUpTool } from '../lib/followUpOffer';
 import { stepTimer } from '../lib/pageTiming';
@@ -1245,6 +1247,16 @@ export function ReaderPage() {
                               onSnoozed={() => setReaderTool(undefined)}
                             />
                           </Suspense>
+                          <ShadowSelfRating
+                            onRecord={(outcome) =>
+                              recordReaderTool(
+                                row.sentence.id,
+                                tool.visitId,
+                                { kind: 'expression', key: shadowTargetKey(row.sentence.id), label: 'Shadowing' },
+                                outcome,
+                              )
+                            }
+                          />
                           <div><button type="button" onClick={() => setReaderTool(undefined)}>Close shadowing</button></div>
                         </div>
                       );

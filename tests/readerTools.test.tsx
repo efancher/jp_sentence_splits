@@ -294,6 +294,15 @@ describe('reader study tools', () => {
     expect(within(region).queryByText('Layout')).not.toBeInTheDocument();
     expect(within(region).queryByRole('link', { name: 'Back to Practice' })).not.toBeInTheDocument();
 
+    // The learner's own good / not good call is logged as evidence, not a rating.
+    await user.click(screen.getByRole('button', { name: 'Good' }));
+    await waitFor(async () => {
+      const events = await getDb().sentenceLearningEvents.toArray();
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({ action: 'target_practice', sentenceId: 'sent-1', target: { key: 'shadow:sent-1' }, outcome: 'got_it', assessmentSource: 'self' });
+    });
+    expect(await getDb().reviews.count()).toBe(0);
+
     await user.click(screen.getByRole('button', { name: 'Close shadowing' }));
     expect(screen.queryByRole('region', { name: 'Shadowing' })).not.toBeInTheDocument();
   });
