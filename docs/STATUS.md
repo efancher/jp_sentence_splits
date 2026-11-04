@@ -62,6 +62,16 @@ and possible extensions. This snapshot does not certify a live deployment.
   `reading_in_context` card of introduced sentences
   (`settings.dailyNewSentenceCardQuota`, default 5): none had been created after
   2026-10-18 for the same reason.
+- Planner steps for the reader tools (2026-11-04): up to 3 two-minute `Ear tiles:` / `Dictation:`
+  steps in the `review` bucket after the Read checks (`findListeningToolCandidates`,
+  `src/lib/listeningTools.ts`; routes `/books/:bookId/tiles|dictate/:sentenceId`, step field
+  `readerTool`). A sentence qualifies when it is introduced, in an active book, has native audio and
+  splits into enough phrases; it starts with Ear tiles and moves to Dictation after a clean Ear tiles
+  round, waits 7 days after a clean pass and 1 day after a slip, and comes first when its last Read
+  check needed help. Sentences already drafted a Fresh try that day are skipped. With
+  `sentenceShadowingPaused` on, the planner's shadow candidates are drafted as `Shadow a phrase:`
+  steps (`phrase: true`, same `/speak/` route) instead of being dropped. The old audio cards still
+  appear in Review unless `sentenceCardsPaused` is on, so both can ask for the same sentence.
 - Audio reviews offer `ear_tiles`, then `dictation_tile:N` after Ear Tiles has
   two reviews and is out of learning/relearning. Whole-sentence dictation is
   retired. Typed-match feedback never chooses the FSRS rating.

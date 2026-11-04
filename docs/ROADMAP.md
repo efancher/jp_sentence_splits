@@ -761,6 +761,7 @@ control).
      offered on some sentences so the comparison has a baseline, because
      activities chosen after a struggle look worse than they are. Record which
      were randomised.
+  *Planner (2026-11-04):* Ear tiles, Dictation and phrase-shadow steps are drafted in the daily plan (STATUS).
   *Progress (2026-11-04):* steps 1 (Read check "needed help" → one offer, not a
   planner step) and 4 (random baseline draws, ~40%) are shipped, and every offer
   is logged as a `follow_up_offer` event (migration `20261104000000`). Listening
