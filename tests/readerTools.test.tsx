@@ -176,6 +176,13 @@ describe('reader study tools', () => {
     expect(await screen.findByText('✓ Heard it cleanly')).toBeInTheDocument();
     expect(slots.textContent).toContain('猫');
 
+    // The clean round is logged as listening evidence, graded by slips, with no self-assessment and no rating.
+    await waitFor(async () => {
+      const events = (await getDb().sentenceLearningEvents.toArray()).filter((event) => event.action === 'target_practice');
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({ sentenceId: 'sent-1', target: { key: 'eartiles:sent-1' }, outcome: 'got_it' });
+      expect(events[0]!.assessmentSource).toBeUndefined();
+    });
     expect(await getDb().reviews.count()).toBe(0);
     expect(await getDb().studyItems.count()).toBe(0);
   });

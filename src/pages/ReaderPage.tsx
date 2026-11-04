@@ -30,6 +30,7 @@ import {
 } from '../lib/earTiles';
 import { readExtrasForSentences, withChapterExtras } from '../db/sentenceExtras';
 import { createId } from '../lib/ids';
+import { earTilesOutcome, earTilesTargetKey } from '../lib/listeningEvidence';
 import { chooseFollowUp, FOLLOW_UP_ASPECT, type FollowUpChoice, type FollowUpTool } from '../lib/followUpOffer';
 import { stepTimer } from '../lib/pageTiming';
 import { meaningCheckTargetKey, readingFeedbackTargetKey } from '../lib/wordEvidence';
@@ -499,6 +500,20 @@ export function ReaderPage() {
     if (next === tool.progress) return;
     setReaderTool({ ...tool, progress: next });
     if (earTilesDone(tool.puzzle, next)) {
+      // The round's result as listening evidence: slips decide the outcome, nothing is rated.
+      void logSentenceLearningEvent({
+        id: createId('sl_event'),
+        visitId: tool.visitId,
+        action: 'target_practice',
+        sentenceId: tool.sentenceId,
+        bookId,
+        chapterId,
+        target: { kind: 'expression', key: earTilesTargetKey(tool.sentenceId), label: 'Ear tiles' },
+        support: 'target_masked',
+        outcome: earTilesOutcome(next.wrongTaps.length),
+        quietMode: settings?.quietMode ?? false,
+        inventoryRevision: preparation?.sentenceFingerprint,
+      });
       for (const decision of particleGlossDecisions(tool.puzzle, next.wrongTaps, { visitId: tool.visitId, sentenceId: tool.sentenceId })) {
         void logGlossDecision({ ...decision, bookId });
       }

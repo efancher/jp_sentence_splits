@@ -134,8 +134,12 @@ and possible extensions. This snapshot does not certify a live deployment.
   activities. Each offer logs a synced `follow_up_offer` event (`followup:<tool>:<rule|random>`,
   migration `20261104000000`) under the Read check's visit; the follow-up tool shares that
   `visitId`, so "taken" is inferred from its own events. Nothing reads these yet: the after-effect
-  comparison panel and listening/grammar/pronunciation outcome evidence are still to build
-  (ROADMAP, "Follow-up offers and activity effectiveness").
+  comparison panel and grammar/pronunciation outcome evidence are still to build
+  (ROADMAP, "Follow-up offers and activity effectiveness"). Listening outcomes are readable
+  per sentence (`src/lib/listeningEvidence.ts`): reader Dictation results, review-card ratings on
+  `ear_tiles`/`dictation_tile:N`/`listening`, and reader Ear tiles rounds, which now log a
+  `target_practice` event (`eartiles:<sentenceId>`) graded by slips (0 = got it, 1–2 = close, more =
+  needed help; observed, so no `assessmentSource`, and never a rating). Nothing consumes it yet.
   🎙 Shadowing opens `ShadowWorkspace` (`embedded`) under the sentence, and shadowing planner steps
   now open `/books/:bookId/speak/:sentenceId` in the reader; the standalone `/shadow/:sentenceId`
   page is unchanged. Episode preparation accepts the main JSON and
