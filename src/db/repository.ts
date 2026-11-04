@@ -299,6 +299,8 @@ import {
 import { buildSkillCoverage, type SkillCoverage } from '../lib/skillCoverage';
 import { buildReviewTroubleReport, type ReviewTroubleReport } from '../lib/reviewTroubleReport';
 import { buildStepUsefulness, type StepUsefulnessReport } from '../lib/stepUsefulness';
+import { buildFollowUpEffect, parseOffer, type FollowUpEffectReport } from '../lib/followUpEffect';
+import { buildListeningAttempts } from '../lib/listeningEvidence';
 import {
   parseShadowingPackage,
   type ShadowingImportPreview,
@@ -4615,6 +4617,25 @@ export async function getStepUsefulness(
     session.steps.map((step) => ({ targetKind: step.targetKind, status: step.status })),
   );
   return buildStepUsefulness(steps, windowDays);
+}
+
+/**
+ * What followed each reader follow-up offer (see `followUpEffect.ts`). Reads the offers, then the other
+ * lesson events and listening cards on just the sentences they were made on.
+ */
+export async function getFollowUpEffect(): Promise<FollowUpEffectReport> {
+  const db = getDb();
+  const offerEvents = await db.sentenceLearningEvents.filter((event) => event.action === 'follow_up_offer' && parseOffer(event) !== null).toArray();
+  if (offerEvents.length === 0) return buildFollowUpEffect({ events: [], listening: [] });
+  const sentenceIds = [...new Set(offerEvents.map((event) => event.sentenceId))];
+  const events = await db.sentenceLearningEvents.where('sentenceId').anyOf(sentenceIds).toArray();
+  const studyItems = (await db.studyItems.where('subjectId').anyOf(sentenceIds).toArray()).filter((item) => item.subjectType === 'sentence');
+  const itemIds = studyItems.map((item) => item.id);
+  const reviews = itemIds.length ? await db.reviews.where('studyItemId').anyOf(itemIds).toArray() : [];
+  return buildFollowUpEffect({
+    events,
+    listening: buildListeningAttempts({ reviews, studyItems, learningEvents: events }),
+  });
 }
 
 export interface GateFunnelSnapshot {

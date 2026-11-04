@@ -765,9 +765,10 @@ control).
   planner step) and 4 (random baseline draws, ~40%) are shipped, and every offer
   is logged as a `follow_up_offer` event (migration `20261104000000`). Listening
   evidence (step 2, first aspect) is shipped as `listeningEvidence.ts` (reader Ear tiles now log
-  a slips-graded result). Still to
-  build: step 2 for grammar and pronunciation, step 3 (the
-  after-effect panel) and the aspect-specific cause picking (the rule today only
+  a slips-graded result). The step 3 panel
+  (`/progress` → "After a follow-up offer") shows reading and listening outcomes.
+  Still to build: step 2 for grammar and pronunciation, meaning (next Word check)
+  and pronunciation columns in the panel, and the aspect-specific cause picking (the rule today only
   knows "weak word → Word check, else listening, else sound"). Offers log no
   outcome; "taken" means the tool wrote events under the same `visitId`.
   Caveats: one learner, self-judged outcomes and a few hundred events mean

@@ -139,7 +139,7 @@ and possible extensions. This snapshot does not certify a live deployment.
   per sentence (`src/lib/listeningEvidence.ts`): reader Dictation results, review-card ratings on
   `ear_tiles`/`dictation_tile:N`/`listening`, and reader Ear tiles rounds, which now log a
   `target_practice` event (`eartiles:<sentenceId>`) graded by slips (0 = got it, 1–2 = close, more =
-  needed help; observed, so no `assessmentSource`, and never a rating). Nothing consumes it yet.
+  needed help; observed, so no `assessmentSource`, and never a rating). `/progress` → "After a follow-up offer" (`src/lib/followUpEffect.ts`, `getFollowUpEffect`) groups offers by tool and rule-vs-random and shows how many were opened, the next Read check's got-it count (14-day window) and the next listening result (7 days, a later occasion). Compare tools on the random rows only; Shadowing logs nothing under the check, so "opened" undercounts it.
   🎙 Shadowing opens `ShadowWorkspace` (`embedded`) under the sentence, and shadowing planner steps
   now open `/books/:bookId/speak/:sentenceId` in the reader; the standalone `/shadow/:sentenceId`
   page is unchanged. Episode preparation accepts the main JSON and

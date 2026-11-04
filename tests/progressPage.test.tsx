@@ -180,4 +180,20 @@ describe('ProgressPage', () => {
     expect(await screen.findByText(/面倒/)).toBeInTheDocument();
     expect(screen.getByText('Confirm →')).toBeInTheDocument();
   });
+  it('shows what followed a reader follow-up offer, with random draws separated from rule picks', async () => {
+    const db = getDb();
+    const at = Date.now() - 2 * 86_400_000;
+    const base = { bookId: 'book-1', sentenceId: 'sent-1' };
+    await db.sentenceLearningEvents.bulkAdd([
+      { id: 'e1', visitId: 'v1', action: 'follow_up_offer', timestamp: new Date(at).toISOString(), target: { kind: 'expression', key: 'followup:tiles:random', label: 'listening' }, ...base },
+      { id: 'e2', visitId: 'v1', action: 'target_practice', timestamp: new Date(at + 60_000).toISOString(), outcome: 'got_it', target: { kind: 'expression', key: 'eartiles:sent-1', label: 'Ear tiles' }, ...base },
+      { id: 'e3', visitId: 'v2', action: 'gist_check', timestamp: new Date(at + 86_400_000).toISOString(), outcome: 'got_it', ...base },
+    ] as never);
+
+    renderProgressPage();
+
+    expect(await screen.findByText('After a follow-up offer')).toBeInTheDocument();
+    expect(await screen.findByText('Ear tiles (listening) — random draw')).toBeInTheDocument();
+    expect(screen.getByText(/1 opened · next Read check: 1\/1 got it/)).toBeInTheDocument();
+  });
 });

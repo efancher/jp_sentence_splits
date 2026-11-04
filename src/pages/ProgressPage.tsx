@@ -18,6 +18,7 @@ import {
   resolveContentReport,
   getSentenceMasteryOverview,
   getSkillCoverage,
+  getFollowUpEffect,
   getStepUsefulness,
   getReviewTroubleReport,
 } from '../db/repository';
@@ -180,6 +181,7 @@ export function ProgressPage() {
   const skillCoverage = useLiveQuery(() => getSkillCoverage(), []);
   const fsrsConfidence = useLiveQuery(() => getFsrsConfidenceSnapshot(), []);
   const stepUsefulness = useLiveQuery(() => getStepUsefulness(), []);
+  const followUpEffect = useLiveQuery(() => getFollowUpEffect(), []);
   const troubleReport = useLiveQuery(() => getReviewTroubleReport(), []);
   const gateFunnel = useLiveQuery(() => getGateFunnelSnapshot(), []);
   const lessonReport = useLiveQuery(() => getSentenceLessonReport(), []);
@@ -771,6 +773,38 @@ export function ProgressPage() {
             <p className="muted" style={{ margin: 0, fontSize: '0.8rem' }}>
               Last {stepUsefulness.windowDays} days — which planner step kinds actually get done
               vs. quietly skipped every time.
+            </p>
+          </>
+        )}
+      </section>
+
+      <section className="panel stack">
+        <h3 style={{ margin: 0 }}>After a follow-up offer</h3>
+        {followUpEffect === undefined ? (
+          <p className="muted">Loading…</p>
+        ) : !followUpEffect.hasData ? (
+          <p className="muted">
+            No offers yet. Answer “Needed help” on a reader Read check to be offered a follow-up.
+          </p>
+        ) : (
+          <>
+            {followUpEffect.rows.map((row) => (
+              <StatRow
+                key={`${row.tool}:${row.source}`}
+                label={`${row.label} (${row.aspect}) — ${row.source === 'random' ? 'random draw' : 'by rule'}`}
+                value={`${row.offers} offer${row.offers === 1 ? '' : 's'}`}
+                hint={[
+                  `${row.taken} opened`,
+                  `next Read check: ${row.readNext === 0 ? 'none yet' : `${row.readGotIt}/${row.readNext} got it`}`,
+                  `next listening: ${row.listenNext === 0 ? 'none yet' : `${row.listenGotIt}/${row.listenNext} clean`}`,
+                ].join(' · ')}
+              />
+            ))}
+            <p className="muted" style={{ margin: 0, fontSize: '0.8rem' }}>
+              {followUpEffect.totalOffers} offers. Compare tools only on the random-draw rows; by-rule offers
+              were picked for a reason, so they mix the tool with the situation. “Opened” undercounts
+              Shadowing (it logs nothing under the check). Read check looks 14 days ahead, listening 7.
+              Few events from one learner show a hint, not proof.
             </p>
           </>
         )}
