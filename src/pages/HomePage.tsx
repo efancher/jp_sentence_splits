@@ -10,6 +10,7 @@ import {
   deleteTodayPlannerSession,
   explainWeakWordRevisits,
   getLastPlannerTiming,
+  probePlannerReadsSerially,
   getTodayPlannerSession,
   updateSettings,
 } from '../db/repository';
@@ -150,7 +151,9 @@ export function HomePage() {
       // Re-enable by passing `await loadGameBreakCandidates(now)` (src/games/gameBreaks.ts).
       await addMinutesToTodaySession(minutes, now, customSplit ?? undefined);
       if (customSplit) await updateSettings({ sessionAllocation: customSplit });
-      setPlannerTiming(`Tap to done ${Math.round(performance.now() - tapped)} ms\n${getLastPlannerTiming()}`);
+      const planned = `Tap to done ${Math.round(performance.now() - tapped)} ms\n${getLastPlannerTiming()}`;
+      setPlannerTiming(`${planned}\n(probing…)`);
+      setPlannerTiming(`${planned}\n${await probePlannerReadsSerially()}`);
     } finally {
       setAddingMinutes(null);
     }

@@ -11834,6 +11834,32 @@ async function traceStep<T>(label: string, work: () => PromiseLike<T>, rowsOf?: 
 
 const rowCount = (value: unknown[]): number => value.length;
 
+/**
+ * Diagnostic: re-runs a few of the planner's slow reads one at a time, once the
+ * planner has finished, so a contended pass (many parallel requests) can be told
+ * apart from a database that is slow even when idle.
+ */
+export async function probePlannerReadsSerially(now: Date = new Date()): Promise<string> {
+  const db = getDb();
+  const cutoffIso = new Date(now.getTime() - NEGLECT_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const lines: string[] = [];
+  const probe = async (label: string, work: () => PromiseLike<unknown[] | number>) => {
+    const begin = performance.now();
+    const value = await work();
+    const rows = typeof value === 'number' ? value : value.length;
+    lines.push(`${String(Math.round(performance.now() - begin)).padStart(6)} ms  ${label} (${rows} rows)`);
+  };
+  await probe('books.toArray', () => db.books.toArray());
+  await probe('attempts since cutoff', () => db.attempts.where('createdAt').above(cutoffIso).toArray());
+  await probe('studyItems.count', () => db.studyItems.count());
+  await probe('studyItems.toArray', () => db.studyItems.toArray());
+  await probe('sentenceGrammar since cutoff', () => db.sentenceGrammar.where('updatedAt').above(cutoffIso).toArray());
+  await probe('bookSentences.toArray', () => db.bookSentences.toArray());
+  await probe('analyses since cutoff', () => db.analyses.where('updatedAt').above(cutoffIso).toArray());
+  await probe('sentenceAudio.count', () => db.sentenceAudio.count());
+  return `--- idle re-run, one at a time ---\n${lines.join('\n')}`;
+}
+
 function createPlannerTimer() {
   const started = performance.now();
   const rows: { step: string; ms: number }[] = [];
