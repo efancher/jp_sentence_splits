@@ -10,6 +10,7 @@ import {
   deleteTodayPlannerSession,
   explainWeakWordRevisits,
   getLastPlannerTiming,
+  measureSerialPlannerPass,
   probePlannerReadsSerially,
   getTodayPlannerSession,
   updateSettings,
@@ -153,7 +154,9 @@ export function HomePage() {
       if (customSplit) await updateSettings({ sessionAllocation: customSplit });
       const planned = `Tap to done ${Math.round(performance.now() - tapped)} ms\n${getLastPlannerTiming()}`;
       setPlannerTiming(`${planned}\n(probing…)`);
-      setPlannerTiming(`${planned}\n${await probePlannerReadsSerially()}`);
+      const probed = `${planned}\n${await probePlannerReadsSerially()}`;
+      setPlannerTiming(`${probed}\n(running serial pass…)`);
+      setPlannerTiming(`${probed}\n${await measureSerialPlannerPass(minutes, now)}`);
     } finally {
       setAddingMinutes(null);
     }

@@ -11988,6 +11988,21 @@ export async function probePlannerReadsSerially(now: Date = new Date()): Promise
   return `--- idle re-run, one at a time ---\n${lines.join('\n')}`;
 }
 
+let plannerSerial = false;
+let serialChain: Promise<void> = Promise.resolve();
+
+/** Diagnostic: one planning pass with every top-level step run strictly one after another. Returns its timing report. */
+export async function measureSerialPlannerPass(minutes: number, now: Date = new Date()): Promise<string> {
+  plannerSerial = true;
+  serialChain = Promise.resolve();
+  try {
+    await getSessionPlannerInput(minutes, now);
+    return `--- SERIAL pass (steps one after another) ---\n${lastPlannerTiming}`;
+  } finally {
+    plannerSerial = false;
+  }
+}
+
 function createPlannerTimer() {
   const started = performance.now();
   const rows: { step: string; ms: number }[] = [];
@@ -11995,11 +12010,17 @@ function createPlannerTimer() {
   plannerPassMemo = new Map();
   return {
     async time<T>(step: string, work: () => Promise<T>): Promise<T> {
+      // Serial diagnostic mode: steps wait for the previous one, so each duration is its own cost.
+      const previous = serialChain;
+      let release: () => void = () => {};
+      if (plannerSerial) serialChain = new Promise<void>((resolve) => (release = resolve));
+      if (plannerSerial) await previous;
       const begin = performance.now();
       try {
         return await work();
       } finally {
         rows.push({ step, ms: Math.round(performance.now() - begin) });
+        release();
       }
     },
     report() {
