@@ -32,4 +32,21 @@ describe('PhraseShadowRating', () => {
     expect(await screen.findByText(/Logged “Close”/)).toBeTruthy();
     expect(await getDb().reviews.count()).toBe(0);
   });
+
+  it("logs under the reader tool's visit when given one, so it groups with the Read check's follow-up offer", async () => {
+    const user = userEvent.setup();
+    render(
+      <PhraseShadowRating
+        bookId="b1"
+        sentenceId="s1"
+        sentenceAudioId="a1"
+        clipDurationMs={2000}
+        range={{ startMs: 500, endMs: 1200 }}
+        visitId="visit-from-reader"
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: 'Got it' }));
+    await waitFor(async () => expect(await getDb().sentenceLearningEvents.count()).toBe(1));
+    expect((await getDb().sentenceLearningEvents.toArray())[0]).toMatchObject({ action: 'phrase_shadow', visitId: 'visit-from-reader' });
+  });
 });

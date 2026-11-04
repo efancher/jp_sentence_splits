@@ -1244,6 +1244,7 @@ export function ReaderPage() {
                               bookId={bookId}
                               sentenceId={row.sentence.id}
                               embedded
+                              visitId={tool.visitId}
                               onSnoozed={() => setReaderTool(undefined)}
                             />
                           </Suspense>

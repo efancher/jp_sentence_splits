@@ -67,6 +67,8 @@ export interface FollowUpEffectRow {
   meaningGotIt: number;
   pronNext: number;
   pronGotIt: number;
+  /** Of `pronNext`, the phrase shadows rated "Close". Not good, not a miss. */
+  pronClose: number;
 }
 
 export interface FollowUpEffectReport {
@@ -125,6 +127,7 @@ export function buildFollowUpEffect(input: { events: readonly EventLike[]; liste
       meaningGotIt: 0,
       pronNext: 0,
       pronGotIt: 0,
+      pronClose: 0,
     };
     row.offers += 1;
     if ((byVisit.get(offer.visitId) ?? []).some((event) => event.action !== 'gist_check' && event.action !== 'follow_up_offer')) row.taken += 1;
@@ -155,6 +158,7 @@ export function buildFollowUpEffect(input: { events: readonly EventLike[]; liste
     if (nextPron) {
       row.pronNext += 1;
       if (nextPron.success) row.pronGotIt += 1;
+      else if (nextPron.close) row.pronClose += 1;
     }
     rows.set(key, row);
   }

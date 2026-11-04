@@ -23,6 +23,8 @@ export interface PronunciationAttempt {
   at: number;
   /** "Good" / "Got it". */
   success: boolean;
+  /** A phrase shadow rated "Close": a real middle result, neither good nor a miss. */
+  close: boolean;
 }
 
 export function buildPronunciationAttempts(
@@ -37,7 +39,7 @@ export function buildPronunciationAttempts(
     if (!isSentenceRating && !isPhrase) continue;
     const at = Date.parse(event.timestamp);
     if (Number.isNaN(at)) continue;
-    attempts.push({ sentenceId: event.sentenceId, at, success: event.outcome === 'got_it' });
+    attempts.push({ sentenceId: event.sentenceId, at, success: event.outcome === 'got_it', close: event.outcome === 'close' });
   }
   return attempts.sort((a, b) => a.at - b.at);
 }

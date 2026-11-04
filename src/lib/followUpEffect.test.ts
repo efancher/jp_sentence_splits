@@ -69,6 +69,16 @@ describe('buildFollowUpEffect', () => {
       event({ action: 'target_practice', timestamp: iso(T0 + 10 * DAY), outcome: 'got_it', target: { kind: 'expression', key: 'shadow:s1', label: 'Shadowing' } }), // past the window
     ];
     const row = buildFollowUpEffect({ events, listening: [] }).rows[0]!;
-    expect(row).toMatchObject({ tool: 'shadow', aspect: 'pronunciation', offers: 1, taken: 1, meaningNext: 1, meaningGotIt: 0, pronNext: 1, pronGotIt: 1 });
+    expect(row).toMatchObject({ tool: 'shadow', aspect: 'pronunciation', offers: 1, taken: 1, meaningNext: 1, meaningGotIt: 0, pronNext: 1, pronGotIt: 1, pronClose: 0 });
+  });
+
+  it('counts a phrase shadow logged under the check\u2019s visit as taking the offer, and keeps a later Close apart from a miss', () => {
+    const events = [
+      offer('shadow', 'random', T0, { visitId: 'v-p' }),
+      event({ action: 'phrase_shadow', timestamp: iso(T0 + 120_000), visitId: 'v-p', outcome: 'got_it', target: { kind: 'expression', key: 'phrase-shadow:w1', label: 'p' } }),
+      event({ action: 'phrase_shadow', timestamp: iso(T0 + DAY), outcome: 'close', target: { kind: 'expression', key: 'phrase-shadow:w1', label: 'p' } }),
+    ];
+    const row = buildFollowUpEffect({ events, listening: [] }).rows[0]!;
+    expect(row).toMatchObject({ taken: 1, pronNext: 1, pronGotIt: 0, pronClose: 1 });
   });
 });

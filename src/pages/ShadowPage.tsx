@@ -125,11 +125,14 @@ export function ShadowWorkspace({
   bookId,
   sentenceId,
   embedded = false,
+  visitId,
   onSnoozed,
 }: {
   bookId: string;
   sentenceId: string;
   embedded?: boolean;
+  /** The reader's visit for this tool, so phrase ratings log under it (and count as taking a follow-up offer). */
+  visitId?: string;
   /** Called after a snooze; defaults to going back a page. */
   onSnoozed?: () => void;
 }) {
@@ -987,6 +990,7 @@ export function ShadowWorkspace({
                 sentenceAudioId={referenceAudio.id}
                 clipDurationMs={referenceAudio.durationMs}
                 range={targetRange!}
+                visitId={visitId}
               />
             ) : null}
             {isLoopingReps ? (

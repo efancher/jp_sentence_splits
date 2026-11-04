@@ -18,9 +18,9 @@ describe('buildPronunciationAttempts', () => {
       ev('gist_check', undefined, 'got_it', 1),
       ev('target_practice', shadowTargetKey('s1'), undefined, 4), // no outcome
     ]);
-    expect(attempts.map((a) => [a.at, a.success])).toEqual([
-      [Date.UTC(2026, 10, 2), true],
-      [Date.UTC(2026, 10, 3), false],
+    expect(attempts.map((a) => [a.at, a.success, a.close])).toEqual([
+      [Date.UTC(2026, 10, 2), true, false],
+      [Date.UTC(2026, 10, 3), false, true],
     ]);
   });
 });

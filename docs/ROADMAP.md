@@ -771,6 +771,12 @@ control).
   grammar column, and the aspect-specific cause picking (the rule today only
   knows "weak word → Word check, else listening, else sound"). Offers log no
   outcome; "taken" means the tool wrote events under the same `visitId`.
+  *Open (pronunciation, noted 2026-11-04):* the pronunciation column mixes a
+  whole-sentence Good / Not good with phrase shadows (Got it / Close / Not yet), which are
+  one self-picked span and can be easier or harder than the sentence. Once there are enough
+  phrase ratings (a few weeks of offers), report whole-sentence and phrase good-rates
+  separately instead of pooling them. "Close" is already shown separately, not as a miss.
+  Do not change the offer rule's Shadowing logic before the random-draw rows have data.
   Caveats: one learner, self-judged outcomes and a few hundred events mean
   associations, not proof; expect noisy results for a while. Keep ratings
   explicit and these events evidence-only. Related: step usefulness

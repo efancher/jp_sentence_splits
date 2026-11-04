@@ -15,12 +15,15 @@ export function PhraseShadowRating({
   sentenceAudioId,
   clipDurationMs,
   range,
+  visitId,
 }: {
   bookId: string;
   sentenceId: string;
   sentenceAudioId: string;
   clipDurationMs: number;
   range: { startMs: number; endMs: number };
+  /** Groups the rating with the reader tool visit that opened this workspace, when there is one. */
+  visitId?: string;
 }) {
   const [logged, setLogged] = useState<PhraseShadowOutcome[]>([]);
   const [busy, setBusy] = useState(false);
@@ -31,7 +34,7 @@ export function PhraseShadowRating({
     setBusy(true);
     setError(null);
     try {
-      const event = await logPhraseShadow({ bookId, sentenceId, sentenceAudioId, clipDurationMs, range, outcome });
+      const event = await logPhraseShadow({ bookId, sentenceId, sentenceAudioId, clipDurationMs, range, outcome, visitId });
       if (event) setLogged((prev) => [...prev, outcome]);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Unable to save that rating.');
