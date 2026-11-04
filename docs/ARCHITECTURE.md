@@ -209,6 +209,19 @@ unaware a session exists.
 
 ## Short games
 
+### Planner read snapshots
+
+Session planning scans whole tables, and IndexedDB charges per row (seconds for
+thousands of rows on a phone). `src/db/plannerSnapshots.ts` stores packed copies
+(~400 records per row, plus derived lists such as usable-check and tile
+eligibility ids) in the **local-only** `plannerSnapshots` table (never synced or
+backed up; safe to delete). A snapshot is trusted only while no table it depends
+on was written (`storagemutated` marks it dirty, persisted in localStorage) and
+the stored row counts still match; otherwise the planner scans normally and
+saves a fresh one in the background. An in-memory cross-tap cache in
+`repository.ts` sits on top. When adding a planner read, route it through
+`plannerShared` + `loadSnapshot` and list its table in `SNAPSHOT_DEPS`.
+
 `/play` hosts short standalone rounds (Word Detective, Particle Puzzle, Odd Ear
 Out, Verb Lego). Design
 decisions worth knowing before adding one:

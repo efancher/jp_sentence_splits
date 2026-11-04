@@ -1412,6 +1412,25 @@ export interface NamedPodcastFeed {
 export type MiningImportStatus = 'mining' | 'ready' | 'committed' | 'failed';
 
 /**
+ * A packed, local-only copy of a table the session planner scans on every tap (see
+ * `src/db/plannerSnapshots.ts`). Never synced or backed up; safe to delete.
+ */
+export interface PlannerSnapshotRow {
+  /** `<snapshot name>#<chunk>` or `<snapshot name>#meta`. */
+  id: string;
+  /** Snapshot name (indexed so one snapshot's rows can be read or replaced together). */
+  table: string;
+  /** Chunk number, or -1 for the metadata row. */
+  chunk: number;
+  rows: unknown[];
+  /** Metadata row only. */
+  version?: number;
+  counts?: number[];
+  rowCount?: number;
+  savedAt?: string;
+}
+
+/**
  * Tracking row for one mined episode/video (synced as `mining_imports`, last
  * write wins). Holds the import's destination so a reloaded or resumed page
  * (which only kept a job id) still commits into the right series book, and

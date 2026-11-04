@@ -16,6 +16,7 @@ import type {
   SentenceLearningEvent,
   ClauseQuestionFeedback,
   MiningImport,
+  PlannerSnapshotRow,
   GlossDecision,
   GrammarPattern,
   GrammarRelationship,
@@ -164,6 +165,8 @@ export class GlossbookDatabase extends Dexie {
   namedPodcastFeeds!: EntityTable<NamedPodcastFeed, 'id'>;
   // One row per mined episode/video: destination + progress, synced (mining_imports), last-write-wins.
   miningImports!: EntityTable<MiningImport, 'id'>;
+  // Packed local-only copies of planner scans; see plannerSnapshots.ts. Never synced.
+  plannerSnapshots!: EntityTable<PlannerSnapshotRow, 'id'>;
   // AI-drafted per-sentence extras (id = sentence id), synced as sentence_extras.
   sentenceExtras!: EntityTable<SentenceExtras, 'id'>;
   // Whole-episode Opus audio cached on this device for offline clip adjusting (local only, never synced).
@@ -751,6 +754,11 @@ export class GlossbookDatabase extends Dexie {
     // Mining-import tracking — purely additive.
     this.version(29).stores({
       miningImports: 'id, sourceId, jobId, status',
+    });
+
+    // Packed planner-read snapshots — local-only and purely additive.
+    this.version(30).stores({
+      plannerSnapshots: 'id, table',
     });
   }
 }

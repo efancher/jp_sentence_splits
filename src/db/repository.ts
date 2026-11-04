@@ -362,6 +362,7 @@ import {
   selectionsFromCuratedPicks,
 } from '../lib/curatedVocabulary';
 import { ensureSettings, getDb, localDateKey, readSettings } from './database';
+import { loadSnapshot, onTableMutation } from './plannerSnapshots';
 import { notifySync, notifySyncMany } from './syncNotify';
 import { getBookWithExtras, withChapterExtras } from './sentenceExtras';
 
@@ -625,7 +626,7 @@ async function loadSuspendedBookIndexUncached(): Promise<SuspendedBookIndex | nu
 
   const [memberships, links] = await Promise.all([
     readAllBookSentencesForPass(),
-    db.sentenceVocabulary.toArray(),
+    readAllSentenceVocabularyForPass(),
   ]);
 
   const membershipsBySentenceId = new Map<string, Array<{ bookId: string; chapterId?: string }>>();
@@ -4794,6 +4795,8 @@ export async function getDueStudyItems(
      * actually needs and would just miscalibrate FSRS's stability estimate).
      */
     ignoreDue?: boolean;
+    /** Select from these already-loaded study items instead of querying (the planner's snapshot-backed read). */
+    fromItems?: readonly StudyItem[];
     /**
      * Subject types whose rows are never read. Callers that discard these
      * subjects afterwards (the planner, while word/grammar drills are paused)
@@ -4806,7 +4809,10 @@ export async function getDueStudyItems(
   const nowIsoValue = (options.now ?? new Date()).toISOString();
   const subjectIdSet = options.subjectIds ? new Set(options.subjectIds) : null;
   const activityTypeSet = new Set<string>(activityTypes);
-  const candidates = await traceStep(
+  const excludedSubjects = new Set<string>(options.excludeSubjectTypes ?? []);
+  const candidates = options.fromItems
+    ? options.fromItems.filter((item) => activityTypeSet.has(item.activityType) && !excludedSubjects.has(item.subjectType))
+    : await traceStep(
     'getDueStudyItems read',
     () =>
       options.excludeSubjectTypes?.length
@@ -6483,15 +6489,15 @@ export async function getSequentialBookStatus(
   const sentenceIds = memberships.map((item) => item.sentenceId);
   const [settings, analyses, events, studyItems] = await Promise.all([
     readSettings(),
-    traceStep('sequential: analyses.bulkGet', () => db.analyses.bulkGet(sentenceIds), rowCount),
+    plannerPassMemo
+      ? Promise.resolve([] as Array<SentenceAnalysis | undefined>)
+      : traceStep('sequential: analyses.bulkGet', () => db.analyses.bulkGet(sentenceIds), rowCount),
     traceStep('sequential: book events', () => listSentenceLearningEvents(bookId), rowCount),
     traceStep('sequential: reading_in_context items', () =>
-      plannerShared('readingInContextItems', ['studyItems'], () =>
-        db.studyItems
-          .where('activityType')
-          .equals('reading_in_context')
-          .filter((item) => item.subjectType === 'sentence')
-          .toArray(),
+      plannerShared('readingInContextItems', ['studyItems'], async () =>
+        (await readAllStudyItemsForPass()).filter(
+          (item) => item.activityType === 'reading_in_context' && item.subjectType === 'sentence',
+        ),
       ),
       rowCount,
     ),
@@ -6510,14 +6516,18 @@ export async function getSequentialBookStatus(
   const walked = new Set(
     events.filter((event) => event.action === 'walkthrough_completed').map((event) => event.sentenceId),
   );
+  // Planner passes ask this for every book; the stored list of usable checks replaces reading each analysis.
+  const usableChecks = plannerPassMemo
+    ? await traceStep('sequential: usable checks', () => readUsableCheckSentenceIdsForPass(), (ids) => ids.size)
+    : null;
   return computeSequentialStatus(
     memberships.map((membership, index) => {
       const item = itemBySentence.get(membership.sentenceId);
-      const bank = getMeaningBank(analyses[index]?.comprehensionCheck);
+      const bank = usableChecks ? null : getMeaningBank(analyses[index]?.comprehensionCheck);
       return {
         sentenceId: membership.sentenceId,
         position: membership.position,
-        hasUsableCheck: (bank?.distractors.length ?? 0) > 0,
+        hasUsableCheck: usableChecks ? usableChecks.has(membership.sentenceId) : (bank?.distractors.length ?? 0) > 0,
         reviews: item ? (reviewsByItem.get(item.id) ?? []) : [],
         // Sentences already worked on before the mode was enabled stay open.
         introduced: membership.status !== 'unstarted' || walked.has(membership.sentenceId),
@@ -10640,7 +10650,7 @@ async function buildReviewPriorityInputs(
     ]),
   ];
   const referencedBookSentences = allReferencedSentenceIds.length
-    ? await db.bookSentences.where('sentenceId').anyOf(allReferencedSentenceIds).toArray()
+    ? await bookSentencesForSentences(allReferencedSentenceIds)
     : [];
   const bookIds = [...new Set(referencedBookSentences.map((item) => item.bookId))];
   const books = await db.books.bulkGet(bookIds);
@@ -10947,11 +10957,10 @@ export async function findListeningToolCandidates(
     if (!membershipBySentence.has(membership.sentenceId)) membershipBySentence.set(membership.sentenceId, membership);
   }
   const reachable = wanted.filter((id) => membershipBySentence.has(id));
-  const sentences = (await db.sentences.bulkGet(reachable)).flatMap((sentence) => (sentence ? [sentence] : []));
-  const eligible = sentences.flatMap((sentence) => {
-    const tilesEligible = tileToolUnavailableReason(sentence, 'tiles', true) === null;
-    const dictateEligible = tileToolUnavailableReason(sentence, 'dictate', true) === null;
-    return tilesEligible || dictateEligible ? [{ sentenceId: sentence.id, tilesEligible, dictateEligible }] : [];
+  const tileEligibility = await readTileEligibilityForPass();
+  const eligible = reachable.flatMap((id) => {
+    const entry = tileEligibility.get(id);
+    return entry ? [{ sentenceId: id, tilesEligible: entry.tiles, dictateEligible: entry.dictate }] : [];
   });
   if (eligible.length === 0) return [];
 
@@ -10978,7 +10987,8 @@ export async function findListeningToolCandidates(
     lastReadCheck,
     now: now.getTime(),
   }).slice(0, limit);
-  const byId = new Map(sentences.map((sentence) => [sentence.id, sentence]));
+  const dueSentences = await db.sentences.bulkGet(due.map((entry) => entry.sentenceId));
+  const byId = new Map(dueSentences.flatMap((sentence) => (sentence ? [[sentence.id, sentence] as const] : [])));
   return due.map((entry) => ({
     bookId: membershipBySentence.get(entry.sentenceId)!.bookId,
     sentenceId: entry.sentenceId,
@@ -11031,7 +11041,13 @@ async function findExploreCandidates(
         )
       : undefined;
     const parkedGlossIds = sentenceFirst
-      ? parkedSentenceIds(await traceStep('explore: glossDecisions', () => db.glossDecisions.where('bookId').equals(book.id).toArray(), rowCount))
+      ? parkedSentenceIds(
+          await traceStep(
+            'explore: glossDecisions',
+            async () => (await readAllGlossDecisionsForPass()).filter((decision) => decision.bookId === book.id),
+            rowCount,
+          ),
+        )
       : [];
     // Review-card requests jump the spacing queue (walked-through sentences only).
     const requestedIds = walked ? pendingFreshTryRequestIds(freshTryRequests, bookEvents).filter((id) => walked.has(id)) : [];
@@ -11414,11 +11430,11 @@ async function loadWordReadingStrengths(maxAgeMs = 0): Promise<WordReadingStreng
 async function computeWordReadingStrengths(timer: ReturnType<typeof stepTimer>): Promise<WordReadingStrengths> {
   const db = getDb();
   const [links, studyItems, reviews, events, vocab] = await Promise.all([
-    db.sentenceVocabulary.toArray(),
-    db.studyItems.toArray(),
-    db.reviews.toArray(),
-    db.sentenceLearningEvents.toArray(),
-    db.vocabularyItems.toArray(),
+    readAllSentenceVocabularyForPass(),
+    readAllStudyItemsForPass(),
+    plannerShared('reviews', ['reviews'], () => loadSnapshot(db, 'reviews', () => db.reviews.toArray())),
+    readAllLearningEventsForPass(),
+    readAllVocabularyItemsForPass(),
   ]);
   timer.mark(`tables(${links.length}/${studyItems.length}/${reviews.length}/${events.length}/${vocab.length})`);
   const wordsBySentence = new Map<string, string[]>();
@@ -11826,12 +11842,16 @@ export async function countSentencesSeededSince(activityType: string, sinceIso: 
 
 /** Every learning event, loaded once per planning pass (shadowing and Read checks both scan it). */
 function readAllLearningEventsForPass(): Promise<SentenceLearningEvent[]> {
-  return plannerShared('sentenceLearningEvents', ['sentenceLearningEvents'], () => getDb().sentenceLearningEvents.toArray());
+  return plannerShared('sentenceLearningEvents', ['sentenceLearningEvents'], () =>
+    loadSnapshot(getDb(), 'sentenceLearningEvents', () => getDb().sentenceLearningEvents.toArray()),
+  );
 }
 
 /** Every book-sentence row, loaded once per planning pass (the planner needs it in two places). */
 function readAllBookSentencesForPass(): Promise<BookSentence[]> {
-  return plannerShared('bookSentences', ['bookSentences'], () => getDb().bookSentences.toArray());
+  return plannerShared('bookSentences', ['bookSentences'], () =>
+    loadSnapshot(getDb(), 'bookSentences', () => getDb().bookSentences.toArray()),
+  );
 }
 
 /** The slice of a Dexie table `getRecentActivityEvents` needs: a range count and the newest row by an index. */
@@ -11994,6 +12014,9 @@ const PLANNER_CACHE_TABLES = [
   'sentenceVocabulary',
   'vocabularyItems',
   'sentenceAudio',
+  'analyses',
+  'sentences',
+  'glossDecisions',
 ] as const;
 type PlannerCacheTable = (typeof PLANNER_CACHE_TABLES)[number];
 
@@ -12007,31 +12030,28 @@ interface PlannerCacheEntry {
   at: number;
 }
 
-const plannerReadCaches = new WeakMap<object, Map<string, PlannerCacheEntry>>();
+const plannerCachesByDbName = new Map<string, { db: object; cache: Map<string, PlannerCacheEntry> }>();
 
 /** > 0 while `warmPlannerReads` runs, so its reads land in the cross-pass cache too. */
 let plannerWarming = 0;
 
-type TableHooks = {
-  hook(event: 'creating' | 'updating' | 'deleting', subscriber: () => void): void;
-  count(): Promise<number>;
-};
+type TableCounter = { count(): Promise<number> };
+
+// Dexie reports each committed write (including `clear()`); drop every cached read that depends on the
+// table. Unlike table hooks this adds no read-before-write cost to bulk writes such as a sync pull.
+onTableMutation((dbName, table) => {
+  const entry = plannerCachesByDbName.get(dbName);
+  if (!entry) return;
+  for (const [key, cached] of entry.cache) {
+    if ((cached.deps as readonly string[]).includes(table)) entry.cache.delete(key);
+  }
+});
 
 function plannerCacheFor(db: ReturnType<typeof getDb>): Map<string, PlannerCacheEntry> {
-  const existing = plannerReadCaches.get(db);
-  if (existing) return existing;
+  const existing = plannerCachesByDbName.get(db.name);
+  if (existing && existing.db === db) return existing.cache;
   const cache = new Map<string, PlannerCacheEntry>();
-  plannerReadCaches.set(db, cache);
-  for (const table of PLANNER_CACHE_TABLES) {
-    // Dexie hooks do not fire for `clear()`; the row-count check in `cachedPlannerRead` covers that.
-    const invalidate = () => {
-      for (const [key, entry] of cache) if (entry.deps.includes(table)) cache.delete(key);
-    };
-    const hooks = db[table] as unknown as TableHooks;
-    hooks.hook('creating', invalidate);
-    hooks.hook('updating', invalidate);
-    hooks.hook('deleting', invalidate);
-  }
+  plannerCachesByDbName.set(db.name, { db, cache });
   return cache;
 }
 
@@ -12042,7 +12062,7 @@ async function cachedPlannerRead<T>(
 ): Promise<T> {
   const db = getDb();
   const cache = plannerCacheFor(db);
-  const counts = await Promise.all(deps.map((table) => (db[table] as unknown as TableHooks).count()));
+  const counts = await Promise.all(deps.map((table) => (db[table] as unknown as TableCounter).count()));
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < PLANNER_CACHE_MAX_AGE_MS && hit.counts.every((count, i) => count === counts[i])) {
     return hit.value as Promise<T>;
@@ -12054,6 +12074,11 @@ async function cachedPlannerRead<T>(
     if (cache.get(key) === entry) cache.delete(key);
   });
   return value;
+}
+
+/** Tests only: forget every in-memory cross-tap read so the next pass reads storage (snapshots or tables). */
+export function resetPlannerReadCachesForTests(): void {
+  plannerCachesByDbName.clear();
 }
 
 /**
@@ -12078,13 +12103,16 @@ function allAudioSentenceIds(): Promise<string[]> {
   return plannerShared(
     'audioSentenceIds',
     ['sentenceAudio'],
-    () => getDb().sentenceAudio.orderBy('sentenceId').uniqueKeys() as Promise<string[]>,
+    () =>
+      loadSnapshot(getDb(), 'audioSentenceIds', () => getDb().sentenceAudio.orderBy('sentenceId').uniqueKeys() as Promise<string[]>),
   );
 }
 
 /** Every sentence-vocabulary link (a small table), shared like the other planner scans. */
 function readAllSentenceVocabularyForPass(): Promise<SentenceVocabulary[]> {
-  return plannerShared('sentenceVocabulary', ['sentenceVocabulary'], () => getDb().sentenceVocabulary.toArray());
+  return plannerShared('sentenceVocabulary', ['sentenceVocabulary'], () =>
+    loadSnapshot(getDb(), 'sentenceVocabulary', () => getDb().sentenceVocabulary.toArray()),
+  );
 }
 
 /**
@@ -12117,10 +12145,61 @@ async function bookSentencesForSentences(sentenceIds: string[]): Promise<BookSen
   return (await readAllBookSentencesForPass()).filter((row) => wanted.has(row.sentenceId));
 }
 
-/** Every sentence-subject study item, loaded once per planning pass. */
-function readSentenceStudyItemsForPass(): Promise<StudyItem[]> {
-  return plannerShared('sentenceStudyItems', ['studyItems'], () =>
-    getDb().studyItems.where('subjectType').equals('sentence').toArray(),
+/** Every study item, loaded once per planning pass (and from a packed snapshot between launches). */
+function readAllStudyItemsForPass(): Promise<StudyItem[]> {
+  return plannerShared('studyItems', ['studyItems'], () =>
+    loadSnapshot(getDb(), 'studyItems', () => getDb().studyItems.toArray()),
+  );
+}
+
+/** Every sentence-subject study item. */
+async function readSentenceStudyItemsForPass(): Promise<StudyItem[]> {
+  return (await readAllStudyItemsForPass()).filter((item) => item.subjectType === 'sentence');
+}
+
+/** Sentence ids whose analysis has a usable comprehension check (the sequential-mode gate); derived, stored packed. */
+async function readUsableCheckSentenceIdsForPass(): Promise<Set<string>> {
+  const ids = await plannerShared('usableChecks', ['analyses'], () =>
+    loadSnapshot(getDb(), 'usableCheckSentenceIds', async () =>
+      (await getDb().analyses.toArray())
+        .filter((analysis) => (getMeaningBank(analysis.comprehensionCheck)?.distractors.length ?? 0) > 0)
+        .map((analysis) => analysis.sentenceId),
+    ),
+  );
+  return new Set(ids);
+}
+
+interface TileEligibility {
+  id: string;
+  tiles: boolean;
+  dictate: boolean;
+}
+
+/** Ear tiles / Dictation eligibility per sentence (only sentences where either tool can open); derived from the sentence text. */
+async function readTileEligibilityForPass(): Promise<Map<string, TileEligibility>> {
+  const rows = await plannerShared('tileEligibility', ['sentences'], () =>
+    loadSnapshot(getDb(), 'tileEligibility', async () =>
+      (await getDb().sentences.toArray()).flatMap((sentence): TileEligibility[] => {
+        const tiles = tileToolUnavailableReason(sentence, 'tiles', true) === null;
+        const dictate = tileToolUnavailableReason(sentence, 'dictate', true) === null;
+        return tiles || dictate ? [{ id: sentence.id, tiles, dictate }] : [];
+      }),
+    ),
+  );
+  return new Map(rows.map((row) => [row.id, row]));
+}
+
+/** Every gloss decision, from the packed snapshot when valid. */
+function readAllGlossDecisionsForPass(): Promise<GlossDecision[]> {
+  return plannerShared('glossDecisions', ['glossDecisions'], () =>
+    loadSnapshot(getDb(), 'glossDecisions', () => getDb().glossDecisions.toArray()),
+  );
+}
+
+/** Every vocabulary item, from the packed snapshot when valid. */
+function readAllVocabularyItemsForPass(): Promise<VocabularyItem[]> {
+  return plannerShared('vocabularyItems', ['vocabularyItems'], () =>
+    loadSnapshot(getDb(), 'vocabularyItems', () => getDb().vocabularyItems.toArray()),
   );
 }
 
@@ -12130,7 +12209,9 @@ async function reviewsForStudyItems(studyItemIds: string[]): Promise<Review[]> {
     return getDb().reviews.where('studyItemId').anyOf(studyItemIds).toArray();
   }
   const wanted = new Set(studyItemIds);
-  const all = await plannerShared('reviews', ['reviews'], () => getDb().reviews.toArray());
+  const all = await plannerShared('reviews', ['reviews'], () =>
+    loadSnapshot(getDb(), 'reviews', () => getDb().reviews.toArray()),
+  );
   return all.filter((review) => wanted.has(review.studyItemId));
 }
 
@@ -12277,8 +12358,9 @@ async function gatherSessionPlannerInput(
     // filters below, or long-overdue paused-drill items crowd out live ones.
     // One scan for both groups (the lists are disjoint), split below: each scan is a
     // whole-table read, which is slow on a phone.
-    timer.time('getDueStudyItems(retain+practice)', () =>
+    timer.time('getDueStudyItems(retain+practice)', async () =>
       getDueStudyItems([...RETAIN_ACTIVITY_TYPES, ...PRACTICE_ACTIVITY_TYPES], {
+        fromItems: await readAllStudyItemsForPass(),
         now,
         graduationMinScheduledDays: settings.graduationMinScheduledDays,
         // unlessLegacyPaused drops these anyway; don't read them.
