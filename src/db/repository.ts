@@ -11764,6 +11764,10 @@ export async function getSessionPlannerInput(
   const db = getDb();
   const timer = createPlannerTimer();
   const settings = await timer.time('readSettings', () => readSettings(db));
+  // Hoisted: the grammar/vocab-card finders below only matter when legacy drills are live.
+  // Under the default sentence-led flow their results were discarded after minutes of IndexedDB
+  // scanning (70 s total on a phone, 2026-11-04), so they are skipped outright.
+  const legacyPaused = effectiveLegacyDrillsPaused(settings);
 
   const [
     recentActivity,
@@ -11797,17 +11801,21 @@ export async function getSessionPlannerInput(
         isSequentialStudyMode(settings),
       ),
     ),
-    timer.time('findUnderstandCandidates', () =>
-      findUnderstandCandidates(UNDERSTAND_CANDIDATE_LIMIT + exclude.grammarPatternIds.size),
-    ),
-    timer.time('findGrammarNoticingCandidates', () =>
-      findGrammarNoticingCandidates(GRAMMAR_NOTICING_CANDIDATE_LIMIT + exclude.sentenceIds.size),
-    ),
+    legacyPaused
+      ? Promise.resolve([] as UnderstandCandidate[])
+      : timer.time('findUnderstandCandidates', () =>
+          findUnderstandCandidates(UNDERSTAND_CANDIDATE_LIMIT + exclude.grammarPatternIds.size),
+        ),
+    legacyPaused
+      ? Promise.resolve([] as GrammarNoticingCandidate[])
+      : timer.time('findGrammarNoticingCandidates', () =>
+          findGrammarNoticingCandidates(GRAMMAR_NOTICING_CANDIDATE_LIMIT + exclude.sentenceIds.size),
+        ),
     // NOTE: not filtered for suspended books — a word only met in a suspended
     // book still counts toward the backlog here, so the planner may slightly
     // over-reserve review minutes while a book is shelved. Tolerable; the
     // seeded cards themselves are held back downstream.
-    timer.time('countNewVocabularyCardBacklog', () => countNewVocabularyCardBacklog()),
+    legacyPaused ? Promise.resolve(0) : timer.time('countNewVocabularyCardBacklog', () => countNewVocabularyCardBacklog()),
   ]);
 
   // Hold back the exclusive review cards of any suspended book — same
@@ -11831,7 +11839,6 @@ export async function getSessionPlannerInput(
   // candidate list, so it's filtered out here instead. "Pause pitch accent"
   // (settings.pitchAccentPaused, 2026-09-28) withholds it too, same as
   // ReviewPage's pitchAccentProductionCandidates.
-  const legacyPaused = effectiveLegacyDrillsPaused(settings);
   const unlessLegacyPaused = (items: StudyItem[]): StudyItem[] =>
     legacyPaused ? items.filter((item) => !isPausedLegacyDrillSubject(item.subjectType)) : items;
   // "Pause sentence cards" (settings.sentenceCardsPaused): the reader's Read checks replace them.
