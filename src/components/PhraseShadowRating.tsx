@@ -57,7 +57,11 @@ export function PhraseShadowRating({
     <div className="stack" role="group" aria-label="Rate this phrase" style={{ gap: '0.25rem' }}>
       <p style={{ margin: 0 }}>
         <span className="muted">Phrase: </span>
-        {phraseText ? <strong lang="ja">{phraseText}</strong> : <span className="muted">(no word timings yet for this span)</span>}
+        {phraseText ? (
+          <strong lang="ja">{phraseText}</strong>
+        ) : phraseText === '' ? (
+          <span className="muted">(no word timings yet for this span)</span>
+        ) : null}
         <span className="muted"> · {(range.startMs / 1000).toFixed(1)}–{(range.endMs / 1000).toFixed(1)}s</span>
       </p>
       <div className="row" style={{ alignItems: 'center', flexWrap: 'wrap' }}>

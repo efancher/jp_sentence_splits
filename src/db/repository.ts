@@ -9828,6 +9828,8 @@ export async function suggestPhraseShadow(input: {
   sentenceId: string;
   sentenceAudioId: string;
   clipDurationMs: number;
+  /** Only this occurrence (a word the learner tapped in the reader) instead of the weakest word. */
+  surfaceForm?: string;
 }): Promise<{ startMs: number; endMs: number; text: string; wordLabel: string } | null> {
   const db = getDb();
   const [alignment, sentence, links] = await Promise.all([
@@ -9836,7 +9838,7 @@ export async function suggestPhraseShadow(input: {
     db.sentenceVocabulary.where('sentenceId').equals(input.sentenceId).toArray(),
   ]);
   if (!alignment || !sentence) return null;
-  const candidates = links.filter((link) => link.surfaceForm);
+  const candidates = links.filter((link) => link.surfaceForm && (!input.surfaceForm || link.surfaceForm === input.surfaceForm));
   if (candidates.length === 0) return null;
   const { strengthByWord, vocabById } = await loadWordReadingStrengths(READER_STRENGTH_CACHE_MS);
   for (const link of orderLinksByWeakness(candidates, strengthByWord)) {

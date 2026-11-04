@@ -184,6 +184,7 @@ export function WordFeedbackPanel({
   readingHidden,
   meaningHidden,
   onRecord,
+  onShadowPhrase,
   onClose,
 }: {
   word: ReaderWord;
@@ -191,6 +192,8 @@ export function WordFeedbackPanel({
   readingHidden: boolean;
   meaningHidden: boolean;
   onRecord: (facet: 'reading' | 'meaning', outcome: ReaderToolOutcome) => void;
+  /** Offered after "I didn't" on the reading: open phrase shadowing on this word's phrase. Absent when the sentence has no clip or sound is off. */
+  onShadowPhrase?: () => void;
   onClose: () => void;
 }) {
   const [shown, setShown] = useState(false);
@@ -231,6 +234,9 @@ export function WordFeedbackPanel({
       ) : (
         <div><button type="button" onClick={() => setShown(true)}>Show reading and meaning</button></div>
       )}
+      {onShadowPhrase && given.reading === 'needed_help' ? (
+        <div><button type="button" onClick={onShadowPhrase}>Shadow this phrase</button></div>
+      ) : null}
       <div><button type="button" onClick={onClose}>Close</button></div>
     </div>
   );

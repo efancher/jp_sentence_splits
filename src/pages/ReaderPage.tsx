@@ -144,7 +144,7 @@ export function ReaderPage() {
     { sentenceId: string; kind: 'dictate'; tile: number; visitId: string } |
     { sentenceId: string; kind: 'meaning'; visitId: string } |
     { sentenceId: string; kind: 'recall'; visitId: string; revealed: boolean; offer?: FollowUpChoice } |
-    { sentenceId: string; kind: 'shadow'; visitId: string } |
+    { sentenceId: string; kind: 'shadow'; visitId: string; focusSurface?: string } |
     { sentenceId: string; kind: 'tiles'; visitId: string; puzzle: EarTilesPuzzle; progress: EarTilesProgress } |
     undefined
   >();
@@ -643,6 +643,16 @@ export function ReaderPage() {
         meaningHidden={hidden.meaningHidden}
         onRecord={(facet, outcome) =>
           recordWordFeedback(sentence.id, tappedWord.visitId, word, facet, facet === 'reading' ? hidden.readingHidden : hidden.meaningHidden, outcome)
+        }
+        onShadowPhrase={
+          loadedAudioRows?.some((audio) => audio.sentenceId === sentence.id) && !settings?.quietMode
+            ? () => {
+                // The shadowing tool opens on this word's phrase; its ratings log under the same visit as the word feedback.
+                native.stop();
+                setTappedWord(undefined);
+                setReaderTool({ sentenceId: sentence.id, kind: 'shadow', visitId: tappedWord.visitId, focusSurface: word.surface });
+              }
+            : undefined
         }
         onClose={() => setTappedWord(undefined)}
       />
@@ -1251,6 +1261,7 @@ export function ReaderPage() {
                               sentenceId={row.sentence.id}
                               embedded
                               visitId={tool.visitId}
+                              focusSurface={tool.focusSurface}
                               onSnoozed={() => setReaderTool(undefined)}
                             />
                           </Suspense>

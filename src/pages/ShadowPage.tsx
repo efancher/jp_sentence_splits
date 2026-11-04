@@ -127,6 +127,7 @@ export function ShadowWorkspace({
   sentenceId,
   embedded = false,
   visitId,
+  focusSurface,
   onSnoozed,
 }: {
   bookId: string;
@@ -134,6 +135,8 @@ export function ShadowWorkspace({
   embedded?: boolean;
   /** The reader's visit for this tool, so phrase ratings log under it (and count as taking a follow-up offer). */
   visitId?: string;
+  /** A word (its surface form in this sentence) the learner tapped in the reader: the suggested phrase is that word's, and is applied on open. */
+  focusSurface?: string;
   /** Called after a snooze; defaults to going back a page. */
   onSnoozed?: () => void;
 }) {
@@ -396,6 +399,7 @@ export function ShadowWorkspace({
     return chunks ? segmentIntoMorae(chunks) : [];
   }, [data?.sentence]);
 
+  const focusAppliedRef = useRef(false);
   // A phrase worth shadowing (the weakest word's span, widened), offered as one tap; computed once per clip.
   const [suggestedPhrase, setSuggestedPhrase] = useState<
     { startMs: number; endMs: number; text: string; wordLabel: string } | null
@@ -412,11 +416,26 @@ export function ShadowWorkspace({
     setSuggestedPhrase(null);
     if (!suggestionAudioId || suggestionDurationMs <= 0 || !alignmentComputedAt) return;
     let cancelled = false;
-    void suggestPhraseShadow({ sentenceId, sentenceAudioId: suggestionAudioId, clipDurationMs: suggestionDurationMs })
-      .then((suggestion) => { if (!cancelled) setSuggestedPhrase(suggestion); })
+    void suggestPhraseShadow({
+      sentenceId,
+      sentenceAudioId: suggestionAudioId,
+      clipDurationMs: suggestionDurationMs,
+      surfaceForm: focusSurface,
+    })
+      .then((suggestion) => {
+        if (cancelled) return;
+        setSuggestedPhrase(suggestion);
+        // Opened from a tapped word in the reader: start on that word's phrase, once, without another tap.
+        if (suggestion && focusSurface && !focusAppliedRef.current) {
+          focusAppliedRef.current = true;
+          const range = { startMs: suggestion.startMs, endMs: suggestion.endMs };
+          setLoopWindow(range);
+          setTargetRange(range);
+        }
+      })
       .catch(() => { /* a missing suggestion just hides the offer */ });
     return () => { cancelled = true; };
-  }, [sentenceId, suggestionAudioId, suggestionDurationMs, alignmentComputedAt]);
+  }, [sentenceId, suggestionAudioId, suggestionDurationMs, alignmentComputedAt, focusSurface]);
 
   if (!data?.sentence) return <p className="muted">Loading…</p>;
 

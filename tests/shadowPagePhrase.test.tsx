@@ -7,7 +7,7 @@ import { resetDbForTests } from '../src/db/database';
 import { getDb, saveReferenceAlignment } from '../src/db/repository';
 import * as analysisApi from '../src/lib/analysisApi';
 import { createId } from '../src/lib/ids';
-import { ShadowPage } from '../src/pages/ShadowPage';
+import { ShadowPage, ShadowWorkspace } from '../src/pages/ShadowPage';
 import { withAppProviders } from '../src/test/providers';
 
 vi.mock('../src/lib/analysisApi', async (importOriginal) => ({
@@ -53,6 +53,16 @@ function renderShadowPage() {
   );
 }
 
+function renderWorkspaceFocused(focusSurface: string) {
+  return render(
+    withAppProviders(
+      <MemoryRouter>
+        <ShadowWorkspace bookId="book-1" sentenceId="sent-1" embedded focusSurface={focusSurface} />
+      </MemoryRouter>,
+    ),
+  );
+}
+
 describe('ShadowPage phrase shadowing', () => {
   beforeEach(() => {
     resetDbForTests(`shadow-phrase-${createId('db')}`);
@@ -87,5 +97,22 @@ describe('ShadowPage phrase shadowing', () => {
     });
     expect(await getDb().attempts.count()).toBe(0);
     expect(await getDb().reviews.count()).toBe(0);
+  });
+
+  it("opened on a tapped word, starts on that word's phrase without another tap", async () => {
+    await seed();
+    await saveReferenceAlignment('audio-1', { durationSeconds: 4, words: WORDS });
+    renderWorkspaceFocused('寝て');
+    const rating = await screen.findByRole('group', { name: 'Rate this phrase' });
+    await waitFor(() => expect(rating.textContent).toContain('寝ています'));
+  });
+
+  it('a tapped word that is not in the sentence leaves the range alone', async () => {
+    await seed();
+    await saveReferenceAlignment('audio-1', { durationSeconds: 4, words: WORDS });
+    renderWorkspaceFocused('犬');
+    await screen.findByText(/Loop window/);
+    await waitFor(() => expect(screen.queryByText(/Suggested phrase/)).toBeNull());
+    expect(screen.queryByRole('group', { name: 'Rate this phrase' })).toBeNull();
   });
 });
