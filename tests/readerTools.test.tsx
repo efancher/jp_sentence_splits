@@ -212,11 +212,53 @@ describe('reader study tools', () => {
 
     await waitFor(async () => {
       const events = await getDb().sentenceLearningEvents.toArray();
-      expect(events).toHaveLength(1);
-      expect(events[0]).toMatchObject({ action: 'gist_check', sentenceId: 'sent-1', outcome: 'needed_help', assessmentSource: 'self' });
+      // The check itself, plus the follow-up offer it triggers (see the offer test below).
+      expect(events.map((event) => event.action).sort()).toEqual(['follow_up_offer', 'gist_check']);
+      expect(events.find((event) => event.action === 'gist_check')).toMatchObject({ sentenceId: 'sent-1', outcome: 'needed_help', assessmentSource: 'self' });
     });
     expect(await getDb().reviews.count()).toBe(0);
     expect(await getDb().studyItems.count()).toBe(0);
+  });
+
+  it('offers one follow-up after "Needed help", logs the offer under the check\u2019s visit, and opens it on request', async () => {
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0.99); // outside the random share: the rule decides
+    try {
+      const user = userEvent.setup();
+      renderReader();
+      await user.click(await screen.findByRole('button', { name: 'Read check' }));
+      await user.click(await screen.findByRole('button', { name: 'Show help and meaning' }));
+      // "Got it" offers nothing.
+      await user.click(screen.getByRole('button', { name: 'Needed help' }));
+
+      expect(await screen.findByText(/Try Word check on it\?/)).toBeInTheDocument();
+      const events = await getDb().sentenceLearningEvents.toArray();
+      const check = events.find((event) => event.action === 'gist_check')!;
+      const offer = events.find((event) => event.action === 'follow_up_offer')!;
+      expect(offer).toMatchObject({ sentenceId: 'sent-1', visitId: check.visitId, target: { kind: 'expression', key: 'followup:meaning:rule', label: 'meaning' } });
+      expect(offer.outcome).toBeUndefined();
+
+      await user.click(screen.getByRole('button', { name: 'Try it' }));
+      expect(await screen.findByRole('group', { name: /word check|meaning/i })).toBeInTheDocument();
+      expect(await getDb().reviews.count()).toBe(0);
+    } finally {
+      random.mockRestore();
+    }
+  });
+
+  it('offers nothing after "Got it"', async () => {
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0);
+    try {
+      const user = userEvent.setup();
+      renderReader();
+      await user.click(await screen.findByRole('button', { name: 'Read check' }));
+      await user.click(await screen.findByRole('button', { name: 'Show help and meaning' }));
+      await user.click(screen.getByRole('button', { name: 'Got it' }));
+      await waitFor(async () => expect(await getDb().sentenceLearningEvents.count()).toBe(1));
+      expect(screen.queryByText(/Try .* on it\?/)).not.toBeInTheDocument();
+      expect((await getDb().sentenceLearningEvents.toArray()).some((event) => event.action === 'follow_up_offer')).toBe(false);
+    } finally {
+      random.mockRestore();
+    }
   });
 
   it('opens the Read check, not the walkthrough, from a planner Read check step', async () => {

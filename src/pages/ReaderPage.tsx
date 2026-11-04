@@ -30,6 +30,7 @@ import {
 } from '../lib/earTiles';
 import { readExtrasForSentences, withChapterExtras } from '../db/sentenceExtras';
 import { createId } from '../lib/ids';
+import { chooseFollowUp, FOLLOW_UP_ASPECT, type FollowUpChoice, type FollowUpTool } from '../lib/followUpOffer';
 import { stepTimer } from '../lib/pageTiming';
 import { meaningCheckTargetKey, readingFeedbackTargetKey } from '../lib/wordEvidence';
 import { grammarFeedbackTargetKey } from '../lib/grammarEvidence';
@@ -136,7 +137,7 @@ export function ReaderPage() {
   const [readerTool, setReaderTool] = useState<
     { sentenceId: string; kind: 'dictate'; tile: number; visitId: string } |
     { sentenceId: string; kind: 'meaning'; visitId: string } |
-    { sentenceId: string; kind: 'recall'; visitId: string; revealed: boolean } |
+    { sentenceId: string; kind: 'recall'; visitId: string; revealed: boolean; offer?: FollowUpChoice } |
     { sentenceId: string; kind: 'shadow'; visitId: string } |
     { sentenceId: string; kind: 'tiles'; visitId: string; puzzle: EarTilesPuzzle; progress: EarTilesProgress } |
     undefined
@@ -439,6 +440,8 @@ export function ReaderPage() {
     sentence: Sentence,
     kind: 'dictate' | 'meaning' | 'tiles' | 'recall' | 'shadow',
     knownHasAudio?: boolean,
+    /** A follow-up opened from a Read check offer shares that check's visit, so its events group with the offer. */
+    sharedVisitId?: string,
   ) {
     if (readerTool?.sentenceId === sentence.id && readerTool.kind === kind) {
       setReaderTool(undefined);
@@ -456,7 +459,7 @@ export function ReaderPage() {
           .sentenceAudio.where('sentenceId')
           .equals(sentence.id)
           .count()
-          .then((count) => toggleReaderTool(sentence, kind, count > 0));
+          .then((count) => toggleReaderTool(sentence, kind, count > 0, sharedVisitId));
         return;
       }
       const reason = tileToolUnavailableReason(sentence, kind, hasAudio);
@@ -466,7 +469,7 @@ export function ReaderPage() {
         return;
       }
     }
-    const visitId = createId('visit');
+    const visitId = sharedVisitId ?? createId('visit');
     if (kind === 'meaning') {
       setReaderTool({ sentenceId: sentence.id, kind, visitId });
       return;
@@ -637,6 +640,33 @@ export function ReaderPage() {
       quietMode: settings?.quietMode ?? false,
       inventoryRevision: preparation?.sentenceFingerprint,
     });
+  }
+
+  /**
+   * After a Read check ends in "needed help", pick one follow-up that can open on this sentence and log
+   * that it was offered (a random share are baseline draws, see `followUpOffer.ts`). Null when none can.
+   */
+  function offerFollowUp(sentence: Sentence, hasAudio: boolean, visitId: string): FollowUpChoice | null {
+    const available: FollowUpTool[] = ['meaning'];
+    if (tileToolUnavailableReason(sentence, 'tiles', hasAudio) === null) available.push('tiles');
+    if (tileToolUnavailableReason(sentence, 'dictate', hasAudio) === null) available.push('dictate');
+    if (hasAudio) available.push('shadow');
+    // A content word that is not yet known by strength is the weak-word signal that puts Word check first.
+    const weakWord = (data?.wordsBySentence.get(sentence.id) ?? []).some((word) => !data?.knownExpressions.has(word.expression));
+    const choice = chooseFollowUp({ available, weakWord, draw: Math.random(), pick: Math.random() });
+    if (!choice) return null;
+    void logSentenceLearningEvent({
+      id: createId('sl_event'),
+      visitId,
+      action: 'follow_up_offer',
+      sentenceId: sentence.id,
+      bookId,
+      chapterId,
+      target: { kind: 'expression', key: `followup:${choice.tool}:${choice.source}`, label: FOLLOW_UP_ASPECT[choice.tool] },
+      quietMode: settings?.quietMode ?? false,
+      inventoryRevision: preparation?.sentenceFingerprint,
+    });
+    return choice;
   }
 
   /** The learner's own call from a reader tool, logged like every other lesson practice: evidence, never a rating. */
@@ -1214,7 +1244,15 @@ export function ReaderPage() {
                           playing={isSequencePlaying && singleIndexRef.current === index}
                           onPlay={() => toggleSentencePlay(index)}
                           onReveal={() => setReaderTool({ ...tool, revealed: true })}
-                          onRecord={(outcome) => recordReadCheck(row.sentence.id, tool.visitId, outcome)}
+                          onRecord={(outcome) => {
+                            recordReadCheck(row.sentence.id, tool.visitId, outcome);
+                            if (outcome === 'needed_help') {
+                              const offer = offerFollowUp(row.sentence, Boolean(audio), tool.visitId);
+                              if (offer) setReaderTool({ ...tool, offer });
+                            }
+                          }}
+                          offer={tool.offer?.tool}
+                          onTakeOffer={tool.offer ? () => toggleReaderTool(row.sentence, tool.offer!.tool, undefined, tool.visitId) : undefined}
                           onClose={() => setReaderTool(undefined)}
                         />
                       );

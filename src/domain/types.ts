@@ -1829,7 +1829,14 @@ export type SentenceLearningAction =
   /** Masked recall of a target in a real occurrence the learner has never met in this target's lesson (`exposedSentenceId`). Separate from same-sentence practice. */
   | 'held_back_check'
   /** A self-rated pass at a hand-marked span of the reference clip (`rangeStartMs`..`rangeEndMs`); never closes the sentence's own shadowing step. */
-  | 'phrase_shadow';
+  | 'phrase_shadow'
+  /**
+   * A reader follow-up was offered after a Read check ended in "needed help". `target.key` is
+   * `followup:<tool>:<rule|random>` (random offers are the baseline for comparing activities). It has no
+   * outcome: the offer was taken when the follow-up tool logs its own events under the same `visitId`
+   * (the Read check's). Evidence only, never a review.
+   */
+  | 'follow_up_offer';
 
 /**
  * Append-only lesson evidence from inside a passage (sentence-first plan, Phase 2).

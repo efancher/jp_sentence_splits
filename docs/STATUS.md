@@ -127,6 +127,15 @@ and possible extensions. This snapshot does not certify a live deployment.
   reason; a sentence drafted a Fresh try the same day is skipped. Settings → "Pause sentence review
   cards" (`sentenceCardsPaused`, default off, reversible, nothing deleted) withholds the
   reading/listening/Ear Tiles/dictation cards from Review and from the planner's batches.
+  "Needed help" on a Read check now offers one follow-up on that sentence (2026-11-04,
+  `chooseFollowUp` in `src/lib/followUpOffer.ts`): Word check when the sentence has a content word
+  not yet known by strength, otherwise Ear tiles, Dictation or Shadowing, whichever can open. About
+  40% of offers are drawn at random among the available tools as a baseline for comparing
+  activities. Each offer logs a synced `follow_up_offer` event (`followup:<tool>:<rule|random>`,
+  migration `20261104000000`) under the Read check's visit; the follow-up tool shares that
+  `visitId`, so "taken" is inferred from its own events. Nothing reads these yet: the after-effect
+  comparison panel and listening/grammar/pronunciation outcome evidence are still to build
+  (ROADMAP, "Follow-up offers and activity effectiveness").
   🎙 Shadowing opens `ShadowWorkspace` (`embedded`) under the sentence, and shadowing planner steps
   now open `/books/:bookId/speak/:sentenceId` in the reader; the standalone `/shadow/:sentenceId`
   page is unchanged. Episode preparation accepts the main JSON and

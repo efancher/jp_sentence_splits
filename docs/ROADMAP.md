@@ -761,6 +761,13 @@ control).
      offered on some sentences so the comparison has a baseline, because
      activities chosen after a struggle look worse than they are. Record which
      were randomised.
+  *Progress (2026-11-04):* steps 1 (Read check "needed help" → one offer, not a
+  planner step) and 4 (random baseline draws, ~40%) are shipped, and every offer
+  is logged as a `follow_up_offer` event (migration `20261104000000`). Still to
+  build: step 2 (listening/grammar/pronunciation evidence), step 3 (the
+  after-effect panel) and the aspect-specific cause picking (the rule today only
+  knows "weak word → Word check, else listening, else sound"). Offers log no
+  outcome; "taken" means the tool wrote events under the same `visitId`.
   Caveats: one learner, self-judged outcomes and a few hundred events mean
   associations, not proof; expect noisy results for a while. Keep ratings
   explicit and these events evidence-only. Related: step usefulness

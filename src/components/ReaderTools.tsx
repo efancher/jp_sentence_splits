@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { getWordMeaningCheckTarget } from '../db/repository';
 import type { Sentence } from '../domain/types';
 import { gradeDictation, typedAsKana } from '../lib/dictationAnswer';
+import { FOLLOW_UP_LABEL, FOLLOW_UP_PURPOSE, type FollowUpTool } from '../lib/followUpOffer';
 import type { TileDictation } from '../lib/earTiles';
 
 /**
@@ -113,6 +114,8 @@ export function ReadCheckPanel({
   onPlay,
   onReveal,
   onRecord,
+  offer,
+  onTakeOffer,
   onClose,
 }: {
   revealed: boolean;
@@ -121,6 +124,9 @@ export function ReadCheckPanel({
   onPlay: () => void;
   onReveal: () => void;
   onRecord: (outcome: ReaderToolOutcome) => void;
+  /** The follow-up suggested once "Needed help" is recorded; taking it opens that tool on this sentence. */
+  offer?: FollowUpTool;
+  onTakeOffer?: () => void;
   onClose: () => void;
 }) {
   const [recorded, setRecorded] = useState(false);
@@ -142,9 +148,17 @@ export function ReadCheckPanel({
           <button type="button" onClick={() => { onRecord('needed_help'); setRecorded(true); }}>Needed help</button>
         </div>
       ) : (
-        <div className="row" style={{ gap: '0.4rem', alignItems: 'center' }}>
+        <div className="row" style={{ gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}>
           <span className="muted">Recorded.</span>
-          <button type="button" onClick={onClose}>Close</button>
+          {offer && onTakeOffer ? (
+            <>
+              <span>Try {FOLLOW_UP_LABEL[offer]} on it? <span className="muted">({FOLLOW_UP_PURPOSE[offer]})</span></span>
+              <button type="button" className="primary" onClick={onTakeOffer}>Try it</button>
+              <button type="button" onClick={onClose}>Not now</button>
+            </>
+          ) : (
+            <button type="button" onClick={onClose}>Close</button>
+          )}
         </div>
       )}
     </div>

@@ -241,6 +241,19 @@ describe.skipIf(!PG_TESTS_ENABLED)('push against real Postgres + RLS', () => {
     expect(() => sql(`update sentence_learning_events set range_start_ms = -1 where id = 'sl_phrase_1'`)).toThrow();
   });
 
+  it('pushes a reader follow-up offer with no outcome', async () => {
+    await device(USER_A);
+    await logSentenceLearningEvent({
+      id: 'sl_offer_1', visitId: 'v1', action: 'follow_up_offer', bookId: 'b1', sentenceId: 'sent_1',
+      target: { kind: 'expression', key: 'followup:tiles:random', label: 'listening' },
+    });
+
+    expect(await pushOnce()).toBeUndefined();
+
+    expect(scalar(`select action || '|' || target_key || '|' || target_label || '|' || coalesce(outcome, 'none') from sentence_learning_events where id = 'sl_offer_1'`))
+      .toBe('follow_up_offer|followup:tiles:random|listening|none');
+  });
+
   it('a link to a pattern that exists nowhere is dropped without blocking the rest of the queue', async () => {
     await device(USER_A);
     sql(`insert into sentences (id, owner_id, japanese, normalized_key, created_at, updated_at, version) values ('sent_1','${USER_A}','今、犬。','k1',now(),now(),1)`);
