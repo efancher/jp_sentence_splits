@@ -51,6 +51,24 @@ encounter) and the local-only `wordIssues` field on
 `attemptAnalysisSummaries`. After A5, run Settings → Export all data (should
 succeed) and check the sync badge (no conflict).
 
+## 2026-11-04 — phrase shadowing
+
+Needs a sentence with a native clip. Writes: `sentence_learning_events` rows
+(`phrase_shadow`) only; no `reviews`, no `attempts`, no FSRS change. Automated
+coverage: `tests/phraseShadow*.test.ts(x)`, `tests/wordFeedbackShadow.test.tsx`,
+`e2e/phrase-shadow.spec.ts` (synthetic data, Chromium + emulated iPhone WebKit).
+These items are the real-device pass the automated tests cannot give.
+
+| # | Feature | How to reach it | Status | Notes |
+|---|---|---|---|---|
+| P1 | Settings → "Pause sentence shadowing in the daily plan" turns the plan's shadowing steps into "Shadow a phrase: …" steps; unticking restores "Shadow: …" | ☰ → Settings, then Home → start today's session | ⬜ | The step label shows the suggested phrase when the clip's alignment is cached, otherwise the sentence start. |
+| P2 | Shadow pane shows "Suggested phrase (covers 〇〇): …" + "Use this phrase"; tapping it narrows the Loop window sliders and shows the rating row | A shadowing step, or `/books/:bookId/shadow/:sentenceId` | ⬜ | On a first visit the line may appear a few seconds after open (the pane caches the alignment first). If it never appears, run the book's "Precompute word audio alignment" and reopen. |
+| P3 | Dragging the Loop window sliders updates "Phrase: …" and the seconds range live | Same pane | ⬜ | The row stays hidden while the window covers about the whole clip. |
+| P4 | Not yet / Close / Got it log one event each tap, and "Logged …" confirms it | Same pane | ⬜ | Check Export all data still succeeds and the sync badge shows no conflict; a clip with no alignment still logs (phrase text empty). |
+| P5 | Reader: tap a word → "I didn't" on Reading → "Shadow this phrase" opens the docked shadowing tool already on that word's phrase | Reader (`/books/:bookId/read…`) | ⬜ | Button only appears when the sentence has a clip and quiet mode is off. Ratings made there group under the word's visit. |
+| P6 | Sentence shadowing stays reachable while paused (Shadow page, reader 🎙) | Reader / Shadow page | ⬜ | Only the planner's whole-sentence steps are paused. |
+| P7 | Sync of phrase events | After P4, check Supabase `sentence_learning_events` for `action = 'phrase_shadow'` rows | ⬜ | Needs migration `20261103000000_phrase_shadow_events.sql` applied; before that these rows queue and fail to push. |
+
 ## Open questions / issues
 
 ### 2h — sibling burying not observed on Firefox / work Linux

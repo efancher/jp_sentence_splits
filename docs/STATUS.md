@@ -45,8 +45,12 @@ and possible extensions. This snapshot does not certify a live deployment.
   words, and the pane offers "Suggested phrase … Use this phrase": the sentence's
   weakest-reading word (`orderLinksByWeakness`) with its following particle, widened to
   1–3 s (`suggestPhraseShadow`, needs a current reference alignment). One tap sets both
-  the loop window and the target; the planner step label still names the sentence, not
-  the phrase.
+  the loop window and the target. The planner's "Shadow a phrase: …" steps (drafted while
+  sentence shadowing is paused) are named after that phrase when the clip is aligned, and
+  in the reader "I didn't" on a tapped word's Reading offers "Shadow this phrase" (opens
+  the docked tool on that word). Covered by `e2e/phrase-shadow.spec.ts` (Chromium and
+  emulated WebKit passed locally in the Playwright container, synthetic data) plus
+  jsdom tests; the hands-on checklist is in `MANUAL_TEST_LOG.md` (P1–P7, none verified yet).
 - Review "Trouble with" chips (Reading, Meaning, Kanji, Sound; prototype,
   2026-10-20): optional, tapped before rating, never choosing the FSRS rating
   or crediting cards. Reading/Meaning/Kanji queue a Fresh try (walked-through

@@ -61,11 +61,11 @@ The items below retain unfinished work, optional refinements and future ideas.
   not a gate: a recent Not yet = phrase pass before the whole sentence, all phrases
   Got it = sentence more eligible, no phrase data = today's behaviour (per the
   starved-gate lesson); (3) decide whether to turn the pause off; (4) the Shadow pane
-  already suggests the weakest word's phrase (2026-11-04); still open: pre-set the range
-  from a reader word flagged Sound / didn't know the reading, and name the phrase in the
-  planner step label; (5) a `/progress` panel and a planner "Phrase
-  shadow" step, and revisit the evidence weights (Got it is a small recognition
-  success today). `phraseShadowsBySentence` (`src/lib/phraseShadow.ts`) is the
+  suggests the weakest word's phrase, the planner's paused-mode steps are named after
+  it, and the reader offers "Shadow this phrase" after "I didn't" on a word's Reading
+  (all 2026-11-04); still open: a "Sound"-flag trigger for the same shortcut, and that
+  hands-on checklist (`MANUAL_TEST_LOG.md` P1–P7); (5) a `/progress` panel, and revisit
+  the evidence weights (Got it is a small recognition success today). `phraseShadowsBySentence` (`src/lib/phraseShadow.ts`) is the
   unused-by-the-planner reader of the data. Apply `20261103000000_phrase_shadow_events.sql`
   (pg-tested locally; confirm it is applied to Supabase, since pushes of these events
   fail on the old constraint until then).
