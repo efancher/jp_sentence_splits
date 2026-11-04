@@ -12,6 +12,7 @@ import {
   updateSettings,
 } from '../src/db/repository';
 import type { Sentence } from '../src/domain/types';
+import { ALIGNMENT_VERSION } from '../src/lib/analysisApi';
 import { createId } from '../src/lib/ids';
 import {
   isPhraseRange,
@@ -191,5 +192,29 @@ describe('logPhraseShadow and the shadowing pause', () => {
     const after = await getSessionPlannerInput(60);
     expect(after.shadowCandidates.map((c) => c.sentenceId)).toContain(sentence.id);
     expect(after.shadowCandidates.some((c) => c.phrase)).toBe(false);
+  });
+
+  it('a phrase step names its suggested phrase once the clip is aligned, and falls back to the sentence before that', async () => {
+    // Default sentence-led flow: a completed walkthrough is what makes a sentence ready to shadow.
+    await updateSettings({ sentenceShadowingPaused: true });
+    const book = await createBook({ title: 'Named' });
+    const { sentence, audioId } = await shadowReadySentence(book, '猫が寝ています。');
+    const db = getDb();
+    const stamp = new Date().toISOString();
+    await db.sentenceLearningEvents.put({
+      id: createId('sle'), visitId: 'v', action: 'walkthrough_completed', bookId: book.id, sentenceId: sentence.id, timestamp: stamp,
+    });
+    await db.vocabularyItems.put({ id: 'v-sleep', expression: '寝る', reading: 'ねる', createdAt: stamp, updatedAt: stamp } as never);
+    await db.sentenceVocabulary.put({ id: 'sv-sleep', sentenceId: sentence.id, vocabularyItemId: 'v-sleep', surfaceForm: '寝て' } as never);
+
+    const unaligned = await getSessionPlannerInput(60);
+    expect(unaligned.shadowCandidates.find((c) => c.sentenceId === sentence.id)?.phraseText).toBeUndefined();
+
+    await db.referenceAlignments.put({
+      id: audioId, alignmentVersion: ALIGNMENT_VERSION, computedAt: stamp,
+      result: { durationSeconds: 2, words: words.map((w) => ({ ...w, phones: [] })) },
+    });
+    const aligned = await getSessionPlannerInput(60);
+    expect(aligned.shadowCandidates.find((c) => c.sentenceId === sentence.id)?.phraseText).toContain('寝て');
   });
 });

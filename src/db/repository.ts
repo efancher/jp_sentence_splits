@@ -9854,6 +9854,15 @@ export async function suggestPhraseShadow(input: {
   return null;
 }
 
+/** `suggestPhraseShadow` for a sentence's first reference clip (the planner has the sentence, not the audio row). */
+export async function suggestPhraseShadowForSentence(
+  sentenceId: string,
+): Promise<{ startMs: number; endMs: number; text: string; wordLabel: string } | null> {
+  const audio = await getDb().sentenceAudio.where('sentenceId').equals(sentenceId).first();
+  if (!audio || audio.durationMs <= 0) return null;
+  return suggestPhraseShadow({ sentenceId, sentenceAudioId: audio.id, clipDurationMs: audio.durationMs });
+}
+
 export async function logGlossDecision(
   decision: Omit<GlossDecision, 'id' | 'timestamp'> & { id?: string; timestamp?: string },
 ): Promise<GlossDecision> {
@@ -12384,9 +12393,17 @@ async function gatherSessionPlannerInput(
   const understandCandidates = (legacyPaused ? [] : understandCandidatesRaw)
     .filter((candidate) => !exclude.grammarPatternIds.has(candidate.grammarPatternId))
     .slice(0, UNDERSTAND_CANDIDATE_LIMIT);
-  const shadowCandidates = shadowCandidatesRaw
+  const shadowCandidatesTrimmed = shadowCandidatesRaw
     .filter((candidate) => !exclude.sentenceIds.has(candidate.sentenceId))
     .slice(0, SHADOW_CANDIDATE_LIMIT);
+  // A phrase step names its suggested phrase (the weakest word's span) when the clip's alignment is cached.
+  const shadowCandidates = await Promise.all(
+    shadowCandidatesTrimmed.map(async (candidate) => {
+      if (!candidate.phrase) return candidate;
+      const suggestion = await suggestPhraseShadowForSentence(candidate.sentenceId).catch(() => null);
+      return suggestion?.text ? { ...candidate, phraseText: suggestion.text } : candidate;
+    }),
+  );
   const grammarNoticingCandidates = (legacyPaused ? [] : grammarNoticingCandidatesRaw)
     .filter((candidate) => !exclude.sentenceIds.has(candidate.sentenceId))
     .slice(0, GRAMMAR_NOTICING_CANDIDATE_LIMIT);

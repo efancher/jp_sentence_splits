@@ -427,6 +427,8 @@ export interface ShadowCandidate {
   reason: string;
   /** Drafted as a phrase shadow (mark a span and rate it) because whole-sentence shadowing is paused. */
   phrase?: boolean;
+  /** The suggested phrase to shadow (from the cached alignment), when one could be worked out. */
+  phraseText?: string;
 }
 
 /**
@@ -1014,9 +1016,11 @@ function buildShadowSteps(
       targetKind: 'shadow',
       bookId: candidate.bookId,
       sentenceId: candidate.sentenceId,
-      label: candidate.phrase ? `Shadow a phrase: ${candidate.label}` : `Shadow: ${candidate.label}`,
+      label: candidate.phrase ? `Shadow a phrase: ${candidate.phraseText ?? candidate.label}` : `Shadow: ${candidate.label}`,
       estimatedMinutes: perItemMinutes,
-      reason: candidate.phrase ? `${candidate.reason} — mark a phrase, shadow it, then rate it` : candidate.reason,
+      reason: candidate.phrase
+        ? `${candidate.reason} — ${candidate.phraseText ? 'use the suggested phrase' : 'mark a phrase'}, shadow it, then rate it`
+        : candidate.reason,
       status: 'pending',
       ...(candidate.phrase ? { phrase: true } : {}),
     });
