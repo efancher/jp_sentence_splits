@@ -5204,9 +5204,11 @@ async function getIntroducedSentenceIds(sentenceIds: string[]): Promise<Set<stri
   const db = getDb();
   const wanted = new Set(sentenceIds);
   const [events, memberships, items] = await Promise.all([
-    db.sentenceLearningEvents.where('sentenceId').anyOf(sentenceIds).toArray(),
-    db.bookSentences.where('sentenceId').anyOf(sentenceIds).toArray(),
-    db.studyItems.where('subjectType').equals('sentence').toArray(),
+    learningEventsForSentences(sentenceIds),
+    bookSentencesForSentences(sentenceIds),
+    sentenceIds.length > ANY_OF_SCAN_THRESHOLD
+      ? readSentenceStudyItemsForPass()
+      : db.studyItems.where('subjectType').equals('sentence').toArray(),
   ]);
   return new Set([
     ...events.filter((event) => event.action === 'walkthrough_completed').map((event) => event.sentenceId),
@@ -10534,10 +10536,9 @@ async function getRecentlyMissedSentenceTransformationSentenceIds(): Promise<Set
   const sentenceIdByLinkId = new Map(
     links.filter((link): link is SentenceVocabulary => Boolean(link)).map((link) => [link.id, link.sentenceId]),
   );
-  const reviews = await db.reviews
-    .where('studyItemId')
-    .anyOf(items.map((item) => item.id))
-    .sortBy('timestamp');
+  const reviews = (await reviewsForStudyItems(items.map((item) => item.id))).sort((a, b) =>
+    a.timestamp.localeCompare(b.timestamp),
+  );
   const reviewsByStudyItem = new Map<string, Review[]>();
   for (const review of reviews) {
     const list = reviewsByStudyItem.get(review.studyItemId);
@@ -10875,7 +10876,7 @@ export async function findReadCheckCandidates(
   const due = sentencesDueForReadCheck(events, now).filter((entry) => !excluded.has(entry.sentenceId));
   if (due.length === 0) return [];
   const activeBooks = new Set(books.filter(isBookInStudyRotation).map((book) => book.id));
-  const memberships = await db.bookSentences.where('sentenceId').anyOf(due.map((entry) => entry.sentenceId)).toArray();
+  const memberships = await bookSentencesForSentences(due.map((entry) => entry.sentenceId));
   const membershipBySentence = new Map<string, BookSentence>();
   for (const membership of memberships) {
     if (!activeBooks.has(membership.bookId)) continue;
@@ -10914,7 +10915,7 @@ export async function findListeningToolCandidates(
   const wanted = audioIds.filter((id) => introduced.has(id));
   if (wanted.length === 0) return [];
   const activeBooks = new Set(books.filter(isBookInStudyRotation).map((book) => book.id));
-  const memberships = await db.bookSentences.where('sentenceId').anyOf(wanted).toArray();
+  const memberships = await bookSentencesForSentences(wanted);
   const membershipBySentence = new Map<string, BookSentence>();
   for (const membership of memberships) {
     if (!activeBooks.has(membership.bookId)) continue;
@@ -10931,10 +10932,15 @@ export async function findListeningToolCandidates(
   if (eligible.length === 0) return [];
 
   const ids = eligible.map((entry) => entry.sentenceId);
-  const events = await db.sentenceLearningEvents.where('sentenceId').anyOf(ids).toArray();
-  const studyItems = (await db.studyItems.where('subjectId').anyOf(ids).toArray()).filter((item) => item.subjectType === 'sentence');
+  const events = await learningEventsForSentences(ids);
+  const idSet = new Set(ids);
+  const studyItems = (
+    ids.length > ANY_OF_SCAN_THRESHOLD
+      ? await readSentenceStudyItemsForPass()
+      : (await db.studyItems.where('subjectId').anyOf(ids).toArray()).filter((item) => item.subjectType === 'sentence')
+  ).filter((item) => idSet.has(item.subjectId));
   const itemIds = studyItems.map((item) => item.id);
-  const reviews = itemIds.length ? await db.reviews.where('studyItemId').anyOf(itemIds).toArray() : [];
+  const reviews = itemIds.length ? await reviewsForStudyItems(itemIds) : [];
   const lastReadCheck = new Map<string, { at: number; gotIt: boolean }>();
   for (const event of events) {
     if (event.action !== 'gist_check' || !event.outcome) continue;
@@ -11903,13 +11909,57 @@ function memoForPlannerPass<T>(key: string, load: () => Promise<T>): Promise<T> 
 }
 
 /**
+ * Above this many ids, `where(...).anyOf(ids)` costs more than reading the whole table once:
+ * Dexie issues one index lookup per id, and each is slow on a phone (a 4,000-id lookup took
+ * ~38 s while a full scan of the same table takes 1-2 s).
+ */
+const ANY_OF_SCAN_THRESHOLD = 200;
+
+/**
  * Which of `sentenceIds` have a recorded clip. Reads only the `sentenceId` index:
  * `sentenceAudio` rows carry the audio Blob, so `toArray()` would load every clip
  * just to read an id (seconds on a phone).
  */
 async function sentenceIdsWithAudioClip(sentenceIds: string[]): Promise<Set<string>> {
-  const keys = await getDb().sentenceAudio.where('sentenceId').anyOf(sentenceIds).keys();
-  return new Set(keys as string[]);
+  const table = getDb().sentenceAudio;
+  if (sentenceIds.length <= ANY_OF_SCAN_THRESHOLD) {
+    return new Set((await table.where('sentenceId').anyOf(sentenceIds).keys()) as string[]);
+  }
+  const wanted = new Set(sentenceIds);
+  const all = (await table.orderBy('sentenceId').uniqueKeys()) as string[];
+  return new Set(all.filter((id) => wanted.has(id)));
+}
+
+async function learningEventsForSentences(sentenceIds: string[]): Promise<SentenceLearningEvent[]> {
+  if (sentenceIds.length <= ANY_OF_SCAN_THRESHOLD) {
+    return getDb().sentenceLearningEvents.where('sentenceId').anyOf(sentenceIds).toArray();
+  }
+  const wanted = new Set(sentenceIds);
+  return (await readAllLearningEventsForPass()).filter((event) => wanted.has(event.sentenceId));
+}
+
+async function bookSentencesForSentences(sentenceIds: string[]): Promise<BookSentence[]> {
+  if (sentenceIds.length <= ANY_OF_SCAN_THRESHOLD) {
+    return getDb().bookSentences.where('sentenceId').anyOf(sentenceIds).toArray();
+  }
+  const wanted = new Set(sentenceIds);
+  return (await readAllBookSentencesForPass()).filter((row) => wanted.has(row.sentenceId));
+}
+
+/** Every sentence-subject study item, loaded once per planning pass. */
+function readSentenceStudyItemsForPass(): Promise<StudyItem[]> {
+  return memoForPlannerPass('sentenceStudyItems', () =>
+    getDb().studyItems.where('subjectType').equals('sentence').toArray(),
+  );
+}
+
+async function reviewsForStudyItems(studyItemIds: string[]): Promise<Review[]> {
+  if (studyItemIds.length <= ANY_OF_SCAN_THRESHOLD) {
+    return getDb().reviews.where('studyItemId').anyOf(studyItemIds).toArray();
+  }
+  const wanted = new Set(studyItemIds);
+  const all = await memoForPlannerPass('reviews', () => getDb().reviews.toArray());
+  return all.filter((review) => wanted.has(review.studyItemId));
 }
 
 /**
