@@ -605,7 +605,12 @@ async function rescheduleResumedItems(sentenceIds: Set<string>, now: Date): Prom
  * `sentenceVocabulary` tables (a few times per review-init / plan); acceptable
  * at this scale.
  */
-export async function loadSuspendedBookIndex(): Promise<SuspendedBookIndex | null> {
+export function loadSuspendedBookIndex(): Promise<SuspendedBookIndex | null> {
+  // A planning pass asks for this from five places; each ask re-reads two whole tables.
+  return memoForPlannerPass('suspendedBookIndex', loadSuspendedBookIndexUncached);
+}
+
+async function loadSuspendedBookIndexUncached(): Promise<SuspendedBookIndex | null> {
   const db = getDb();
   const books = await db.books.toArray();
   const suspendedBookIds = new Set(
@@ -619,7 +624,7 @@ export async function loadSuspendedBookIndex(): Promise<SuspendedBookIndex | nul
   if (suspendedBookIds.size === 0 && suspendedChapterIds.size === 0) return null;
 
   const [memberships, links] = await Promise.all([
-    db.bookSentences.toArray(),
+    readAllBookSentencesForPass(),
     db.sentenceVocabulary.toArray(),
   ]);
 
@@ -10863,7 +10868,7 @@ export async function findReadCheckCandidates(
 ): Promise<ReadCheckCandidate[]> {
   const db = getDb();
   const [events, books, suspendedIndex] = await Promise.all([
-    db.sentenceLearningEvents.toArray(),
+    readAllLearningEventsForPass(),
     db.books.toArray(),
     loadSuspendedBookIndex(),
   ]);
@@ -11262,7 +11267,7 @@ async function activeSentenceIdsForShadowing(bookLimit: number): Promise<Set<str
     .sort((a, b) => (b.lastOpenedAt ?? b.updatedAt).localeCompare(a.lastOpenedAt ?? a.updatedAt))
     .slice(0, bookLimit);
   const walkedThrough = new Set(
-    (await traceStep('shadow: sentenceLearningEvents.toArray', () => db.sentenceLearningEvents.toArray(), rowCount))
+    (await traceStep('shadow: sentenceLearningEvents.toArray', () => readAllLearningEventsForPass(), rowCount))
       .filter((event) => event.action === 'walkthrough_completed')
       .map((event) => event.sentenceId),
   );
@@ -11760,6 +11765,11 @@ export async function countSentencesSeededSince(activityType: string, sinceIso: 
   return subjects.size;
 }
 
+/** Every learning event, loaded once per planning pass (shadowing and Read checks both scan it). */
+function readAllLearningEventsForPass(): Promise<SentenceLearningEvent[]> {
+  return memoForPlannerPass('sentenceLearningEvents', () => getDb().sentenceLearningEvents.toArray());
+}
+
 /** Every book-sentence row, loaded once per planning pass (the planner needs it in two places). */
 function readAllBookSentencesForPass(): Promise<BookSentence[]> {
   return memoForPlannerPass('bookSentences', () => getDb().bookSentences.toArray());
@@ -11977,6 +11987,22 @@ export async function getSessionPlannerInput(
   baselineOverride?: Record<SessionBucket, number>,
   gameBreakCandidates?: GameBreakCandidate[],
 ): Promise<SessionPlannerInput> {
+  try {
+    return await gatherSessionPlannerInput(totalMinutes, now, exclude, baselineOverride, gameBreakCandidates);
+  } finally {
+    // The per-pass memo must never outlive the pass (a failed pass would leave stale reads behind).
+    plannerTrace = null;
+    plannerPassMemo = null;
+  }
+}
+
+async function gatherSessionPlannerInput(
+  totalMinutes: number,
+  now: Date,
+  exclude: SessionPlannerExclusions,
+  baselineOverride?: Record<SessionBucket, number>,
+  gameBreakCandidates?: GameBreakCandidate[],
+): Promise<SessionPlannerInput> {
   const db = getDb();
   const timer = createPlannerTimer();
   const settings = await timer.time('readSettings', () => readSettings(db));
@@ -11987,6 +12013,10 @@ export async function getSessionPlannerInput(
 
   const [
     recentActivity,
+    shadowCandidatesFound,
+    readCheckCandidates,
+    listeningToolCandidates,
+    recentlyMissedTransformationSentenceIds,
     dueItems,
     exploreCandidatesRaw,
     understandCandidatesRaw,
@@ -11994,6 +12024,29 @@ export async function getSessionPlannerInput(
     newCardBacklogCount,
   ] = await Promise.all([
     timer.time('getRecentActivityEvents', () => getRecentActivityEvents(now)),
+    // Quiet mode (settings, per-device): the learner can't speak aloud, so withhold every
+    // shadowing candidate. buildShadowSteps then drafts nothing and allocateTimeAcrossModes routes
+    // the shadowing minutes to the other buckets. Nothing is consumed — the candidates recompute on
+    // the next plan once quiet mode is off.
+    settings.quietMode
+      ? Promise.resolve([] as ShadowCandidate[])
+      : timer.time('findShadowCandidates (incl. activeSentenceIdsForShadowing)', async () =>
+          findShadowCandidates(
+            SHADOW_CANDIDATE_LIMIT + exclude.sentenceIds.size,
+            await activeSentenceIdsForShadowing(5),
+            !legacyPaused,
+          ),
+        ),
+    // The planner drops any sentence it actually drafts a Fresh try for (a full walkthrough already covers it).
+    timer.time('findReadCheckCandidates', () =>
+      findReadCheckCandidates(READ_CHECK_CANDIDATE_LIMIT, exclude.sentenceIds, now),
+    ),
+    timer.time('findListeningToolCandidates', () =>
+      findListeningToolCandidates(LISTENING_TOOL_CANDIDATE_LIMIT, exclude.sentenceIds, now),
+    ),
+    timer.time('getRecentlyMissedSentenceTransformationSentenceIds', () =>
+      getRecentlyMissedSentenceTransformationSentenceIds(),
+    ),
     // Not capped here: the pool is trimmed after the suspended/paused/readiness
     // filters below, or long-overdue paused-drill items crowd out live ones.
     // One scan for both groups (the lists are disjoint), split below: each scan is a
@@ -12079,10 +12132,6 @@ export async function getSessionPlannerInput(
   // retainDueItems/practiceDueItems are ranked/packed together downstream
   // (one shared `review` bucket) — the 'review' tag here is only used for
   // ReviewPriorityInput's informational `mode` field, not for allocation.
-  const recentlyMissedTransformationSentenceIds = await timer.time(
-    'getRecentlyMissedSentenceTransformationSentenceIds',
-    () => getRecentlyMissedSentenceTransformationSentenceIds(),
-  );
   const [retainDue, practiceDue] = await Promise.all([
     timer.time('buildReviewPriorityInputs(retain)', () =>
       buildReviewPriorityInputs(
@@ -12110,17 +12159,9 @@ export async function getSessionPlannerInput(
   // "Pause sentence shadowing" (settings.sentenceShadowingPaused) withholds them the same way, while phrase
   // shadowing builds up its own data; the Shadow page and the reader's Shadowing tool stay available.
   // While sentence shadowing is paused the same candidates are drafted as phrase shadows (mark a span, rate it).
-  const shadowCandidatesRaw = settings.quietMode
-    ? []
-    : (
-        await timer.time('findShadowCandidates (incl. activeSentenceIdsForShadowing)', async () =>
-          findShadowCandidates(
-            SHADOW_CANDIDATE_LIMIT + exclude.sentenceIds.size,
-            await activeSentenceIdsForShadowing(5),
-            !legacyPaused,
-          ),
-        )
-      ).map((candidate) => (settings.sentenceShadowingPaused ? { ...candidate, phrase: true } : candidate));
+  const shadowCandidatesRaw = shadowCandidatesFound.map((candidate) =>
+    settings.sentenceShadowingPaused ? { ...candidate, phrase: true } : candidate,
+  );
 
   const exploreCandidates = exploreCandidatesRaw
     .filter((candidate) => !exclude.bookIds.has(candidate.bookId))
@@ -12128,13 +12169,6 @@ export async function getSessionPlannerInput(
   const understandCandidates = (legacyPaused ? [] : understandCandidatesRaw)
     .filter((candidate) => !exclude.grammarPatternIds.has(candidate.grammarPatternId))
     .slice(0, UNDERSTAND_CANDIDATE_LIMIT);
-  // The planner drops any sentence it actually drafts a Fresh try for (a full walkthrough already covers it).
-  const readCheckCandidates = await timer.time('findReadCheckCandidates', () =>
-    findReadCheckCandidates(READ_CHECK_CANDIDATE_LIMIT, exclude.sentenceIds, now),
-  );
-  const listeningToolCandidates = await timer.time('findListeningToolCandidates', () =>
-    findListeningToolCandidates(LISTENING_TOOL_CANDIDATE_LIMIT, exclude.sentenceIds, now),
-  );
   const shadowCandidates = shadowCandidatesRaw
     .filter((candidate) => !exclude.sentenceIds.has(candidate.sentenceId))
     .slice(0, SHADOW_CANDIDATE_LIMIT);
