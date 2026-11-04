@@ -4838,7 +4838,11 @@ export async function getReviewableVocabularyItemIdsBySentence(
   const map = new Map<string, string[]>();
   if (sentenceIds.length === 0) return map;
   const db = getDb();
-  const links = await db.sentenceVocabulary.where('sentenceId').anyOf(sentenceIds).toArray();
+  // Thousands of point lookups cost far more than one pass over this table (about 1.7k rows).
+  const idSet = sentenceIds.length > 500 ? new Set(sentenceIds) : null;
+  const links = idSet
+    ? (await db.sentenceVocabulary.toArray()).filter((link) => idSet.has(link.sentenceId))
+    : await db.sentenceVocabulary.where('sentenceId').anyOf(sentenceIds).toArray();
   for (const link of links) {
     if (!link.surfaceForm) continue;
     const existing = map.get(link.sentenceId);
@@ -5218,7 +5222,7 @@ export async function getBookVocabularyCoverage(): Promise<Map<string, BookCover
   const db = getDb();
   const [books, bookSentences] = await Promise.all([
     db.books.toArray(),
-    traceStep('coverage: bookSentences.toArray', () => db.bookSentences.toArray(), rowCount),
+    traceStep('coverage: bookSentences.toArray', () => readAllBookSentencesForPass(), rowCount),
   ]);
   const sentenceIdsByBook = new Map<string, string[]>();
   for (const membership of bookSentences) {
@@ -5330,11 +5334,10 @@ export async function getSentenceListeningReadiness(
   const readiness = new Map<string, boolean>();
   if (sentenceIds.length === 0) return readiness;
   const db = getDb();
-  const [settings, audioRows] = await Promise.all([
+  const [settings, audioSentenceIds] = await Promise.all([
     readSettings(db),
-    db.sentenceAudio.where('sentenceId').anyOf(sentenceIds).toArray(),
+    sentenceIdsWithAudioClip(sentenceIds),
   ]);
-  const audioSentenceIds = new Set(audioRows.map((row) => row.sentenceId));
   const links = (
     await db.sentenceVocabulary.where('sentenceId').anyOf(sentenceIds).toArray()
   ).filter((link) => !!link.surfaceForm && audioSentenceIds.has(link.sentenceId));
@@ -11586,9 +11589,9 @@ async function findShadowCandidates(
   if (activeSentenceIds.size === 0) return [];
   const db = getDb();
   const activeIds = [...activeSentenceIds];
-  const audioRows = await traceStep('shadow: sentenceAudio anyOf', () => db.sentenceAudio.where('sentenceId').anyOf(activeIds).toArray(), rowCount);
-  if (audioRows.length === 0) return [];
-  const sentenceIdsWithAudioUnfiltered = [...new Set(audioRows.map((audio) => audio.sentenceId))];
+  const audioSentenceIds = await traceStep('shadow: sentenceAudio ids', () => sentenceIdsWithAudioClip(activeIds), (ids) => ids.size);
+  if (audioSentenceIds.size === 0) return [];
+  const sentenceIdsWithAudioUnfiltered = [...audioSentenceIds];
   const readiness = await traceStep('shadow: getSentenceShadowingReadiness', () => getSentenceShadowingReadiness(sentenceIdsWithAudioUnfiltered));
   const sentenceIdsWithAudio = sentenceIdsWithAudioUnfiltered.filter((id) => readiness.get(id));
   if (sentenceIdsWithAudio.length === 0) return [];
@@ -11757,27 +11760,33 @@ export async function countSentencesSeededSince(activityType: string, sinceIso: 
   return subjects.size;
 }
 
+/** Every book-sentence row, loaded once per planning pass (the planner needs it in two places). */
+function readAllBookSentencesForPass(): Promise<BookSentence[]> {
+  return memoForPlannerPass('bookSentences', () => getDb().bookSentences.toArray());
+}
+
 async function getRecentActivityEvents(now: Date): Promise<RecentActivityEvent[]> {
   const db = getDb();
   const cutoffIso = new Date(now.getTime() - NEGLECT_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
 
   const [recentReviews, recentAttempts, allBookSentences, recentAnalyses, recentSentenceGrammar] =
     await Promise.all([
-      traceStep('recent: reviews', () => db.reviews.where('timestamp').above(cutoffIso).toArray(), rowCount),
-      traceStep('recent: attempts', () => db.attempts.where('createdAt').above(cutoffIso).toArray(), rowCount),
-      traceStep('recent: bookSentences.toArray', () => db.bookSentences.toArray(), rowCount),
-      traceStep('recent: analyses', () => db.analyses.where('updatedAt').above(cutoffIso).toArray(), rowCount),
-      traceStep('recent: sentenceGrammar', () => db.sentenceGrammar.where('updatedAt').above(cutoffIso).toArray(), rowCount),
+      // Index keys only: the timestamps are all this needs, and analysis rows are large.
+      traceStep('recent: reviews', () => db.reviews.where('timestamp').above(cutoffIso).keys(), rowCount),
+      traceStep('recent: attempts', () => db.attempts.where('createdAt').above(cutoffIso).keys(), rowCount),
+      traceStep('recent: bookSentences.toArray', () => readAllBookSentencesForPass(), rowCount),
+      traceStep('recent: analyses', () => db.analyses.where('updatedAt').above(cutoffIso).keys(), rowCount),
+      traceStep('recent: sentenceGrammar', () => db.sentenceGrammar.where('updatedAt').above(cutoffIso).keys(), rowCount),
     ]);
 
   const events: RecentActivityEvent[] = [];
-  for (const review of recentReviews) events.push({ mode: 'review', timestamp: review.timestamp });
-  for (const attempt of recentAttempts) events.push({ mode: 'shadowing', timestamp: attempt.createdAt });
+  for (const timestamp of recentReviews) events.push({ mode: 'review', timestamp: timestamp as string });
+  for (const timestamp of recentAttempts) events.push({ mode: 'shadowing', timestamp: timestamp as string });
   for (const membership of allBookSentences) {
     if (membership.addedAt >= cutoffIso) events.push({ mode: 'glossing', timestamp: membership.addedAt });
   }
-  for (const analysis of recentAnalyses) events.push({ mode: 'grammar', timestamp: analysis.updatedAt });
-  for (const link of recentSentenceGrammar) events.push({ mode: 'grammar', timestamp: link.updatedAt });
+  for (const timestamp of recentAnalyses) events.push({ mode: 'grammar', timestamp: timestamp as string });
+  for (const timestamp of recentSentenceGrammar) events.push({ mode: 'grammar', timestamp: timestamp as string });
   return events;
 }
 
@@ -11871,6 +11880,28 @@ async function traceStep<T>(label: string, work: () => PromiseLike<T>, rowsOf?: 
 
 const rowCount = (value: unknown[]): number => value.length;
 
+/** Whole-table reads shared by the steps of one planning pass (cleared when the pass reports). */
+let plannerPassMemo: Map<string, Promise<unknown>> | null = null;
+
+function memoForPlannerPass<T>(key: string, load: () => Promise<T>): Promise<T> {
+  if (!plannerPassMemo) return load();
+  const cached = plannerPassMemo.get(key);
+  if (cached) return cached as Promise<T>;
+  const pending = load();
+  plannerPassMemo.set(key, pending);
+  return pending;
+}
+
+/**
+ * Which of `sentenceIds` have a recorded clip. Reads only the `sentenceId` index:
+ * `sentenceAudio` rows carry the audio Blob, so `toArray()` would load every clip
+ * just to read an id (seconds on a phone).
+ */
+async function sentenceIdsWithAudioClip(sentenceIds: string[]): Promise<Set<string>> {
+  const keys = await getDb().sentenceAudio.where('sentenceId').anyOf(sentenceIds).keys();
+  return new Set(keys as string[]);
+}
+
 /**
  * Diagnostic: re-runs a few of the planner's slow reads one at a time, once the
  * planner has finished, so a contended pass (many parallel requests) can be told
@@ -11901,6 +11932,7 @@ function createPlannerTimer() {
   const started = performance.now();
   const rows: { step: string; ms: number }[] = [];
   plannerTrace = new Map();
+  plannerPassMemo = new Map();
   return {
     async time<T>(step: string, work: () => Promise<T>): Promise<T> {
       const begin = performance.now();
@@ -11923,6 +11955,7 @@ function createPlannerTimer() {
         )
         .join('\n');
       plannerTrace = null;
+      plannerPassMemo = null;
       const full = trace ? `${text}\n--- sub-steps (overlap with the above) ---\n${trace}` : text;
       lastPlannerTiming = full;
       console.info(`[planner timing] ${full}`);
@@ -11954,8 +11987,7 @@ export async function getSessionPlannerInput(
 
   const [
     recentActivity,
-    retainDueItems,
-    practiceDueItems,
+    dueItems,
     exploreCandidatesRaw,
     understandCandidatesRaw,
     grammarNoticingCandidatesRaw,
@@ -11964,18 +11996,13 @@ export async function getSessionPlannerInput(
     timer.time('getRecentActivityEvents', () => getRecentActivityEvents(now)),
     // Not capped here: the pool is trimmed after the suspended/paused/readiness
     // filters below, or long-overdue paused-drill items crowd out live ones.
-    timer.time('getDueStudyItems(retain)', () =>
-      getDueStudyItems(RETAIN_ACTIVITY_TYPES, {
+    // One scan for both groups (the lists are disjoint), split below: each scan is a
+    // whole-table read, which is slow on a phone.
+    timer.time('getDueStudyItems(retain+practice)', () =>
+      getDueStudyItems([...RETAIN_ACTIVITY_TYPES, ...PRACTICE_ACTIVITY_TYPES], {
         now,
         graduationMinScheduledDays: settings.graduationMinScheduledDays,
         // unlessLegacyPaused drops these anyway; don't read them.
-        excludeSubjectTypes: legacyPaused ? PAUSED_LEGACY_DRILL_SUBJECT_TYPES : undefined,
-      }),
-    ),
-    timer.time('getDueStudyItems(practice)', () =>
-      getDueStudyItems(PRACTICE_ACTIVITY_TYPES, {
-        now,
-        graduationMinScheduledDays: settings.graduationMinScheduledDays,
         excludeSubjectTypes: legacyPaused ? PAUSED_LEGACY_DRILL_SUBJECT_TYPES : undefined,
       }),
     ),
@@ -12030,6 +12057,9 @@ export async function getSessionPlannerInput(
   // "Pause sentence cards" (settings.sentenceCardsPaused): the reader's Read checks replace them.
   const unlessSentenceCardsPaused = (items: StudyItem[]): StudyItem[] =>
     settings.sentenceCardsPaused ? items.filter((item) => !isSentenceCardSubject(item.subjectType)) : items;
+  const retainTypes = new Set<string>(RETAIN_ACTIVITY_TYPES);
+  const retainDueItems = dueItems.filter((item) => retainTypes.has(item.activityType));
+  const practiceDueItems = dueItems.filter((item) => !retainTypes.has(item.activityType));
   const practiceDueItemsForMode = unlessSentenceCardsPaused(
     unlessLegacyPaused(
       settings.quietMode || settings.pitchAccentPaused
