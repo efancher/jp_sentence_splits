@@ -27,6 +27,7 @@ import {
   recordShadowingEncounter,
   saveAttempt,
   setAttemptFavorite,
+  suggestPhraseShadow,
   updateSettings,
 } from '../db/repository';
 import type { Attempt, AttemptRating } from '../domain/types';
@@ -395,6 +396,22 @@ export function ShadowWorkspace({
     return chunks ? segmentIntoMorae(chunks) : [];
   }, [data?.sentence]);
 
+  // A phrase worth shadowing (the weakest word's span, widened), offered as one tap; computed once per clip.
+  const [suggestedPhrase, setSuggestedPhrase] = useState<
+    { startMs: number; endMs: number; text: string; wordLabel: string } | null
+  >(null);
+  const suggestionAudioId = data?.referenceAudio?.id;
+  const suggestionDurationMs = data?.referenceAudio?.durationMs ?? 0;
+  useEffect(() => {
+    setSuggestedPhrase(null);
+    if (!suggestionAudioId || suggestionDurationMs <= 0) return;
+    let cancelled = false;
+    void suggestPhraseShadow({ sentenceId, sentenceAudioId: suggestionAudioId, clipDurationMs: suggestionDurationMs })
+      .then((suggestion) => { if (!cancelled) setSuggestedPhrase(suggestion); })
+      .catch(() => { /* a missing suggestion just hides the offer */ });
+    return () => { cancelled = true; };
+  }, [sentenceId, suggestionAudioId, suggestionDurationMs]);
+
   if (!data?.sentence) return <p className="muted">Loading…</p>;
 
   const { book, sentence, referenceAudio, attempts, analysisSummaries } = data;
@@ -708,6 +725,23 @@ export function ShadowWorkspace({
           onLeadInChange={changeLoopLeadIn}
           onReset={() => setLoopWindow(null)}
         />
+      ) : null}
+      {suggestedPhrase &&
+      !(phraseRange && phraseRange.startMs === suggestedPhrase.startMs && phraseRange.endMs === suggestedPhrase.endMs) ? (
+        <div className="row" style={{ alignItems: 'center', flexWrap: 'wrap' }}>
+          <span className="muted">Suggested phrase (covers {suggestedPhrase.wordLabel}):</span>
+          <strong lang="ja">{suggestedPhrase.text}</strong>
+          <button
+            type="button"
+            onClick={() => {
+              const range = { startMs: suggestedPhrase.startMs, endMs: suggestedPhrase.endMs };
+              setLoopWindow(range);
+              setTargetRange(range);
+            }}
+          >
+            Use this phrase
+          </button>
+        </div>
       ) : null}
       {referenceAudio && phraseRange && isPhraseRange(phraseRange, referenceAudio.durationMs) ? (
         <PhraseShadowRating

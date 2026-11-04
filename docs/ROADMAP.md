@@ -60,9 +60,10 @@ The items below retain unfinished work, optional refinements and future ideas.
   changing any gate; (2) feed it into `findShadowCandidates`/the planner as ordering,
   not a gate: a recent Not yet = phrase pass before the whole sentence, all phrases
   Got it = sentence more eligible, no phrase data = today's behaviour (per the
-  starved-gate lesson); (3) decide whether to turn the pause off; (4) optional
-  shortcut: "Shadow this phrase" from a reader word flagged Sound / didn't know the
-  reading, pre-setting the range; (5) a `/progress` panel and a planner "Phrase
+  starved-gate lesson); (3) decide whether to turn the pause off; (4) the Shadow pane
+  already suggests the weakest word's phrase (2026-11-04); still open: pre-set the range
+  from a reader word flagged Sound / didn't know the reading, and name the phrase in the
+  planner step label; (5) a `/progress` panel and a planner "Phrase
   shadow" step, and revisit the evidence weights (Got it is a small recognition
   success today). `phraseShadowsBySentence` (`src/lib/phraseShadow.ts`) is the
   unused-by-the-planner reader of the data. Apply `20261103000000_phrase_shadow_events.sql`

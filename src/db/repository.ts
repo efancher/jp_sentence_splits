@@ -7,7 +7,9 @@ import { FREQUENCY_WAIT_MS, loadWordFrequency, lookupWordBand } from '../lib/wor
 import { frequencyBandPrior, planWeakWordSentences, READER_KNOWN_STRENGTH, wordStrength } from '../lib/wordStrength';
 import { readCheckReason, sentencesDueForReadCheck } from '../lib/readCheck';
 import {
+  expandToPhrase,
   isPhraseRange,
+  orderLinksByWeakness,
   phraseShadowTargetKey,
   phraseTextFromAlignment,
   wordIdsInPhrase,
@@ -9798,6 +9800,41 @@ export async function logPhraseShadow(input: {
     assessmentSource: 'self',
     quietMode: settings.quietMode ?? false,
   });
+}
+
+/**
+ * A phrase to shadow for this sentence: the aligned span of its weakest-reading word (with a following
+ * particle), widened to a short phrase. Read-only. Null without a current alignment or when none of the
+ * sentence's words can be located in the clip. The learner still chooses: the Shadow pane offers it as one tap.
+ */
+export async function suggestPhraseShadow(input: {
+  sentenceId: string;
+  sentenceAudioId: string;
+  clipDurationMs: number;
+}): Promise<{ startMs: number; endMs: number; text: string; wordLabel: string } | null> {
+  const db = getDb();
+  const [alignment, sentence, links] = await Promise.all([
+    getReferenceAlignment(input.sentenceAudioId),
+    db.sentences.get(input.sentenceId),
+    db.sentenceVocabulary.where('sentenceId').equals(input.sentenceId).toArray(),
+  ]);
+  if (!alignment || !sentence) return null;
+  const candidates = links.filter((link) => link.surfaceForm);
+  if (candidates.length === 0) return null;
+  const { strengthByWord, vocabById } = await loadWordReadingStrengths(READER_STRENGTH_CACHE_MS);
+  for (const link of orderLinksByWeakness(candidates, strengthByWord)) {
+    const spans = isolatedWordSpans(alignment.words, sentence.japanese, link.surfaceForm!);
+    const span = spans?.withParticle ?? spans?.wordOnly;
+    if (!span) continue;
+    const range = expandToPhrase(alignment.words, span, input.clipDurationMs);
+    if (!isPhraseRange(range, input.clipDurationMs)) continue;
+    return {
+      ...range,
+      text: phraseTextFromAlignment(alignment.words, range),
+      wordLabel: vocabById.get(link.vocabularyItemId)?.expression ?? link.surfaceForm!,
+    };
+  }
+  return null;
 }
 
 export async function logGlossDecision(

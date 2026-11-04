@@ -93,3 +93,46 @@ export function phraseShadowsBySentence(
   }
   return out;
 }
+
+/** A suggested phrase is widened from one word's span to about this long, and never past the cap. */
+export const SUGGESTED_PHRASE_MIN_MS = 1000;
+export const SUGGESTED_PHRASE_MAX_MS = 3000;
+
+/**
+ * Widens a single word's span (ms) to a short phrase by taking in neighbouring aligned words,
+ * following word first (the particle and what comes next), then the preceding one, until it is at
+ * least `minMs` long. Never exceeds `maxMs` or the clip. Silence/empty tokens are skipped.
+ */
+export function expandToPhrase(
+  words: readonly Pick<WordAlignment, 'start' | 'end' | 'text'>[],
+  span: { startMs: number; endMs: number },
+  clipDurationMs: number,
+  minMs = SUGGESTED_PHRASE_MIN_MS,
+  maxMs = SUGGESTED_PHRASE_MAX_MS,
+): { startMs: number; endMs: number } {
+  const spoken = words.filter((word) => word.text && !word.text.startsWith('<') && word.end > word.start);
+  const clampEnd = (ms: number) => (clipDurationMs > 0 ? Math.min(clipDurationMs, ms) : ms);
+  let startMs = Math.max(0, span.startMs);
+  let endMs = clampEnd(span.endMs);
+  for (let guard = 0; guard < 8 && endMs - startMs < minMs; guard += 1) {
+    const next = spoken.find((word) => word.start * 1000 >= endMs - 1);
+    const prev = [...spoken].reverse().find((word) => word.end * 1000 <= startMs + 1);
+    if (next && next.end * 1000 - startMs <= maxMs) endMs = clampEnd(next.end * 1000);
+    else if (prev && endMs - prev.start * 1000 <= maxMs) startMs = prev.start * 1000;
+    else break;
+  }
+  return { startMs: Math.round(startMs), endMs: Math.round(endMs) };
+}
+
+/** Links ordered weakest word first (no evidence yet counts as the average), keeping sentence order on ties. */
+export function orderLinksByWeakness<T extends { vocabularyItemId: string }>(
+  links: readonly T[],
+  strengthByWord: ReadonlyMap<string, number>,
+): T[] {
+  const strengths = [...strengthByWord.values()];
+  const middle = strengths.length ? strengths.reduce((a, b) => a + b, 0) / strengths.length : 0;
+  return links
+    .map((link, index) => ({ link, index, strength: strengthByWord.get(link.vocabularyItemId) ?? middle }))
+    .sort((a, b) => a.strength - b.strength || a.index - b.index)
+    .map((entry) => entry.link);
+}

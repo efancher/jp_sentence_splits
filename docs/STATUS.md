@@ -40,7 +40,13 @@ and possible extensions. This snapshot does not certify a live deployment.
   unchanged. The Supabase migration `20261103000000_phrase_shadow_events.sql` adds the
   action, the `close` outcome and the span columns; `npm run test:pg` covers it locally,
   but it is not confirmed applied to production. Follow-up plan under ROADMAP
-  "Phrase shadowing".
+  "Phrase shadowing". 2026-11-04: the span can come from the Loop window sliders as well
+  as Mark start/end, the rating row sits under the sliders and prints the span's aligned
+  words, and the pane offers "Suggested phrase … Use this phrase": the sentence's
+  weakest-reading word (`orderLinksByWeakness`) with its following particle, widened to
+  1–3 s (`suggestPhraseShadow`, needs a current reference alignment). One tap sets both
+  the loop window and the target; the planner step label still names the sentence, not
+  the phrase.
 - Review "Trouble with" chips (Reading, Meaning, Kanji, Sound; prototype,
   2026-10-20): optional, tapped before rating, never choosing the FSRS rating
   or crediting cards. Reading/Meaning/Kanji queue a Fresh try (walked-through
