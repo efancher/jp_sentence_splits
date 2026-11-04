@@ -103,7 +103,13 @@ export function buildChunkPrompt(chunk: WizardTranscriptSeg[], index: number, to
   });
 }
 
-/** Returns an error message when the reply for `chunk` is unusable, else null. */
+/**
+ * Returns an error message when the reply for `chunk` is unusable, else null.
+ * The dropped-connective check is left to the review stage: where Whisper
+ * garbles a clause (a repeated "何回もいいけど"), the assistant rightly corrects
+ * it, the tail never matches, and retrying the same prompt rejected the part
+ * every time and stopped the run.
+ */
 export function validateChunkReply(reply: string, chunk: WizardTranscriptSeg[]): string | null {
   const sections = splitCombinedReply(reply);
   const last = chunk.at(-1);
@@ -115,6 +121,7 @@ export function validateChunkReply(reply: string, chunk: WizardTranscriptSeg[]):
     rows,
     transcript: chunk,
     options: NO_EXTRAS,
+    skipConnectiveCheck: true,
   });
   return warnings[0] ?? null;
 }

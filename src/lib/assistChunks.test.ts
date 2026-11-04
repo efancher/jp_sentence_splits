@@ -35,6 +35,12 @@ describe('validateChunkReply', () => {
     expect(validateChunkReply(full.replace('=== END ===', ''), chunk)).toMatch(/END/);
     expect(validateChunkReply('hello', chunk)).toMatch(/no "\[m:ss\]/);
   });
+
+  it('leaves a possibly dropped connective to the review stage', () => {
+    const chunk = [{ ...seg(0), text: '何回もいいけど' }];
+    const reply = '=== SENTENCES ===\n[0:00] 何回も言ったよ。 || I said it many times.\n=== END ===';
+    expect(validateChunkReply(reply, chunk)).toBeNull();
+  });
 });
 
 describe('mergeChunkReplies', () => {

@@ -405,6 +405,8 @@ export function checkCombinedReply(input: {
   rows: { startMs: number; endMs: number; japanese: string }[];
   transcript: { startMs: number; endMs: number; text?: string }[];
   options?: CombinedPromptOptions;
+  /** Leave out the dropped-connective warning (the assistant run defers it to the review stage). */
+  skipConnectiveCheck?: boolean;
 }): string[] {
   const { reply, sections, rows, transcript } = input;
   const warnings: string[] = [];
@@ -440,7 +442,7 @@ export function checkCombinedReply(input: {
       );
     }
   }
-  const dropped = findDroppedConnectives(transcript, rows);
+  const dropped = input.skipConnectiveCheck ? [] : findDroppedConnectives(transcript, rows);
   if (dropped.length > 0) {
     const shown = dropped.slice(0, 5).map((d) => `${formatMinSec(d.startMs)} …${d.tail}`);
     warnings.push(
