@@ -10561,12 +10561,14 @@ export async function recordGrammarRelationshipObservation(
  */
 async function getRecentlyMissedSentenceTransformationSentenceIds(): Promise<Set<string>> {
   const db = getDb();
-  const items = await db.studyItems
-    .where('activityType')
-    .equals('sentence_transformation')
-    .toArray();
+  const inPass = Boolean(plannerPassMemo);
+  const items = inPass
+    ? (await readAllStudyItemsForPass()).filter((item) => item.activityType === 'sentence_transformation')
+    : await db.studyItems.where('activityType').equals('sentence_transformation').toArray();
   if (items.length === 0) return new Set();
-  const links = await db.sentenceVocabulary.bulkGet(items.map((item) => item.subjectId));
+  const links = inPass
+    ? await readAllSentenceVocabularyForPass()
+    : await db.sentenceVocabulary.bulkGet(items.map((item) => item.subjectId));
   const sentenceIdByLinkId = new Map(
     links.filter((link): link is SentenceVocabulary => Boolean(link)).map((link) => [link.id, link.sentenceId]),
   );
@@ -12205,7 +12207,7 @@ function readAllVocabularyItemsForPass(): Promise<VocabularyItem[]> {
 
 async function reviewsForStudyItems(studyItemIds: string[]): Promise<Review[]> {
   // Each id is its own index lookup (~2 ms on a phone); inside a pass the full table is read once and shared.
-  if (studyItemIds.length <= (plannerPassMemo ? 30 : ANY_OF_SCAN_THRESHOLD)) {
+  if (studyItemIds.length <= (plannerPassMemo ? 3 : ANY_OF_SCAN_THRESHOLD)) {
     return getDb().reviews.where('studyItemId').anyOf(studyItemIds).toArray();
   }
   const wanted = new Set(studyItemIds);
