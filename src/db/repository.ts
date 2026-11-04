@@ -253,7 +253,8 @@ import {
   HOMOPHONE_HUNT_GAME_ID,
   type HomophoneHistoryEntry,
 } from '../lib/homophoneHunt';
-import { earTilesRejection } from '../lib/earTiles';
+import { earTilesRejection, tileToolUnavailableReason } from '../lib/earTiles';
+import { dueListeningTools } from '../lib/listeningTools';
 import {
   buildRemixNounPool,
   buildRemixPuzzle,
@@ -311,6 +312,7 @@ import {
   computeRecentActivityDistribution,
   shadowAttemptSummary,
   type ExploreCandidate,
+  type ListeningToolCandidate,
   type ReadCheckCandidate,
   type GameBreakCandidate,
   type GrammarNoticingCandidate,
@@ -329,6 +331,7 @@ import {
   SHADOWING_MIN_INTRODUCED_RATIO,
   EXPLORE_CANDIDATE_LIMIT,
   EXPLORE_REVISITS_PER_BOOK,
+  LISTENING_TOOL_CANDIDATE_LIMIT,
   READ_CHECK_CANDIDATE_LIMIT,
   WEAK_WORD_REVISIT_MIN_GAP_DAYS,
   isPausedLegacyDrillSubject,
@@ -10840,6 +10843,70 @@ export async function findReadCheckCandidates(
   }));
 }
 
+/**
+ * Sentences due for an Ear tiles or Dictation round in the reader (see `listeningTools.ts`): introduced, in an
+ * active book, with native audio and enough phrases for the tool, not tried by ear recently. Evidence only.
+ */
+export async function findListeningToolCandidates(
+  limit: number,
+  excluded: ReadonlySet<string> = new Set(),
+  now: Date = new Date(),
+): Promise<ListeningToolCandidate[]> {
+  const db = getDb();
+  const audioIds = ((await db.sentenceAudio.orderBy('sentenceId').uniqueKeys()) as string[]).filter((id) => !excluded.has(id));
+  if (audioIds.length === 0) return [];
+  const [introduced, books, suspendedIndex] = await Promise.all([
+    getIntroducedSentenceIds(audioIds),
+    db.books.toArray(),
+    loadSuspendedBookIndex(),
+  ]);
+  const wanted = audioIds.filter((id) => introduced.has(id));
+  if (wanted.length === 0) return [];
+  const activeBooks = new Set(books.filter(isBookInStudyRotation).map((book) => book.id));
+  const memberships = await db.bookSentences.where('sentenceId').anyOf(wanted).toArray();
+  const membershipBySentence = new Map<string, BookSentence>();
+  for (const membership of memberships) {
+    if (!activeBooks.has(membership.bookId)) continue;
+    if (suspendedIndex && membershipIsShelved(membership, suspendedIndex)) continue;
+    if (!membershipBySentence.has(membership.sentenceId)) membershipBySentence.set(membership.sentenceId, membership);
+  }
+  const reachable = wanted.filter((id) => membershipBySentence.has(id));
+  const sentences = (await db.sentences.bulkGet(reachable)).flatMap((sentence) => (sentence ? [sentence] : []));
+  const eligible = sentences.flatMap((sentence) => {
+    const tilesEligible = tileToolUnavailableReason(sentence, 'tiles', true) === null;
+    const dictateEligible = tileToolUnavailableReason(sentence, 'dictate', true) === null;
+    return tilesEligible || dictateEligible ? [{ sentenceId: sentence.id, tilesEligible, dictateEligible }] : [];
+  });
+  if (eligible.length === 0) return [];
+
+  const ids = eligible.map((entry) => entry.sentenceId);
+  const events = await db.sentenceLearningEvents.where('sentenceId').anyOf(ids).toArray();
+  const studyItems = (await db.studyItems.where('subjectId').anyOf(ids).toArray()).filter((item) => item.subjectType === 'sentence');
+  const itemIds = studyItems.map((item) => item.id);
+  const reviews = itemIds.length ? await db.reviews.where('studyItemId').anyOf(itemIds).toArray() : [];
+  const lastReadCheck = new Map<string, { at: number; gotIt: boolean }>();
+  for (const event of events) {
+    if (event.action !== 'gist_check' || !event.outcome) continue;
+    const at = Date.parse(event.timestamp);
+    if (Number.isNaN(at) || at <= (lastReadCheck.get(event.sentenceId)?.at ?? 0)) continue;
+    lastReadCheck.set(event.sentenceId, { at, gotIt: event.outcome === 'got_it' });
+  }
+  const due = dueListeningTools({
+    sentences: eligible,
+    attempts: buildListeningAttempts({ reviews, studyItems, learningEvents: events }),
+    lastReadCheck,
+    now: now.getTime(),
+  }).slice(0, limit);
+  const byId = new Map(sentences.map((sentence) => [sentence.id, sentence]));
+  return due.map((entry) => ({
+    bookId: membershipBySentence.get(entry.sentenceId)!.bookId,
+    sentenceId: entry.sentenceId,
+    preview: byId.get(entry.sentenceId)?.japanese.slice(0, 24) ?? '',
+    reason: entry.reason,
+    tool: entry.tool,
+  }));
+}
+
 /** Explore candidates: books with sentences not yet started, most-recently-opened first ("continue where you left off" reusing Book.lastOpenedAt, the same signal BookDetailPage's touchBookOpened already maintains). */
 async function findExploreCandidates(
   limit: number,
@@ -11912,15 +11979,18 @@ export async function getSessionPlannerInput(
   // next plan once quiet mode is off.
   // "Pause sentence shadowing" (settings.sentenceShadowingPaused) withholds them the same way, while phrase
   // shadowing builds up its own data; the Shadow page and the reader's Shadowing tool stay available.
-  const shadowCandidatesRaw = settings.quietMode || settings.sentenceShadowingPaused
+  // While sentence shadowing is paused the same candidates are drafted as phrase shadows (mark a span, rate it).
+  const shadowCandidatesRaw = settings.quietMode
     ? []
-    : await timer.time('findShadowCandidates (incl. activeSentenceIdsForShadowing)', async () =>
-        findShadowCandidates(
-          SHADOW_CANDIDATE_LIMIT + exclude.sentenceIds.size,
-          await activeSentenceIdsForShadowing(5),
-          !legacyPaused,
-        ),
-      );
+    : (
+        await timer.time('findShadowCandidates (incl. activeSentenceIdsForShadowing)', async () =>
+          findShadowCandidates(
+            SHADOW_CANDIDATE_LIMIT + exclude.sentenceIds.size,
+            await activeSentenceIdsForShadowing(5),
+            !legacyPaused,
+          ),
+        )
+      ).map((candidate) => (settings.sentenceShadowingPaused ? { ...candidate, phrase: true } : candidate));
 
   const exploreCandidates = exploreCandidatesRaw
     .filter((candidate) => !exclude.bookIds.has(candidate.bookId))
@@ -11931,6 +12001,9 @@ export async function getSessionPlannerInput(
   // The planner drops any sentence it actually drafts a Fresh try for (a full walkthrough already covers it).
   const readCheckCandidates = await timer.time('findReadCheckCandidates', () =>
     findReadCheckCandidates(READ_CHECK_CANDIDATE_LIMIT, exclude.sentenceIds, now),
+  );
+  const listeningToolCandidates = await timer.time('findListeningToolCandidates', () =>
+    findListeningToolCandidates(LISTENING_TOOL_CANDIDATE_LIMIT, exclude.sentenceIds, now),
   );
   const shadowCandidates = shadowCandidatesRaw
     .filter((candidate) => !exclude.sentenceIds.has(candidate.sentenceId))
@@ -11948,6 +12021,7 @@ export async function getSessionPlannerInput(
     practiceDue,
     exploreCandidates,
     readCheckCandidates,
+    listeningToolCandidates,
     understandCandidates,
     grammarNoticingCandidates,
     shadowCandidates,

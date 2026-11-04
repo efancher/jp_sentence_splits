@@ -339,6 +339,24 @@ describe('reader study tools', () => {
     expect(screen.queryByRole('region', { name: 'Sentence walkthrough' })).not.toBeInTheDocument();
   });
 
+  it.each([
+    ['tiles', 'Ear tiles'],
+    ['dictate', 'Dictation'],
+  ])('opens %s, not the walkthrough, from a planner step', async (route, groupName) => {
+    Element.prototype.scrollIntoView = vi.fn();
+    render(
+      withAppProviders(
+        <MemoryRouter initialEntries={[`/books/book-1/${route}/sent-1`]}>
+          <Routes>
+            <Route path={`books/:bookId/${route}/:sentenceId`} element={<ReaderPage />} />
+          </Routes>
+        </MemoryRouter>,
+      ),
+    );
+    expect(await screen.findByRole('group', { name: groupName })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Sentence walkthrough' })).not.toBeInTheDocument();
+  });
+
   it('lets the learner tap a word and say whether they knew its reading and meaning, as evidence only', async () => {
     const user = userEvent.setup();
     renderReader();

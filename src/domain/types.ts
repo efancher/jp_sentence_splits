@@ -1719,6 +1719,10 @@ export interface PlannerSessionStep {
   wordCheck?: boolean;
   /** `sentence_learning` only: a Read check (`/books/:bookId/recall/:sentenceId`) — read the sentence unaided in the reader, then judge it — not a walkthrough. Sits in the `review` bucket. */
   readCheck?: boolean;
+  /** `sentence_learning` only: an Ear tiles or Dictation round in the reader (`/books/:bookId/tiles|dictate/:sentenceId`), not a walkthrough. Sits in the `review` bucket. */
+  readerTool?: 'tiles' | 'dictate';
+  /** `shadow` only: a phrase shadow (mark a span, then rate it), drafted while whole-sentence shadowing is paused. Opens the same reader path. */
+  phrase?: boolean;
 }
 
 /**

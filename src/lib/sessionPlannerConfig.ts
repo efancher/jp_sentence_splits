@@ -171,6 +171,14 @@ export const READ_CHECK_STEP_MINUTES = 1;
 export const READ_CHECK_CANDIDATE_LIMIT = 30;
 
 /**
+ * Ear tiles / Dictation steps in the reader (the replacement for the audio review cards, see
+ * src/lib/listeningTools.ts): at most this many per plan, drawn from the `review` bucket after the Read checks.
+ */
+export const LISTENING_TOOL_STEPS_PER_PLAN = 3;
+export const LISTENING_TOOL_STEP_MINUTES = 2;
+export const LISTENING_TOOL_CANDIDATE_LIMIT = 12;
+
+/**
  * Minimum share of the glossing bucket's minutes that vocabulary
  * confirmations (`vocabulary_review`) get first claim on, whenever any
  * not-yet-confirmed sentence is a candidate (user request, 2026-08-29).

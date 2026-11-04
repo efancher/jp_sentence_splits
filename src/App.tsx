@@ -263,6 +263,8 @@ export default function App() {
             <Route path="books/:bookId/check/:sentenceId" element={<ReaderPage />} />
             <Route path="books/:bookId/recall/:sentenceId" element={<ReaderPage />} />
             <Route path="books/:bookId/speak/:sentenceId" element={<ReaderPage />} />
+            <Route path="books/:bookId/tiles/:sentenceId" element={<ReaderPage />} />
+            <Route path="books/:bookId/dictate/:sentenceId" element={<ReaderPage />} />
             <Route
               path="books/:bookId/resegment"
               element={<ResegmentSourcePage />}

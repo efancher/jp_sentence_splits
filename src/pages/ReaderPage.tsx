@@ -98,6 +98,9 @@ export function ReaderPage() {
   const isWordCheckRoute = pathname.includes('/check/');
   const isReadCheckRoute = pathname.includes('/recall/');
   const isShadowRoute = pathname.includes('/speak/');
+  // /tiles/:sentenceId and /dictate/:sentenceId (planner Ear tiles / Dictation steps) open that tool on the sentence.
+  const isTilesRoute = pathname.includes('/tiles/');
+  const isDictateRoute = pathname.includes('/dictate/');
   // /books/:bookId/learn/:sentenceId (planner lesson step) shows the sentence's own chapter.
   const lessonChapterId = useLiveQuery(
     async () =>
@@ -328,10 +331,13 @@ export function ReaderPage() {
     if (isShadowRoute) setReaderTool({ sentenceId: lessonSentenceId, kind: 'shadow', visitId: createId('visit') });
     else if (isReadCheckRoute) setReaderTool({ sentenceId: lessonSentenceId, kind: 'recall', visitId: createId('visit'), revealed: false });
     else if (isWordCheckRoute) setReaderTool({ sentenceId: lessonSentenceId, kind: 'meaning', visitId: createId('visit') });
+    else if (isTilesRoute || isDictateRoute) toggleReaderTool(data.rows[index]!.sentence, isTilesRoute ? 'tiles' : 'dictate');
     else setWalkthroughId(lessonSentenceId);
     setSelectedId(lessonSentenceId);
     setTimeout(() => rowRefs.current[index]?.scrollIntoView({ block: 'center' }), 0);
-  }, [lessonSentenceId, lessonChapterId, data, isWordCheckRoute, isReadCheckRoute, isShadowRoute]);
+    // The opener runs once per sentence (openedLessonRef), so the toggleReaderTool closure it captures is current enough.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lessonSentenceId, lessonChapterId, data, isWordCheckRoute, isReadCheckRoute, isShadowRoute, isTilesRoute, isDictateRoute]);
 
   const focus = useLiveQuery(
     () => getEpisodeFocus(bookId, chapterId).catch(() => null),

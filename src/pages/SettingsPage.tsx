@@ -444,10 +444,10 @@ export function SettingsPage() {
           Pause sentence shadowing in the daily plan (phrase shadowing only)
         </label>
         <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
-          Stops the planner drafting whole-sentence shadowing steps while you
-          try phrase shadowing (mark a span on the Shadow page, then rate it).
-          The Shadow page and the reader's Shadowing tool still work. Nothing
-          is deleted; turn it off to get the steps back.
+          Replaces the planner's whole-sentence shadowing steps with "Shadow a
+          phrase" steps (mark a span, shadow it, then rate it). The Shadow
+          page and the reader's Shadowing tool still work. Nothing is
+          deleted; turn it off to get the whole-sentence steps back.
         </p>
         <label className="row">
           <input

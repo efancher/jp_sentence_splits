@@ -11,6 +11,8 @@ import {
   BASELINE_SESSION_ALLOCATION,
   EXPLORE_STEP_MINUTES,
   WORD_CHECK_STEPS_PER_PLAN,
+  LISTENING_TOOL_STEPS_PER_PLAN,
+  LISTENING_TOOL_STEP_MINUTES,
   READ_CHECK_STEPS_PER_PLAN,
   READ_CHECK_STEP_MINUTES,
   GAME_BREAK_INTERVAL_MINUTES,
@@ -381,6 +383,15 @@ export interface ReadCheckCandidate {
   waiting: number;
 }
 
+/** A sentence due for an Ear tiles or Dictation round in the reader (see src/lib/listeningTools.ts). */
+export interface ListeningToolCandidate {
+  bookId: string;
+  sentenceId: string;
+  preview: string;
+  reason: string;
+  tool: 'tiles' | 'dictate';
+}
+
 export interface ExploreCandidate {
   bookId: string;
   label: string;
@@ -414,6 +425,8 @@ export interface ShadowCandidate {
   bookId?: string;
   label: string;
   reason: string;
+  /** Drafted as a phrase shadow (mark a span and rate it) because whole-sentence shadowing is paused. */
+  phrase?: boolean;
 }
 
 /**
@@ -457,6 +470,8 @@ export interface SessionPlannerInput {
   exploreCandidates: ExploreCandidate[];
   /** Sentences due for a Read check, most urgent first. Drafted into the `review` bucket (sentence cards are replaced by these). */
   readCheckCandidates?: ReadCheckCandidate[];
+  /** Sentences due for an Ear tiles or Dictation round in the reader, most urgent first. Drafted into the `review` bucket after the Read checks. */
+  listeningToolCandidates?: ListeningToolCandidate[];
   /** Sentence-first planning (settings.sentenceFirstPlanning): explore sentences become `sentence_learning` lessons with no vocabulary gate or reserve. */
   sentenceFirst?: boolean;
   understandCandidates: UnderstandCandidate[];
@@ -519,6 +534,10 @@ export interface PlannerStepDraft {
   wordCheck?: boolean;
   /** A Read check in the reader (see PlannerSessionStep.readCheck), not a walkthrough. */
   readCheck?: boolean;
+  /** An Ear tiles or Dictation round in the reader (see PlannerSessionStep.readerTool). */
+  readerTool?: 'tiles' | 'dictate';
+  /** A phrase shadow (see PlannerSessionStep.phrase). */
+  phrase?: boolean;
 }
 
 export interface RecommendedSession {
@@ -653,6 +672,30 @@ function buildReadCheckSteps(candidates: readonly ReadCheckCandidate[], budgetMi
       readCheck: true,
     });
     remaining -= READ_CHECK_STEP_MINUTES;
+  }
+  return steps;
+}
+
+/** Ear tiles / Dictation steps for the sentences due, within the review budget left after the Read checks. */
+function buildListeningToolSteps(candidates: readonly ListeningToolCandidate[], budgetMinutes: number): PlannerStepDraft[] {
+  const steps: PlannerStepDraft[] = [];
+  let remaining = budgetMinutes;
+  for (const candidate of candidates.slice(0, LISTENING_TOOL_STEPS_PER_PLAN)) {
+    if (LISTENING_TOOL_STEP_MINUTES > remaining) break;
+    steps.push({
+      id: draftStepId(),
+      bucket: 'review',
+      activityType: SYNTHETIC_ACTIVITY_TYPES.sentenceLearning,
+      targetKind: 'sentence_learning',
+      bookId: candidate.bookId,
+      sentenceId: candidate.sentenceId,
+      label: `${candidate.tool === 'tiles' ? 'Ear tiles' : 'Dictation'}: ${candidate.preview}`,
+      estimatedMinutes: LISTENING_TOOL_STEP_MINUTES,
+      reason: candidate.reason,
+      status: 'pending',
+      readerTool: candidate.tool,
+    });
+    remaining -= LISTENING_TOOL_STEP_MINUTES;
   }
   return steps;
 }
@@ -971,10 +1014,11 @@ function buildShadowSteps(
       targetKind: 'shadow',
       bookId: candidate.bookId,
       sentenceId: candidate.sentenceId,
-      label: `Shadow: ${candidate.label}`,
+      label: candidate.phrase ? `Shadow a phrase: ${candidate.label}` : `Shadow: ${candidate.label}`,
       estimatedMinutes: perItemMinutes,
-      reason: candidate.reason,
+      reason: candidate.phrase ? `${candidate.reason} — mark a phrase, shadow it, then rate it` : candidate.reason,
       status: 'pending',
+      ...(candidate.phrase ? { phrase: true } : {}),
     });
     remaining -= perItemMinutes;
   }
@@ -1157,6 +1201,7 @@ export function sessionStepTargetPath(step: PlannerSessionStep): string | null {
       if (!step.bookId || !step.sentenceId) return null;
       // A Word check opens the reader with that sentence's word check ready; query-free like every step path.
       if (step.readCheck) return `/books/${step.bookId}/recall/${step.sentenceId}`;
+      if (step.readerTool) return `/books/${step.bookId}/${step.readerTool}/${step.sentenceId}`;
       return step.wordCheck
         ? `/books/${step.bookId}/check/${step.sentenceId}`
         : `/books/${step.bookId}/learn/${step.sentenceId}`;
@@ -1191,7 +1236,9 @@ export function buildRecommendedSession(input: SessionPlannerInput): Recommended
   const newCardMinutes = newCardSlots * MODE_ACTIVITY_ESTIMATE_MINUTES.retain;
   const readCheckMinutes =
     Math.min(READ_CHECK_STEPS_PER_PLAN, input.readCheckCandidates?.length ?? 0) * READ_CHECK_STEP_MINUTES;
-  const reviewCeiling = reviewBatchCostMinutes(rankedReview, reviewLimit) + newCardMinutes + readCheckMinutes;
+  const listeningToolMinutes =
+    Math.min(LISTENING_TOOL_STEPS_PER_PLAN, input.listeningToolCandidates?.length ?? 0) * LISTENING_TOOL_STEP_MINUTES;
+  const reviewCeiling = reviewBatchCostMinutes(rankedReview, reviewLimit) + newCardMinutes + readCheckMinutes + listeningToolMinutes;
 
   // Every bucket — not just review — is clamped to what its candidate list
   // can actually spend. Without this, minutes freed by a capped bucket get
@@ -1230,7 +1277,12 @@ export function buildRecommendedSession(input: SessionPlannerInput): Recommended
     (input.readCheckCandidates ?? []).filter((candidate) => !walkedAgainIds.has(candidate.sentenceId)),
     allocation.review - reviewBatchSpent,
   );
-  const reviewSteps = [...reviewBatchSteps, ...readCheckSteps];
+  const readCheckSpent = readCheckSteps.reduce((sum, step) => sum + step.estimatedMinutes, 0);
+  const listeningToolSteps = buildListeningToolSteps(
+    (input.listeningToolCandidates ?? []).filter((candidate) => !walkedAgainIds.has(candidate.sentenceId)),
+    allocation.review - reviewBatchSpent - readCheckSpent,
+  );
+  const reviewSteps = [...reviewBatchSteps, ...readCheckSteps, ...listeningToolSteps];
   // The grammar bucket runs two passes over one shared budget: corpus-flagged
   // patterns "worth learning now" first (the corpus has already told the
   // learner they recur), then "notice the grammar in this worked-through

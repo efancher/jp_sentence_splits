@@ -174,18 +174,22 @@ describe('logPhraseShadow and the shadowing pause', () => {
     expect(await getDb().attempts.count()).toBe(0);
   });
 
-  it('pausing sentence shadowing drops the planner shadow candidates only', async () => {
+  it('pausing sentence shadowing turns the planner shadow candidates into phrase shadows', async () => {
     await updateSettings({ sentenceLedFlow: false });
     const book = await createBook({ title: 'Pause' });
     const { sentence } = await shadowReadySentence(book, '今日は雨です。');
     const before = await getSessionPlannerInput(60);
     expect(before.shadowCandidates.map((c) => c.sentenceId)).toContain(sentence.id);
+    expect(before.shadowCandidates.some((c) => c.phrase)).toBe(false);
 
     await updateSettings({ sentenceShadowingPaused: true });
     const during = await getSessionPlannerInput(60);
-    expect(during.shadowCandidates).toEqual([]);
+    expect(during.shadowCandidates.map((c) => c.sentenceId)).toContain(sentence.id);
+    expect(during.shadowCandidates.every((c) => c.phrase === true)).toBe(true);
 
     await updateSettings({ sentenceShadowingPaused: false });
-    expect((await getSessionPlannerInput(60)).shadowCandidates.map((c) => c.sentenceId)).toContain(sentence.id);
+    const after = await getSessionPlannerInput(60);
+    expect(after.shadowCandidates.map((c) => c.sentenceId)).toContain(sentence.id);
+    expect(after.shadowCandidates.some((c) => c.phrase)).toBe(false);
   });
 });
