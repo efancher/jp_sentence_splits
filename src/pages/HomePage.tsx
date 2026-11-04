@@ -9,6 +9,7 @@ import {
   computeLearningBalance,
   deleteTodayPlannerSession,
   explainWeakWordRevisits,
+  getLastPlannerTiming,
   getTodayPlannerSession,
   updateSettings,
 } from '../db/repository';
@@ -114,6 +115,8 @@ function WeakWordRevisitExplainer() {
 export function HomePage() {
   const navigate = useNavigate();
   const [addingMinutes, setAddingMinutes] = useState<number | null>(null);
+  // Temporary diagnostic: per-step planner timings, shown on-screen because a phone has no console.
+  const [plannerTiming, setPlannerTiming] = useState('');
   const [confirmingClear, setConfirmingClear] = useState(false);
   // Open by default (2026-08-27 follow-up) — hiding it behind a click meant
   // the split was easy to forget to adjust before starting/topping up.
@@ -139,6 +142,7 @@ export function HomePage() {
 
   async function handleAdd(minutes: number) {
     setAddingMinutes(minutes);
+    const tapped = performance.now();
     try {
       const now = new Date();
       // Game breaks are off for now (2026-10-21): omitting the candidates keeps
@@ -146,6 +150,7 @@ export function HomePage() {
       // Re-enable by passing `await loadGameBreakCandidates(now)` (src/games/gameBreaks.ts).
       await addMinutesToTodaySession(minutes, now, customSplit ?? undefined);
       if (customSplit) await updateSettings({ sessionAllocation: customSplit });
+      setPlannerTiming(`Tap to done ${Math.round(performance.now() - tapped)} ms\n${getLastPlannerTiming()}`);
     } finally {
       setAddingMinutes(null);
     }
@@ -343,6 +348,11 @@ export function HomePage() {
             </button>
           ))}
         </div>
+        {plannerTiming ? (
+          <pre className="muted" style={{ margin: 0, fontSize: '0.75rem', whiteSpace: 'pre-wrap' }}>
+            {plannerTiming}
+          </pre>
+        ) : null}
       </section>
 
       <DailyPracticePanel />

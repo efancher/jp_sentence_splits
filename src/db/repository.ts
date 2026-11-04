@@ -11717,6 +11717,13 @@ async function filterReadyGrammarDueItems(
  * be traced to the step responsible. Steps that run in parallel overlap, so
  * their durations don't sum to the total.
  */
+let lastPlannerTiming = '';
+
+/** The most recent `[planner timing]` report, for showing on devices without a console (Home page). */
+export function getLastPlannerTiming(): string {
+  return lastPlannerTiming;
+}
+
 function createPlannerTimer() {
   const started = performance.now();
   const rows: { step: string; ms: number }[] = [];
@@ -11731,10 +11738,11 @@ function createPlannerTimer() {
     },
     report() {
       const total = Math.round(performance.now() - started);
-      console.info(
-        `[planner timing] getSessionPlannerInput ${total} ms`,
-        '\n' + [...rows].sort((a, b) => b.ms - a.ms).map((row) => `${String(row.ms).padStart(6)} ms  ${row.step}`).join('\n'),
-      );
+      const text =
+        `getSessionPlannerInput ${total} ms\n` +
+        [...rows].sort((a, b) => b.ms - a.ms).map((row) => `${String(row.ms).padStart(6)} ms  ${row.step}`).join('\n');
+      lastPlannerTiming = text;
+      console.info(`[planner timing] ${text}`);
     },
   };
 }
