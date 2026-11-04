@@ -4799,13 +4799,18 @@ export async function getDueStudyItems(
   const nowIsoValue = (options.now ?? new Date()).toISOString();
   const subjectIdSet = options.subjectIds ? new Set(options.subjectIds) : null;
   const activityTypeSet = new Set<string>(activityTypes);
-  const candidates = options.excludeSubjectTypes?.length
-    ? await db.studyItems
-        .where('subjectType')
-        .noneOf([...options.excludeSubjectTypes])
-        .and((item) => activityTypeSet.has(item.activityType))
-        .toArray()
-    : await db.studyItems.where('activityType').anyOf(activityTypes).toArray();
+  const candidates = await traceStep(
+    'getDueStudyItems read',
+    () =>
+      options.excludeSubjectTypes?.length
+        ? db.studyItems
+            .where('subjectType')
+            .noneOf([...options.excludeSubjectTypes])
+            .and((item) => activityTypeSet.has(item.activityType))
+            .toArray()
+        : db.studyItems.where('activityType').anyOf(activityTypes).toArray(),
+    rowCount,
+  );
   const isUngraduatedState = (item: StudyItem) =>
     item.fsrsState.state === 'new' || item.fsrsState.state === 'learning';
   const due = candidates
@@ -5211,7 +5216,7 @@ export async function getBookVocabularyCoverage(): Promise<Map<string, BookCover
   const db = getDb();
   const [books, bookSentences] = await Promise.all([
     db.books.toArray(),
-    db.bookSentences.toArray(),
+    traceStep('coverage: bookSentences.toArray', () => db.bookSentences.toArray(), rowCount),
   ]);
   const sentenceIdsByBook = new Map<string, string[]>();
   for (const membership of bookSentences) {
@@ -5220,13 +5225,14 @@ export async function getBookVocabularyCoverage(): Promise<Map<string, BookCover
     else sentenceIdsByBook.set(membership.bookId, [membership.sentenceId]);
   }
   const allSentenceIds = [...new Set(bookSentences.map((m) => m.sentenceId))];
-  const vocabularyItemIdsBySentence =
-    await getReviewableVocabularyItemIdsBySentence(allSentenceIds);
+  const vocabularyItemIdsBySentence = await traceStep('coverage: getReviewableVocabularyItemIdsBySentence', () =>
+    getReviewableVocabularyItemIdsBySentence(allSentenceIds),
+  );
   const allVocabularyItemIds = [
     ...new Set([...vocabularyItemIdsBySentence.values()].flat()),
   ];
-  const proficientVocabularyItemIds = await getProficientVocabularyItemIds(
-    allVocabularyItemIds,
+  const proficientVocabularyItemIds = await traceStep('coverage: getProficientVocabularyItemIds', () =>
+    getProficientVocabularyItemIds(allVocabularyItemIds),
   );
   const coverage = buildBookCoverage(
     books.map((book) => ({
@@ -10916,7 +10922,7 @@ async function findExploreCandidates(
   const db = getDb();
   const [allBooks, coverageByBookId, suspendedIndex] = await Promise.all([
     db.books.toArray(),
-    getBookVocabularyCoverage(),
+    traceStep('explore: getBookVocabularyCoverage', () => getBookVocabularyCoverage()),
     loadSuspendedBookIndex(),
   ]);
   const notShelved = (item: { bookId: string; chapterId?: string }) =>
@@ -10931,10 +10937,10 @@ async function findExploreCandidates(
   /** Sequential mode: learnt sentences in the episode each book would offer first. */
   const leadEpisodeLearnt = new Map<string, number>();
   for (const book of books) {
-    const memberships = await db.bookSentences.where('bookId').equals(book.id).toArray();
+    const memberships = await traceStep('explore: book memberships', () => db.bookSentences.where('bookId').equals(book.id).toArray(), rowCount);
     // Sentence-first: a lesson never changes BookSentence.status, so a
     // sentence is "done" once its walkthrough was completed, not once it's marked complete.
-    const bookEvents = sentenceFirst ? await listSentenceLearningEvents(book.id) : [];
+    const bookEvents = sentenceFirst ? await traceStep('explore: book events', () => listSentenceLearningEvents(book.id), rowCount) : [];
     const walked = sentenceFirst
       ? new Set(
           bookEvents
@@ -10943,7 +10949,7 @@ async function findExploreCandidates(
         )
       : undefined;
     const parkedGlossIds = sentenceFirst
-      ? parkedSentenceIds(await db.glossDecisions.where('bookId').equals(book.id).toArray())
+      ? parkedSentenceIds(await traceStep('explore: glossDecisions', () => db.glossDecisions.where('bookId').equals(book.id).toArray(), rowCount))
       : [];
     // Review-card requests jump the spacing queue (walked-through sentences only).
     const requestedIds = walked ? pendingFreshTryRequestIds(freshTryRequests, bookEvents).filter((id) => walked.has(id)) : [];
@@ -10985,7 +10991,7 @@ async function findExploreCandidates(
     // Order only: nothing is added, gated or skipped, and sequential mode keeps
     // its strict episode order.
     const unstarted =
-      sentenceFirst && !sequential ? await floatGrowthEligibleFirst(inReadingOrder) : inReadingOrder;
+      sentenceFirst && !sequential ? await traceStep('explore: floatGrowthEligibleFirst', () => floatGrowthEligibleFirst(inReadingOrder)) : inReadingOrder;
     // Shelved (suspended-episode) sentences are dropped *before* the cap, or the
     // oldest due ones — often in shelved episodes — would eat the cap and then vanish.
     const shelvedIds = new Set(memberships.filter((item) => !notShelved(item)).map((item) => item.sentenceId));
@@ -10994,10 +11000,8 @@ async function findExploreCandidates(
     // Walked-through sentences holding words that haven't stuck: the lowest-priority revisit source,
     // so they only fill whatever room the learner's requests, parked checks and spaced tries leave.
     const weakWordRevisits = sentenceFirst
-      ? await findWeakWordRevisits(
-          bookEvents,
-          new Set([...requestedIds, ...shelvedIds]),
-          automaticRevisitCap,
+      ? await traceStep('explore: findWeakWordRevisits', () =>
+          findWeakWordRevisits(bookEvents, new Set([...requestedIds, ...shelvedIds]), automaticRevisitCap),
         )
       : new Map<string, string[]>();
     const revisitIds = sentenceFirst
@@ -11020,10 +11024,12 @@ async function findExploreCandidates(
     if (unstarted.length === 0 && revisitMemberships.length === 0) continue;
     const revisitSet = new Set(revisitMemberships.map((item) => item.sentenceId));
     const preview = [...revisitMemberships, ...unstarted].slice(0, EXPLORE_SENTENCE_PREVIEW_LIMIT);
-    const [sentenceRows, analysisRows] = await Promise.all([
-      db.sentences.bulkGet(preview.map((item) => item.sentenceId)),
-      db.analyses.bulkGet(preview.map((item) => item.sentenceId)),
-    ]);
+    const [sentenceRows, analysisRows] = await traceStep('explore: preview sentences+analyses', () =>
+      Promise.all([
+        db.sentences.bulkGet(preview.map((item) => item.sentenceId)),
+        db.analyses.bulkGet(preview.map((item) => item.sentenceId)),
+      ]),
+    );
     candidates.push({
       bookId: book.id,
       label: book.title,
@@ -11078,8 +11084,10 @@ async function findExploreCandidates(
     })
     .slice(0, limit)
     .map((entry) => entry.candidate);
-  const readiness = await getSentenceReadingIntroducedReadiness(
-    limited.flatMap((candidate) => candidate.sentences.map((sentence) => sentence.sentenceId)),
+  const readiness = await traceStep('explore: getSentenceReadingIntroducedReadiness', () =>
+    getSentenceReadingIntroducedReadiness(
+      limited.flatMap((candidate) => candidate.sentences.map((sentence) => sentence.sentenceId)),
+    ),
   );
   for (const candidate of limited) {
     for (const sentence of candidate.sentences) {
@@ -11214,7 +11222,7 @@ async function activeSentenceIdsForShadowing(bookLimit: number): Promise<Set<str
     .sort((a, b) => (b.lastOpenedAt ?? b.updatedAt).localeCompare(a.lastOpenedAt ?? a.updatedAt))
     .slice(0, bookLimit);
   const walkedThrough = new Set(
-    (await db.sentenceLearningEvents.toArray())
+    (await traceStep('shadow: sentenceLearningEvents.toArray', () => db.sentenceLearningEvents.toArray(), rowCount))
       .filter((event) => event.action === 'walkthrough_completed')
       .map((event) => event.sentenceId),
   );
@@ -11296,7 +11304,7 @@ async function loadWordReadingStrengths(maxAgeMs = 0): Promise<WordReadingStreng
   const timer = stepTimer('wordStrengths');
   const value = (async () => {
     try {
-      return await computeWordReadingStrengths(timer);
+      return await traceStep('loadWordReadingStrengths compute', () => computeWordReadingStrengths(timer));
     } finally {
       timer.done();
     }
@@ -11541,10 +11549,10 @@ async function findShadowCandidates(
   if (activeSentenceIds.size === 0) return [];
   const db = getDb();
   const activeIds = [...activeSentenceIds];
-  const audioRows = await db.sentenceAudio.where('sentenceId').anyOf(activeIds).toArray();
+  const audioRows = await traceStep('shadow: sentenceAudio anyOf', () => db.sentenceAudio.where('sentenceId').anyOf(activeIds).toArray(), rowCount);
   if (audioRows.length === 0) return [];
   const sentenceIdsWithAudioUnfiltered = [...new Set(audioRows.map((audio) => audio.sentenceId))];
-  const readiness = await getSentenceShadowingReadiness(sentenceIdsWithAudioUnfiltered);
+  const readiness = await traceStep('shadow: getSentenceShadowingReadiness', () => getSentenceShadowingReadiness(sentenceIdsWithAudioUnfiltered));
   const sentenceIdsWithAudio = sentenceIdsWithAudioUnfiltered.filter((id) => readiness.get(id));
   if (sentenceIdsWithAudio.length === 0) return [];
 
@@ -11718,11 +11726,11 @@ async function getRecentActivityEvents(now: Date): Promise<RecentActivityEvent[]
 
   const [recentReviews, recentAttempts, allBookSentences, recentAnalyses, recentSentenceGrammar] =
     await Promise.all([
-      db.reviews.where('timestamp').above(cutoffIso).toArray(),
-      db.attempts.where('createdAt').above(cutoffIso).toArray(),
-      db.bookSentences.toArray(),
-      db.analyses.where('updatedAt').above(cutoffIso).toArray(),
-      db.sentenceGrammar.where('updatedAt').above(cutoffIso).toArray(),
+      traceStep('recent: reviews', () => db.reviews.where('timestamp').above(cutoffIso).toArray(), rowCount),
+      traceStep('recent: attempts', () => db.attempts.where('createdAt').above(cutoffIso).toArray(), rowCount),
+      traceStep('recent: bookSentences.toArray', () => db.bookSentences.toArray(), rowCount),
+      traceStep('recent: analyses', () => db.analyses.where('updatedAt').above(cutoffIso).toArray(), rowCount),
+      traceStep('recent: sentenceGrammar', () => db.sentenceGrammar.where('updatedAt').above(cutoffIso).toArray(), rowCount),
     ]);
 
   const events: RecentActivityEvent[] = [];
@@ -11807,9 +11815,29 @@ export function getLastPlannerTiming(): string {
   return lastPlannerTiming;
 }
 
+/** Sub-step trace for the planning pass in flight (summed per label), so a slow top-level step can be broken down. */
+let plannerTrace: Map<string, { ms: number; count: number; rows: number }> | null = null;
+
+/** Times `work` into the active planner trace (no-op otherwise); `rowsOf` records how many rows it returned. */
+async function traceStep<T>(label: string, work: () => PromiseLike<T>, rowsOf?: (value: T) => number): Promise<T> {
+  const begin = performance.now();
+  const value = await work();
+  if (plannerTrace) {
+    const entry = plannerTrace.get(label) ?? { ms: 0, count: 0, rows: 0 };
+    entry.ms += performance.now() - begin;
+    entry.count += 1;
+    entry.rows += rowsOf ? rowsOf(value) : 0;
+    plannerTrace.set(label, entry);
+  }
+  return value;
+}
+
+const rowCount = (value: unknown[]): number => value.length;
+
 function createPlannerTimer() {
   const started = performance.now();
   const rows: { step: string; ms: number }[] = [];
+  plannerTrace = new Map();
   return {
     async time<T>(step: string, work: () => Promise<T>): Promise<T> {
       const begin = performance.now();
@@ -11824,8 +11852,17 @@ function createPlannerTimer() {
       const text =
         `getSessionPlannerInput ${total} ms\n` +
         [...rows].sort((a, b) => b.ms - a.ms).map((row) => `${String(row.ms).padStart(6)} ms  ${row.step}`).join('\n');
-      lastPlannerTiming = text;
-      console.info(`[planner timing] ${text}`);
+      const trace = [...(plannerTrace ?? [])]
+        .sort((a, b) => b[1].ms - a[1].ms)
+        .map(
+          ([label, entry]) =>
+            `${String(Math.round(entry.ms)).padStart(6)} ms  · ${label} ×${entry.count}${entry.rows ? ` (${entry.rows} rows)` : ''}`,
+        )
+        .join('\n');
+      plannerTrace = null;
+      const full = trace ? `${text}\n--- sub-steps (overlap with the above) ---\n${trace}` : text;
+      lastPlannerTiming = full;
+      console.info(`[planner timing] ${full}`);
     },
   };
 }
