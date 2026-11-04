@@ -730,6 +730,42 @@ control).
   have no episode context and need a single-sentence or short-window fallback.
   The schedule needs an obvious "next up" so the reader does not become
   open-ended wandering. Ratings stay explicit; tool results are evidence only.
+- **Follow-up offers and activity effectiveness (agreed 2026-11-04, not built).**
+  The reader tools (🎧 Dictation, 🧩 Ear tiles, 💭 Word check, 🎙 Shadowing)
+  sit in an icon rail and nothing prompts the learner to open them, so they get
+  almost no use while the old cards (`sentenceCardsPaused` off) stay the natural
+  route. Direction: learning is sentence-led and in context, across five aspects
+  — *reading*, *meaning*, *listening*, *pronunciation* (mostly shadowing/pitch)
+  and *grammar* — and it is not obvious which activity best supports which
+  (shadowing seems to help reading too), so measure it instead of assuming.
+  1. **Embed, don't queue.** The Read check stays the entry point (self-judged,
+     spaced 1…64 days; see `readCheck.ts`). When the learner answers "needed
+     help", the reader offers one follow-up on that sentence chosen by what went
+     wrong (Ear tiles for flow, Dictation blanking the weakest word, Word check
+     for meaning, Shadowing for sound). No new planner steps or cards for these
+     tools; once offers exist, `sentenceCardsPaused` can be turned on without
+     losing dictation/Ear tiles practice.
+  2. **Evidence gaps to close first.** The word-strength model has no listening
+     facet: Dictation and Ear tiles outcomes are logged but nothing reads them as
+     listening evidence. Grammar evidence (`grammarStrength`) is collected but
+     the planner does not read it. Shadowing attempts are not linked to later
+     reading outcomes. Pronunciation needs its own outcome check.
+  3. **After-effect measurement.** Log every offer (sentence, aspect targeted,
+     activity offered, whether taken). For each aspect define one outcome check
+     (reading → next Read check got-it; meaning → next Word check on a word in
+     the sentence; listening → next Dictation/Ear tiles result; grammar → next
+     grammar-spot tap; pronunciation → next shadowing score/H-L match) and
+     compare it in the following 1–7 days against sentences where the activity
+     was not done. A `/progress` panel would show the table.
+  4. **Vary the offer.** The learner agreed to randomising which follow-up is
+     offered on some sentences so the comparison has a baseline, because
+     activities chosen after a struggle look worse than they are. Record which
+     were randomised.
+  Caveats: one learner, self-judged outcomes and a few hundred events mean
+  associations, not proof; expect noisy results for a while. Keep ratings
+  explicit and these events evidence-only. Related: step usefulness
+  (`stepUsefulness.ts`, completed vs skipped), skill coverage, and the
+  remediation counts in STATUS.
 
 ## Possibilities (analytics & cross-activity coherence)
 
