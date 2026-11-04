@@ -6483,17 +6483,24 @@ export async function getSequentialBookStatus(
   const sentenceIds = memberships.map((item) => item.sentenceId);
   const [settings, analyses, events, studyItems] = await Promise.all([
     readSettings(),
-    db.analyses.bulkGet(sentenceIds),
-    listSentenceLearningEvents(bookId),
-    db.studyItems
-      .where('activityType')
-      .equals('reading_in_context')
-      .filter((item) => item.subjectType === 'sentence')
-      .toArray(),
+    traceStep('sequential: analyses.bulkGet', () => db.analyses.bulkGet(sentenceIds), rowCount),
+    traceStep('sequential: book events', () => listSentenceLearningEvents(bookId), rowCount),
+    traceStep('sequential: reading_in_context items', () =>
+      memoForPlannerPass('readingInContextItems', () =>
+        db.studyItems
+          .where('activityType')
+          .equals('reading_in_context')
+          .filter((item) => item.subjectType === 'sentence')
+          .toArray(),
+      ),
+      rowCount,
+    ),
   ]);
   const itemBySentence = new Map(studyItems.map((item) => [item.subjectId, item]));
   const reviewItemIds = sentenceIds.flatMap((id) => (itemBySentence.get(id) ? [itemBySentence.get(id)!.id] : []));
-  const reviews = reviewItemIds.length ? await db.reviews.where('studyItemId').anyOf(reviewItemIds).toArray() : [];
+  const reviews = reviewItemIds.length
+    ? await traceStep('sequential: reviews', () => reviewsForStudyItems(reviewItemIds), rowCount)
+    : [];
   const reviewsByItem = new Map<string, Review[]>();
   for (const review of reviews) {
     const list = reviewsByItem.get(review.studyItemId);
@@ -9937,6 +9944,12 @@ export async function getEpisodeProgress(): Promise<EpisodeProgressRow[]> {
 }
 
 export async function listSentenceLearningEvents(bookId: string): Promise<SentenceLearningEvent[]> {
+  if (plannerPassMemo) {
+    // Inside a planning pass this runs once per book; filter the single shared scan instead.
+    return (await readAllLearningEventsForPass())
+      .filter((event) => event.bookId === bookId)
+      .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+  }
   return getDb().sentenceLearningEvents.where('bookId').equals(bookId).sortBy('timestamp');
 }
 
@@ -10641,7 +10654,7 @@ async function buildReviewPriorityInputs(
   }
 
   const studyItemIds = studyItems.map((item) => item.id);
-  const allReviews = await db.reviews.where('studyItemId').anyOf(studyItemIds).toArray();
+  const allReviews = await reviewsForStudyItems(studyItemIds);
   const reviewsByStudyItemId = new Map<string, Review[]>();
   for (const review of allReviews) {
     const list = reviewsByStudyItemId.get(review.studyItemId);
@@ -10905,7 +10918,7 @@ export async function findListeningToolCandidates(
   now: Date = new Date(),
 ): Promise<ListeningToolCandidate[]> {
   const db = getDb();
-  const audioIds = ((await db.sentenceAudio.orderBy('sentenceId').uniqueKeys()) as string[]).filter((id) => !excluded.has(id));
+  const audioIds = (await allAudioSentenceIds()).filter((id) => !excluded.has(id));
   if (audioIds.length === 0) return [];
   const [introduced, books, suspendedIndex] = await Promise.all([
     getIntroducedSentenceIds(audioIds),
@@ -10988,7 +11001,14 @@ async function findExploreCandidates(
   /** Sequential mode: learnt sentences in the episode each book would offer first. */
   const leadEpisodeLearnt = new Map<string, number>();
   for (const book of books) {
-    const memberships = await traceStep('explore: book memberships', () => db.bookSentences.where('bookId').equals(book.id).toArray(), rowCount);
+    const memberships = await traceStep(
+      'explore: book memberships',
+      async () =>
+        plannerPassMemo
+          ? (await readAllBookSentencesForPass()).filter((row) => row.bookId === book.id)
+          : db.bookSentences.where('bookId').equals(book.id).toArray(),
+      rowCount,
+    );
     // Sentence-first: a lesson never changes BookSentence.status, so a
     // sentence is "done" once its walkthrough was completed, not once it's marked complete.
     const bookEvents = sentenceFirst ? await traceStep('explore: book events', () => listSentenceLearningEvents(book.id), rowCount) : [];
@@ -11278,8 +11298,11 @@ async function activeSentenceIdsForShadowing(bookLimit: number): Promise<Set<str
       .map((event) => event.sentenceId),
   );
   const ids = new Set<string>();
+  const allMemberships = plannerPassMemo ? await readAllBookSentencesForPass() : null;
   for (const book of books) {
-    const memberships = await db.bookSentences.where('bookId').equals(book.id).toArray();
+    const memberships = allMemberships
+      ? allMemberships.filter((row) => row.bookId === book.id)
+      : await db.bookSentences.where('bookId').equals(book.id).toArray();
     for (const membership of memberships) {
       if (membership.status === 'unstarted' && !walkedThrough.has(membership.sentenceId)) continue;
       if (suspendedIndex && membershipIsShelved(membership, suspendedIndex)) continue;
@@ -11610,36 +11633,41 @@ async function findShadowCandidates(
   const settingsRow = await ensureSettings(db);
   const shadowRequests = settingsRow.shadowRequests ?? {};
   const snoozedSentenceIds = activeShadowSnoozeIds(settingsRow.shadowSnoozes, new Date());
-  const [attempts, sentences, bookSentences, recentlyMissedClozeSentenceIds] = await Promise.all([
-    db.attempts.where('sentenceId').anyOf(sentenceIdsWithAudio).toArray(),
-    db.sentences.bulkGet(sentenceIdsWithAudio),
-    db.bookSentences.where('sentenceId').anyOf(sentenceIdsWithAudio).toArray(),
+  // Attempt rows carry the recording Blob, so only the index keys are read to count attempts; full
+  // rows are fetched just for the few sentences with a pending "sound" request.
+  const requestIds = Object.keys(shadowRequests);
+  const [attemptSentenceIds, requestAttempts, bookSentences, recentlyMissedClozeSentenceIds] = await Promise.all([
+    sentenceIdsWithAudio.length <= ANY_OF_SCAN_THRESHOLD
+      ? db.attempts.where('sentenceId').anyOf(sentenceIdsWithAudio).keys()
+      : db.attempts.orderBy('sentenceId').keys(),
+    requestIds.length ? db.attempts.where('sentenceId').anyOf(requestIds).toArray() : Promise.resolve([]),
+    bookSentencesForSentences(sentenceIdsWithAudio),
     routeClozeMisses ? getRecentlyMissedClozeSentenceIds() : Promise.resolve(new Set<string>()),
   ]);
+  const wantedSentenceIds = new Set(sentenceIdsWithAudio);
   const attemptCountBySentenceId = new Map<string, number>();
-  for (const attempt of attempts) {
-    attemptCountBySentenceId.set(attempt.sentenceId, (attemptCountBySentenceId.get(attempt.sentenceId) ?? 0) + 1);
+  for (const sentenceId of attemptSentenceIds as string[]) {
+    if (!wantedSentenceIds.has(sentenceId)) continue;
+    attemptCountBySentenceId.set(sentenceId, (attemptCountBySentenceId.get(sentenceId) ?? 0) + 1);
   }
   // A "sound" trouble tag stays pending until a shadowing attempt is saved after it.
   const requestedSentenceIds = new Set(
     Object.entries(shadowRequests)
-      .filter(([id, at]) => !attempts.some((attempt) => attempt.sentenceId === id && attempt.createdAt > at))
+      .filter(([id, at]) => !requestAttempts.some((attempt) => attempt.sentenceId === id && attempt.createdAt > at))
       .map(([id]) => id),
   );
   const bookIdBySentenceId = new Map(bookSentences.map((item) => [item.sentenceId, item.bookId]));
   const weakWords = await getWeakWordSentenceSignal(sentenceIdsWithAudio, PLANNER_STRENGTH_CACHE_MS);
   const weakRank = new Map(weakWords.order.map((id, rank) => [id, rank]));
 
-  return sentenceIdsWithAudio
-    .map((sentenceId, index) => ({
+  const ranked = sentenceIdsWithAudio
+    .map((sentenceId) => ({
       sentenceId,
-      sentence: sentences[index],
       attemptCount: attemptCountBySentenceId.get(sentenceId) ?? 0,
       recentlyMissedCloze: recentlyMissedClozeSentenceIds.has(sentenceId),
       requested: requestedSentenceIds.has(sentenceId),
       weakRank: weakRank.get(sentenceId),
     }))
-    .filter((candidate): candidate is typeof candidate & { sentence: Sentence } => Boolean(candidate.sentence))
     .filter((candidate) => !snoozedSentenceIds.has(candidate.sentenceId))
     .sort((a, b) => {
       if (a.requested !== b.requested) return a.requested ? -1 : 1;
@@ -11651,7 +11679,13 @@ async function findShadowCandidates(
         return a.weakRank - b.weakRank;
       }
       return a.attemptCount - b.attemptCount;
-    })
+    });
+  // Sentence rows are large; fetch them only for the front of the ranking (a few spare cover any orphans).
+  const shortlist = ranked.slice(0, limit * 3);
+  const shortlistSentences = await db.sentences.bulkGet(shortlist.map((candidate) => candidate.sentenceId));
+  return shortlist
+    .map((candidate, index) => ({ ...candidate, sentence: shortlistSentences[index] }))
+    .filter((candidate): candidate is typeof candidate & { sentence: Sentence } => Boolean(candidate.sentence))
     .slice(0, limit)
     .map((candidate) => {
       const weakLabels = weakWords.labels.get(candidate.sentenceId) ?? [];
@@ -11781,28 +11815,47 @@ function readAllBookSentencesForPass(): Promise<BookSentence[]> {
   return memoForPlannerPass('bookSentences', () => getDb().bookSentences.toArray());
 }
 
+/** The slice of a Dexie table `getRecentActivityEvents` needs: a range count and the newest row by an index. */
+interface IndexedTimestampTable {
+  where(index: string): { above(value: string): { count(): PromiseLike<number> } };
+  orderBy(index: string): { last(): PromiseLike<object | undefined> };
+}
+
 async function getRecentActivityEvents(now: Date): Promise<RecentActivityEvent[]> {
   const db = getDb();
   const cutoffIso = new Date(now.getTime() - NEGLECT_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
 
-  const [recentReviews, recentAttempts, allBookSentences, recentAnalyses, recentSentenceGrammar] =
-    await Promise.all([
-      // Index keys only: the timestamps are all this needs, and analysis rows are large.
-      traceStep('recent: reviews', () => db.reviews.where('timestamp').above(cutoffIso).keys(), rowCount),
-      traceStep('recent: attempts', () => db.attempts.where('createdAt').above(cutoffIso).keys(), rowCount),
-      traceStep('recent: bookSentences.toArray', () => readAllBookSentencesForPass(), rowCount),
-      traceStep('recent: analyses', () => db.analyses.where('updatedAt').above(cutoffIso).keys(), rowCount),
-      traceStep('recent: sentenceGrammar', () => db.sentenceGrammar.where('updatedAt').above(cutoffIso).keys(), rowCount),
-    ]);
+  // The planner only uses, per mode, how many events fell in the window and when the latest one was.
+  // IndexedDB charges per row read (about 0.3 ms each in WebKit, more on a phone) but a range count is
+  // nearly free, so indexed tables are summarised with `count()` plus the single newest row instead of
+  // reading thousands of timestamps. Events are then expanded at that latest time.
+  const summarise = async (
+    mode: SessionBucket,
+    label: string,
+    table: IndexedTimestampTable,
+    index: string,
+  ): Promise<RecentActivityEvent[]> => {
+    const count = await traceStep(`recent: ${label} count`, () => table.where(index).above(cutoffIso).count());
+    if (count === 0) return [];
+    const newest = await traceStep(`recent: ${label} newest`, () => table.orderBy(index).last());
+    const timestamp = (newest as Record<string, unknown> | undefined)?.[index] as string | undefined;
+    if (!timestamp) return [];
+    return Array.from({ length: count }, () => ({ mode, timestamp }));
+  };
 
-  const events: RecentActivityEvent[] = [];
-  for (const timestamp of recentReviews) events.push({ mode: 'review', timestamp: timestamp as string });
-  for (const timestamp of recentAttempts) events.push({ mode: 'shadowing', timestamp: timestamp as string });
+  const [review, shadowing, grammarFromAnalyses, grammarFromLinks, allBookSentences] = await Promise.all([
+    summarise('review', 'reviews', db.reviews, 'timestamp'),
+    summarise('shadowing', 'attempts', db.attempts, 'createdAt'),
+    summarise('grammar', 'analyses', db.analyses, 'updatedAt'),
+    summarise('grammar', 'sentenceGrammar', db.sentenceGrammar, 'updatedAt'),
+    // addedAt has no index, so glossing still needs the (shared, once-per-pass) membership scan.
+    traceStep('recent: bookSentences.toArray', () => readAllBookSentencesForPass(), rowCount),
+  ]);
+
+  const events: RecentActivityEvent[] = [...review, ...shadowing, ...grammarFromAnalyses, ...grammarFromLinks];
   for (const membership of allBookSentences) {
     if (membership.addedAt >= cutoffIso) events.push({ mode: 'glossing', timestamp: membership.addedAt });
   }
-  for (const timestamp of recentAnalyses) events.push({ mode: 'grammar', timestamp: timestamp as string });
-  for (const timestamp of recentSentenceGrammar) events.push({ mode: 'grammar', timestamp: timestamp as string });
   return events;
 }
 
@@ -11915,6 +11968,24 @@ function memoForPlannerPass<T>(key: string, load: () => Promise<T>): Promise<T> 
  */
 const ANY_OF_SCAN_THRESHOLD = 200;
 
+const audioSentenceIdCache = new WeakMap<object, { count: number; ids: Promise<string[]> }>();
+
+/**
+ * Every sentence id that has a clip. The index scan costs a row per clip (about 1 s for ~4,000 on a
+ * phone), so the result is kept per database and reused while the clip count is unchanged; `count()`
+ * itself is nearly free.
+ */
+async function allAudioSentenceIds(): Promise<string[]> {
+  const db = getDb();
+  const count = await db.sentenceAudio.count();
+  const hit = audioSentenceIdCache.get(db);
+  if (hit && hit.count === count) return hit.ids;
+  const ids = db.sentenceAudio.orderBy('sentenceId').uniqueKeys() as Promise<string[]>;
+  audioSentenceIdCache.set(db, { count, ids });
+  ids.catch(() => audioSentenceIdCache.delete(db));
+  return ids;
+}
+
 /**
  * Which of `sentenceIds` have a recorded clip. Reads only the `sentenceId` index:
  * `sentenceAudio` rows carry the audio Blob, so `toArray()` would load every clip
@@ -11926,8 +11997,7 @@ async function sentenceIdsWithAudioClip(sentenceIds: string[]): Promise<Set<stri
     return new Set((await table.where('sentenceId').anyOf(sentenceIds).keys()) as string[]);
   }
   const wanted = new Set(sentenceIds);
-  const all = (await table.orderBy('sentenceId').uniqueKeys()) as string[];
-  return new Set(all.filter((id) => wanted.has(id)));
+  return new Set((await allAudioSentenceIds()).filter((id) => wanted.has(id)));
 }
 
 async function learningEventsForSentences(sentenceIds: string[]): Promise<SentenceLearningEvent[]> {
@@ -11954,7 +12024,8 @@ function readSentenceStudyItemsForPass(): Promise<StudyItem[]> {
 }
 
 async function reviewsForStudyItems(studyItemIds: string[]): Promise<Review[]> {
-  if (studyItemIds.length <= ANY_OF_SCAN_THRESHOLD) {
+  // Each id is its own index lookup (~2 ms on a phone); inside a pass the full table is read once and shared.
+  if (studyItemIds.length <= (plannerPassMemo ? 30 : ANY_OF_SCAN_THRESHOLD)) {
     return getDb().reviews.where('studyItemId').anyOf(studyItemIds).toArray();
   }
   const wanted = new Set(studyItemIds);
