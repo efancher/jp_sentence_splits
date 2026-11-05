@@ -993,40 +993,40 @@
   },
   {
     "id": "sent_bd2bf277-clause-v1",
-    "source": "きょうのエピソードは、まちについてです。",
+    "source": "今日のエピソードは、町についてです。",
     "targetText": "について",
     "question": "Which preceding expression names the subject matter introduced by the highlighted phrase?",
     "options": [
-      "まち",
+      "町",
       "エピソード"
     ],
-    "answerText": "まち",
-    "explanation": "「まち」 is the subject matter introduced by 「について」: “about / concerning まち”. について stays together as a compound expression."
+    "answerText": "町",
+    "explanation": "「町」 is the subject matter introduced by 「について」: “about / concerning 町”. について stays together as a compound expression."
   },
   {
     "id": "sent_8cb2233c-clause-v1",
-    "source": "わたしは、いまはドイツのおおきなまち、デュッセルドルフにすんでいます。",
-    "targetText": "すんでいます",
+    "source": "私は、今はドイツの大きな町、デュッセルドルフに住んでいます。",
+    "targetText": "住んでいます",
     "question": "Which phrase gives the location for the highlighted part of the sentence?",
     "options": [
       "デュッセルドルフに",
-      "いまは"
+      "今は"
     ],
     "answerText": "デュッセルドルフに",
-    "explanation": "「デュッセルドルフに」 supplies the location for 「すんでいます」. The location belongs with that part of the sentence, rather than being its actor or object."
+    "explanation": "「デュッセルドルフに」 supplies the location for 「住んでいます」. The location belongs with that part of the sentence, rather than being its actor or object."
   },
   {
     "id": "sent_744be7ec-clause-v2",
-    "source": "デュッセルドルフはおおきいので、おみせがたくさんあります。",
-    "targetText": "デュッセルドルフはおおきいので",
+    "source": "デュッセルドルフは大きいので、お店がたくさんあります。",
+    "targetText": "デュッセルドルフは大きいので",
     "question": "Which word marks the highlighted clause as the reason for what follows?",
     "options": [
-      "おおきいので",
-      "おみせが",
+      "大きいので",
+      "お店が",
       "たくさん"
     ],
-    "answerText": "おおきいので",
-    "explanation": "「おおきいので」 ends the highlighted clause with ので, which presents it as the reason for the statement that follows. 「おみせが」 and 「たくさん」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
+    "answerText": "大きいので",
+    "explanation": "「大きいので」 ends the highlighted clause with ので, which presents it as the reason for the statement that follows. 「お店が」 and 「たくさん」 only fill roles inside one of the two parts; they do not link the parts. This question tests the link itself, without claiming more than the wording supports."
   },
   {
     "id": "sent_3386a436-clause-v1",
@@ -1091,27 +1091,27 @@
   },
   {
     "id": "sent_041efae6-clause-v1",
-    "source": "このこうえんもゆうがたややすみのひはとてもにぎやかです。",
+    "source": "この公園も夕方や休みの日はとてもにぎやかです。",
     "targetText": "にぎやかです",
     "question": "Which phrase gives the time or occasion for the highlighted event or description?",
     "options": [
-      "ゆうがたややすみのひは",
-      "このこうえんも"
+      "夕方や休みの日は",
+      "この公園も"
     ],
-    "answerText": "ゆうがたややすみのひは",
-    "explanation": "「ゆうがたややすみのひは」 supplies the time or occasion for 「にぎやかです」. It sets when the statement applies, rather than naming the object of an action."
+    "answerText": "夕方や休みの日は",
+    "explanation": "「夕方や休みの日は」 supplies the time or occasion for 「にぎやかです」. It sets when the statement applies, rather than naming the object of an action."
   },
   {
     "id": "sent_861985f1-clause-v1",
-    "source": "こうえんのとりやどうぶつはとてもかわいいです。",
+    "source": "公園の鳥や動物はとてもかわいいです。",
     "targetText": "かわいいです",
     "question": "Which は-marked phrase supplies a topic for the highlighted description?",
     "options": [
-      "こうえんのとりやどうぶつは",
+      "公園の鳥や動物は",
       "とても"
     ],
-    "answerText": "こうえんのとりやどうぶつは",
-    "explanation": "「こうえんのとりやどうぶつは」 uses は to set a topic for 「かわいいです」. A topic frames the statement; it is not automatically the grammatical subject of every clause."
+    "answerText": "公園の鳥や動物は",
+    "explanation": "「公園の鳥や動物は」 uses は to set a topic for 「かわいいです」. A topic frames the statement; it is not automatically the grammatical subject of every clause."
   },
   {
     "id": "sent_c8ae89b9-clause-v1",
@@ -1139,27 +1139,27 @@
   },
   {
     "id": "sent_ab91fbc6-clause-v1",
-    "source": "みなさんのまちには、なにがありますか？",
+    "source": "みなさんの町には、何がありますか？",
     "targetText": "ありますか",
     "question": "Which choice contains the が-marked subject linked to the highlighted description or event?",
     "options": [
-      "なにが",
-      "みなさんのまちには"
+      "何が",
+      "みなさんの町には"
     ],
-    "answerText": "なにが",
-    "explanation": "The が in 「なにが」 marks the subject linked to 「ありますか」. Keep this local subject–predicate relationship separate from any broader は-marked topic."
+    "answerText": "何が",
+    "explanation": "The が in 「何が」 marks the subject linked to 「ありますか」. Keep this local subject–predicate relationship separate from any broader は-marked topic."
   },
   {
     "id": "sent_521dda45-clause-v1",
-    "source": "きょうもきいてくれて、ありがとうございます。",
-    "targetText": "きいてくれて",
+    "source": "今日も聞いてくれて、ありがとうございます。",
+    "targetText": "聞いてくれて",
     "question": "Which following part is linked to the highlighted clause?",
     "options": [
       "ありがとうございます",
-      "きょうも"
+      "今日も"
     ],
     "answerText": "ありがとうございます",
-    "explanation": "「きいてくれて」 links to 「ありがとうございます」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
+    "explanation": "「聞いてくれて」 links to 「ありがとうございます」. Read the highlighted clause together with that following part. This question tests the connection, without requiring a stronger causal or before/after claim than the wording supports."
   },
   {
     "id": "sent_be359772-clause-v1",
