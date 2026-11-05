@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 import { resetDbForTests } from '../src/db/database';
-import { getDb, saveReferenceAlignment } from '../src/db/repository';
+import { getDb, saveReferenceAlignment, updateSettings } from '../src/db/repository';
 import * as analysisApi from '../src/lib/analysisApi';
 import { createId } from '../src/lib/ids';
 import { ShadowPage, ShadowWorkspace } from '../src/pages/ShadowPage';
@@ -114,5 +114,45 @@ describe('ShadowPage phrase shadowing', () => {
     await screen.findByText(/Loop window/);
     await waitFor(() => expect(screen.queryByText(/Suggested phrase/)).toBeNull());
     expect(screen.queryByRole('group', { name: 'Rate this phrase' })).toBeNull();
+  });
+
+  it('while sentence shadowing is paused, presets the estimated phrase on open so it only needs fine-tuning', async () => {
+    await seed();
+    await updateSettings({ sentenceShadowingPaused: true });
+    await saveReferenceAlignment('audio-1', { durationSeconds: 4, words: WORDS });
+    renderShadowPage();
+    const rating = await screen.findByRole('group', { name: 'Rate this phrase' });
+    await waitFor(() => expect(rating.textContent).toContain('寝ています'));
+    expect(rating.textContent).toContain('0.5–1.6s');
+    // Already on the estimate, so there is nothing to offer.
+    expect(screen.queryByRole('button', { name: 'Use this phrase' })).toBeNull();
+  });
+
+  it('does not preset when sentence shadowing is not paused, and keeps a range the learner already set', async () => {
+    await seed();
+    await saveReferenceAlignment('audio-1', { durationSeconds: 4, words: WORDS });
+    renderShadowPage();
+    expect(await screen.findByText(/Suggested phrase \(covers 寝る\)/)).toBeTruthy();
+    expect(screen.queryByRole('group', { name: 'Rate this phrase' })).toBeNull();
+  });
+
+  it('opens the zoomed edge editor from Fine-tune phrase and closes it without changing the range', async () => {
+    const user = userEvent.setup();
+    await seed();
+    await updateSettings({ sentenceShadowingPaused: true });
+    await saveReferenceAlignment('audio-1', { durationSeconds: 4, words: WORDS });
+    renderShadowPage();
+    await screen.findByRole('group', { name: 'Rate this phrase' });
+
+    await user.click(screen.getByRole('button', { name: 'Fine-tune phrase' }));
+    expect(await screen.findByRole('group', { name: 'Word audio range editor' })).toBeTruthy();
+    expect(screen.getByText(/Zoom in on the start and end of the phrase/)).toBeTruthy();
+    // Nothing moved yet: Save stays disabled and there is no override to reset.
+    expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Reset to automatic' })).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('group', { name: 'Word audio range editor' })).toBeNull();
+    expect((await screen.findByRole('group', { name: 'Rate this phrase' })).textContent).toContain('0.5–1.6s');
   });
 });

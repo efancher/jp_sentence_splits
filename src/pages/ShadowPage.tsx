@@ -9,6 +9,7 @@ import { ShadowSnoozeButtons } from '../components/ShadowSnoozeButtons';
 import { LoopWindowControls, MAX_LOOP_GAP_MS, MAX_LOOP_LEAD_IN_MS } from '../components/LoopWindowControls';
 import { NativePitchPractice } from '../components/NativePitchPractice';
 import { PhraseShadowRating } from '../components/PhraseShadowRating';
+import { ZoomedRangeEditor } from '../components/ZoomedRangeEditor';
 import { isPhraseRange } from '../lib/phraseShadow';
 import { AttemptPitchGrid } from '../components/AttemptPitchGrid';
 import { attemptsNeedingPhraseSnapshot, backfillPhraseSnapshots } from '../lib/backfillPhraseSnapshots';
@@ -399,7 +400,11 @@ export function ShadowWorkspace({
     return chunks ? segmentIntoMorae(chunks) : [];
   }, [data?.sentence]);
 
-  const focusAppliedRef = useRef(false);
+  /** The sentence whose suggested phrase was already preset, so a later alignment refresh doesn't move a range being fine-tuned. */
+  const focusAppliedRef = useRef<string | null>(null);
+  /** undefined while loading: the preset waits for it so a phrase-mode pane isn't preset late or never. */
+  const sentenceShadowingPaused = useLiveQuery(async () => (await readSettings()).sentenceShadowingPaused ?? false, []);
+  const [editingPhrase, setEditingPhrase] = useState(false);
   // A phrase worth shadowing (the weakest word's span, widened), offered as one tap; computed once per clip.
   const [suggestedPhrase, setSuggestedPhrase] = useState<
     { startMs: number; endMs: number; text: string; wordLabel: string } | null
@@ -425,17 +430,18 @@ export function ShadowWorkspace({
       .then((suggestion) => {
         if (cancelled) return;
         setSuggestedPhrase(suggestion);
-        // Opened from a tapped word in the reader: start on that word's phrase, once, without another tap.
-        if (suggestion && focusSurface && !focusAppliedRef.current) {
-          focusAppliedRef.current = true;
+        // Phrase mode (opened from a tapped word, or whole-sentence shadowing is paused): preset the loop to the
+        // estimated phrase once per sentence, ready to fine-tune, unless a range is already set.
+        if (suggestion && (focusSurface || sentenceShadowingPaused) && focusAppliedRef.current !== sentenceId) {
+          focusAppliedRef.current = sentenceId;
           const range = { startMs: suggestion.startMs, endMs: suggestion.endMs };
-          setLoopWindow(range);
-          setTargetRange(range);
+          setLoopWindow((prev) => prev ?? range);
+          setTargetRange((prev) => prev ?? range);
         }
       })
       .catch(() => { /* a missing suggestion just hides the offer */ });
     return () => { cancelled = true; };
-  }, [sentenceId, suggestionAudioId, suggestionDurationMs, alignmentComputedAt, focusSurface]);
+  }, [sentenceId, suggestionAudioId, suggestionDurationMs, alignmentComputedAt, focusSurface, sentenceShadowingPaused]);
 
   if (!data?.sentence) return <p className="muted">Loading…</p>;
 
@@ -750,6 +756,45 @@ export function ShadowWorkspace({
           onLeadInChange={changeLoopLeadIn}
           onReset={() => setLoopWindow(null)}
         />
+      ) : null}
+      {referenceAudio && referenceAudio.durationMs > 0 ? (
+        editingPhrase ? (
+          <ZoomedRangeEditor
+            blob={referenceAudio.blob}
+            audioId={referenceAudio.id}
+            value={phraseRange ?? (suggestedPhrase ? { startMs: suggestedPhrase.startMs, endMs: suggestedPhrase.endMs } : { startMs: 0, endMs: referenceAudio.durationMs })}
+            hasOverride={Boolean(suggestedPhrase && phraseRange && (phraseRange.startMs !== suggestedPhrase.startMs || phraseRange.endMs !== suggestedPhrase.endMs))}
+            description="Zoom in on the start and end of the phrase and nudge them (±1 / ±10 / ±100 ms), then Save to loop and rate just this span. Nothing about the clip itself changes."
+            onSave={(range) => {
+              setLoopWindow(range);
+              setTargetRange(range);
+              setEditingPhrase(false);
+            }}
+            onReset={() => {
+              // Back to the estimate (or the whole sentence when there is none).
+              const range = suggestedPhrase ? { startMs: suggestedPhrase.startMs, endMs: suggestedPhrase.endMs } : null;
+              setLoopWindow(range);
+              setTargetRange(range);
+              setEditingPhrase(false);
+            }}
+            onCancel={() => setEditingPhrase(false)}
+          />
+        ) : (
+          <div>
+            <button
+              type="button"
+              disabled={isLoopingReps || isRecording}
+              onClick={() => {
+                // The editor plays its own audio: stop any target loop first.
+                targetLoopCoordinator.current.cancel();
+                setIsLoopingTarget(false);
+                setEditingPhrase(true);
+              }}
+            >
+              Fine-tune phrase
+            </button>
+          </div>
+        )
       ) : null}
       {suggestedPhrase &&
       !(phraseRange && phraseRange.startMs === suggestedPhrase.startMs && phraseRange.endMs === suggestedPhrase.endMs) ? (
