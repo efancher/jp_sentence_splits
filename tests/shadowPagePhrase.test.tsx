@@ -10,6 +10,21 @@ import { createId } from '../src/lib/ids';
 import { ShadowPage, ShadowWorkspace } from '../src/pages/ShadowPage';
 import { withAppProviders } from '../src/test/providers';
 
+// jsdom has no AudioContext: only the zoomed editor's decode step gets a fake clip (the rest of the page keeps
+// degrading as before), and no real playback happens.
+vi.mock('../src/lib/decodeWithRepair', () => ({
+  decodeWithRepair: vi.fn(async () => ({
+    duration: 4, sampleRate: 16000, numberOfChannels: 1, length: 64000, getChannelData: () => new Float32Array(64000),
+  })),
+}));
+vi.mock('../src/lib/rangePlayer', () => ({
+  RangePlayer: class {
+    play = vi.fn(async () => undefined);
+    stop = vi.fn();
+    dispose = vi.fn();
+  },
+}));
+
 vi.mock('../src/lib/analysisApi', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../src/lib/analysisApi')>()),
   alignAudio: vi.fn(),
@@ -148,11 +163,42 @@ describe('ShadowPage phrase shadowing', () => {
     expect(await screen.findByRole('group', { name: 'Word audio range editor' })).toBeTruthy();
     expect(screen.getByText(/Zoom in on the start and end of the phrase/)).toBeTruthy();
     // Nothing moved yet: Save stays disabled and there is no override to reset.
-    expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.queryByRole('button', { name: 'Reset to automatic' })).toBeNull();
+    expect((screen.getByRole('button', { name: 'Use this span' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Back to the estimate' })).toBeNull();
 
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(screen.queryByRole('group', { name: 'Word audio range editor' })).toBeNull();
     expect((await screen.findByRole('group', { name: 'Rate this phrase' })).textContent).toContain('0.5–1.6s');
+  });
+
+  it('applying a fine-tuned span changes only the looped and rated span: no clip, trim, link or event is written', async () => {
+    const user = userEvent.setup();
+    await seed();
+    await updateSettings({ sentenceShadowingPaused: true });
+    await saveReferenceAlignment('audio-1', { durationSeconds: 4, words: WORDS });
+    renderShadowPage();
+    const rating = await screen.findByRole('group', { name: 'Rate this phrase' });
+    await waitFor(() => expect(rating.textContent).toContain('0.5–1.6s'));
+
+    const db = getDb();
+    const before = {
+      audio: JSON.stringify({ ...(await db.sentenceAudio.get('audio-1')), blob: undefined }),
+      link: JSON.stringify(await db.sentenceVocabulary.get('sv-1')),
+      events: await db.sentenceLearningEvents.count(),
+    };
+
+    await user.click(screen.getByRole('button', { name: 'Fine-tune phrase' }));
+    await screen.findByRole('slider', { name: /start edge/i }); // decoded and ready
+    await user.click(screen.getByRole('button', { name: /move start edge 100 ms/i }));
+    await user.click(screen.getByRole('button', { name: 'Use this span' }));
+
+    // The displayed (and so the rated) span moved...
+    await waitFor(() => expect(screen.getByRole('group', { name: 'Rate this phrase' }).textContent).toContain('0.6–1.6s'));
+    expect(screen.queryByRole('group', { name: 'Word audio range editor' })).toBeNull();
+    // ...and nothing was persisted: the clip row (incl. any trim), the word link and the event log are as they were.
+    expect(JSON.stringify({ ...(await db.sentenceAudio.get('audio-1')), blob: undefined })).toBe(before.audio);
+    expect(JSON.stringify(await db.sentenceVocabulary.get('sv-1'))).toBe(before.link);
+    expect(await db.sentenceLearningEvents.count()).toBe(before.events);
+    expect(await db.attempts.count()).toBe(0);
   });
 });

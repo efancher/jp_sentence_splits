@@ -26,6 +26,8 @@ export function ZoomedRangeEditor({
   onReset,
   onCancel,
   description = 'Set the span this card loops. For pitch cards keep the word’s ending or following particle inside it.',
+  saveLabel = 'Save',
+  resetLabel = 'Reset to automatic',
 }: {
   blob: Blob;
   audioId: string;
@@ -38,6 +40,9 @@ export function ZoomedRangeEditor({
   onCancel: () => void;
   /** Caller-specific instructions shown above the waveform — the default assumes a word-loop card. */
   description?: string;
+  /** Button text, for callers whose "save" only applies the span in memory (the phrase fine-tune). */
+  saveLabel?: string;
+  resetLabel?: string;
 }) {
   const [buffer, setBuffer] = useState<AudioBuffer | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -139,14 +144,14 @@ export function ZoomedRangeEditor({
       )}
       <div className="row" style={{ flexWrap: 'wrap', gap: '0.5rem' }}>
         <button type="button" className="primary" disabled={!buffer || !moved} onClick={() => onSave(rounded)}>
-          Save
+          {saveLabel}
         </button>
         <button type="button" className="secondary" onClick={onCancel}>
           Cancel
         </button>
         {hasOverride ? (
           <button type="button" className="secondary" onClick={onReset}>
-            Reset to automatic
+            {resetLabel}
           </button>
         ) : null}
       </div>

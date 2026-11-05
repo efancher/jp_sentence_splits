@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { afterIndex, leadInIndex, liveWindowBuckets, nativeIndex, padBuckets } from '../lib/liveWindow';
 import { estimateFramePitch, extractPitch, hzToRelativeSemitones, medianHz } from '../lib/pitch';
 import type { TimeRangeMs } from '../lib/recording';
 import {
@@ -53,6 +54,10 @@ export function LiveShadowWaveform({
   showWaveform = true,
   wrapSeconds,
   isHeld,
+  leadInMs,
+  tailMs,
+  playbackRate,
+  getLeadInRemainingMs,
 }: {
   referenceBlob: Blob;
   active: boolean;
@@ -78,6 +83,17 @@ export function LiveShadowWaveform({
    * finished rep; the live line is only wiped when the next rep starts.
    */
   isHeld?: () => boolean;
+  /**
+   * The lead-in (wall-clock ms) before the native starts each rep and the pause (ms) after it ends. The chart
+   * widens to cover both, so the learner's voice is drawn from the moment recording starts and past the native's
+   * end, with the native contour kept at its true position in between. Omit for the native span only.
+   */
+  leadInMs?: number;
+  tailMs?: number;
+  /** Playback speed, to convert the wall-clock lead-in / pause into chart time. */
+  playbackRate?: number;
+  /** Milliseconds left on the lead-in countdown (0 once the native is playing). */
+  getLeadInRemainingMs?: () => number;
 }) {
   const [referencePeaks, setReferencePeaks] = useState<WavePeak[]>([]);
   const [referencePitchBuckets, setReferencePitchBuckets] = useState<Array<number | null>>([]);
@@ -105,8 +121,21 @@ export function LiveShadowWaveform({
   const isHeldRef = useRef(isHeld);
   isHeldRef.current = isHeld;
   const wasHeldRef = useRef(false);
+  /** Wall-clock time the current pause began, to place the voice in the after-window. */
+  const heldSinceRef = useRef(0);
+  const playbackRateRef = useRef(playbackRate ?? 1);
+  playbackRateRef.current = playbackRate ?? 1;
+  const getLeadInRemainingRef = useRef(getLeadInRemainingMs);
+  getLeadInRemainingRef.current = getLeadInRemainingMs;
   const rangeStartMs = range?.startMs;
   const rangeEndMs = range?.endMs;
+
+  const win = useMemo(
+    () => liveWindowBuckets(referencePeaks.length, durationSeconds, (leadInMs ?? 0) / 1000, (tailMs ?? 0) / 1000, playbackRate ?? 1),
+    [referencePeaks.length, durationSeconds, leadInMs, tailMs, playbackRate],
+  );
+  const paddedPeaks = useMemo(() => padBuckets(referencePeaks, win, { min: 0, max: 0 }), [referencePeaks, win]);
+  const paddedPitch = useMemo(() => padBuckets(referencePitchBuckets, win, null as number | null), [referencePitchBuckets, win]);
 
   useEffect(() => {
     let cancelled = false;
@@ -146,7 +175,7 @@ export function LiveShadowWaveform({
       setPlayheadIndex(0);
       return;
     }
-    const buckets = referencePeaks.length || LIVE_WAVEFORM_BUCKETS;
+    const buckets = win.total || LIVE_WAVEFORM_BUCKETS;
     liveAmpRef.current = new Array<number>(buckets).fill(0);
     liveHzSumRef.current = new Array<number>(buckets).fill(0);
     liveHzCountRef.current = new Array<number>(buckets).fill(0);
@@ -174,29 +203,44 @@ export function LiveShadowWaveform({
 
     const tick = () => {
       const rawMediaTime = getMediaTimeRef.current();
-      // Pause between reps: leave the finished rep's contour on screen, and
-      // wipe it only once the next rep begins.
-      const held = isHeldRef.current?.() ?? false;
+      // Pause between reps: the finished rep's contour stays on screen (wiped only once the next rep begins),
+      // and the learner's voice keeps drawing into the after-window, since a shadow trails the native's end.
+      // Once that window is used up the chart just holds.
+      // `isHeld` is also true during the lead-in countdown, which draws (it is not a hold), so that is told apart first.
+      const leadInRemainingMs = getLeadInRemainingRef.current?.() ?? 0;
+      const held = leadInRemainingMs <= 0 && (isHeldRef.current?.() ?? false);
+      let index: number;
       if (held) {
+        if (!wasHeldRef.current) heldSinceRef.current = performance.now();
         wasHeldRef.current = true;
         lastMediaTimeRef.current = rawMediaTime;
-        rafRef.current = requestAnimationFrame(tick);
-        return;
+        const afterAt = afterIndex(win, (performance.now() - heldSinceRef.current) / 1000);
+        if (afterAt === null) {
+          rafRef.current = requestAnimationFrame(tick);
+          return;
+        }
+        index = afterAt;
+      } else {
+        if (wasHeldRef.current) {
+          wasHeldRef.current = false;
+          startRep();
+        }
+        // The reference plays muted through the lead-in and is then rewound, so its clock says nothing about
+        // a wrap during it.
+        if (leadInRemainingMs <= 0 && lastMediaTimeRef.current - rawMediaTime > durationSeconds / 2) startRep();
+        lastMediaTimeRef.current = rawMediaTime;
+        if (leadInRemainingMs > 0) {
+          index = leadInIndex(win, leadInRemainingMs / 1000);
+        } else {
+          // Shift left by output latency so drawing tracks what you hear over AirPods,
+          // then rebase onto the cropped range's own clock (getMediaTime() still
+          // reports position in the *full* clip, not the zoomed-in word span).
+          const latencyAdjusted = Math.max(0, rawMediaTime - SHADOW_OUTPUT_LATENCY_SECONDS);
+          const mediaTime =
+            rangeStartMs !== undefined ? Math.max(0, latencyAdjusted - rangeStartMs / 1000) : latencyAdjusted;
+          index = nativeIndex(win, Math.min(1, Math.max(0, mediaTime / durationSeconds)));
+        }
       }
-      if (wasHeldRef.current) {
-        wasHeldRef.current = false;
-        startRep();
-      }
-      if (lastMediaTimeRef.current - rawMediaTime > durationSeconds / 2) startRep();
-      lastMediaTimeRef.current = rawMediaTime;
-      // Shift left by output latency so drawing tracks what you hear over AirPods,
-      // then rebase onto the cropped range's own clock (getMediaTime() still
-      // reports position in the *full* clip, not the zoomed-in word span).
-      const latencyAdjusted = Math.max(0, rawMediaTime - SHADOW_OUTPUT_LATENCY_SECONDS);
-      const mediaTime =
-        rangeStartMs !== undefined ? Math.max(0, latencyAdjusted - rangeStartMs / 1000) : latencyAdjusted;
-      const progress = Math.min(1, Math.max(0, mediaTime / durationSeconds));
-      const index = Math.min(buckets - 1, Math.floor(progress * buckets));
 
       analyser.getFloatTimeDomainData(samples);
       let peak = 0;
@@ -259,11 +303,11 @@ export function LiveShadowWaveform({
     return () => {
       if (rafRef.current !== undefined) cancelAnimationFrame(rafRef.current);
     };
-  }, [active, analyser, durationSeconds, rangeStartMs, referencePeaks.length, sampleRate]);
+  }, [active, analyser, durationSeconds, rangeStartMs, sampleRate, win]);
 
   const referenceLine = useMemo(
-    () => peaksToPolyline(referencePeaks, VIEW_WIDTH, WAVE_HEIGHT),
-    [referencePeaks],
+    () => peaksToPolyline(paddedPeaks, VIEW_WIDTH, WAVE_HEIGHT),
+    [paddedPeaks],
   );
   const liveLine = useMemo(
     () =>
@@ -271,16 +315,19 @@ export function LiveShadowWaveform({
     [active, livePeaks, playheadIndex],
   );
   const playheadX =
-    referencePeaks.length > 1
-      ? (playheadIndex / Math.max(1, referencePeaks.length - 1)) * VIEW_WIDTH
+    paddedPeaks.length > 1
+      ? (playheadIndex / Math.max(1, paddedPeaks.length - 1)) * VIEW_WIDTH
       : 0;
 
   // Pitch chart rows: equal-time slices of the bucket arrays (one row unless wrapped).
-  const bucketCount = referencePitchBuckets.length;
+  const bucketCount = paddedPitch.length;
+  // Rows wrap by media time, and the chart now also spans the lead-in and pause around the native.
+  const chartSeconds = win.perMediaSecond > 0 ? win.total / win.perMediaSecond : durationSeconds;
   const bucketsPerRow =
-    wrapSeconds && durationSeconds > wrapSeconds && bucketCount > 0
-      ? Math.max(2, Math.round((bucketCount * wrapSeconds) / durationSeconds))
+    wrapSeconds && chartSeconds > wrapSeconds && bucketCount > 0
+      ? Math.max(2, Math.round((bucketCount * wrapSeconds) / chartSeconds))
       : Math.max(1, bucketCount);
+  const hasWindow = win.before > 0 || win.after > 0;
   const rowCount = Math.max(1, Math.ceil(bucketCount / bucketsPerRow));
   const pitchHeight = rowCount > 1 ? 90 : PITCH_HEIGHT;
   const pitchRows = Array.from({ length: rowCount }, (_, row) => {
@@ -302,10 +349,15 @@ export function LiveShadowWaveform({
       active && playheadIndex >= from && playheadIndex < to
         ? ((playheadIndex - from) / Math.max(1, to - from - 1)) * rowWidth
         : null;
+    // Where the native starts and ends in this row, so a voice that starts early or runs on is easy to read.
+    const markerX = (bucket: number) =>
+      hasWindow && bucket >= from && bucket <= to ? ((bucket - from) / Math.max(1, to - from - 1)) * rowWidth : null;
     return {
       widthFrac,
       rowWidth,
-      referenceRuns: line(referencePitchBuckets),
+      nativeStartX: markerX(win.before),
+      nativeEndX: markerX(win.before + win.native),
+      referenceRuns: line(paddedPitch),
       // Rows after the playhead stay empty so a rep redraws top-to-bottom.
       liveRuns: liveUpTo >= from ? line(livePitchBuckets, liveUpTo) : [],
       playhead,
@@ -382,6 +434,21 @@ export function LiveShadowWaveform({
                 points={points}
               />
             ))}
+            {[row.nativeStartX, row.nativeEndX].map((x, markerIndex) =>
+              x === null ? null : (
+                <line
+                  key={`m${markerIndex}`}
+                  x1={x}
+                  x2={x}
+                  y1="0"
+                  y2={pitchHeight}
+                  stroke="currentColor"
+                  strokeOpacity="0.35"
+                  strokeDasharray="3 4"
+                  strokeWidth="1"
+                />
+              ),
+            )}
             {row.playhead !== null && (
               <line
                 x1={row.playhead}
@@ -401,6 +468,7 @@ export function LiveShadowWaveform({
           {referenceMedianHz && liveMedianHz ? `, you ${Math.round(liveMedianHz)} Hz` : ''}
           {referenceMedianHz ? ')' : ''}
           {active ? '' : ' — start recording to draw'}.
+          {hasWindow ? ' The dashed lines mark where the reference starts and ends; your line is drawn from the moment recording starts and keeps going through the pause.' : ''}
         </p>
       </div>
     </div>

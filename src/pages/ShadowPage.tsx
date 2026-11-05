@@ -764,7 +764,9 @@ export function ShadowWorkspace({
             audioId={referenceAudio.id}
             value={phraseRange ?? (suggestedPhrase ? { startMs: suggestedPhrase.startMs, endMs: suggestedPhrase.endMs } : { startMs: 0, endMs: referenceAudio.durationMs })}
             hasOverride={Boolean(suggestedPhrase && phraseRange && (phraseRange.startMs !== suggestedPhrase.startMs || phraseRange.endMs !== suggestedPhrase.endMs))}
-            description="Zoom in on the start and end of the phrase and nudge them (±1 / ±10 / ±100 ms), then Save to loop and rate just this span. Nothing about the clip itself changes."
+            description="Zoom in on the start and end of the phrase and nudge them (±1 / ±10 / ±100 ms), then tap Use this span to loop and rate just that. Nothing is saved: the clip and its trim are untouched (only Adjust clip changes those), and this span is forgotten when you leave."
+            saveLabel="Use this span"
+            resetLabel="Back to the estimate"
             onSave={(range) => {
               setLoopWindow(range);
               setTargetRange(range);
@@ -857,6 +859,10 @@ export function ShadowWorkspace({
           sampleRate={shadowing.getShadowSampleRate()}
           showWaveform={false}
           wrapSeconds={wrapSeconds}
+          leadInMs={loopLeadInMs}
+          tailMs={loopGapMs}
+          playbackRate={speed}
+          getLeadInRemainingMs={shadowing.getShadowLeadInRemainingMs}
         />
       ) : null}
       {referenceAudio && !hideTranscript && !showMeaningInstead ? (
