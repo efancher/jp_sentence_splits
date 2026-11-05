@@ -50,7 +50,12 @@ and possible extensions. This snapshot does not certify a live deployment.
   in the reader "I didn't" on a tapped word's Reading offers "Shadow this phrase" (opens
   the docked tool on that word). Covered by `e2e/phrase-shadow.spec.ts` (Chromium and
   emulated WebKit passed locally in the Playwright container, synthetic data) plus
-  jsdom tests; the hands-on checklist is in `MANUAL_TEST_LOG.md` (P1–P7, none verified yet).
+  jsdom tests; the hands-on checklist is in `MANUAL_TEST_LOG.md` (P1–P8, none verified yet).
+  2026-11-05: the loop sliders were too coarse for a short phrase inside a long clip, so while
+  sentence shadowing is paused the estimated phrase is preset on open, and "Fine-tune phrase"
+  opens the zoomed edge editor (the "Adjust clip" one) on that span. Its Save changes the loop
+  window and rated span only, not the audio. The editor's decode and Save path is not covered by
+  jsdom (no audio decoding there), so it needs the hands-on pass.
 - Review "Trouble with" chips (Reading, Meaning, Kanji, Sound; prototype,
   2026-10-20): optional, tapped before rating, never choosing the FSRS rating
   or crediting cards. Reading/Meaning/Kanji queue a Fresh try (walked-through
