@@ -250,6 +250,16 @@ repair tooling, research materials and future roadmap ideas remain available.
 
 ## Open limitations and follow-ups
 
+- **All-kana ASR transcripts (2026-11-05):** slow learner speech (Slow Japanese) came back
+  from `/transcribe-source` as hiragana (no kanji, no readings stored). The service now passes
+  Whisper `hotwords` (`ANALYSIS_SOURCE_HOTWORDS`; re-injected every window, unlike
+  `initial_prompt`) and re-transcribing the Episode #7 audio returned normal kanji-kana.
+  `scripts/restore-kanji-sentences.ts` (dry-run by default, explicit substitutions in
+  `scripts/data/restore-kanji-*.json`) fixed that episode's nine kana-only sentences in
+  place: ids, cards and events kept, readings/suggestions regenerated, `sentence_grammar`
+  offsets remapped, bundled clause questions updated. It refuses sentences with chunk
+  analyses or vocabulary selections. Other earlier imports have not been scanned for
+  kana-only text; the hotwords change was only tested on this one episode.
 - **Imports and extras (2026-10-20):** chunk/walkthrough drafts are stored per
   chapter in `sentence_extras`. New standalone shadowing imports now get a
   chapter, a quick import that cannot save its extras says so on the book page,
