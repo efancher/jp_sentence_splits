@@ -562,6 +562,14 @@ describe('Learning Orchestrator repository layer', () => {
     await updateSettings({ quietMode: false });
     const loud = await planRecommendedSession(60);
     expect(loud.steps.some((step) => step.targetKind === 'shadow')).toBe(true);
+
+    // Phrase shadows (drafted while sentence shadowing is paused) are spoken too, so quiet mode withholds them.
+    await updateSettings({ sentenceShadowingPaused: true });
+    const phrase = await planRecommendedSession(60);
+    expect(phrase.steps.some((step) => step.targetKind === 'shadow' && step.phrase)).toBe(true);
+    await updateSettings({ quietMode: true });
+    const phraseQuiet = await planRecommendedSession(60);
+    expect(phraseQuiet.steps.some((step) => step.targetKind === 'shadow')).toBe(false);
   });
 
   it('shadows a walked-through sentence even when its book membership is still unstarted', async () => {

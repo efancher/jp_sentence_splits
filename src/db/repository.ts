@@ -12469,9 +12469,11 @@ async function gatherSessionPlannerInput(
   // "Pause sentence shadowing" (settings.sentenceShadowingPaused) withholds them the same way, while phrase
   // shadowing builds up its own data; the Shadow page and the reader's Shadowing tool stay available.
   // While sentence shadowing is paused the same candidates are drafted as phrase shadows (mark a span, rate it).
-  const shadowCandidatesRaw = shadowCandidatesFound.map((candidate) =>
-    settings.sentenceShadowingPaused ? { ...candidate, phrase: true } : candidate,
-  );
+  const shadowCandidatesRaw = settings.quietMode
+    ? []
+    : shadowCandidatesFound.map((candidate) =>
+        settings.sentenceShadowingPaused ? { ...candidate, phrase: true } : candidate,
+      );
 
   const exploreCandidates = exploreCandidatesRaw
     .filter((candidate) => !exclude.bookIds.has(candidate.bookId))
