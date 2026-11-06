@@ -5011,10 +5011,16 @@ async function filterVocabularyItemIdsByActivity(
   if (vocabularyItemIds.length === 0) return new Set();
   const db = getDb();
   const idSet = new Set(vocabularyItemIds);
+  // A handful of ids (the Reader's per-chapter lookup) reads just their rows through the subjectId index
+  // instead of materialising every vocabulary card, which stalled chapter loads on iPhone.
+  const candidates = idSet.size <= 500
+    ? await db.studyItems.where('subjectId').anyOf([...idSet]).toArray()
+    : await db.studyItems.where('subjectType').equals('vocabularyItem').toArray();
   return new Set(
-    (await db.studyItems.where('subjectType').equals('vocabularyItem').toArray())
+    candidates
       .filter(
         (item) =>
+          item.subjectType === 'vocabularyItem' &&
           idSet.has(item.subjectId) &&
           activityTypes.includes(item.activityType) &&
           isMatch(item.fsrsState.state),
