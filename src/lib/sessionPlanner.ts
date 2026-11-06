@@ -1372,6 +1372,21 @@ export function buildRecommendedSession(input: SessionPlannerInput): Recommended
   if (chainedSentenceIds.length > 0) {
     explanation.push('Some steps below share the same sentence, so they run back to back.');
   }
+  if (orderedSteps.length === 0) {
+    const baseline = input.baseline ?? BASELINE_SESSION_ALLOCATION;
+    const withShare = ALL_SESSION_BUCKETS.filter((bucket) => (baseline[bucket] ?? 0) > 0);
+    if (input.quietMode && withShare.length > 0 && withShare.every((bucket) => bucket === 'shadowing')) {
+      explanation.push(
+        'Nothing was planned: your split gives all the time to shadowing, and quiet mode has shadowing paused. Give another activity a share under "Customize split", or turn quiet mode off.',
+      );
+    } else if (withShare.length > 0) {
+      explanation.push(
+        `Nothing was planned: none of the activities your split gives time to (${withShare.join(', ')}) has anything to offer right now. Try a share for another activity under "Customize split".`,
+      );
+    } else {
+      explanation.push('Nothing was planned: your split gives no activity any time. Set a share under "Customize split".');
+    }
+  }
   if (explanation.length === 0) {
     explanation.push('A balanced mix across glossing, grammar, shadowing, and review.');
   }

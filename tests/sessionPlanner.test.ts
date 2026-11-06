@@ -240,6 +240,19 @@ describe('buildRecommendedSession', () => {
     ).toBe(true);
   });
 
+  it('quiet mode with only shadowing in the split: an empty plan names the cause', () => {
+    const session = buildRecommendedSession(
+      emptyPlannerInput({
+        shadowCandidates: [],
+        quietMode: true,
+        totalMinutes: 30,
+        baseline: { glossing: 0, grammar: 0, shadowing: 1, review: 0 },
+      }),
+    );
+    expect(session.steps).toHaveLength(0);
+    expect(session.explanation.some((line) => line.includes('Nothing was planned') && line.includes('quiet mode'))).toBe(true);
+  });
+
   it('with no due reviews, review gets 0 minutes and the rest is spent elsewhere', () => {
     const exploreCandidates: ExploreCandidate[] = [
       {

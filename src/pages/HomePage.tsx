@@ -217,7 +217,11 @@ export function HomePage() {
                 Continue today's session
               </button>
             ) : (
-              <p className="muted">All done for now — add more time below whenever you have it.</p>
+              <p className="muted">
+                {session.steps.length === 0
+                  ? 'Nothing to recommend with this split right now — see the note above, or adjust "Customize split".'
+                  : 'All done for now — add more time below whenever you have it.'}
+              </p>
             )}
 
             {confirmingClear ? (
