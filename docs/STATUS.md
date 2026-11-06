@@ -254,8 +254,12 @@ repair tooling, research materials and future roadmap ideas remain available.
   sentence to the same chapter before syncing hit `book_sentences_book_chapter_sentence_uidx`
   (23505) forever and aborted the `book_sentences` push. The push now adopts the server's row
   (`adoptRemoteBookSentence`, `engine.ts`): local twin and its queued pushes dropped, server
-  row kept. Not exercised against real Postgres (`npm run test:pg` not run). Settings also
-  stopped loading every native-audio blob at once (iOS page kills).
+  row kept. It covers both the insert path and the update path (a standalone episode book
+  merged into its series moves the row locally while the server still has that id in the old
+  book; the stale server copy is then tombstoned via a queued delete). Both are covered in
+  `tests/pgIntegration/syncPush.pg.test.ts`. Settings also stopped loading every
+  native-audio blob at once (iOS page kills). Series imports now queue only the membership
+  rows whose position changed (a dozen out-of-order imports had queued 2000+ pushes).
 - **All-kana ASR transcripts (2026-11-05):** slow learner speech (Slow Japanese) came back
   from `/transcribe-source` as hiragana (no kanji, no readings stored). The service now passes
   Whisper `hotwords` (`ANALYSIS_SOURCE_HOTWORDS`; re-injected every window, unlike

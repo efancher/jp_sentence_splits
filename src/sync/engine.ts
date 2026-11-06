@@ -556,7 +556,29 @@ async function pushOne(item: SyncQueueItem, userId: string): Promise<void> {
     .eq(idCol, item.recordId)
     .eq('version', existing.version)
     .select('version');
-  if (error) throw new Error(error.message);
+  if (error) {
+    // The server has this id too, but in another book/chapter (a merge moved the
+    // row here locally; reported 2026-11-06 for a standalone episode book merged
+    // into its series), and moving it collides with the row another device
+    // already made for this book+chapter+sentence. Take that row, then tombstone
+    // the stale server copy so it doesn't linger as a live row in the old book.
+    if (
+      error.code === '23505' &&
+      item.entity === 'book_sentences' &&
+      (await adoptRemoteBookSentence(item.recordId, row))
+    ) {
+      const { enqueueMutation } = await import('./queue');
+      await enqueueMutation({
+        entity: 'book_sentences',
+        recordId: item.recordId,
+        operation: 'delete',
+        expectedVersion: null,
+        payload: null,
+      });
+      return;
+    }
+    throw new Error(error.message);
+  }
   if (!updated?.length) {
     throw new Error('version_conflict');
   }

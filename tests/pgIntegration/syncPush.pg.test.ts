@@ -152,6 +152,38 @@ describe.skipIf(!PG_TESTS_ENABLED)('push against real Postgres + RLS', () => {
     expect((await getDb().bookSentences.get('bs_remote'))?.position).toBe(7);
   });
 
+  it('a membership row moved into a series book locally, whose server twin already exists, adopts it and retires the stale copy', async () => {
+    // 2026-11-06: a standalone episode book was merged into its series. The phone
+    // moved bs_local into the series chapter; the server still had it in the old
+    // (deleted) book, and another device had made bs_remote for the new chapter.
+    await device(USER_A);
+    sql(`insert into sentences (id, owner_id, japanese, normalized_key, created_at, updated_at, version) values ('sent_1','${USER_A}','今日は晴れです。','k1',now(),now(),1)`);
+    sql(`insert into books (id, owner_id, title) values ('book_old','${USER_A}','Episode 44'), ('book_series','${USER_A}','Slow')`);
+    sql(`insert into book_sentences (id, owner_id, book_id, sentence_id, chapter_id, position, status, added_at, created_at, updated_at, version) values
+      ('bs_local','${USER_A}','book_old','sent_1',null,7,'unstarted',now(),now(),now(),2),
+      ('bs_remote','${USER_A}','book_series','sent_1','chapter_1',1294,'unstarted',now(),now(),now(),10)`);
+
+    const moved = {
+      id: 'bs_local',
+      bookId: 'book_series',
+      sentenceId: 'sent_1',
+      chapterId: 'chapter_1',
+      position: 3,
+      status: 'unstarted' as const,
+      addedAt: new Date().toISOString(),
+    };
+    await getDb().bookSentences.put(moved);
+    notifySync('book_sentences', moved.id, moved);
+
+    await drain();
+
+    expect(await getDb().syncQueue.count()).toBe(0);
+    expect(scalar(`select count(*) from book_sentences where book_id = 'book_series' and sentence_id = 'sent_1' and deleted_at is null`)).toBe('1');
+    expect(scalar(`select count(*) from book_sentences where id = 'bs_local' and deleted_at is null`)).toBe('0');
+    expect(await getDb().bookSentences.get('bs_local')).toBeUndefined();
+    expect((await getDb().bookSentences.get('bs_remote'))?.position).toBe(1294);
+  });
+
   it('ids are scoped per user, so two users learning the same kanji do not collide', async () => {
     await device(USER_A);
     const a = await ensureKanji('宮');
