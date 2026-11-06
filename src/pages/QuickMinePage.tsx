@@ -1670,12 +1670,30 @@ export function QuickMinePage() {
           {source?.type === 'podcast' && !targetBook && !podcastFeedUrl.trim() ? (
             <p className="muted" role="note" style={{ margin: 0 }}>
               No podcast feed or target book is known for this episode, so it will be imported as its own standalone
-              book instead of a chapter of its series. Pick a target book above, or load the feed again, to avoid that.
+              book instead of a chapter of its series. Pick a target book below, or load the feed again, to avoid that.
             </p>
           ) : null}
           <ShadowingPreviewCard
             preview={preview}
             retentionNote="Native clips are not included in Glossbook JSON backups. Re-mine this video to restore them if needed."
+            commitControls={
+              <label className="stack" style={{ gap: '0.25rem' }}>
+                <span className="muted" style={{ fontSize: '0.85rem' }}>
+                  Add to book (as a new chapter)
+                </span>
+                <select
+                  value={targetBook ? targetBookId : ''}
+                  onChange={(event) => setTargetBookId(event.target.value)}
+                >
+                  <option value="">Default — a podcast feed's own book, otherwise a new book</option>
+                  {targetBooks?.map((book) => (
+                    <option key={book.id} value={book.id}>
+                      {book.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            }
             {...(targetBook && source
               ? {
                   commitLabel: `Add as a new chapter of “${targetBook.title}”`,

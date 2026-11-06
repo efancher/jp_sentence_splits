@@ -30,6 +30,8 @@ interface ShadowingPreviewCardProps {
   onCommit?: (preview: ShadowingImportPreview) => Promise<{ bookId: string; chapterId?: string }>;
   /** Overrides the default "Import complete project" button label. */
   commitLabel?: string;
+  /** Extra controls rendered directly above the commit button (e.g. a target-book picker). */
+  commitControls?: ReactNode;
 }
 
 /**
@@ -46,6 +48,7 @@ export function ShadowingPreviewCard({
   retentionNote,
   onCommit,
   commitLabel,
+  commitControls,
 }: ShadowingPreviewCardProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -113,6 +116,7 @@ export function ShadowingPreviewCard({
           </>
         )}
       </p>
+      {commitControls}
       <div className="row">
         <button
           type="button"
