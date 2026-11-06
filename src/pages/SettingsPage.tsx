@@ -94,11 +94,15 @@ export function SettingsPage() {
   const settings = useLiveQuery(() => readSettings(), []);
   const sync = useSync();
   const nativeAudioSummary = useLiveQuery(async () => {
-    const records = await getDb().sentenceAudio.toArray();
-    return {
-      count: records.length,
-      bytes: records.reduce((total, record) => total + record.blob.size, 0),
-    };
+    // Cursor, not toArray(): materialising every audio blob at once is
+    // enough to get the page killed on iOS once the library is large.
+    let count = 0;
+    let bytes = 0;
+    await getDb().sentenceAudio.each((record) => {
+      count += 1;
+      bytes += record.blob.size;
+    });
+    return { count, bytes };
   }, []);
   const { theme, setTheme } = useTheme();
   const speech = useJapaneseSpeech();
