@@ -11,8 +11,11 @@ import {
   resolveSyncIssueReport,
   settleChunkIssueReports,
 } from '../db/repository';
+import { NativeAudioButton } from '../components/NativeAudioButton';
+import { ReadingFlagsPanel } from '../components/ReadingFlagsPanel';
 import type { ChunkIssueReport } from '../domain/types';
 import { chunkIssueKey } from '../lib/chunkIssues';
+import { parseReadingFlagNote } from '../lib/readingFlagFix';
 
 /**
  * Lists issues reported from in-app "Report issue"/"Report sync issue"
@@ -31,8 +34,51 @@ interface ChunkIssueGroup {
   examples: { japanese: string; chunks: string[]; bookId?: string; sentenceId: string }[];
 }
 
+/** Open furigana flags are judged by ear per sentence (ReadingChecksSection), never as a pattern group. */
+function isOpenReadingFlag(report: ChunkIssueReport): boolean {
+  return report.status === 'open' && report.source === 'meaning_checks' && parseReadingFlagNote(report.note) !== null;
+}
+
+async function loadReadingCheckSentences() {
+  const db = getDb();
+  const reports = (await listChunkIssueReports()).filter(isOpenReadingFlag);
+  const sentenceIds = [...new Set(reports.map((report) => report.sentenceId))];
+  const out = [];
+  for (const sentenceId of sentenceIds) {
+    const sentence = await db.sentences.get(sentenceId);
+    if (!sentence) continue;
+    const audio = await db.sentenceAudio.where('sentenceId').equals(sentenceId).first();
+    out.push({ sentence, audio });
+  }
+  return out;
+}
+
+function ReadingChecksSection() {
+  const items = useLiveQuery(() => loadReadingCheckSentences(), []);
+  if (!items || items.length === 0) return null;
+  return (
+    <section className="panel stack">
+      <h2 style={{ margin: 0 }}>Reading checks ({items.length})</h2>
+      <p className="muted" style={{ margin: 0 }}>
+        The furigana and the assistant disagree. Play the sentence, then keep the furigana or use the
+        assistant&rsquo;s reading. &ldquo;Keep&rdquo; also stops the same word being flagged on later imports.
+      </p>
+      {items.map(({ sentence, audio }) => (
+        <div key={sentence.id} className="list-card stack">
+          {audio ? (
+            <NativeAudioButton audio={audio} hideAdjust />
+          ) : (
+            <span className="muted">No native audio for this sentence.</span>
+          )}
+          <ReadingFlagsPanel sentence={sentence} />
+        </div>
+      ))}
+    </section>
+  );
+}
+
 async function loadChunkIssueGroups(): Promise<ChunkIssueGroup[]> {
-  const reports = await listChunkIssueReports();
+  const reports = (await listChunkIssueReports()).filter((report) => !isOpenReadingFlag(report));
   const groups = new Map<string, ChunkIssueGroup>();
   for (const report of reports) {
     const key = `${report.status}::${chunkIssueKey(report)}`;
@@ -143,6 +189,7 @@ export function CardIssuesPage() {
 
   return (
     <div className="stack">
+      <ReadingChecksSection />
       <ChunkIssuesSection />
       <section className="panel stack">
         <div className="row" style={{ justifyContent: 'space-between' }}>
