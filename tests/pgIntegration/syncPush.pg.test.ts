@@ -124,6 +124,34 @@ describe.skipIf(!PG_TESTS_ENABLED)('push against real Postgres + RLS', () => {
     expect((await getDb().grammarPatterns.get(p.id))?.shortMeaning).toBe('phone version');
   });
 
+  it('a device whose book membership twin already exists on the server under another id adopts the server row', async () => {
+    // 2026-11-06: two devices attached the same sentence to the same chapter
+    // before syncing; the loser retried the chapter uniqueness index forever.
+    await device(USER_A);
+    sql(`insert into sentences (id, owner_id, japanese, normalized_key, created_at, updated_at, version) values ('sent_1','${USER_A}','今日は晴れです。','k1',now(),now(),1)`);
+    sql(`insert into books (id, owner_id, title) values ('book_1','${USER_A}','Slow')`);
+    sql(`insert into book_sentences (id, owner_id, book_id, sentence_id, chapter_id, position, status, added_at, created_at, updated_at, version) values ('bs_remote','${USER_A}','book_1','sent_1','chapter_1',7,'unstarted',now(),now(),now(),3)`);
+
+    const local = {
+      id: 'bs_local',
+      bookId: 'book_1',
+      sentenceId: 'sent_1',
+      chapterId: 'chapter_1',
+      position: 2,
+      status: 'unstarted' as const,
+      addedAt: new Date().toISOString(),
+    };
+    await getDb().bookSentences.put(local);
+    notifySync('book_sentences', local.id, local);
+
+    expect(await drain()).toEqual([undefined]);
+
+    expect(await getDb().syncQueue.count()).toBe(0);
+    expect(scalar('select count(*) from book_sentences')).toBe('1');
+    expect(await getDb().bookSentences.get('bs_local')).toBeUndefined();
+    expect((await getDb().bookSentences.get('bs_remote'))?.position).toBe(7);
+  });
+
   it('ids are scoped per user, so two users learning the same kanji do not collide', async () => {
     await device(USER_A);
     const a = await ensureKanji('宮');
