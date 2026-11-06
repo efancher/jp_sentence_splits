@@ -157,9 +157,12 @@ export async function runSyncCycle(options: { throttlePull?: boolean } = {}): Pr
  * referenced rows to already exist server-side, and the queue is ordered by when
  * a row was *queued*, not by what depends on what — so a link queued before its
  * (re-queued) parent failed RLS and waited a whole cycle. Unlisted entities are
- * tier 1 (links, attachments).
+ * tier 1 (links, attachments). `sync_issue_reports` has no references and is the
+ * channel for diagnosing a stuck queue, so it goes first (tier -1) instead of
+ * waiting behind thousands of book_sentences rows.
  */
 const PUSH_TIER: Partial<Record<SyncEntity, number>> = {
+  sync_issue_reports: -1,
   books: 0,
   sentences: 0,
   kanji: 0,

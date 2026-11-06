@@ -103,6 +103,20 @@ beforeEach(async () => {
 });
 
 describe('sortForPush', () => {
+  it('pushes sync issue reports ahead of a large book_sentences backlog', () => {
+    const q = (entity: SyncQueueItem['entity'], recordId: string): SyncQueueItem => ({
+      id: `q_${recordId}`, entity, recordId, operation: 'upsert', expectedVersion: null,
+      payload: {}, localTimestamp: '', retryCount: 0,
+    });
+    const sorted = sortForPush([
+      q('book_sentences', 'bs_1'),
+      q('book_sentences', 'bs_2'),
+      q('sync_issue_reports', 'sync_issue_1'),
+      q('books', 'b_1'),
+    ]);
+    expect(sorted[0]!.entity).toBe('sync_issue_reports');
+  });
+
   const item = (entity: SyncQueueItem['entity'], recordId: string): SyncQueueItem => ({
     id: `q_${recordId}`,
     entity,
