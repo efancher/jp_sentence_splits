@@ -2616,6 +2616,11 @@ export async function reorderBookSentences(
      * other would get silently shoved to the end as a "leftover."
      */
     chapterId?: string;
+    /**
+     * The caller queues the sync itself (see `notifyMovedBookSentences`), e.g.
+     * because a second reorder follows and most rows end where they started.
+     */
+    skipSync?: boolean;
   } = {},
 ): Promise<void> {
   const db = getDb();
@@ -2655,6 +2660,7 @@ export async function reorderBookSentences(
       await db.books.put({ ...book, updatedAt: nowIso() });
     }
   });
+  if (options.skipSync) return;
   const memberships = await getDb()
     .bookSentences.where('bookId')
     .equals(bookId)
@@ -2665,6 +2671,29 @@ export async function reorderBookSentences(
       recordId: item.id,
       payload: item,
     })),
+  );
+}
+
+/**
+ * Queues only the membership rows whose position differs from `before` (an
+ * id → position snapshot). A series import re-sorts the whole book twice
+ * (`reorderBookSentences` then `reorderChaptersChronologically`) and used to
+ * queue every row each time: importing a dozen episodes out of date order left
+ * 2000+ pushes that stalled on a phone (2026-11-06).
+ */
+async function notifyMovedBookSentences(
+  bookId: string,
+  before: Map<string, number>,
+): Promise<void> {
+  const memberships = await getDb().bookSentences.where('bookId').equals(bookId).toArray();
+  notifySyncMany(
+    memberships
+      .filter((item) => before.get(item.id) !== item.position)
+      .map((item) => ({
+        entity: 'book_sentences' as const,
+        recordId: item.id,
+        payload: item,
+      })),
   );
 }
 
@@ -3300,13 +3329,22 @@ export async function commitSeriesEpisodeImport(options: {
   // chapter: a reused sentenceId now has its own row per chapter (see
   // attachSentencesToChapterForImport), so an unscoped reorder could grab
   // the wrong one.
-  await reorderBookSentences(result.bookId, selectedIds, { chapterId: result.chapterId });
+  const positionsBefore = new Map(
+    (await db.bookSentences.where('bookId').equals(result.bookId).toArray()).map(
+      (item) => [item.id, item.position] as const,
+    ),
+  );
+  await reorderBookSentences(result.bookId, selectedIds, {
+    chapterId: result.chapterId,
+    skipSync: true,
+  });
   // A hand-made target may hold undated chapters, which the date sort would push
   // behind the new episode; leave its order alone unless every chapter is dated.
   const targetChapters = (await db.books.get(result.bookId))?.chapters ?? [];
   if (!options.targetBookId || targetChapters.every((chapter) => chapter.sourceDate)) {
-    await reorderChaptersChronologically(result.bookId);
+    await reorderChaptersChronologically(result.bookId, { skipSync: true });
   }
+  await notifyMovedBookSentences(result.bookId, positionsBefore);
   await applySentenceAudioForPreview(result.bookId, options.preview);
 
   return { bookId: result.bookId, chapterId: result.chapterId };
@@ -3362,7 +3400,10 @@ export async function getSeriesImportedSourceIds(
  * books `commitSeriesEpisodeImport` manages, where every chapter it created
  * has one.
  */
-async function reorderChaptersChronologically(bookId: string): Promise<void> {
+async function reorderChaptersChronologically(
+  bookId: string,
+  options: { skipSync?: boolean } = {},
+): Promise<void> {
   const db = getDb();
   const book = await db.books.get(bookId);
   if (!book) return;
@@ -3407,6 +3448,7 @@ async function reorderChaptersChronologically(bookId: string): Promise<void> {
   await db.bookSentences.bulkPut(
     orderedRows.map((row, index) => ({ ...row, position: index })),
   );
+  if (options.skipSync) return;
   const updatedMemberships = await getDb()
     .bookSentences.where('bookId')
     .equals(bookId)
