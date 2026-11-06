@@ -107,7 +107,11 @@ export function llmSpanReadings(inline: string, llmKana: string): SpanReadings {
   // boundaryMap runs on the whitespace-free string; remap span offsets to it.
   const stripOffset = (pos: number) => kana.slice(0, pos).replace(/\s+/g, '').length;
   for (const span of spans) {
-    const reading = target.slice(map[stripOffset(span.start)]!, map[stripOffset(span.end)]!);
+    // The reply may add punctuation the tokenizer kana lacks (いつから、ともだち);
+    // alignment can attribute it to the neighbouring span, which then never matches.
+    const reading = target
+      .slice(map[stripOffset(span.start)]!, map[stripOffset(span.end)]!)
+      .replace(/[^\p{L}\p{N}ー]/gu, '');
     if (reading) out.set(span.segIndex, reading);
   }
   return out;

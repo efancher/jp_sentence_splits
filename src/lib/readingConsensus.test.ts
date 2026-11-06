@@ -34,6 +34,13 @@ describe('readingConsensus', () => {
     expect([...spans.values()]).toEqual(['まえ', 'えき', 'い']);
   });
 
+  it('drops punctuation the LLM added around a span', () => {
+    const spans = llmSpanReadings('いつから友達[ともだち]になる。', 'いつから、ともだちになる。');
+    expect([...spans.values()]).toEqual(['ともだち']);
+    const mid = llmSpanReadings('どこから友達[ともだち]に、普通[ふつう]を', 'どこからともだちに、ふつうを');
+    expect([...mid.values()]).toEqual(['ともだち', 'ふつう']);
+  });
+
   it('judges: fix only when audio and LLM agree against the tokenizer', () => {
     expect(judgeSpan('ぜん', 'まえ', 'まえ')).toEqual({ kind: 'fix', reading: 'まえ' });
     expect(judgeSpan('ぜん', 'まえ', undefined)).toEqual({ kind: 'flag', audio: 'まえ', llm: undefined });
