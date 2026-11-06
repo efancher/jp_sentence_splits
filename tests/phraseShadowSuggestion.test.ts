@@ -4,7 +4,7 @@ import { resetDbForTests } from '../src/db/database';
 import { getDb, suggestPhraseShadow } from '../src/db/repository';
 import { ALIGNMENT_VERSION } from '../src/lib/analysisApi';
 import { createId } from '../src/lib/ids';
-import { expandToPhrase, orderLinksByWeakness } from '../src/lib/phraseShadow';
+import { expandToPhrase, orderLinksByWeakness, weakestChunkRange } from '../src/lib/phraseShadow';
 
 const words = [
   { text: '猫', start: 0, end: 0.4 },
@@ -33,6 +33,42 @@ describe('expandToPhrase', () => {
       { text: 'い', start: 2.5, end: 5 },
     ];
     expect(expandToPhrase(slow, { startMs: 0, endMs: 600 }, 5000)).toEqual({ startMs: 0, endMs: 600 });
+  });
+});
+
+describe('weakestChunkRange', () => {
+  const sentence = '私は先週、風邪をひいてしまい、ポッドキャストなどをやすみました';
+  const long = [
+    { text: '私は', start: 0.2, end: 0.8 },
+    { text: '先週', start: 0.8, end: 1.4 },
+    { text: '風邪を', start: 1.7, end: 2.3 },
+    { text: 'ひいて', start: 2.3, end: 3.0 },
+    { text: 'しまい', start: 3.4, end: 4.0 },
+    { text: 'ポッド', start: 4.3, end: 5.2 },
+    { text: 'きゃすと', start: 5.2, end: 6.4 },
+    { text: 'など', start: 6.4, end: 7.0 },
+    { text: 'やすみました', start: 7.4, end: 9.0 },
+  ];
+
+  it('returns the chunk where the weakest word sits, not the whole clip', () => {
+    const range = weakestChunkRange(long, sentence, ['ポッドキャスト'], 9500)!;
+    expect(range.startMs).toBeLessThanOrEqual(4300);
+    expect(range.endMs).toBeGreaterThanOrEqual(6400);
+    expect(range.endMs - range.startMs).toBeLessThan(9500 * 0.9);
+  });
+
+  it('tries the next weakest word when one is not in the sentence text', () => {
+    expect(weakestChunkRange(long, sentence, ['存在しない', '先週'], 9500)).toEqual(
+      weakestChunkRange(long, sentence, ['先週'], 9500),
+    );
+  });
+
+  it('falls back to the first chunk with no usable word', () => {
+    expect(weakestChunkRange(long, sentence, [], 9500)!.startMs).toBe(200);
+  });
+
+  it('returns null when the clip is already phrase-sized', () => {
+    expect(weakestChunkRange([{ text: 'はい', start: 0, end: 0.5 }], 'はい', [], 520)).toBeNull();
   });
 });
 

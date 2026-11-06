@@ -801,7 +801,7 @@ export function ShadowWorkspace({
       {suggestedPhrase &&
       !(phraseRange && phraseRange.startMs === suggestedPhrase.startMs && phraseRange.endMs === suggestedPhrase.endMs) ? (
         <div className="row" style={{ alignItems: 'center', flexWrap: 'wrap' }}>
-          <span className="muted">Suggested phrase (covers {suggestedPhrase.wordLabel}):</span>
+          <span className="muted">Suggested phrase{suggestedPhrase.wordLabel ? ` (covers ${suggestedPhrase.wordLabel})` : ''}:</span>
           <strong lang="ja">{suggestedPhrase.text}</strong>
           <button
             type="button"

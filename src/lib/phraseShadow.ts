@@ -124,6 +124,78 @@ export function expandToPhrase(
   return { startMs: Math.round(startMs), endMs: Math.round(endMs) };
 }
 
+/** A pause at least this long between aligned words is a clause/chunk boundary. */
+export const CHUNK_PAUSE_MS = 150;
+
+/**
+ * Splits the spoken part of a clip into clause-sized chunks (each `minMs`..`maxMs` long where the
+ * speech allows): a chunk closes at a pause once long enough, or before a word that would push it
+ * past `maxMs`. A short trailing remainder joins the previous chunk.
+ */
+export function chunkRanges(
+  words: readonly Pick<WordAlignment, 'start' | 'end' | 'text'>[],
+  minMs = SUGGESTED_PHRASE_MIN_MS,
+  maxMs = SUGGESTED_PHRASE_MAX_MS,
+): { startMs: number; endMs: number }[] {
+  const spoken = words.filter((word) => word.text && !word.text.startsWith('<') && word.end > word.start);
+  const chunks: { startMs: number; endMs: number }[] = [];
+  let current: { startMs: number; endMs: number } | null = null;
+  for (let i = 0; i < spoken.length; i += 1) {
+    const startMs = spoken[i].start * 1000;
+    const endMs = spoken[i].end * 1000;
+    if (current && endMs - current.startMs > maxMs && current.endMs - current.startMs >= minMs) {
+      chunks.push(current);
+      current = null;
+    }
+    current = current ? { startMs: current.startMs, endMs } : { startMs, endMs };
+    const next = spoken[i + 1];
+    if (next && next.start * 1000 - endMs >= CHUNK_PAUSE_MS && endMs - current.startMs >= minMs) {
+      chunks.push(current);
+      current = null;
+    }
+  }
+  if (current) {
+    const last = chunks[chunks.length - 1];
+    if (last && current.endMs - current.startMs < minMs) last.endMs = current.endMs;
+    else chunks.push(current);
+  }
+  return chunks.map((chunk) => ({ startMs: Math.round(chunk.startMs), endMs: Math.round(chunk.endMs) }));
+}
+
+const NON_SPOKEN = /[\s、。，．,.!?！？「」『』（）()…・]/g;
+
+/**
+ * Fallback when a word's own aligned span can't be located: the clause-sized chunk where the weakest
+ * word sits, found from its position in the sentence text (spoken characters before it, as a share of
+ * the spoken span) instead of an aligner match. `surfaceForms` are weakest first; with none usable the
+ * first chunk is returned. Null when the clip is already phrase-sized (nothing to narrow).
+ */
+export function weakestChunkRange(
+  words: readonly Pick<WordAlignment, 'start' | 'end' | 'text'>[],
+  japanese: string,
+  surfaceForms: readonly string[],
+  clipDurationMs: number,
+): { startMs: number; endMs: number } | null {
+  const chunks = chunkRanges(words).filter((chunk) => isPhraseRange(chunk, clipDurationMs));
+  if (chunks.length === 0) return null;
+  const spokenText = japanese.replace(NON_SPOKEN, '');
+  const spoken = words.filter((word) => word.text && !word.text.startsWith('<') && word.end > word.start);
+  if (spokenText && spoken.length > 0) {
+    const spanStart = spoken[0].start * 1000;
+    const spanLength = spoken[spoken.length - 1].end * 1000 - spanStart;
+    for (const surface of surfaceForms) {
+      const index = japanese.indexOf(surface);
+      const spokenSurface = surface.replace(NON_SPOKEN, '');
+      if (index < 0 || !spokenSurface) continue;
+      const before = japanese.slice(0, index).replace(NON_SPOKEN, '').length;
+      const centre = spanStart + ((before + spokenSurface.length / 2) / spokenText.length) * spanLength;
+      const hit = chunks.find((chunk) => centre >= chunk.startMs && centre <= chunk.endMs);
+      if (hit) return hit;
+    }
+  }
+  return chunks[0];
+}
+
 /** Links ordered weakest word first (no evidence yet counts as the average), keeping sentence order on ties. */
 export function orderLinksByWeakness<T extends { vocabularyItemId: string }>(
   links: readonly T[],

@@ -8,6 +8,7 @@ import { frequencyBandPrior, planWeakWordSentences, READER_KNOWN_STRENGTH, wordS
 import { readCheckReason, sentencesDueForReadCheck } from '../lib/readCheck';
 import {
   expandToPhrase,
+  weakestChunkRange,
   isPhraseRange,
   orderLinksByWeakness,
   phraseShadowTargetKey,
@@ -9890,10 +9891,19 @@ export async function suggestPhraseShadow(input: {
     db.sentenceVocabulary.where('sentenceId').equals(input.sentenceId).toArray(),
   ]);
   if (!alignment || !sentence) return null;
+  // No word could be placed (or none is linked): still never leave the pane on the whole sentence.
+  const chunkFallback = (weakestFirst: readonly string[]) => {
+    if (input.surfaceForm) return null;
+    const range = weakestChunkRange(alignment.words, sentence.japanese, weakestFirst, input.clipDurationMs);
+    if (!range) return null;
+    const text = phraseTextFromAlignment(alignment.words, range);
+    return text ? { ...range, text, wordLabel: '' } : null;
+  };
   const candidates = links.filter((link) => link.surfaceForm && (!input.surfaceForm || link.surfaceForm === input.surfaceForm));
-  if (candidates.length === 0) return null;
+  if (candidates.length === 0) return chunkFallback([]);
   const { strengthByWord, vocabById } = await loadWordReadingStrengths(READER_STRENGTH_CACHE_MS);
-  for (const link of orderLinksByWeakness(candidates, strengthByWord)) {
+  const ordered = orderLinksByWeakness(candidates, strengthByWord);
+  for (const link of ordered) {
     const spans = isolatedWordSpans(alignment.words, sentence.japanese, link.surfaceForm!);
     const span = spans?.withParticle ?? spans?.wordOnly;
     if (!span) continue;
@@ -9905,7 +9915,8 @@ export async function suggestPhraseShadow(input: {
       wordLabel: vocabById.get(link.vocabularyItemId)?.expression ?? link.surfaceForm!,
     };
   }
-  return null;
+  // The weakest word's chunk, located from its place in the sentence rather than by an aligner match.
+  return chunkFallback(ordered.map((link) => link.surfaceForm!));
 }
 
 /** `suggestPhraseShadow` for a sentence's first reference clip (the planner has the sentence, not the audio row). */
