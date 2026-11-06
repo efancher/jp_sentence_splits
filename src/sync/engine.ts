@@ -505,6 +505,13 @@ async function pushOne(item: SyncQueueItem, userId: string): Promise<void> {
       ) {
         return;
       }
+      if (
+        error.code === '23505' &&
+        item.entity === 'book_sentences' &&
+        (await adoptRemoteBookSentence(item.recordId, row))
+      ) {
+        return;
+      }
       if (error.code === '42501') {
         if (await pruneOrphanedGrammarLink(item)) return;
         await requeueMissingPattern(item);
@@ -802,6 +809,58 @@ export async function adoptRemoteDuplicate(
     entity,
     localId,
     remoteId: String(remote.id),
+  });
+  return true;
+}
+
+/**
+ * A book membership row whose (book, chapter, sentence) — or (book, sentence)
+ * for a chapterless row — is already on the server under a different id. Two
+ * devices attached the same sentence to the same chapter before either had
+ * pulled the other's row (reported 2026-11-06: a phone's quick import against
+ * a row another device had pushed 40 minutes earlier), so the insert hits
+ * `book_sentences_book_chapter_sentence_uidx` (23505) on every retry and the
+ * failure aborted the whole `book_sentences` push. Nothing references a
+ * membership row by id, so adopting is just: drop the local twin, take the
+ * server's row, and let the queue row settle. Exported for unit tests.
+ */
+export async function adoptRemoteBookSentence(
+  localId: string,
+  row: Record<string, unknown>,
+): Promise<boolean> {
+  const supabase = getSupabase();
+  if (!supabase) return false;
+  let query = supabase
+    .from('book_sentences')
+    .select('*')
+    .is('deleted_at', null)
+    .eq('book_id', row.book_id as string)
+    .eq('sentence_id', row.sentence_id as string);
+  query = row.chapter_id ? query.eq('chapter_id', row.chapter_id as string) : query.is('chapter_id', null);
+  const { data: remote, error } = await query.maybeSingle();
+  if (error || !remote || String(remote.id) === localId) return false;
+
+  const db = getDb();
+  const remoteId = String(remote.id);
+  const version = Number(remote.version ?? 1);
+  await db.transaction('rw', [db.bookSentences, db.syncQueue, db.syncRecordMeta], async () => {
+    await db.bookSentences.delete(localId);
+    // every queued push for the abandoned id, so a later edit can't resurrect it
+    await db.syncQueue.where('[entity+recordId]').equals(['book_sentences', localId]).delete();
+    await db.bookSentences.put(remoteToBookSentence(remote as Record<string, unknown>));
+    await db.syncRecordMeta.delete(recordMetaKey('book_sentences', localId));
+    await putRecordMeta({
+      entity: 'book_sentences',
+      recordId: remoteId,
+      version,
+      syncedVersion: version,
+      updatedAt: String(remote.updated_at ?? new Date().toISOString()),
+    });
+  });
+  syncLog('warn', 'Adopted remote book membership for a duplicate insert', 'DEDUP_ADOPT', {
+    entity: 'book_sentences',
+    localId,
+    remoteId,
   });
   return true;
 }

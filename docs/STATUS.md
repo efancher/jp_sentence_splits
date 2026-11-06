@@ -250,6 +250,12 @@ repair tooling, research materials and future roadmap ideas remain available.
 
 ## Open limitations and follow-ups
 
+- **Duplicate book membership on push (2026-11-06):** two devices attaching the same
+  sentence to the same chapter before syncing hit `book_sentences_book_chapter_sentence_uidx`
+  (23505) forever and aborted the `book_sentences` push. The push now adopts the server's row
+  (`adoptRemoteBookSentence`, `engine.ts`): local twin and its queued pushes dropped, server
+  row kept. Not exercised against real Postgres (`npm run test:pg` not run). Settings also
+  stopped loading every native-audio blob at once (iOS page kills).
 - **All-kana ASR transcripts (2026-11-05):** slow learner speech (Slow Japanese) came back
   from `/transcribe-source` as hiragana (no kanji, no readings stored). The service now passes
   Whisper `hotwords` (`ANALYSIS_SOURCE_HOTWORDS`; re-injected every window, unlike

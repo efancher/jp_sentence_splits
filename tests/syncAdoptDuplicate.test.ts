@@ -46,7 +46,7 @@ const fake = vi.hoisted(() => {
 
 vi.mock('../src/sync/supabaseClient', () => ({ getSupabase: () => fake.client }));
 
-import { adoptRemoteDuplicate, remapDuplicateEntityId } from '../src/sync/engine';
+import { adoptRemoteBookSentence, adoptRemoteDuplicate, remapDuplicateEntityId } from '../src/sync/engine';
 
 const REMOTE_PATTERN_ID = 'grammar_pattern_00000000-remote'; // sorts before any real uuid-suffixed local id
 
@@ -346,5 +346,73 @@ describe('adoptRemoteDuplicate remote lookup', () => {
     const db = getDb();
     expect(await db.grammarPatterns.get(local.id)).toBeUndefined();
     expect(await db.grammarPatterns.get(REMOTE_PATTERN_ID)).toBeDefined();
+  });
+});
+
+describe('book membership duplicate adoption', () => {
+  beforeEach(() => {
+    resetDbForTests(`sync-adopt-bs-${createId('db')}`);
+    fake.calls.length = 0;
+    fake.state.result = { data: null, error: null };
+  });
+
+  const localRow = (chapterId?: string) => ({
+    id: 'bs_local',
+    bookId: 'book_1',
+    sentenceId: 'sent_1',
+    chapterId,
+    position: 5,
+    status: 'unstarted' as const,
+    addedAt: '2026-11-06T13:00:00.000Z',
+  });
+  const remoteRow = (chapterId: string | null) => ({
+    id: 'bs_remote',
+    book_id: 'book_1',
+    sentence_id: 'sent_1',
+    chapter_id: chapterId,
+    position: 1294,
+    status: 'unstarted',
+    added_at: '2026-11-06T12:00:00.000Z',
+    version: 10,
+    updated_at: '2026-11-06T14:09:28.000Z',
+  });
+
+  it('replaces the local twin with the server row and clears its queued pushes', async () => {
+    const db = getDb();
+    await db.bookSentences.put(localRow('chapter_1'));
+    await enqueueMutation({ entity: 'book_sentences', recordId: 'bs_local', operation: 'upsert', expectedVersion: null, payload: localRow('chapter_1') });
+    fake.state.result = { data: remoteRow('chapter_1'), error: null };
+
+    const adopted = await adoptRemoteBookSentence('bs_local', {
+      book_id: 'book_1',
+      sentence_id: 'sent_1',
+      chapter_id: 'chapter_1',
+    });
+
+    expect(adopted).toBe(true);
+    expect(fake.calls[0]!.eqs).toEqual([
+      ['book_id', 'book_1'],
+      ['sentence_id', 'sent_1'],
+      ['chapter_id', 'chapter_1'],
+    ]);
+    expect(await db.bookSentences.get('bs_local')).toBeUndefined();
+    expect((await db.bookSentences.get('bs_remote'))?.position).toBe(1294);
+    expect((await db.syncRecordMeta.get('book_sentences:bs_remote'))?.version).toBe(10);
+    expect(await db.syncQueue.where('[entity+recordId]').equals(['book_sentences', 'bs_local']).count()).toBe(0);
+  });
+
+  it('looks up a chapterless row by chapter_id IS NULL', async () => {
+    fake.state.result = { data: remoteRow(null), error: null };
+    await adoptRemoteBookSentence('bs_local', { book_id: 'book_1', sentence_id: 'sent_1', chapter_id: null });
+    expect(fake.calls[0]!.is).toContainEqual(['chapter_id', null]);
+  });
+
+  it('does nothing when the server has no such row', async () => {
+    const db = getDb();
+    await db.bookSentences.put(localRow('chapter_1'));
+    expect(
+      await adoptRemoteBookSentence('bs_local', { book_id: 'book_1', sentence_id: 'sent_1', chapter_id: 'chapter_1' }),
+    ).toBe(false);
+    expect(await db.bookSentences.get('bs_local')).toBeDefined();
   });
 });
