@@ -17,6 +17,7 @@ import {
   getSentenceShadowingReadiness,
   getSessionPlannerInput,
   getTodayPlannerSession,
+  logPhraseShadow,
   logSentenceLearningEvent,
   planRecommendedSession,
   setBookSuspended,
@@ -570,6 +571,53 @@ describe('Learning Orchestrator repository layer', () => {
     await updateSettings({ quietMode: true });
     const phraseQuiet = await planRecommendedSession(60);
     expect(phraseQuiet.steps.some((step) => step.targetKind === 'shadow')).toBe(false);
+  });
+
+  it('does not re-offer sentences already shadowed today after the session is cleared', async () => {
+    const book = await createBook({ title: 'Shadow Twice' });
+    const db = getDb();
+    const sentences = [makeSentence(), makeSentence()];
+    await db.sentences.bulkPut(sentences);
+    await addSentencesToBook(book.id, sentences.map((s) => s.id));
+    for (const sentence of sentences) {
+      await setBookSentenceStatus(book.id, sentence.id, 'in_progress');
+      await confirmSentenceVocabulary(sentence.id, []);
+      await db.sentenceAudio.add({
+        id: `audio-${sentence.id}`,
+        sentenceId: sentence.id,
+        sourceId: 'source-1',
+        sourceSentenceId: `src-${sentence.id}`,
+        sourceTitle: 'Test Source',
+        mimeType: 'audio/mp3',
+        durationMs: 3000,
+        startMs: 0,
+        endMs: 3000,
+        blob: new Blob(['fake audio bytes'], { type: 'audio/mp3' }),
+        importedAt: new Date().toISOString(),
+      });
+    }
+    await updateSettings({ sentenceShadowingPaused: true });
+
+    const first = await planRecommendedSession(60);
+    const firstShadow = first.steps.filter((step) => step.targetKind === 'shadow').map((step) => step.sentenceId);
+    expect(new Set(firstShadow)).toEqual(new Set(sentences.map((s) => s.id)));
+
+    // A phrase pass logs no attempt row, so attempt counts alone cannot tell it was done.
+    const done = firstShadow[0]!;
+    await logPhraseShadow({
+      bookId: book.id,
+      sentenceId: done,
+      sentenceAudioId: `audio-${done}`,
+      clipDurationMs: 3000,
+      range: { startMs: 500, endMs: 1500 },
+      outcome: 'got_it',
+    });
+    await deleteTodayPlannerSession();
+
+    const again = await planRecommendedSession(60);
+    const order = again.steps.filter((step) => step.targetKind === 'shadow').map((step) => step.sentenceId);
+    expect(order[0]).not.toBe(done);
+    expect(order).toContain(done);
   });
 
   it('shadows a walked-through sentence even when its book membership is still unstarted', async () => {

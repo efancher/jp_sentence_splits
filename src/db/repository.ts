@@ -11732,13 +11732,29 @@ async function findShadowCandidates(
   // Attempt rows carry the recording Blob, so only the index keys are read to count attempts; full
   // rows are fetched just for the few sentences with a pending "sound" request.
   const requestIds = Object.keys(shadowRequests);
-  const [attemptSentenceIds, requestAttempts, bookSentences, recentlyMissedClozeSentenceIds] = await Promise.all([
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const startOfTodayIso = startOfToday.toISOString();
+  const [attemptSentenceIds, requestAttempts, bookSentences, recentlyMissedClozeSentenceIds, todayAttempts, todayPhraseEvents] = await Promise.all([
     sentenceIdsWithAudio.length <= ANY_OF_SCAN_THRESHOLD
       ? db.attempts.where('sentenceId').anyOf(sentenceIdsWithAudio).keys()
       : db.attempts.orderBy('sentenceId').keys(),
     requestIds.length ? db.attempts.where('sentenceId').anyOf(requestIds).toArray() : Promise.resolve([]),
     bookSentencesForSentences(sentenceIdsWithAudio),
     routeClozeMisses ? getRecentlyMissedClozeSentenceIds() : Promise.resolve(new Set<string>()),
+    db.attempts.where('createdAt').aboveOrEqual(startOfTodayIso).toArray(),
+    db.sentenceLearningEvents
+      .where('timestamp')
+      .aboveOrEqual(startOfTodayIso)
+      .filter((event) => event.action === 'phrase_shadow')
+      .toArray(),
+  ]);
+  // Shadowed today (whole-sentence attempt or phrase pass): sent to the back so a cleared or topped-up
+  // session doesn't offer the same sentences again — clearing deletes the plan's own step list, which
+  // is what the planner's exclusions otherwise come from.
+  const shadowedTodayIds = new Set([
+    ...todayAttempts.map((attempt) => attempt.sentenceId),
+    ...todayPhraseEvents.map((event) => event.sentenceId),
   ]);
   const wantedSentenceIds = new Set(sentenceIdsWithAudio);
   const attemptCountBySentenceId = new Map<string, number>();
@@ -11762,11 +11778,13 @@ async function findShadowCandidates(
       attemptCount: attemptCountBySentenceId.get(sentenceId) ?? 0,
       recentlyMissedCloze: recentlyMissedClozeSentenceIds.has(sentenceId),
       requested: requestedSentenceIds.has(sentenceId),
+      shadowedToday: shadowedTodayIds.has(sentenceId),
       weakRank: weakRank.get(sentenceId),
     }))
     .filter((candidate) => !snoozedSentenceIds.has(candidate.sentenceId))
     .sort((a, b) => {
       if (a.requested !== b.requested) return a.requested ? -1 : 1;
+      if (a.shadowedToday !== b.shadowedToday) return a.shadowedToday ? 1 : -1;
       if (a.recentlyMissedCloze !== b.recentlyMissedCloze) return a.recentlyMissedCloze ? -1 : 1;
       // Sentences covering the weakest words come next, in coverage order, ahead of the plain fewest-attempts fallback.
       if (a.weakRank !== b.weakRank) {
