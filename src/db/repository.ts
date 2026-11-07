@@ -1,3 +1,5 @@
+import type { Table } from 'dexie';
+
 import { openContentReports, type OpenContentReport } from '../lib/contentReports';
 import { isSentenceLedFlow } from '../lib/sentenceLed';
 import { isReadingAnswerCorrect, surfaceReadingFromInline } from '../lib/readingAnswer';
@@ -4952,7 +4954,7 @@ export async function getSavedWordStatus(
   expressions: string[],
   options: { skipStrength?: boolean } = {},
 ): Promise<{ savedMeanings: Map<string, string>; knownExpressions: Set<string> }> {
-  const items = expressions.length ? await getDb().vocabularyItems.where('expression').anyOf(expressions).toArray() : [];
+  const items = await readRowsByKeys(getDb().vocabularyItems, 'expression', expressions);
   const savedMeanings = new Map<string, string>();
   for (const item of items) if (item.meaning.trim() && !savedMeanings.has(item.expression)) savedMeanings.set(item.expression, item.meaning);
   const proficientIds = await getProficientReadingVocabularyItemIds(items.map((item) => item.id));
@@ -4972,7 +4974,7 @@ export async function getSavedWordStatus(
  */
 export async function getStrengthKnownExpressions(expressions: string[]): Promise<Set<string>> {
   if (expressions.length === 0) return new Set();
-  const items = await getDb().vocabularyItems.where('expression').anyOf(expressions).toArray();
+  const items = await readRowsByKeys(getDb().vocabularyItems, 'expression', expressions);
   if (items.length === 0) return new Set();
   const { strengthByWord } = await loadWordReadingStrengths(READER_STRENGTH_CACHE_MS);
   return new Set(items.filter((item) => (strengthByWord.get(item.id) ?? 0) >= READER_KNOWN_STRENGTH).map((item) => item.expression));
@@ -5011,9 +5013,9 @@ async function filterVocabularyItemIdsByActivity(
   if (vocabularyItemIds.length === 0) return new Set();
   const db = getDb();
   const idSet = new Set(vocabularyItemIds);
-  // A handful of ids (the Reader's per-chapter lookup) reads just their rows through the subjectId index
-  // instead of materialising every vocabulary card, which stalled chapter loads on iPhone.
-  const candidates = idSet.size <= 500
+  // A handful of ids reads just their rows through the subjectId index. Beyond that one read of the
+  // vocabulary cards beats a lookup per id (each waits in IndexedDB's queue); cards are paused, so few exist.
+  const candidates = idSet.size <= SMALL_TABLE_ANY_OF_LIMIT
     ? await db.studyItems.where('subjectId').anyOf([...idSet]).toArray()
     : await db.studyItems.where('subjectType').equals('vocabularyItem').toArray();
   return new Set(
@@ -12177,6 +12179,22 @@ function plannerShared<T>(key: string, deps: readonly PlannerCacheTable[], load:
  */
 const ANY_OF_SCAN_THRESHOLD = 40;
 
+/**
+ * For the small, blob-free tables the Reader joins (a few thousand rows): above this many keys one
+ * `toArray()` beats `anyOf`, whose per-key lookups all wait in IndexedDB's queue. A 2026-11-07 iPhone
+ * report spent 12-29 s in ~170 such lookups over tables of 1-2.5k rows, while a one-request `bulkGet`
+ * on the same data took under 100 ms. Never use it on a table whose rows carry Blobs.
+ */
+const SMALL_TABLE_ANY_OF_LIMIT = 6;
+
+/** Rows of a small table whose `index` value is in `keys`: `anyOf` for a few keys, one table read otherwise. */
+export async function readRowsByKeys<T, TInsert>(table: Table<T, string, TInsert>, index: keyof T & string, keys: readonly string[]): Promise<T[]> {
+  if (keys.length === 0) return [];
+  if (keys.length <= SMALL_TABLE_ANY_OF_LIMIT) return table.where(index).anyOf(keys as string[]).toArray();
+  const wanted = new Set(keys);
+  return (await table.toArray()).filter((row) => wanted.has(row[index] as string));
+}
+
 /** Every sentence id that has a clip. The index scan costs a row per clip (about 1 s for ~4,000 on a phone). */
 function allAudioSentenceIds(): Promise<string[]> {
   return plannerShared(
@@ -12209,7 +12227,7 @@ async function sentenceIdsWithAudioClip(sentenceIds: string[]): Promise<Set<stri
 }
 
 async function learningEventsForSentences(sentenceIds: string[]): Promise<SentenceLearningEvent[]> {
-  if (sentenceIds.length <= ANY_OF_SCAN_THRESHOLD) {
+  if (sentenceIds.length <= SMALL_TABLE_ANY_OF_LIMIT) {
     return getDb().sentenceLearningEvents.where('sentenceId').anyOf(sentenceIds).toArray();
   }
   const wanted = new Set(sentenceIds);
@@ -12217,7 +12235,7 @@ async function learningEventsForSentences(sentenceIds: string[]): Promise<Senten
 }
 
 async function bookSentencesForSentences(sentenceIds: string[]): Promise<BookSentence[]> {
-  if (sentenceIds.length <= ANY_OF_SCAN_THRESHOLD) {
+  if (sentenceIds.length <= SMALL_TABLE_ANY_OF_LIMIT) {
     return getDb().bookSentences.where('sentenceId').anyOf(sentenceIds).toArray();
   }
   const wanted = new Set(sentenceIds);

@@ -41,7 +41,7 @@ import { SentenceWalkthrough, walkthroughChunks } from '../components/SentenceWa
 import { glossesFromWords } from '../lib/chunkGlosses';
 import { mergeChapterConstructionDrafts, mergeChapterWalkthroughs } from '../lib/contextWalkthrough';
 import { WordGlossList, type CompareAids } from '../components/TargetLessonCard';
-import { ensureDefaultBookChapter, getDb, getEpisodeFocus, getSavedWordStatus, getStrengthKnownExpressions, listGlossDecisions, listSentenceLearningEvents, logGlossDecision, logSentenceLearningEvent, ensureVocabularyItem, readSettings, updateSettings, withoutUnseenAiLinks } from '../db/repository';
+import { ensureDefaultBookChapter, getDb, getEpisodeFocus, getSavedWordStatus, getStrengthKnownExpressions, listGlossDecisions, readRowsByKeys, listSentenceLearningEvents, logGlossDecision, logSentenceLearningEvent, ensureVocabularyItem, readSettings, updateSettings, withoutUnseenAiLinks } from '../db/repository';
 import { registerReportContext } from '../lib/reportContext';
 import type { BookSentence, Sentence, SentenceAudio, StructureDraftChunk, TextDisplayMode } from '../domain/types';
 import { useNativeAudio } from '../hooks/useNativeAudio';
@@ -220,9 +220,9 @@ export function ReaderPage() {
         // The words a learner can tap in each sentence: its content words, in sentence order. A word that has no
         // vocabulary item yet (an unconfirmed AI draft) gets one on the first answer, so '' marks "not created yet".
         timer.track('vocabulary', (async () => {
-          const links = await db.sentenceVocabulary.where('sentenceId').anyOf(sentenceIds).toArray();
+          const links = await readRowsByKeys(db.sentenceVocabulary, 'sentenceId', sentenceIds);
           const [existingItems, linkedItems] = await Promise.all([
-            contentExpressions.length ? db.vocabularyItems.where('expression').anyOf(contentExpressions).toArray() : [],
+            readRowsByKeys(db.vocabularyItems, 'expression', contentExpressions),
             db.vocabularyItems.bulkGet([...new Set(links.map((link) => link.vocabularyItemId))]),
           ]);
           timer.count('vocabularyLinks', links.length);
@@ -230,7 +230,7 @@ export function ReaderPage() {
         })()),
         // Grammar patterns linked to each sentence, positioned in its text, so they can be tapped like words.
         timer.track('grammar', (async () => {
-          const grammarLinks = await withoutUnseenAiLinks(await db.sentenceGrammar.where('sentenceId').anyOf(sentenceIds).toArray());
+          const grammarLinks = await withoutUnseenAiLinks(await readRowsByKeys(db.sentenceGrammar, 'sentenceId', sentenceIds));
           const patternRows = await db.grammarPatterns.bulkGet([...new Set(grammarLinks.map((link) => link.grammarPatternId))]);
           timer.count('grammarLinks', grammarLinks.length);
           return { grammarLinks, patternRows };

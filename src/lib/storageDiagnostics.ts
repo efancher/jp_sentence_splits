@@ -21,9 +21,31 @@ export interface StorageSnapshot {
   /** `navigator.storage.estimate()`, in MB; browsers may round or withhold it. */
   usageMb?: number;
   quotaMb?: number;
+  /** Same 20 rows fetched three ways, so a report shows which access pattern this device is slow at. */
+  lookupProbeMs?: { anyOf: number; scan: number; bulkGet: number };
   takenAt: string;
   /** How long the snapshot itself took; counting a busy table is slow too. */
   tookMs: number;
+}
+
+async function timed(work: () => Promise<unknown>): Promise<number> {
+  const started = performance.now();
+  await work();
+  return Math.round(performance.now() - started);
+}
+
+/** 20 `sentenceVocabulary` rows by id via `where().anyOf()` (the Reader's old pattern), a whole-table read, and `bulkGet`. */
+async function probeLookups(): Promise<StorageSnapshot['lookupProbeMs']> {
+  const table = getDb().sentenceVocabulary;
+  const sample = await table.limit(20).toArray();
+  if (sample.length < 20) return undefined;
+  const sentenceIds = [...new Set(sample.map((row) => row.sentenceId))];
+  const ids = sample.map((row) => row.id);
+  return {
+    anyOf: await timed(() => table.where('sentenceId').anyOf(sentenceIds).toArray()),
+    scan: await timed(() => table.toArray()),
+    bulkGet: await timed(() => table.bulkGet(ids)),
+  };
 }
 
 let snapshot: StorageSnapshot | undefined;
@@ -49,8 +71,10 @@ export function refreshStorageSnapshot(): Promise<void> {
         }),
       );
       const estimate = await navigator.storage?.estimate?.().catch(() => undefined);
+      const lookupProbeMs = await probeLookups().catch(() => undefined);
       snapshot = {
         tableCounts,
+        lookupProbeMs,
         usageMb: estimate?.usage === undefined ? undefined : Math.round(estimate.usage / 1_048_576),
         quotaMb: estimate?.quota === undefined ? undefined : Math.round(estimate.quota / 1_048_576),
         takenAt: new Date().toISOString(),
