@@ -327,6 +327,18 @@ Unfinished work and optional extensions; completed behavior is in `AI_OVERVIEW.m
   ASR fallback, difficulty screening and the longer ASR timeout are implemented.
   The earlier 10–20 minute episode checks succeeded; preserve chunked
   transcription beyond roughly 30 minutes as an optional future design.
+  - **Chunked ASR for long episodes (2026-11-07).** A 42-minute episode outran the
+    1 h `MINING_ASR_TIMEOUT_SECONDS`: the client gave up, no captions existed to
+    fall back on, and the job failed with "no segmented sentences". Interim fixes
+    shipped: timeout raised to 2 h, and a caption-less ASR failure now says so.
+    Still open: the single `/transcribe-source` request is one long blocking call
+    and the analysis service keeps transcribing after the client times out (wasted
+    CPU, slows other work). Proposed design: split the source audio into
+    roughly 5–10 minute chunks at silences, transcribe sequentially with
+    progress in the job status, checkpoint finished chunks so a restart or
+    timeout resumes instead of starting over, offset cue timestamps back onto the
+    full source, and cancel the server side when the job is abandoned. Check
+    seams for sentences split across chunk boundaries.
   - Direct podcast URLs still lack the YouTube-id-based "already imported"
     warning. Feed episode badges/chapter dedup are separate; extending the raw
     URL warning remains a low-priority refinement.
