@@ -107,8 +107,8 @@ describe('ShadowPage phrase shadowing', () => {
     await waitFor(async () => expect(await getDb().sentenceLearningEvents.count()).toBe(1));
     const [event] = await getDb().sentenceLearningEvents.toArray();
     expect(event).toMatchObject({
-      action: 'phrase_shadow', outcome: 'close', sentenceId: 'sent-1', rangeStartMs: 500, rangeEndMs: 1600,
-      target: { label: '寝ています' },
+      action: 'phrase_shadow', outcome: 'close', sentenceId: 'sent-1', rangeStartMs: 500, rangeEndMs: 2100,
+      target: { label: '寝ていますね' },
     });
     expect(await getDb().attempts.count()).toBe(0);
     expect(await getDb().reviews.count()).toBe(0);
@@ -138,7 +138,7 @@ describe('ShadowPage phrase shadowing', () => {
     renderShadowPage();
     const rating = await screen.findByRole('group', { name: 'Rate this phrase' });
     await waitFor(() => expect(rating.textContent).toContain('寝ています'));
-    expect(rating.textContent).toContain('0.5–1.6s');
+    expect(rating.textContent).toContain('0.5–2.1s');
     // Already on the estimate, so there is nothing to offer.
     expect(screen.queryByRole('button', { name: 'Use this phrase' })).toBeNull();
   });
@@ -168,7 +168,7 @@ describe('ShadowPage phrase shadowing', () => {
 
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(screen.queryByRole('group', { name: 'Word audio range editor' })).toBeNull();
-    expect((await screen.findByRole('group', { name: 'Rate this phrase' })).textContent).toContain('0.5–1.6s');
+    expect((await screen.findByRole('group', { name: 'Rate this phrase' })).textContent).toContain('0.5–2.1s');
   });
 
   it('applying a fine-tuned span changes only the looped and rated span: no clip, trim, link or event is written', async () => {
@@ -178,7 +178,7 @@ describe('ShadowPage phrase shadowing', () => {
     await saveReferenceAlignment('audio-1', { durationSeconds: 4, words: WORDS });
     renderShadowPage();
     const rating = await screen.findByRole('group', { name: 'Rate this phrase' });
-    await waitFor(() => expect(rating.textContent).toContain('0.5–1.6s'));
+    await waitFor(() => expect(rating.textContent).toContain('0.5–2.1s'));
 
     const db = getDb();
     const before = {
@@ -193,7 +193,7 @@ describe('ShadowPage phrase shadowing', () => {
     await user.click(screen.getByRole('button', { name: 'Use this span' }));
 
     // The displayed (and so the rated) span moved...
-    await waitFor(() => expect(screen.getByRole('group', { name: 'Rate this phrase' }).textContent).toContain('0.6–1.6s'));
+    await waitFor(() => expect(screen.getByRole('group', { name: 'Rate this phrase' }).textContent).toContain('0.6–2.1s'));
     expect(screen.queryByRole('group', { name: 'Word audio range editor' })).toBeNull();
     // ...and nothing was persisted: the clip row (incl. any trim), the word link and the event log are as they were.
     expect(JSON.stringify({ ...(await db.sentenceAudio.get('audio-1')), blob: undefined })).toBe(before.audio);

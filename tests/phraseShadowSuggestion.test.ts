@@ -16,7 +16,8 @@ const words = [
 
 describe('expandToPhrase', () => {
   it('widens a short word span forward first, up to about a second', () => {
-    expect(expandToPhrase(words, { startMs: 500, endMs: 1000 }, 2000)).toEqual({ startMs: 500, endMs: 1600 });
+    // ...and takes the trailing よ with いません rather than stopping just before it.
+    expect(expandToPhrase(words, { startMs: 500, endMs: 1000 }, 2000)).toEqual({ startMs: 500, endMs: 1800 });
   });
 
   it('takes in the preceding word when nothing follows, and stays inside the clip', () => {
@@ -25,6 +26,32 @@ describe('expandToPhrase', () => {
 
   it('leaves a span that is already long enough alone', () => {
     expect(expandToPhrase(words, { startMs: 0, endMs: 1100 }, 2000)).toEqual({ startMs: 0, endMs: 1100 });
+  });
+
+  it('keeps a particle that directly follows the span, even when the span is long enough', () => {
+    const w = [
+      { text: '学校', start: 0, end: 1.2 },
+      { text: 'だけ', start: 1.2, end: 1.5 },
+      { text: '行く', start: 1.5, end: 2 },
+    ];
+    expect(expandToPhrase(w, { startMs: 0, endMs: 1200 }, 2000)).toEqual({ startMs: 0, endMs: 1500 });
+  });
+
+  it('does not pull in a particle that follows a pause', () => {
+    const w = [
+      { text: '学校', start: 0, end: 1.2 },
+      { text: 'に', start: 1.6, end: 1.8 },
+    ];
+    expect(expandToPhrase(w, { startMs: 0, endMs: 1200 }, 2000)).toEqual({ startMs: 0, endMs: 1200 });
+  });
+
+  it('never starts on a particle', () => {
+    const w = [
+      { text: '猫', start: 0, end: 0.4 },
+      { text: 'が', start: 0.4, end: 0.5 },
+      { text: '寝て', start: 0.5, end: 1.6 },
+    ];
+    expect(expandToPhrase(w, { startMs: 400, endMs: 1600 }, 2000)).toEqual({ startMs: 0, endMs: 1600 });
   });
 
   it('never grows past the cap', () => {

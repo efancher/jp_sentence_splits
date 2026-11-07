@@ -56,7 +56,9 @@ export function phraseTextFromAlignment(
       const length = word.end - word.start;
       if (length <= 0) return false;
       const overlap = Math.min(word.end, end) - Math.max(word.start, start);
-      return overlap > length / 2;
+      if (overlap > length / 2) return true;
+      // A particle token stretched over trailing silence counts once its audible part (capped) is inside.
+      return isParticleToken(word) && length * 1000 > PARTICLE_MAX_MS && overlap * 1000 >= PARTICLE_MAX_MS - 1;
     })
     .map((word) => word.text)
     .join('');
@@ -94,6 +96,21 @@ export function phraseShadowsBySentence(
   return out;
 }
 
+/**
+ * Tokens that attach to the word before them and carry part of its pitch pattern (a particle's pitch
+ * is what shows heiban vs odaka), so a suggested phrase must not end just before one or start on one.
+ * Set phrases such as について/によって are not handled here: ending a phrase before them is fine.
+ */
+const ATTACHED_PARTICLES = new Set([
+  'は', 'が', 'を', 'に', 'へ', 'と', 'で', 'の', 'も', 'や', 'か', 'ね', 'よ', 'ぞ', 'さ', 'わ',
+  'から', 'まで', 'より', 'だけ', 'しか', 'でも', 'って', 'など', 'ばかり', 'ほど', 'くらい', 'ぐらい',
+  'さえ', 'こそ', 'には', 'では', 'とは', 'へは', 'からは', 'までは', 'とも', 'にも',
+]);
+
+const PARTICLE_MAX_MS = 500;
+
+const isParticleToken =(word: Pick<WordAlignment, 'text'>) => ATTACHED_PARTICLES.has(word.text);
+
 /** A suggested phrase is widened from one word's span to about this long, and never past the cap. */
 export const SUGGESTED_PHRASE_MIN_MS = 1000;
 export const SUGGESTED_PHRASE_MAX_MS = 3000;
@@ -121,6 +138,18 @@ export function expandToPhrase(
     else if (prev && endMs - prev.start * 1000 <= maxMs) startMs = prev.start * 1000;
     else break;
   }
+  // Never end just before a particle that belongs to the last word, nor start on one.
+  const after = spoken.find((word) => word.start * 1000 >= endMs - 1);
+  const last = [...spoken].reverse().find((word) => word.end * 1000 <= endMs + 1);
+  if (after && last && isParticleToken(after) && after.start * 1000 - last.end * 1000 < CHUNK_PAUSE_MS) {
+    // A particle is a mora or two: a longer token is trailing silence the aligner stretched over it.
+    endMs = clampEnd(Math.min(after.end * 1000, after.start * 1000 + PARTICLE_MAX_MS));
+  }
+  const first = spoken.find((word) => word.end * 1000 > startMs + 1);
+  const before = [...spoken].reverse().find((word) => word.end * 1000 <= startMs + 1);
+  if (first && before && isParticleToken(first) && first.start * 1000 - before.end * 1000 < CHUNK_PAUSE_MS) {
+    startMs = before.start * 1000;
+  }
   return { startMs: Math.round(startMs), endMs: Math.round(endMs) };
 }
 
@@ -143,7 +172,9 @@ export function chunkRanges(
   for (let i = 0; i < spoken.length; i += 1) {
     const startMs = spoken[i].start * 1000;
     const endMs = spoken[i].end * 1000;
-    if (current && endMs - current.startMs > maxMs && current.endMs - current.startMs >= minMs) {
+    // A particle stays with the word it follows even when that pushes the chunk past maxMs.
+    const attached = i > 0 && isParticleToken(spoken[i]) && startMs - spoken[i - 1].end * 1000 < CHUNK_PAUSE_MS;
+    if (!attached && current && endMs - current.startMs > maxMs && current.endMs - current.startMs >= minMs) {
       chunks.push(current);
       current = null;
     }
