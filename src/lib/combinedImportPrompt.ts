@@ -429,7 +429,7 @@ export function checkCombinedReply(input: {
     if (b.startMs - a.startMs <= 45_000) continue;
     if (transcript.some((seg) => seg.startMs > a.startMs + 15_000 && seg.startMs < b.startMs - 15_000)) {
       warnings.push(
-        `No sentences between ${formatMinSec(a.startMs)} and ${formatMinSec(b.startMs)}, though the transcript has speech there — part of the reply may be missing.`,
+        `No sentences between ${formatMinSec(a.startMs)} and ${formatMinSec(b.startMs)}, though the transcript has speech there — it was dropped, or joined into one very long sentence.`,
       );
       break;
     }

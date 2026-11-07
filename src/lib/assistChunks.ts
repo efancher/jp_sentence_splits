@@ -93,13 +93,24 @@ export function chunkTranscript<T>(segs: T[], size = CHUNK_FRAGMENTS): T[][] {
   return chunks;
 }
 
-export function buildChunkPrompt(chunk: WizardTranscriptSeg[], index: number, total: number): string {
+export function buildChunkPrompt(
+  chunk: WizardTranscriptSeg[],
+  index: number,
+  total: number,
+  /** Why the previous reply for this part was rejected, so the retry can fix it rather than repeat it. */
+  rejection?: string,
+): string {
+  const notes = [
+    total > 1
+      ? `This is excerpt ${index + 1} of ${total} of a longer transcript. Timestamps are absolute; keep them as given and cover only the lines below.`
+      : null,
+    rejection
+      ? `Your previous reply for this excerpt was rejected: ${rejection} Split long transcript lines into separate sentences at natural breaks instead of joining lines into one run-on sentence; give every sentence the timestamp of the transcript line it starts in, and cover every line.`
+      : null,
+  ].filter((note): note is string => note !== null);
   return formatCombinedPromptForAI(chunk, NO_EXTRAS, {
     inline: true,
-    note:
-      total > 1
-        ? `This is excerpt ${index + 1} of ${total} of a longer transcript. Timestamps are absolute; keep them as given and cover only the lines below.`
-        : undefined,
+    note: notes.length > 0 ? notes.join('\n\n') : undefined,
   });
 }
 
@@ -167,6 +178,7 @@ export async function runSegmentChunks(input: {
   const doChunk = async (index: number): Promise<void> => {
     const chunk = chunks[index]!;
     let lastError = '';
+    let rejection: string | undefined;
     const label = `sentences part ${index + 1} of ${chunks.length}`;
     for (let attempt = 1; attempt <= MAX_ATTEMPTS_PER_CHUNK; attempt++) {
       if (input.isCancelled()) {
@@ -175,11 +187,12 @@ export async function runSegmentChunks(input: {
       }
       input.onProgress({ index, total: chunks.length, attempt, backend: null });
       try {
-        const { reply, backend } = await run(buildChunkPrompt(chunk, index, chunks.length));
+        const { reply, backend } = await run(buildChunkPrompt(chunk, index, chunks.length, rejection));
         input.onProgress({ index, total: chunks.length, attempt, backend });
         const problem = validateChunkReply(reply, chunk);
         if (problem) {
           lastError = problem;
+          rejection = problem;
           input.onNote?.(`${label}: reply rejected (${problem}) — attempt ${attempt} of ${MAX_ATTEMPTS_PER_CHUNK}`);
           continue;
         }

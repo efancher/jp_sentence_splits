@@ -43,6 +43,30 @@ describe('validateChunkReply', () => {
   });
 });
 
+describe('runSegmentChunks retry', () => {
+  const chunk = [seg(0), seg(30), seg(60), seg(90)];
+  const gappy = '=== SENTENCES ===\n[0:00] あ。 || Ah.\n[1:30] あ。 || Ah.\n=== END ===';
+  const fixed = '=== SENTENCES ===\n[0:00] あ。 || Ah.\n[0:30] あ。 || Ah.\n[1:00] あ。 || Ah.\n[1:30] あ。 || Ah.\n=== END ===';
+
+  it('tells the retry why the first reply was rejected', async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce({ reply: gappy, backend: 'codex' })
+      .mockResolvedValueOnce({ reply: fixed, backend: 'codex' });
+    const result = await runSegmentChunks({
+      chunks: [chunk],
+      replies: [null],
+      run,
+      onChunkDone: () => {},
+      onProgress: () => {},
+      isCancelled: () => false,
+    });
+    expect(result.failure).toBeNull();
+    expect(run.mock.calls[0]![0]).not.toContain('previous reply');
+    expect(run.mock.calls[1]![0]).toContain('No sentences between');
+  });
+});
+
 describe('mergeChunkReplies', () => {
   it('joins the sentence lines of every chunk into one parseable reply', () => {
     const merged = mergeChunkReplies([goodReply(0), goodReply(30)]);
