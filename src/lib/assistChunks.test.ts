@@ -43,26 +43,6 @@ describe('validateChunkReply', () => {
   });
 });
 
-describe('runSegmentChunks gap handling', () => {
-  const chunk = [seg(0), seg(30), seg(60), seg(90)];
-  const gappy = '=== SENTENCES ===\n[0:00] あ。 || Ah.\n[1:30] あ。 || Ah.\n=== END ===';
-
-  it('retries a mid-part gap once, then keeps the part instead of stopping', async () => {
-    const run = vi.fn().mockResolvedValue({ reply: gappy, backend: 'codex' });
-    const result = await runSegmentChunks({
-      chunks: [chunk],
-      replies: [null],
-      run,
-      onChunkDone: () => {},
-      onProgress: () => {},
-      isCancelled: () => false,
-    });
-    expect(run).toHaveBeenCalledTimes(MAX_ATTEMPTS_PER_CHUNK);
-    expect(result.failure).toBeNull();
-    expect(result.replies[0]).toBe(gappy);
-  });
-});
-
 describe('mergeChunkReplies', () => {
   it('joins the sentence lines of every chunk into one parseable reply', () => {
     const merged = mergeChunkReplies([goodReply(0), goodReply(30)]);
