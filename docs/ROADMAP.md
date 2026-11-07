@@ -706,6 +706,55 @@ Unfinished work and optional extensions; completed behavior is in `AI_OVERVIEW.m
 - Bank coverage: shipped 2026-10-02 (book-page "Meaning choices: bulk generate" panel with copy/paste and AI-now, plus background auto-generation for sentences with no check). Remaining: auto top-up of thin banks (manual only today) and wiring generation directly into each import commit instead of the background worker.
 - Sequential mode: latch from the planner too (it is read-only today) and expose a per-book "reset unlocks".
 
+## Possibilities (organic vocabulary/grammar growth, i+1 sequencing)
+
+Direction from a 2026-11-07 discussion. Replace "the book's order decides what
+comes next" with "the learner's current knowledge decides": prefer sentences
+whose content words and grammar are almost all known, with one or two unknown
+pieces, and mix in a higher-unknown sentence every few days. Grammar patterns
+should eventually be tracked like vocabulary items.
+
+Feasibility check (read-only, prod Supabase, 2026-11-07; reproduce with
+`npm run diagnose:i-plus-one`). 5,232 not-yet-introduced candidate sentences;
+every one has `sentences.vocabulary_suggestions` (UniDic morphology) and 5,144
+have default-checked content tokens. Known lemmas come from the 231 introduced
+sentences only (465 lemmas, the sentence-led definition from
+`getIntroducedSentenceIds`). Unknown distinct content lemmas per candidate:
+0 -> 430, 1 -> 1,003, 2 -> 1,083, 3 -> 905, 4 -> 654, 5+ -> ~1,070. About 2,086
+(~40%) have 1-2 unknowns, spread across every book (593 and 651 in the two
+largest). A one-off greedy simulation (learn the most unlocking word each
+step; not in the script) grew the "<=1 unknown" pool from ~1,500 to ~2,400
+after 140 words, so the pool does not run dry.
+
+Constraints and decisions:
+
+- **Use morphology, not `sentence_vocabulary`.** Only ~284 candidates have
+  picker-confirmed vocabulary links, so linked-vocab counts would starve the
+  scheduler (a per-item gate with no eligibility check starves, as it has
+  before). Count the sentence's default-checked `vocabularySuggestions`
+  (`selectedByDefault`, the picker's content-vs-function rule), keyed by
+  lemma expression + reading.
+- **"Known" is conservative today**: lemmas from introduced sentences only. Open:
+  also count confirmed `vocabulary_items` and imported Anki words (would make
+  the pool larger), a minimum-exposure count instead of "seen once", and a
+  struggle signal from self-ratings. Never derive FSRS ratings from this.
+- **Rank by unlock value** among 1-2-unknown sentences: how many other
+  candidates become closer to ready if the unknown word is learned.
+- **Stretch cadence** is a setting (start ~1 in 5 sentences with more unknowns);
+  keep the older book-order flow selectable.
+- **Grammar later.** `sentence_grammar` is 100% `ai_suggested` (54 of 2,530 links
+  confirmed) and only 27 unknown patterns appear in candidates, so grammar adds
+  almost no sequencing signal today. Revisit once pattern linking is reliable
+  (see the grammar-links extra); skip the no-auto-link families.
+- Proper nouns and odd UniDic splits can inflate unknown counts; audit the
+  default-checked tokens before trusting a threshold.
+
+Steps: (1) [done 2026-11-07] `src/lib/unknownLemmas.ts` (content lemmas,
+known set, unknown-per-sentence, unlock value) with fixture tests, and the
+`diagnose:i-plus-one` script; (2) unknown-count ordering as an
+opt-in candidate ranking behind a setting; (3) stretch cadence and unlock-value
+ranking; (4) grammar as items.
+
 ## Possibilities (reader as the single study surface)
 
 Direction from a 2026-11-01 discussion, not scheduled. Make the reader the one

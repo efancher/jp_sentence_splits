@@ -87,6 +87,7 @@
     "retire:extra-dictation-tiles": "tsx scripts/retire-extra-dictation-tiles.ts",
     "diagnose:conjugation-cards": "tsx scripts/diagnose-conjugation-cards.ts",
     "diagnose:grammar-links": "tsx scripts/diagnose-grammar-links.ts",
+    "diagnose:i-plus-one": "tsx scripts/diagnose-i-plus-one.ts",
     "merge:grammar-patterns": "tsx scripts/merge-grammar-patterns.ts",
     "remine:silent-shadowing-audio": "tsx scripts/remine-silent-shadowing-audio.ts",
     "validate:sentence-transcripts": "tsx scripts/validate-sentence-transcripts.ts",
