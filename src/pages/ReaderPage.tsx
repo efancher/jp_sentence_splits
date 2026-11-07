@@ -41,7 +41,7 @@ import { SentenceWalkthrough, walkthroughChunks } from '../components/SentenceWa
 import { glossesFromWords } from '../lib/chunkGlosses';
 import { mergeChapterConstructionDrafts, mergeChapterWalkthroughs } from '../lib/contextWalkthrough';
 import { WordGlossList, type CompareAids } from '../components/TargetLessonCard';
-import { ensureDefaultBookChapter, getDb, getEpisodeFocus, getSavedWordStatus, getStrengthKnownExpressions, listGlossDecisions, readRowsByKeys, listSentenceLearningEvents, logGlossDecision, logSentenceLearningEvent, ensureVocabularyItem, readSettings, updateSettings, withoutUnseenAiLinks } from '../db/repository';
+import { ensureDefaultBookChapter, getDb, getEpisodeFocus, getSavedWordStatus, getStrengthKnownExpressions, listGlossDecisions, readRowsByKeys, readSentenceAudioForSentences, listSentenceLearningEvents, logGlossDecision, logSentenceLearningEvent, ensureVocabularyItem, readSettings, updateSettings, withoutUnseenAiLinks } from '../db/repository';
 import { registerReportContext } from '../lib/reportContext';
 import type { BookSentence, Sentence, SentenceAudio, StructureDraftChunk, TextDisplayMode } from '../domain/types';
 import { useNativeAudio } from '../hooks/useNativeAudio';
@@ -324,7 +324,11 @@ export function ReaderPage() {
       if (!audioSentenceKey) return undefined; // rows not loaded yet: stay "unloaded", not "no audio"
       const timer = stepTimer('reader.audio');
       try {
-        return await getDb().sentenceAudio.where('sentenceId').anyOf(audioSentenceKey.split(',')).toArray();
+        const sentenceIds = audioSentenceKey.split(',');
+        timer.count('sentences', sentenceIds.length);
+        const clips = await readSentenceAudioForSentences(sentenceIds);
+        timer.count('clips', clips.length);
+        return clips;
       } finally {
         timer.done();
       }

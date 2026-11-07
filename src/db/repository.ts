@@ -9783,16 +9783,18 @@ export async function getEpisodeFocus(bookId: string, chapterId?: string): Promi
     .filter((row) => !chapterId || row.chapterId === chapterId);
   const sentenceIds = memberships.map((row) => row.sentenceId);
   const [vocabularyLinks, grammarLinks] = await Promise.all([
-    db.sentenceVocabulary.where('sentenceId').anyOf(sentenceIds).toArray(),
-    db.sentenceGrammar.where('sentenceId').anyOf(sentenceIds).toArray(),
+    readRowsByKeys(db.sentenceVocabulary, 'sentenceId', sentenceIds),
+    readRowsByKeys(db.sentenceGrammar, 'sentenceId', sentenceIds),
   ]);
   const vocabularyIds = [...new Set(vocabularyLinks.map((link) => link.vocabularyItemId))];
   const patternIds = [...new Set(grammarLinks.map((link) => link.grammarPatternId))];
+  const vocabularyIdSet = new Set(vocabularyIds);
+  const patternIdSet = new Set(patternIds);
   const [vocabularyItems, grammarPatterns, vocabularyStudy, grammarStudy] = await Promise.all([
     db.vocabularyItems.bulkGet(vocabularyIds),
     db.grammarPatterns.bulkGet(patternIds),
-    db.studyItems.where('subjectType').equals('vocabularyItem').filter((item) => vocabularyIds.includes(item.subjectId)).toArray(),
-    db.studyItems.where('subjectType').equals('grammarPattern').filter((item) => patternIds.includes(item.subjectId)).toArray(),
+    db.studyItems.where('subjectType').equals('vocabularyItem').filter((item) => vocabularyIdSet.has(item.subjectId)).toArray(),
+    db.studyItems.where('subjectType').equals('grammarPattern').filter((item) => patternIdSet.has(item.subjectId)).toArray(),
   ]);
   const retained = (items: StudyItem[]) =>
     new Set(
@@ -12186,6 +12188,24 @@ const ANY_OF_SCAN_THRESHOLD = 40;
  * on the same data took under 100 ms. Never use it on a table whose rows carry Blobs.
  */
 const SMALL_TABLE_ANY_OF_LIMIT = 6;
+
+/**
+ * The clips for `sentenceIds`, Blobs included. `anyOf` costs one queued lookup per id, which scales with the
+ * episode: ~0.2-0.9 s per id on the iPhone that reported 20-sentence chapters taking 20 s, so a 380-sentence
+ * episode would take minutes. Past a few ids this walks the `sentenceId` index once (keys only, no Blobs
+ * read) and fetches just the wanted rows by primary key, which stays flat as the episode grows.
+ */
+export async function readSentenceAudioForSentences(sentenceIds: readonly string[]): Promise<SentenceAudio[]> {
+  if (sentenceIds.length === 0) return [];
+  const table = getDb().sentenceAudio;
+  if (sentenceIds.length <= SMALL_TABLE_ANY_OF_LIMIT) return table.where('sentenceId').anyOf(sentenceIds as string[]).toArray();
+  const wanted = new Set(sentenceIds);
+  const clipIds: string[] = [];
+  await table.orderBy('sentenceId').eachKey((sentenceId, cursor) => {
+    if (wanted.has(sentenceId as string)) clipIds.push(cursor.primaryKey);
+  });
+  return (await table.bulkGet(clipIds)).filter((clip): clip is SentenceAudio => Boolean(clip));
+}
 
 /** Rows of a small table whose `index` value is in `keys`: `anyOf` for a few keys, one table read otherwise. */
 export async function readRowsByKeys<T, TInsert>(table: Table<T, string, TInsert>, index: keyof T & string, keys: readonly string[]): Promise<T[]> {
