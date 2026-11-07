@@ -13,7 +13,8 @@
  */
 import openJlptGrammar from '../src/data/openJlptGrammar.json';
 import type { VocabularySuggestion } from '../src/domain/types';
-import { buildReferenceIndex, curatedGrammarByPattern } from '../src/lib/grammarReference';
+import { buildGrammarDetector, buildReferenceIndex, curatedGrammarByPattern } from '../src/lib/grammarReference';
+import { grammarLevelCosts } from '../src/lib/iPlusOne';
 import {
   buildKnownLemmaSet,
   lemmaKey,
@@ -45,7 +46,7 @@ async function main(): Promise<void> {
     fetchAll<Row>(client, 'book_sentences', 'id,book_id,sentence_id,status', ownerId, (r) => r),
     fetchAll<Row>(client, 'sentence_learning_events', 'id,sentence_id,action', ownerId, (r) => r),
     fetchAll<Row>(client, 'study_items', 'id,subject_id,subject_type,activity_type,fsrs_state', ownerId, (r) => r),
-    fetchAll<Row>(client, 'sentences', 'id,vocabulary_suggestions', ownerId, (r) => r),
+    fetchAll<Row>(client, 'sentences', 'id,japanese,vocabulary_suggestions', ownerId, (r) => r),
     fetchAll<Row>(client, 'vocabulary_items', 'id,expression,reading', ownerId, (r) => r),
   ]);
 
@@ -112,10 +113,31 @@ async function main(): Promise<void> {
     entriesBySentence.get(link.sentence_id)!.add(entryId);
     if (introduced.has(link.sentence_id)) knownGrammar.add(entryId);
   }
+  const linked = new Set(entriesBySentence.keys());
+  const detect = buildGrammarDetector(openJlptGrammar.patterns);
+  for (const sentence of sentences) {
+    for (const entryId of detect(sentence.japanese ?? '')) {
+      if (!entriesBySentence.has(sentence.id)) entriesBySentence.set(sentence.id, new Set());
+      entriesBySentence.get(sentence.id)!.add(entryId);
+      if (introduced.has(sentence.id)) knownGrammar.add(entryId);
+    }
+  }
+  const levelOf = new Map(openJlptGrammar.patterns.map((entry) => [entry.id, entry.level as string | undefined]));
+  const present = new Map<string, string | undefined>();
+  for (const entries of entriesBySentence.values()) for (const id of entries) present.set(id, levelOf.get(id));
+  const patternCounts = new Map<string, number>();
+  for (const entries of entriesBySentence.values()) for (const id of entries) patternCounts.set(id, (patternCounts.get(id) ?? 0) + 1);
+  const nameOf = new Map(openJlptGrammar.patterns.map((entry) => [entry.id, entry.pattern]));
+  console.log(`\nmost common curated patterns (check for over-matching): ${[...patternCounts].sort((a, b) => b[1] - a[1]).slice(0, top).map(([id, n]) => `${nameOf.get(id)}×${n}`).join('  ')}`);
+  const cost = grammarLevelCosts(present, knownGrammar);
+  const unmet = (id: string) => (knownGrammar.has(id) ? 0 : (cost.get(id) ?? 1));
   const withGrammar = scored.map(
-    (s) => s.unknown.length + [...(entriesBySentence.get(s.id) ?? [])].filter((id) => !knownGrammar.has(id)).length,
+    (s) => s.unknown.length + [...(entriesBySentence.get(s.id) ?? [])].reduce((sum, id) => sum + unmet(id), 0),
   );
-  console.log(`\nunknown lemmas + unmet curated grammar per candidate (known curated patterns ${knownGrammar.size}):`);
+  console.log(
+    `\nsentences with curated grammar: ${entriesBySentence.size} (${linked.size} via AI links); known curated patterns ${knownGrammar.size}; level-costed ${cost.size} of ${present.size} in use`,
+  );
+  console.log('unknown lemmas + unmet curated grammar (level-weighted) per candidate:');
   console.log(formatHistogram(unknownCountHistogram(withGrammar, 10)));
 
   const perBook = new Map<string, { total: number; ready: number }>();

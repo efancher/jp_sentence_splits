@@ -27,8 +27,8 @@ import {
   type SequentialBookStatus,
   type SequentialSentenceStatus,
 } from '../lib/sequentialStudy';
-import { buildReferenceIndex, curatedGrammarByPattern } from '../lib/grammarReference';
-import { orderByIPlusOne, type IPlusOneItem } from '../lib/iPlusOne';
+import { buildGrammarDetector, buildReferenceIndex, curatedGrammarByPattern } from '../lib/grammarReference';
+import { grammarLevelCosts, orderByIPlusOne, type IPlusOneItem } from '../lib/iPlusOne';
 import {
   effectiveLegacyDrillsPaused,
   effectiveSentenceFirstPlanning,
@@ -11084,10 +11084,14 @@ async function loadKnownLemmaSet(introducedRows: (Sentence | undefined)[]): Prom
  * Curated grammar (vendored OpenJLPT list) per sentence, via the learner's own pattern links. Only unambiguous
  * matches count (see `curatedGrammarByPattern`); `known` is every curated entry carried by an introduced sentence.
  */
-async function loadCuratedGrammar(introduced: ReadonlySet<string>): Promise<{
+async function loadCuratedGrammar(
+  introduced: ReadonlySet<string>,
+  rows: readonly (Sentence | undefined)[],
+): Promise<{
   entriesBySentence: Map<string, string[]>;
   known: Set<string>;
   names: Map<string, string>;
+  cost: Map<string, number>;
 }> {
   const db = getDb();
   const [{ default: reference }, patterns, links] = await Promise.all([
@@ -11108,7 +11112,22 @@ async function loadCuratedGrammar(introduced: ReadonlySet<string>): Promise<{
     entriesBySentence.set(link.sentenceId, entries);
     if (introduced.has(link.sentenceId)) known.add(entryId);
   }
-  return { entriesBySentence, known, names };
+  // Text detection covers the sentences the AI never linked (see buildGrammarDetector).
+  const detect = buildGrammarDetector(reference.patterns);
+  for (const row of rows) {
+    if (!row) continue;
+    for (const entryId of detect(row.japanese)) {
+      const entries = entriesBySentence.get(row.id) ?? [];
+      if (!entries.includes(entryId)) entries.push(entryId);
+      entriesBySentence.set(row.id, entries);
+      if (introduced.has(row.id)) known.add(entryId);
+    }
+  }
+  const levels = new Map<string, string | undefined>();
+  for (const entries of entriesBySentence.values()) {
+    for (const id of entries) levels.set(id, reference.patterns.find((entry) => entry.id === id)?.level);
+  }
+  return { entriesBySentence, known, names, cost: grammarLevelCosts(levels, known) };
 }
 
 /**
@@ -11122,7 +11141,7 @@ async function loadIPlusOneContext(stretchEvery: number): Promise<IPlusOneContex
   const introduced = await getIntroducedSentenceIds(sentenceIds);
   const rows = await getDb().sentences.bulkGet(sentenceIds);
   const known = await loadKnownLemmaSet(rows.filter((row) => row && introduced.has(row.id)));
-  const grammar = await loadCuratedGrammar(introduced);
+  const grammar = await loadCuratedGrammar(introduced, rows);
   const items: IPlusOneItem[] = [];
   const newWords = new Map<string, string[]>();
   rows.forEach((row, index) => {
@@ -11133,7 +11152,11 @@ async function loadIPlusOneContext(stretchEvery: number): Promise<IPlusOneContex
     const patterns = (entryIds ?? []).filter((id) => !grammar.known.has(id)).map((id) => grammar.names.get(id)!);
     if (words.length + patterns.length > 0) newWords.set(row.id, [...words, ...patterns]);
   });
-  const order = orderByIPlusOne(items, known, { stretchEvery, knownGrammar: grammar.known });
+  const order = orderByIPlusOne(items, known, {
+    stretchEvery,
+    knownGrammar: grammar.known,
+    grammarCost: grammar.cost,
+  });
   return { rank: new Map(order.map((id, index) => [id, index])), newWords };
 }
 

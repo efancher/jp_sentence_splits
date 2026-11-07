@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { orderByIPlusOne, type IPlusOneItem } from './iPlusOne';
+import { grammarLevelCosts, orderByIPlusOne, type IPlusOneItem } from './iPlusOne';
 import { buildKnownLemmaSet, lemmaKey, type LemmaSource } from './unknownLemmas';
 
 const tok = (word: string, selectedByDefault = true, pos?: string): LemmaSource => ({
@@ -88,6 +88,38 @@ describe('orderByIPlusOne', () => {
 
   it('returns an empty order for no items', () => {
     expect(orderByIPlusOne([], known)).toEqual([]);
+  });
+});
+
+describe('grammarLevelCosts', () => {
+  const entries = new Map<string, string | undefined>([
+    ['n5a', 'N5'],
+    ['n5b', 'N5'],
+    ['n4a', 'N4'],
+    ['n2a', 'N2'],
+    ['plain', undefined],
+  ]);
+
+  it('holds back levels above the easiest level that is under 60% met', () => {
+    // N5 is half met, so N5 is the frontier: N4 costs 2, N2 costs 4.
+    expect([...grammarLevelCosts(entries, new Set(['n5a']))]).toEqual([['n4a', 2], ['n2a', 4]]);
+  });
+
+  it('opens the next level once the easier one is mostly met', () => {
+    // N5 fully met, N4 not: frontier is N4, so only N2 costs more.
+    expect([...grammarLevelCosts(entries, new Set(['n5a', 'n5b']))]).toEqual([['n2a', 3]]);
+  });
+
+  it('makes a far-level pattern push a sentence out of the ready pool', () => {
+    const items: IPlusOneItem[] = [
+      { ...sentence('advanced', '猫', '空'), grammar: ['n2a'] },
+      { ...sentence('basic', '猫', '空', '雲', '風'), grammar: [] },
+    ];
+    const knownGrammar = new Set(['n5a']);
+    const grammarCost = grammarLevelCosts(entries, knownGrammar);
+    // advanced is 1 word + 1 pattern (ready); with the N2 pattern costing 4 it becomes 5 and falls behind basic (3).
+    expect(orderByIPlusOne(items, known, { knownGrammar })).toEqual(['advanced', 'basic']);
+    expect(orderByIPlusOne(items, known, { knownGrammar, grammarCost })).toEqual(['basic', 'advanced']);
   });
 });
 

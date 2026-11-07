@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildGrammarDetector,
   buildReferenceIndex,
+  detectableSegments,
   curatedGrammarByPattern,
   matchOwnPattern,
   normalizePatternKey,
@@ -68,5 +70,37 @@ describe('curatedGrammarByPattern', () => {
       index,
     );
     expect([...map]).toEqual([['p1', 'temiru']]);
+  });
+});
+
+describe('buildGrammarDetector', () => {
+  const entries: ReferencePattern[] = [
+    { id: 'takoto', pattern: '〜たことがある' },
+    { id: 'tokoro', pattern: '〜ところ' },
+    { id: 'tatokorode', pattern: '〜たところで' },
+    { id: 'yarayara', pattern: '〜やら〜やら' },
+    { id: 'wa', pattern: '〜は' },
+    { id: 'nagara-a', pattern: '〜ながら（while）' },
+    { id: 'nagara-b', pattern: '〜ながら（even though）' },
+    { id: 'kono', pattern: 'この / その / あの / どの' },
+  ];
+  const detect = buildGrammarDetector(entries);
+
+  it('finds an entry by its fixed text', () => {
+    expect(detect('日本に行ったことがあります')).toEqual(['takoto']);
+  });
+
+  it('drops a match inside a longer entry match', () => {
+    expect(detect('行ったところで無駄だ')).toEqual(['tatokorode']);
+  });
+
+  it('needs both halves of a split pattern, in order', () => {
+    expect(detect('泣くやら笑うやら大変だった')).toEqual(['yarayara']);
+    expect(detect('やらなければ')).toEqual([]);
+  });
+
+  it('skips short literals and entries whose text is shared by several senses', () => {
+    expect(detect('これは本です。この猫は走りながら食べる')).toEqual([]);
+    expect(detectableSegments({ pattern: '〜は' })).toEqual([]);
   });
 });

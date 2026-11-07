@@ -36,7 +36,13 @@ export interface IPlusOneItem {
 export function orderByIPlusOne(
   items: readonly IPlusOneItem[],
   known: ReadonlySet<string>,
-  options: { maxUnknown?: number; stretchEvery?: number; knownGrammar?: ReadonlySet<string> } = {},
+  options: {
+    maxUnknown?: number;
+    stretchEvery?: number;
+    knownGrammar?: ReadonlySet<string>;
+    /** Weight of an unmet grammar entry (default 1); see `grammarLevelCosts`. */
+    grammarCost?: ReadonlyMap<string, number>;
+  } = {},
 ): string[] {
   const maxUnknown = options.maxUnknown ?? I_PLUS_ONE_MAX_UNKNOWN;
   const stretchEvery = options.stretchEvery ?? I_PLUS_ONE_STRETCH_EVERY;
@@ -46,7 +52,11 @@ export function orderByIPlusOne(
     const score = scoreSentence(item.suggestions, known);
     const unknown = score.scorable ? score.unknown : [];
     // Curated grammar the learner hasn't met counts like an unknown word, so "1-2 new pieces" covers both.
-    const grammarUnknown = knownGrammar ? (item.grammar ?? []).filter((id) => !knownGrammar.has(id)).length : 0;
+    const grammarUnknown = knownGrammar
+      ? (item.grammar ?? [])
+          .filter((id) => !knownGrammar.has(id))
+          .reduce((sum, id) => sum + (options.grammarCost?.get(id) ?? 1), 0)
+      : 0;
     return {
       id: item.sentenceId,
       position,
@@ -95,4 +105,35 @@ export function orderByIPlusOne(
     else take(unscorable);
   }
   return ordered;
+}
+
+const LEVELS = ['N5', 'N4', 'N3', 'N2', 'N1'] as const;
+/** Share of a level's patterns (those the pool actually uses) the learner must have met before the next level opens. */
+export const GRAMMAR_LEVEL_OPEN_AT = 0.6;
+
+/**
+ * Level-aware pacing for grammar: the frontier is the easiest JLPT level whose in-use patterns are less than
+ * `GRAMMAR_LEVEL_OPEN_AT` met; an unmet pattern costs 1 plus its levels above the frontier, so an N2 pattern is
+ * not offered as "one new piece" while N4 is still being met. Entries without a level cost 1. Only entries
+ * costing more than 1 are returned.
+ */
+export function grammarLevelCosts(
+  entries: ReadonlyMap<string, string | undefined>,
+  known: ReadonlySet<string>,
+): Map<string, number> {
+  const rank = (level: string | undefined) => LEVELS.indexOf(level as (typeof LEVELS)[number]);
+  let frontier = LEVELS.length - 1;
+  for (let i = 0; i < LEVELS.length; i += 1) {
+    const ids = [...entries].filter(([, level]) => rank(level) === i).map(([id]) => id);
+    if (ids.length > 0 && ids.filter((id) => known.has(id)).length / ids.length < GRAMMAR_LEVEL_OPEN_AT) {
+      frontier = i;
+      break;
+    }
+  }
+  const costs = new Map<string, number>();
+  for (const [id, level] of entries) {
+    const r = rank(level);
+    if (r > frontier) costs.set(id, 1 + r - frontier);
+  }
+  return costs;
 }
