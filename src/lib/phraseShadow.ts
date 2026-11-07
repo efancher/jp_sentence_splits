@@ -108,6 +108,8 @@ const ATTACHED_PARTICLES = new Set([
 ]);
 
 const PARTICLE_MAX_MS = 500;
+/** A particle this close after its word still belongs to it (the aligner often leaves a small gap). */
+const PARTICLE_ATTACH_GAP_MS = 400;
 
 const isParticleToken =(word: Pick<WordAlignment, 'text'>) => ATTACHED_PARTICLES.has(word.text);
 
@@ -141,13 +143,13 @@ export function expandToPhrase(
   // Never end just before a particle that belongs to the last word, nor start on one.
   const after = spoken.find((word) => word.start * 1000 >= endMs - 1);
   const last = [...spoken].reverse().find((word) => word.end * 1000 <= endMs + 1);
-  if (after && last && isParticleToken(after) && after.start * 1000 - last.end * 1000 < CHUNK_PAUSE_MS) {
+  if (after && last && isParticleToken(after) && after.start * 1000 - last.end * 1000 < PARTICLE_ATTACH_GAP_MS) {
     // A particle is a mora or two: a longer token is trailing silence the aligner stretched over it.
     endMs = clampEnd(Math.min(after.end * 1000, after.start * 1000 + PARTICLE_MAX_MS));
   }
   const first = spoken.find((word) => word.end * 1000 > startMs + 1);
   const before = [...spoken].reverse().find((word) => word.end * 1000 <= startMs + 1);
-  if (first && before && isParticleToken(first) && first.start * 1000 - before.end * 1000 < CHUNK_PAUSE_MS) {
+  if (first && before && isParticleToken(first) && first.start * 1000 - before.end * 1000 < PARTICLE_ATTACH_GAP_MS) {
     startMs = before.start * 1000;
   }
   return { startMs: Math.round(startMs), endMs: Math.round(endMs) };
@@ -173,14 +175,14 @@ export function chunkRanges(
     const startMs = spoken[i].start * 1000;
     const endMs = spoken[i].end * 1000;
     // A particle stays with the word it follows even when that pushes the chunk past maxMs.
-    const attached = i > 0 && isParticleToken(spoken[i]) && startMs - spoken[i - 1].end * 1000 < CHUNK_PAUSE_MS;
+    const attached = i > 0 && isParticleToken(spoken[i]) && startMs - spoken[i - 1].end * 1000 < PARTICLE_ATTACH_GAP_MS;
     if (!attached && current && endMs - current.startMs > maxMs && current.endMs - current.startMs >= minMs) {
       chunks.push(current);
       current = null;
     }
     current = current ? { startMs: current.startMs, endMs } : { startMs, endMs };
     const next = spoken[i + 1];
-    if (next && next.start * 1000 - endMs >= CHUNK_PAUSE_MS && endMs - current.startMs >= minMs) {
+    if (next && !(isParticleToken(next) && next.start * 1000 - endMs < PARTICLE_ATTACH_GAP_MS) && next.start * 1000 - endMs >= CHUNK_PAUSE_MS && endMs - current.startMs >= minMs) {
       chunks.push(current);
       current = null;
     }

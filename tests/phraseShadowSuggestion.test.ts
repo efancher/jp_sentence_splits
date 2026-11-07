@@ -4,7 +4,7 @@ import { resetDbForTests } from '../src/db/database';
 import { getDb, suggestPhraseShadow } from '../src/db/repository';
 import { ALIGNMENT_VERSION } from '../src/lib/analysisApi';
 import { createId } from '../src/lib/ids';
-import { expandToPhrase, orderLinksByWeakness, weakestChunkRange } from '../src/lib/phraseShadow';
+import { chunkRanges, expandToPhrase, orderLinksByWeakness, weakestChunkRange } from '../src/lib/phraseShadow';
 
 const words = [
   { text: '猫', start: 0, end: 0.4 },
@@ -60,6 +60,23 @@ describe('expandToPhrase', () => {
       { text: 'い', start: 2.5, end: 5 },
     ];
     expect(expandToPhrase(slow, { startMs: 0, endMs: 600 }, 5000)).toEqual({ startMs: 0, endMs: 600 });
+  });
+});
+
+describe('chunkRanges', () => {
+  it('hands a particle that follows a short gap back to the chunk of the word it belongs to', () => {
+    const w = [
+      { text: 'エピソード1', start: 0, end: 1.2 },
+      { text: 'で', start: 1.4, end: 1.5 },
+      { text: '私', start: 1.5, end: 1.9 },
+      { text: 'は', start: 1.9, end: 2.0 },
+      { text: '趣味', start: 2.4, end: 3.6 },
+    ];
+    // Not [0–1200] then [1400–2000]: で is エピソード1's particle, and 私は stays with what follows it.
+    expect(chunkRanges(w)).toEqual([
+      { startMs: 0, endMs: 2000 },
+      { startMs: 2400, endMs: 3600 },
+    ]);
   });
 });
 
