@@ -2,7 +2,9 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useState } from 'react';
 
 import { getDb, logPhraseShadow } from '../db/repository';
-import { PHRASE_SHADOW_OUTCOMES, phraseTextFromAlignment, type PhraseShadowOutcome } from '../lib/phraseShadow';
+import { readExtrasForSentences } from '../db/sentenceExtras';
+import { validWalkthroughFor } from '../lib/contextWalkthrough';
+import { PHRASE_SHADOW_OUTCOMES, phraseGloss, phraseTextFromAlignment, type PhraseShadowOutcome } from '../lib/phraseShadow';
 
 /**
  * Self-rating for a phrase shadow: shown under the Shadow pane's target controls once the learner
@@ -50,6 +52,27 @@ export function PhraseShadowRating({
     return alignment ? phraseTextFromAlignment(alignment.result.words, range) : '';
   }, [sentenceAudioId, range.startMs, range.endMs]);
 
+  // What the words inside the span mean, so the learner knows what they are saying (null when nothing is glossed).
+  const gloss = useLiveQuery(async () => {
+    if (!phraseText) return null;
+    const db = getDb();
+    const [sentence, links, [extras], book] = await Promise.all([
+      db.sentences.get(sentenceId),
+      db.sentenceVocabulary.where('sentenceId').equals(sentenceId).toArray(),
+      readExtrasForSentences([sentenceId]),
+      db.books.get(bookId),
+    ]);
+    if (!sentence) return null;
+    const vocab = await db.vocabularyItems.bulkGet(links.map((link) => link.vocabularyItemId));
+    const saved = extras?.contextWalkthrough ?? book?.chapters?.map((chapter) => chapter.contextWalkthroughs?.[sentenceId]).find(Boolean);
+    return phraseGloss(
+      sentence.japanese,
+      phraseText,
+      validWalkthroughFor(sentence.japanese, saved),
+      links.map((link, index) => ({ surfaceForm: link.surfaceForm, meaning: vocab[index]?.meaning })),
+    );
+  }, [bookId, sentenceId, phraseText]);
+
   const last = logged[logged.length - 1];
   const lastLabel = PHRASE_SHADOW_OUTCOMES.find((entry) => entry.outcome === last)?.label;
 
@@ -64,6 +87,7 @@ export function PhraseShadowRating({
         ) : null}
         <span className="muted"> · {(range.startMs / 1000).toFixed(1)}–{(range.endMs / 1000).toFixed(1)}s</span>
       </p>
+      {gloss ? <p className="muted" style={{ margin: 0, fontSize: '0.9rem' }}>{gloss}</p> : null}
       <div className="row" style={{ alignItems: 'center', flexWrap: 'wrap' }}>
         <span className="muted">How did this phrase go?</span>
         {PHRASE_SHADOW_OUTCOMES.map((entry) => (

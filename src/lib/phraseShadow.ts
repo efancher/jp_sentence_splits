@@ -1,4 +1,4 @@
-import type { SentenceLearningEvent, WordAlignment } from '../domain/types';
+import type { ContextWalkthrough, SentenceLearningEvent, WordAlignment } from '../domain/types';
 
 /**
  * Phrase shadowing: the learner marks a span of a sentence's reference clip (the Shadow
@@ -62,6 +62,44 @@ export function phraseTextFromAlignment(
     })
     .map((word) => word.text)
     .join('');
+}
+
+/**
+ * Plain-English help for a marked phrase, as "word = meaning" pieces. It is not a translation of the
+ * fragment: a phrase is usually mid-clause, so each word inside it is glossed on its own. Prefers the
+ * sentence's contextual walkthrough (per-word glosses, particles included), then the linked
+ * vocabulary's dictionary meaning. Null when the phrase can't be located in the sentence or nothing
+ * in it has a gloss.
+ */
+export function phraseGloss(
+  japanese: string,
+  phrase: string,
+  walkthrough: ContextWalkthrough | undefined,
+  links: readonly { surfaceForm?: string; meaning?: string }[],
+): string | null {
+  const at = phrase ? japanese.indexOf(phrase) : -1;
+  if (at < 0) return null;
+  const end = at + phrase.length;
+  const inside = (span: { start: number; end: number }) => span.start >= at && span.end <= end;
+  const pieces: { start: number; text: string; gloss: string }[] = [];
+  const fromWalkthrough = walkthrough?.words?.length ? walkthrough.words : walkthrough?.steps;
+  for (const item of fromWalkthrough ?? []) {
+    if (inside(item) && item.gloss?.trim()) pieces.push({ start: item.start, text: item.text, gloss: item.gloss.trim() });
+  }
+  if (pieces.length === 0) {
+    for (const link of links) {
+      const index = link.surfaceForm ? japanese.indexOf(link.surfaceForm) : -1;
+      const meaning = link.meaning?.split(/[;；]/)[0]?.trim();
+      if (link.surfaceForm && meaning && index >= at && index + link.surfaceForm.length <= end) {
+        pieces.push({ start: index, text: link.surfaceForm, gloss: meaning });
+      }
+    }
+  }
+  if (pieces.length === 0) return null;
+  return pieces
+    .sort((a, b) => a.start - b.start)
+    .map((piece) => `${piece.text} = ${piece.gloss}`)
+    .join(' · ');
 }
 
 /** Vocabulary item ids whose occurrence in the sentence (its surface form) sits inside the phrase text. */
