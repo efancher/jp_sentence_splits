@@ -7,7 +7,14 @@ import { refreshSentenceAudioFromCloud } from '../sync/audioSync';
  * re-cut, replaced or removed on another device while this one keeps playing
  * the old audio. Cheaper and safer than Settings' full re-download.
  */
-export function ReloadSentenceAudioButton({ sentenceId }: { sentenceId: string }) {
+export function ReloadSentenceAudioButton({
+  sentenceId,
+  label = 'Reload audio',
+}: {
+  sentenceId: string;
+  /** "Fetch audio" where the sentence has no local clip yet. */
+  label?: string;
+}) {
   const [state, setState] = useState<'idle' | 'busy'>('idle');
   const [message, setMessage] = useState('');
 
@@ -29,7 +36,7 @@ export function ReloadSentenceAudioButton({ sentenceId }: { sentenceId: string }
   return (
     <>
       <button type="button" disabled={state === 'busy'} onClick={() => void reload()}>
-        {state === 'busy' ? 'Reloading…' : 'Reload audio'}
+        {state === 'busy' ? 'Fetching…' : label}
       </button>
       {message ? <span className="muted" role="status">{message}</span> : null}
     </>

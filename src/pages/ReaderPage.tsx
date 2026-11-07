@@ -138,7 +138,7 @@ export function ReaderPage() {
   );
   const [walkthroughId, setWalkthroughId] = useState<string>();
   /** Why a tool that was just tapped could not open on a sentence (shown under it, so a tap never does nothing silently). */
-  const [toolNotice, setToolNotice] = useState<{ sentenceId: string; text: string } | undefined>();
+  const [toolNotice, setToolNotice] = useState<{ sentenceId: string; text: string; missingAudio?: boolean } | undefined>();
   /** The in-place study tool open on a sentence: a dictation blank (with its tile), a word-meaning check or an Ear Tiles round. */
   const [readerTool, setReaderTool] = useState<
     { sentenceId: string; kind: 'dictate'; tile: number; visitId: string } |
@@ -474,7 +474,7 @@ export function ReaderPage() {
       const reason = tileToolUnavailableReason(sentence, kind, hasAudio);
       if (reason) {
         setReaderTool(undefined);
-        setToolNotice({ sentenceId: sentence.id, text: reason });
+        setToolNotice({ sentenceId: sentence.id, text: reason, missingAudio: !hasAudio });
         return;
       }
     }
@@ -1320,7 +1320,12 @@ export function ReaderPage() {
                     );
                   })()}
                   {toolNotice?.sentenceId === row.sentence.id ? (
-                    <p className="muted" role="status" style={{ margin: 0 }}>{toolNotice.text}</p>
+                    <p className="muted" role="status" style={{ margin: 0 }}>
+                      {toolNotice.text}{' '}
+                      {toolNotice.missingAudio ? (
+                        <ReloadSentenceAudioButton sentenceId={row.sentence.id} label="Fetch audio" />
+                      ) : null}
+                    </p>
                   ) : null}
                   {(() => {
                     const here = walkthroughFocus.filter((target) => target.sentenceIds.includes(row.sentence.id));

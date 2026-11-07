@@ -28,6 +28,7 @@ import { StructureChecks } from './StructureChecks';
 import { GlossDecisionPanel, planGlossDecisions, type GlossDecisionInput } from './GlossDecisionPanel';
 import { SentenceExpressionCard, meaningUnits } from './SentenceExpressionCard';
 import { NativeAudioButton } from './NativeAudioButton';
+import { ReloadSentenceAudioButton } from './ReloadSentenceAudioButton';
 import { PhraseConstructionSection } from './PhraseConstructionSection';
 import { ReadingFlagsPanel } from './ReadingFlagsPanel';
 import { SentencePatterns } from './SentencePatterns';
@@ -596,7 +597,10 @@ export function SentenceWalkthrough({
         {audio ? (
           <NativeAudioButton audio={audio} displayLabel="Native audio" />
         ) : (
-          <span className="muted">No native audio for this sentence; reading and the walkthrough still work.</span>
+          <>
+            <span className="muted">No native audio for this sentence; reading and the walkthrough still work.</span>
+            <ReloadSentenceAudioButton sentenceId={sentence.id} label="Fetch audio" />
+          </>
         )}
         <label className="row" style={{ gap: '0.35rem' }}>
           <input type="checkbox" checked={quietMode} onChange={(event) => onQuietModeChange(event.target.checked)} />
