@@ -27,7 +27,7 @@ study progressive web app. It centers on **sentences**, not decks of
 isolated flashcards: every study activity — vocabulary, kanji, grammar
 comprehension, listening, shadowing/pronunciation — is generated from and
 traceable back to a specific sentence the user actually encountered (via
-Satori Reader CSV exports, YouTube/podcast "shadowing" clips, or hand
+YouTube/podcast "shadowing" clips, or hand
 import). Its most distinctive piece is a **Cure-Dolly-style structural
 analysis engine**: sentences are broken into ordered "chunks" with
 grammatical roles (topic, subject, object, verb, particle, etc.), including
@@ -83,7 +83,7 @@ collaborators as editor/viewer).
   meta tags) — genuinely installable, not aspirational. Known caveat:
   `window.prompt`/`window.confirm` silently no-op on an installed iOS
   Safari PWA, so all new UI uses inline controls instead.
-- **Other libs**: `@dnd-kit` (drag-and-drop reordering), `papaparse` (CSV),
+- **Other libs**: `@dnd-kit` (drag-and-drop reordering), `papaparse` (test fixtures only),
   `fflate` (zip read/write for `.shadowing.zip` packages), Web Speech API
   (device TTS, no cloud TTS), Web Audio API (recording, YIN pitch
   detection, waveform).
@@ -819,11 +819,12 @@ itself, never touches FSRS or the planner's bucket minutes, and has no Mark comp
 Targets are constants; no settings UI.
 
 ### 1. Content import & organization
-- **CSV import** (`src/lib/csvImport.ts`, `ImportPage.tsx`) — parses
-  Satori Reader vocabulary CSV exports; dedupes/merges sentences on
-  re-import (`mergeSentenceOnReimport`), preserving `firstOccurrenceIndex`
-  and merging `sourceReferences`/`targetVocabulary` rather than
-  duplicating.
+- **Shared import merge** (`src/lib/sentenceImport.ts`) — dedupes/merges
+  sentences on re-import (`mergeSentenceOnReimport`), preserving
+  `firstOccurrenceIndex` and merging `sourceReferences`/`targetVocabulary`
+  rather than duplicating. The Satori CSV importer and the one-time Anki
+  importer were removed 2026-11-07 (unused); a CSV parser survives only as
+  a test fixture loader (`tests/helpers/satoriCsvFixture.ts`).
 - **`.shadowing.zip` import** (`src/lib/shadowingImport.ts`) — consumes
   packages produced by the separate `shadowmine` Python CLI (YouTube/
   podcast mining tool, lives in the sibling `shadowing` repo, not part of
@@ -3114,8 +3115,8 @@ sessions.
   works standalone if needed. Its morphology tokenizer (fugashi/UniDic)
   is also invoked directly by `scripts/backfill-vocabulary-suggestions.ts`
   (via a local Python venv or GitHub Actions) to backfill
-  `vocabularySuggestions` for CSV-imported sentences, which the CSV import
-  path itself never populates — that script still shells out to this
+  `vocabularySuggestions` for sentences imported by the removed CSV/Anki
+  paths, which never populated it — that script still shells out to this
   sibling repo rather than `server/youtube-mining/`'s copy.
 - **`~/projects/anki`** (archived on GitHub) — used exactly once,
   historically, via `anki_headless/` (an official-API-based headless

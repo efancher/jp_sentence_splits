@@ -3,17 +3,15 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import {
-  mergeSentenceOnReimport,
-  parseSatoriCsvText,
-} from '../src/lib/csvImport';
+import { mergeSentenceOnReimport } from '../src/lib/sentenceImport';
+import { parseSatoriCsvText } from './helpers/satoriCsvFixture';
 
 const littleBirds = readFileSync(
   resolve(import.meta.dirname, '../fixtures/little-birds.csv'),
   'utf8',
 );
 
-describe('parseSatoriCsvText', () => {
+describe('sentence import merge (via the CSV fixture loader)', () => {
   it('handles UTF-8 BOM', () => {
     const bom = `\uFEFFCardID,CardType,Expression,Context1,Context1-Translation\nid1,JE,春,暖かい春がやって来ました。,Warm spring.\n`;
     const preview = parseSatoriCsvText(bom, 'bom.csv');

@@ -775,8 +775,8 @@ live from `vocabularySuggestions` plus the introduced-sentence set, so new
 imports need no extra scoring step, and they do not change the known set until
 they are introduced. Only YouTube/podcast (quick import and wizard), NHK Easy
 and Shadowmine ZIP imports are in use; all write morphology tokens, so every
-live import path is scorable. The one-time Anki importer was removed 2026-11-07,
-and the Satori CSV importer is slated for removal (it wrote `[]`). Guard shipped:
+live import path is scorable. The one-time Anki importer and the Satori CSV importer
+(both wrote `[]`) were removed 2026-11-07. Guard shipped:
 `scoreSentence` treats an empty suggestion list as "not scorable", never "0
 unknowns", and `diagnose:i-plus-one` reports and warns about such sentences.
 Still to do at import: (a) grammar links produced and matched to the curated

@@ -93,7 +93,7 @@ import type {
 } from '../src/domain/types';
 import { studyItemIsHeldBackBySuspension } from '../src/lib/suspendedBooks';
 import { parseBackupJson } from '../src/lib/backup';
-import { parseSatoriCsvText } from '../src/lib/csvImport';
+import { parseSatoriCsvText } from './helpers/satoriCsvFixture';
 import { createId } from '../src/lib/ids';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';

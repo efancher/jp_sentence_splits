@@ -1,7 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { strToU8, zipSync } from 'fflate';
 import { beforeEach, describe, expect, it } from 'vitest';
 
@@ -10,14 +8,7 @@ import { ensureSettings, resetDbForTests } from '../src/db/database';
 import { createId } from '../src/lib/ids';
 import { withAppProviders } from '../src/test/providers';
 
-const littleBirds = readFileSync(
-  resolve(import.meta.dirname, '../fixtures/little-birds.csv'),
-  'utf8',
-);
-
-function fileFromCsv(name: string, contents: string): File {
-  return new File([contents], name, { type: 'text/csv' });
-}
+import { seedLittleBirds } from './helpers/seedLittleBirds';
 
 /** Navigation now lives behind a header menu button rather than an always-visible bottom nav — open it before a test can see/click a nav link. */
 async function openNavMenu(user: ReturnType<typeof userEvent.setup>): Promise<void> {
@@ -78,21 +69,9 @@ describe('UI flows', () => {
 
   it('imports a fixture, creates a book, edits analysis, and autosaves', async () => {
     const user = userEvent.setup();
+    const { bookId } = await seedLittleBirds('new_book');
+    window.history.replaceState({}, '', `/#/books/${bookId}`);
     render(withAppProviders(<App />));
-
-    await openNavMenu(user);
-    await user.click(await screen.findByRole('link', { name: 'Import' }));
-    const input = await screen.findByLabelText(/CSV file/i);
-    await user.upload(input, fileFromCsv('little-birds.csv', littleBirds));
-
-    await screen.findByText(/Import preview/i);
-    expect(screen.getByText(/Unique sentences:/i)).toBeInTheDocument();
-
-    await user.selectOptions(
-      screen.getByLabelText(/Place selected sentences/i),
-      'new_book',
-    );
-    await user.click(screen.getByRole('button', { name: /Import .* selected/i }));
 
     await screen.findByRole('heading', { name: /little-birds/i });
     const analyzeButtons = await screen.findAllByRole('button', {
@@ -162,19 +141,9 @@ describe('UI flows', () => {
 
   it('reorders with explicit buttons and reveals practice stages', async () => {
     const user = userEvent.setup();
+    const { bookId } = await seedLittleBirds('new_book');
+    window.history.replaceState({}, '', `/#/books/${bookId}`);
     render(withAppProviders(<App />));
-    await openNavMenu(user);
-    await user.click(await screen.findByRole('link', { name: 'Import' }));
-    await user.upload(
-      await screen.findByLabelText(/CSV file/i),
-      fileFromCsv('little-birds.csv', littleBirds),
-    );
-    await screen.findByText(/Import preview/i);
-    await user.selectOptions(
-      screen.getByLabelText(/Place selected sentences/i),
-      'new_book',
-    );
-    await user.click(screen.getByRole('button', { name: /Import .* selected/i }));
     await screen.findByRole('button', { name: 'Edit order' });
     await user.click(screen.getByRole('button', { name: 'Edit order' }));
 
@@ -209,15 +178,9 @@ describe('UI flows', () => {
 
   it('assigns selected Inbox sentences to a newly created book', async () => {
     const user = userEvent.setup();
+    await seedLittleBirds('inbox');
+    window.history.replaceState({}, '', '/#/inbox');
     render(withAppProviders(<App />));
-    await openNavMenu(user);
-    await user.click(await screen.findByRole('link', { name: 'Import' }));
-    await user.upload(
-      await screen.findByLabelText(/CSV file/i),
-      fileFromCsv('little-birds.csv', littleBirds),
-    );
-    await screen.findByText(/Import preview/i);
-    await user.click(screen.getByRole('button', { name: /Import .* selected/i }));
 
     await screen.findByRole('heading', { name: 'Inbox' });
     const sentenceCheckboxes = await screen.findAllByLabelText('Select sentence');
@@ -239,15 +202,9 @@ describe('UI flows', () => {
 
   it('opens an import batch and performs a bulk Search action', async () => {
     const user = userEvent.setup();
+    await seedLittleBirds('inbox');
+    window.history.replaceState({}, '', '/#/inbox');
     render(withAppProviders(<App />));
-    await openNavMenu(user);
-    await user.click(await screen.findByRole('link', { name: 'Import' }));
-    await user.upload(
-      await screen.findByLabelText(/CSV file/i),
-      fileFromCsv('little-birds.csv', littleBirds),
-    );
-    await screen.findByText(/Import preview/i);
-    await user.click(screen.getByRole('button', { name: /Import .* selected/i }));
 
     await screen.findByRole('heading', { name: 'Inbox' });
     await user.click(

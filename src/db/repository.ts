@@ -168,9 +168,8 @@ import {
 } from '../lib/conjugation';
 import {
   mergeSentenceOnReimport,
-  parseSatoriCsvText,
   type ImportPreview,
-} from '../lib/csvImport';
+} from '../lib/sentenceImport';
 import {
   computeGrammarLearnerState,
   computeGrammarPriorityBucket,
@@ -3048,19 +3047,6 @@ export async function commitImport(options: {
   }
 
   return { batchId, bookId, chapterId };
-}
-
-export async function previewCsvFile(
-  file: File,
-  batchName?: string,
-): Promise<ImportPreview> {
-  const db = getDb();
-  const text = await file.text();
-  const existing = await db.sentences.toArray();
-  return parseSatoriCsvText(text, file.name, {
-    existing,
-    batchName,
-  });
 }
 
 export async function previewShadowingPackageFile(

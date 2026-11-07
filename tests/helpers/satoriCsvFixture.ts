@@ -1,61 +1,30 @@
 import Papa from 'papaparse';
 
-import type {
-  ImportBatchCounts,
-  ParsedSentenceDraft,
-  SourceConflict,
-  SourceReference,
-  TargetVocabulary,
-  VocabularySuggestion,
-} from '../domain/types';
-import { sentenceIdFromNormalizedKey } from './ids';
+import type { ParsedSentenceDraft, SourceReference, TargetVocabulary } from '../../src/domain/types';
+import { sentenceIdFromNormalizedKey } from '../../src/lib/ids';
 import {
   displayJapanese,
   normalizeExpressionKey,
   normalizeSentenceKey,
-} from './normalize';
-import { mergeVocabularySuggestions } from './vocabularySuggestions';
+} from '../../src/lib/normalize';
+import {
+  mergeTimes,
+  mergeVocabulary,
+  recordConflict,
+  uniqueRefs,
+  type ExistingSentenceLookup,
+  type ImportPreview,
+  type ImportPreviewSentence,
+  type ImportWarning,
+} from '../../src/lib/sentenceImport';
 
+/**
+ * TEST-ONLY. The Satori CSV importer was removed from the app (2026-11-07);
+ * this parser remains so the data-layer and UI tests can still build an
+ * `ImportPreview` from fixtures/little-birds.csv and seed through the real
+ * `commitImport`.
+ */
 const CONTEXT_NUMBERS = [1, 2, 3] as const;
-
-export interface ImportWarning {
-  message: string;
-  rowNumber?: number;
-}
-
-export interface ImportPreviewSentence {
-  draft: ParsedSentenceDraft;
-  proposedId: string;
-  isNew: boolean;
-  willUpdate: boolean;
-  selected: boolean;
-}
-
-export interface ImportPreview {
-  filename: string;
-  batchName: string;
-  totalRows: number;
-  drafts: ImportPreviewSentence[];
-  counts: ImportBatchCounts;
-  warnings: ImportWarning[];
-}
-
-export interface ExistingSentenceLookup {
-  id: string;
-  normalizedKey: string;
-  japanese: string;
-  readingOnly: string;
-  inlineReading: string;
-  translation: string;
-  targetVocabulary: TargetVocabulary[];
-  vocabularySuggestions?: VocabularySuggestion[];
-  sourceReferences: SourceReference[];
-  conflicts: SourceConflict[];
-  earliestCreatedAt?: string;
-  latestCreatedAt?: string;
-  firstOccurrenceIndex: number;
-  importBatchIds: string[];
-}
 
 function cell(row: Record<string, string>, ...keys: string[]): string {
   for (const key of keys) {
@@ -70,87 +39,6 @@ function parseWhenCreated(value: string): string | undefined {
   const parsed = Date.parse(value);
   if (Number.isNaN(parsed)) return value.trim();
   return new Date(parsed).toISOString();
-}
-
-function mergeTimes(
-  a?: string,
-  b?: string,
-): { earliest?: string; latest?: string } {
-  const values = [a, b].filter((value): value is string => Boolean(value));
-  if (!values.length) return {};
-  const sorted = [...values].sort();
-  return { earliest: sorted[0], latest: sorted[sorted.length - 1] };
-}
-
-function mergeVocabulary(
-  existing: TargetVocabulary[],
-  next: TargetVocabulary,
-): { list: TargetVocabulary[]; added: boolean } {
-  const key = normalizeExpressionKey(next.expression, next.reading);
-  const index = existing.findIndex(
-    (item) => normalizeExpressionKey(item.expression, item.reading) === key,
-  );
-  if (index < 0) {
-    return { list: [...existing, next], added: true };
-  }
-  const current = existing[index]!;
-  const merged: TargetVocabulary = {
-    ...current,
-    expression: current.expression || next.expression,
-    reading: current.reading || next.reading,
-    furigana: current.furigana || next.furigana,
-    english: current.english || next.english,
-    partsOfSpeech: current.partsOfSpeech || next.partsOfSpeech,
-    sourceCardIds: Array.from(
-      new Set([...current.sourceCardIds, ...next.sourceCardIds]),
-    ),
-    cardTypes: Array.from(new Set([...current.cardTypes, ...next.cardTypes])),
-  };
-  const list = [...existing];
-  list[index] = merged;
-  return { list, added: false };
-}
-
-function recordConflict(
-  conflicts: SourceConflict[],
-  field: SourceConflict['field'],
-  preferred: string,
-  alternative: string,
-): SourceConflict[] {
-  if (!alternative || alternative === preferred) return conflicts;
-  const existing = conflicts.find((item) => item.field === field);
-  if (!existing) {
-    return [
-      ...conflicts,
-      { field, preferred, alternatives: [alternative] },
-    ];
-  }
-  if (
-    existing.alternatives.includes(alternative) ||
-    existing.preferred === alternative
-  ) {
-    return conflicts;
-  }
-  return conflicts.map((item) =>
-    item.field === field
-      ? {
-          ...item,
-          alternatives: [...item.alternatives, alternative],
-        }
-      : item,
-  );
-}
-
-function uniqueRefs(refs: SourceReference[]): SourceReference[] {
-  const seen = new Set<string>();
-  const result: SourceReference[] = [];
-  for (const ref of refs) {
-    const key = `${ref.cardId}|${ref.cardType}|${ref.contextNumber}|${ref.importBatchId}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    result.push(ref);
-  }
-  return result;
 }
 
 export function parseSatoriCsvText(
@@ -432,92 +320,5 @@ export function parseSatoriCsvText(
     drafts: previewSentences,
     counts,
     warnings,
-  };
-}
-
-export function mergeSentenceOnReimport(
-  existing: ExistingSentenceLookup,
-  draft: ParsedSentenceDraft,
-  importBatchId: string,
-): ExistingSentenceLookup {
-  let targetVocabulary = existing.targetVocabulary;
-  for (const vocab of draft.targetVocabulary) {
-    targetVocabulary = mergeVocabulary(targetVocabulary, vocab).list;
-  }
-
-  let conflicts = [...existing.conflicts, ...draft.conflicts];
-  let translation = existing.translation;
-  let readingOnly = existing.readingOnly;
-  let inlineReading = existing.inlineReading;
-
-  if (draft.translation) {
-    if (!translation) translation = draft.translation;
-    else if (draft.translation !== translation) {
-      conflicts = recordConflict(
-        conflicts,
-        'translation',
-        translation,
-        draft.translation,
-      );
-    }
-  }
-  if (draft.readingOnly) {
-    if (!readingOnly) readingOnly = draft.readingOnly;
-    else if (draft.readingOnly !== readingOnly) {
-      conflicts = recordConflict(
-        conflicts,
-        'readingOnly',
-        readingOnly,
-        draft.readingOnly,
-      );
-    }
-  }
-  if (draft.inlineReading) {
-    if (!inlineReading) inlineReading = draft.inlineReading;
-    else if (draft.inlineReading !== inlineReading) {
-      conflicts = recordConflict(
-        conflicts,
-        'inlineReading',
-        inlineReading,
-        draft.inlineReading,
-      );
-    }
-  }
-
-  const times = mergeTimes(
-    existing.earliestCreatedAt ?? existing.latestCreatedAt,
-    draft.earliestCreatedAt ?? draft.latestCreatedAt,
-  );
-
-  const sourceReferences = uniqueRefs([
-    ...existing.sourceReferences.map((ref) =>
-      ref.importBatchId === 'preview'
-        ? { ...ref, importBatchId }
-        : ref,
-    ),
-    ...draft.sourceReferences.map((ref) => ({ ...ref, importBatchId })),
-  ]);
-
-  const japanese = existing.japanese || draft.japanese;
-
-  return {
-    ...existing,
-    japanese,
-    readingOnly,
-    inlineReading,
-    translation,
-    targetVocabulary,
-    vocabularySuggestions: mergeVocabularySuggestions(
-      existing.vocabularySuggestions ?? [],
-      draft.vocabularySuggestions ?? [],
-      japanese,
-    ),
-    sourceReferences,
-    conflicts,
-    earliestCreatedAt: times.earliest ?? existing.earliestCreatedAt,
-    latestCreatedAt: times.latest ?? existing.latestCreatedAt,
-    importBatchIds: Array.from(
-      new Set([...existing.importBatchIds, importBatchId]),
-    ),
   };
 }

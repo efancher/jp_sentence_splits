@@ -11,7 +11,7 @@ import {
   type ExistingSentenceLookup,
   type ImportPreview,
   type ImportPreviewSentence,
-} from './csvImport';
+} from './sentenceImport';
 import {
   displayJapanese,
   normalizeSentenceKey,

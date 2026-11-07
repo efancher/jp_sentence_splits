@@ -1,7 +1,7 @@
 # Satori Glossbook
 
 Offline-capable progressive web app for analyzing Japanese sentences imported
-from **Satori Reader** vocabulary CSV exports and
+from YouTube and podcast mining, NHK Easy News, and
 **japanese-shadowing-package** project ZIPs.
 
 This repository is the home of **Satori Glossbook** (name configurable in [`src/appConfig.ts`](src/appConfig.ts)). It is an analysis workspace, not a spaced-repetition system. Study data lives in IndexedDB first; optional Supabase auth/sync keeps devices aligned when configured.
@@ -135,11 +135,12 @@ confirmed via the `VocabularyPicker` suggestion-confirmation UI (Analyze
 page, see `docs/ROADMAP.md` Phase 5); this script exists so that UI has a
 working gloss/reading lookup to build against.
 
-### Backfilling vocabulary suggestions for CSV-imported sentences
+### Backfilling vocabulary suggestions for older sentences
 
 `VocabularyPicker`'s tappable word-chips come from `vocabularySuggestions`,
-which only Shadowmine `.zip` package imports populate — CSV imports leave
-it empty, so those sentences render a flat, chip-less picker (the "Add
+which every current import path populates. Sentences imported by the
+removed Satori CSV / Anki importers (before 2026-11-07) may have it empty,
+so they render a flat, chip-less picker (the "Add
 blank" button still works, just one word at a time). This script backfills
 real suggestions using the same fugashi/UniDic engine Shadowmine uses
 (`shadowmine.morphology.tokenize_japanese`, from the sibling `shadowing`
@@ -271,7 +272,7 @@ importer).
 
 ## Tests
 
-- **Unit tests** cover CSV import/dedupe, chunking regressions, furigana parsing, Dexie data operations, and backup round-trips.
+- **Unit tests** cover import merge/dedupe, chunking regressions, furigana parsing, Dexie data operations, and backup round-trips.
 - **Component tests** cover import → book → analysis autosave, explicit reorder controls, and Practice reveal stages.
 - **Playwright** covers import/backup, chapter review, reader walkthroughs, sentence lessons, episode preparation, extras recovery, clause questions and native pitch preparation in Chromium/WebKit.
 - **Backend and database checks** exercise the offline mining API and real Postgres migrations/RLS. See [Testing and coverage](docs/TESTING.md) for commands, results and known gaps.
@@ -316,20 +317,13 @@ Hash routing is used so nested routes do not 404 on refresh under project Pages.
 2. Tap **Share → Add to Home Screen**
 3. Launch from the Home Screen (standalone display)
 
-### Importing a Satori export from the Files app
-
-1. Export vocabulary from Satori Reader to Files
-2. Open Glossbook → **Import**
-3. Choose the CSV with the file picker
-4. Review the preview, name the batch, and send sentences to Inbox or a book
-
 ### Backup and restore
 
 Use **Settings → Backup & restore** to export/import versioned JSON. Prefer exporting before replacing local data. With Supabase configured and signed in, devices share cloud data; JSON backups remain an independent safety net.
 
 ### Offline behavior
 
-After the first successful load, the application shell and already-imported study data remain usable offline. Imported CSV files are not cached as app assets.
+After the first successful load, the application shell and already-imported study data remain usable offline. Imported files are not cached as app assets.
 
 ## Current limitations
 
