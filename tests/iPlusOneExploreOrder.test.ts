@@ -139,4 +139,45 @@ describe('walkthrough supply: i+1 ordering (settings.iPlusOneOrdering)', () => {
     }
     expect(await lessonOrder()).toEqual(['i1', 'hard', 'easy']);
   });
+
+  it('counts unmet curated grammar patterns as unknowns, and names them as new here', async () => {
+    const book = await createBook({ title: 'Grammar Book' });
+    const rows = [
+      sentenceOf('done', ['猫', '犬']),
+      sentenceOf('x', ['猫', '空']),
+      sentenceOf('y', ['猫', '雲']),
+      sentenceOf('z', ['猫', '犬']),
+    ];
+    await getDb().sentences.bulkPut(rows);
+    await addSentencesToBook(book.id, rows.map((row) => row.id));
+    await setBookSentenceStatus(book.id, 'done', 'complete');
+    // Curated entries: てみる (met in 'done'), たことがある and ておく (new in 'x').
+    const pattern = (id: string, canonicalName: string) => ({
+      id, canonicalName, normalizedKey: canonicalName, aliases: [], shortMeaning: '', provenance: 'manual' as const,
+      createdAt: T, updatedAt: T,
+    });
+    await getDb().grammarPatterns.bulkPut([
+      pattern('p-temiru', '〜てみる'),
+      pattern('p-takoto', '〜たことがある'),
+      pattern('p-teoku', '〜ておく'),
+    ]);
+    const link = (sentenceId: string, grammarPatternId: string) => ({
+      id: `${sentenceId}-${grammarPatternId}`, sentenceId, grammarPatternId, confirmedByLearner: false,
+      source: 'ai_suggested' as const, createdAt: T, updatedAt: T,
+    });
+    await getDb().sentenceGrammar.bulkPut([
+      link('done', 'p-temiru'),
+      link('x', 'p-temiru'),
+      link('x', 'p-takoto'),
+      link('x', 'p-teoku'),
+    ]);
+    await updateSettings({ iPlusOneOrdering: true });
+    // 'x' has one new word but two new patterns: three unknowns, so it waits behind the i+1 sentence 'y'.
+    const steps = await lessonSteps();
+    expect(steps.map((step) => step.sentenceId)).toEqual(['y', 'z', 'x']);
+    const reason = steps.find((step) => step.sentenceId === 'x')?.reason ?? '';
+    expect(reason).toContain('〜たことがある');
+    expect(reason).toContain('空');
+    expect(reason).not.toContain('〜てみる');
+  });
 });

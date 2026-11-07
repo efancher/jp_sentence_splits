@@ -11,7 +11,9 @@
  * not scorable, never counted as zero unknowns.
  * "Introduced" matches getIntroducedSentenceIds: walkthrough_completed, started in a book, or has a sentence card.
  */
+import openJlptGrammar from '../src/data/openJlptGrammar.json';
 import type { VocabularySuggestion } from '../src/domain/types';
+import { buildReferenceIndex, curatedGrammarByPattern } from '../src/lib/grammarReference';
 import {
   buildKnownLemmaSet,
   lemmaKey,
@@ -91,6 +93,30 @@ async function main(): Promise<void> {
   }
   console.log('\nunknown content lemmas per candidate:');
   console.log(formatHistogram(unknownCountHistogram(scored.map((s) => s.unknown.length), 10)));
+
+  // Same curated-grammar counting as the planner (loadCuratedGrammar): unambiguous OpenJLPT matches only.
+  const [patterns, links] = await Promise.all([
+    fetchAll<Row>(client, 'grammar_patterns', 'id,canonical_name,aliases', ownerId, (r) => r),
+    fetchAll<Row>(client, 'sentence_grammar', 'id,sentence_id,grammar_pattern_id', ownerId, (r) => r),
+  ]);
+  const byPattern = curatedGrammarByPattern(
+    patterns.map((p) => ({ id: p.id, canonicalName: p.canonical_name, aliases: p.aliases ?? [] })),
+    buildReferenceIndex(openJlptGrammar.patterns),
+  );
+  const entriesBySentence = new Map<string, Set<string>>();
+  const knownGrammar = new Set<string>();
+  for (const link of links) {
+    const entryId = byPattern.get(link.grammar_pattern_id);
+    if (!entryId) continue;
+    if (!entriesBySentence.has(link.sentence_id)) entriesBySentence.set(link.sentence_id, new Set());
+    entriesBySentence.get(link.sentence_id)!.add(entryId);
+    if (introduced.has(link.sentence_id)) knownGrammar.add(entryId);
+  }
+  const withGrammar = scored.map(
+    (s) => s.unknown.length + [...(entriesBySentence.get(s.id) ?? [])].filter((id) => !knownGrammar.has(id)).length,
+  );
+  console.log(`\nunknown lemmas + unmet curated grammar per candidate (known curated patterns ${knownGrammar.size}):`);
+  console.log(formatHistogram(unknownCountHistogram(withGrammar, 10)));
 
   const perBook = new Map<string, { total: number; ready: number }>();
   for (const { id, unknown } of scored) {

@@ -8,6 +8,8 @@ export const I_PLUS_ONE_STRETCH_EVERY = 5;
 export interface IPlusOneItem {
   sentenceId: string;
   suggestions: readonly LemmaSource[] | undefined;
+  /** Curated grammar entry ids the sentence carries (see `curatedGrammarByPattern`); counted only when `knownGrammar` is passed. */
+  grammar?: readonly string[];
 }
 
 /**
@@ -17,7 +19,8 @@ export interface IPlusOneItem {
  * nothing is dropped, gated or starved — only reordered.
  *
  * Tiers, in the order they are served:
- * 1. i+1: 1-2 unknown content lemmas, those whose unknown words unlock the
+ * 1. i+1: 1-2 unknown pieces (content lemmas plus, when `knownGrammar` is
+ *    given, unmet curated grammar entries), those whose unknown words unlock the
  *    most other sentences first (`unlockValueByLemma`, with fillers, discourse
  *    markers and names down-weighted by `lemmaWeight`), then fewer unknowns,
  *    then reading order.
@@ -33,14 +36,24 @@ export interface IPlusOneItem {
 export function orderByIPlusOne(
   items: readonly IPlusOneItem[],
   known: ReadonlySet<string>,
-  options: { maxUnknown?: number; stretchEvery?: number } = {},
+  options: { maxUnknown?: number; stretchEvery?: number; knownGrammar?: ReadonlySet<string> } = {},
 ): string[] {
   const maxUnknown = options.maxUnknown ?? I_PLUS_ONE_MAX_UNKNOWN;
   const stretchEvery = options.stretchEvery ?? I_PLUS_ONE_STRETCH_EVERY;
 
+  const knownGrammar = options.knownGrammar;
   const scored = items.map((item, position) => {
     const score = scoreSentence(item.suggestions, known);
-    return { id: item.sentenceId, position, scorable: score.scorable, unknown: score.scorable ? score.unknown : [] };
+    const unknown = score.scorable ? score.unknown : [];
+    // Curated grammar the learner hasn't met counts like an unknown word, so "1-2 new pieces" covers both.
+    const grammarUnknown = knownGrammar ? (item.grammar ?? []).filter((id) => !knownGrammar.has(id)).length : 0;
+    return {
+      id: item.sentenceId,
+      position,
+      scorable: score.scorable,
+      unknown,
+      count: unknown.length + grammarUnknown,
+    };
   });
   const weights = new Map<string, number>();
   for (const item of items) {
@@ -64,14 +77,12 @@ export function orderByIPlusOne(
   const unscorable: typeof scored = [];
   for (const entry of scored) {
     if (!entry.scorable) unscorable.push(entry);
-    else if (entry.unknown.length === 0) allKnown.push(entry);
-    else if (entry.unknown.length <= maxUnknown) ready.push(entry);
+    else if (entry.count === 0) allKnown.push(entry);
+    else if (entry.count <= maxUnknown) ready.push(entry);
     else stretch.push(entry);
   }
-  ready.sort(
-    (a, b) => unlock(b) - unlock(a) || a.unknown.length - b.unknown.length || a.position - b.position,
-  );
-  stretch.sort((a, b) => a.unknown.length - b.unknown.length || a.position - b.position);
+  ready.sort((a, b) => unlock(b) - unlock(a) || a.count - b.count || a.position - b.position);
+  stretch.sort((a, b) => a.count - b.count || a.position - b.position);
 
   const ordered: string[] = [];
   const take = (queue: typeof scored) => ordered.push(queue.shift()!.id);

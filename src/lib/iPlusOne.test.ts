@@ -90,3 +90,35 @@ describe('orderByIPlusOne', () => {
     expect(orderByIPlusOne([], known)).toEqual([]);
   });
 });
+
+describe('orderByIPlusOne with grammar', () => {
+  const withGrammar = (item: IPlusOneItem, ...grammar: string[]): IPlusOneItem => ({ ...item, grammar });
+  const knownGrammar = new Set(['temiru']);
+
+  it('counts an unmet curated pattern like an unknown word, so one word plus one pattern is still i+1', () => {
+    const items: IPlusOneItem[] = [
+      withGrammar(sentence('too-much', '猫', '空', '雲'), 'nagara'),
+      withGrammar(sentence('words-and-grammar', '猫', '空'), 'nagara'),
+      withGrammar(sentence('seen-grammar', '猫', '空'), 'temiru'),
+    ];
+    // seen-grammar: 1 unknown; words-and-grammar: 2 (ready); too-much: 3 (stretch).
+    expect(orderByIPlusOne(items, known, { knownGrammar })).toEqual(['seen-grammar', 'words-and-grammar', 'too-much']);
+  });
+
+  it('treats a known-words sentence with a new pattern as i+1, ahead of an all-known one', () => {
+    const items: IPlusOneItem[] = [
+      withGrammar(sentence('plain', '猫', '犬')),
+      withGrammar(sentence('new-pattern', '猫', '犬'), 'nagara'),
+    ];
+    expect(orderByIPlusOne(items, known, { knownGrammar })).toEqual(['new-pattern', 'plain']);
+  });
+
+  it('ignores grammar when no known-grammar set is given', () => {
+    const items: IPlusOneItem[] = [
+      sentence('b', '猫', '空', '雲', '風'),
+      withGrammar(sentence('a', '猫', '空'), 'g1', 'g2', 'g3'),
+    ];
+    expect(orderByIPlusOne(items, known)).toEqual(['a', 'b']);
+    expect(orderByIPlusOne(items, known, { knownGrammar: new Set() })).toEqual(['b', 'a']);
+  });
+});

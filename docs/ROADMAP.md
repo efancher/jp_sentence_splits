@@ -801,8 +801,19 @@ data; all 1,099 picked vocabulary items would add ~800 lemmas, but that is
 here: X"; ranking is across books (one global rank, per-book order kept, books
 merged by next rank). Left over: a longer grammar-bound list (add only lemmas
 with no life outside a pattern), an exposure-count threshold or struggle signal
-instead of "seen once", and a per-book "ready to pick up" screen; (4) grammar
-as items (curated OpenJLPT patterns, see above).
+instead of "seen once", and a per-book "ready to pick up" screen; (4) [first
+slice done 2026-11-07] grammar as items: the OpenJLPT list is vendored as a
+trimmed derived file (`src/data/openJlptGrammar.json`, id/pattern/level/formation,
+CC BY-SA 4.0 attribution inside; `npm run vendor:openjlpt-grammar` regenerates
+it), unambiguous learner-pattern matches give each sentence curated grammar
+entries, an entry is known once an introduced sentence carries it, and unmet
+entries count as unknown pieces in `orderByIPlusOne` (and are named in "new
+here"). On 2026-11-07 data: 27 curated patterns known; the 1-2-unknown pool
+2,273 -> 2,231 sentences. Left over: detect curated patterns from morphology
+(`formation` tokens) so the other ~80% of sentences carry grammar, merge
+duplicate learner patterns and clean junk, resolve ambiguous `（note）` matches
+(e.g. ながら（while）/（も） collapse to one key), level-aware pacing (do not
+offer N2 patterns before N4 ones are met), and any grammar study surface.
 
 ## Possibilities (reader as the single study surface)
 

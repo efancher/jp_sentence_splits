@@ -28,8 +28,16 @@ and possible extensions. This snapshot does not certify a live deployment.
   down-weights interjections/fillers and discourse markers (x0.2), grammar-bound
   verbs (しれる, x0.3) and proper nouns (x0.5) via `lemmaWeight`, for ranking
   only: those words still count as unknown. Limits: only しれる is on the
-  grammar-bound list; exposure counts and self-ratings are not used; grammar is
-  not yet considered. Measure with `npm run diagnose:i-plus-one`.
+  grammar-bound list; exposure counts and self-ratings are not used.
+  Grammar (2026-11-07): an unmet curated pattern counts as one more unknown
+  piece, so "1-2 new pieces" covers words plus patterns. A sentence's curated
+  patterns are its AI/manual `sentence_grammar` links that resolve
+  unambiguously to the vendored OpenJLPT list (`src/data/openJlptGrammar.json`,
+  CC BY-SA 4.0, id/pattern/level/formation only; regenerate with
+  `npm run vendor:openjlpt-grammar`); a pattern is known once an introduced
+  sentence carries it. Only ~19% of sentences carry a curated link, so grammar
+  refines the ranking but vocabulary still leads. The "new here" line names new
+  patterns too. Measure with `npm run diagnose:i-plus-one`.
 - "Fresh try" revisits: automatic ones (parked checks, spaced schedule) are capped
   at `EXPLORE_REVISITS_PER_BOOK` per book per plan, counted after sentences in
   suspended episodes are dropped and only while that book has new lessons waiting

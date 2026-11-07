@@ -27,6 +27,7 @@ import {
   type SequentialBookStatus,
   type SequentialSentenceStatus,
 } from '../lib/sequentialStudy';
+import { buildReferenceIndex, curatedGrammarByPattern } from '../lib/grammarReference';
 import { orderByIPlusOne, type IPlusOneItem } from '../lib/iPlusOne';
 import {
   effectiveLegacyDrillsPaused,
@@ -11080,6 +11081,37 @@ async function loadKnownLemmaSet(introducedRows: (Sentence | undefined)[]): Prom
 }
 
 /**
+ * Curated grammar (vendored OpenJLPT list) per sentence, via the learner's own pattern links. Only unambiguous
+ * matches count (see `curatedGrammarByPattern`); `known` is every curated entry carried by an introduced sentence.
+ */
+async function loadCuratedGrammar(introduced: ReadonlySet<string>): Promise<{
+  entriesBySentence: Map<string, string[]>;
+  known: Set<string>;
+  names: Map<string, string>;
+}> {
+  const db = getDb();
+  const [{ default: reference }, patterns, links] = await Promise.all([
+    import('../data/openJlptGrammar.json'),
+    db.grammarPatterns.toArray(),
+    db.sentenceGrammar.toArray(),
+  ]);
+  const index = buildReferenceIndex(reference.patterns);
+  const byPattern = curatedGrammarByPattern(patterns, index);
+  const names = new Map(reference.patterns.map((entry) => [entry.id!, entry.pattern]));
+  const entriesBySentence = new Map<string, string[]>();
+  const known = new Set<string>();
+  for (const link of links) {
+    const entryId = byPattern.get(link.grammarPatternId);
+    if (!entryId) continue;
+    const entries = entriesBySentence.get(link.sentenceId) ?? [];
+    if (!entries.includes(entryId)) entries.push(entryId);
+    entriesBySentence.set(link.sentenceId, entries);
+    if (introduced.has(link.sentenceId)) known.add(entryId);
+  }
+  return { entriesBySentence, known, names };
+}
+
+/**
  * Ranks every not-yet-introduced sentence across all books at once (so
  * unlock value and the stretch cadence are global, not per book). A pure
  * permutation of reading order; callers sort their own lists by `rank`.
@@ -11090,15 +11122,18 @@ async function loadIPlusOneContext(stretchEvery: number): Promise<IPlusOneContex
   const introduced = await getIntroducedSentenceIds(sentenceIds);
   const rows = await getDb().sentences.bulkGet(sentenceIds);
   const known = await loadKnownLemmaSet(rows.filter((row) => row && introduced.has(row.id)));
+  const grammar = await loadCuratedGrammar(introduced);
   const items: IPlusOneItem[] = [];
   const newWords = new Map<string, string[]>();
   rows.forEach((row, index) => {
     if (!row || introduced.has(sentenceIds[index]!)) return;
-    items.push({ sentenceId: row.id, suggestions: row.vocabularySuggestions });
+    const entryIds = grammar.entriesBySentence.get(row.id);
+    items.push({ sentenceId: row.id, suggestions: row.vocabularySuggestions, grammar: entryIds });
     const words = unknownLemmasForSentence(row.vocabularySuggestions, known).map((key) => key.split('|')[0]!);
-    if (words.length > 0) newWords.set(row.id, words);
+    const patterns = (entryIds ?? []).filter((id) => !grammar.known.has(id)).map((id) => grammar.names.get(id)!);
+    if (words.length + patterns.length > 0) newWords.set(row.id, [...words, ...patterns]);
   });
-  const order = orderByIPlusOne(items, known, { stretchEvery });
+  const order = orderByIPlusOne(items, known, { stretchEvery, knownGrammar: grammar.known });
   return { rank: new Map(order.map((id, index) => [id, index])), newWords };
 }
 

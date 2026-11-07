@@ -1,0 +1,3164 @@
+{
+ "source": "https://github.com/evanclan/OpenJLPT",
+ "license": "CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/)",
+ "attribution": "Grammar patterns and JLPT levels from OpenJLPT by evanclan, trimmed to id/pattern/level/formation.",
+ "generatedAt": "2026-11-07",
+ "patterns": [
+  {
+   "id": "wa",
+   "pattern": "〜は",
+   "level": "N5",
+   "formation": "Noun + は"
+  },
+  {
+   "id": "ga-subject",
+   "pattern": "〜が（subject）",
+   "level": "N5",
+   "formation": "Noun + が"
+  },
+  {
+   "id": "o",
+   "pattern": "〜を",
+   "level": "N5",
+   "formation": "Noun + を"
+  },
+  {
+   "id": "ni-time",
+   "pattern": "〜に（time）",
+   "level": "N5",
+   "formation": "Noun + に"
+  },
+  {
+   "id": "ni-destination",
+   "pattern": "〜に（destination）",
+   "level": "N5",
+   "formation": "Noun + に + 行く / 来る / 帰る"
+  },
+  {
+   "id": "ni-location",
+   "pattern": "〜に（place of existence）",
+   "level": "N5",
+   "formation": "Noun + に + ある / いる"
+  },
+  {
+   "id": "ni-indirect-object",
+   "pattern": "〜に（indirect object）",
+   "level": "N5",
+   "formation": "Noun + に"
+  },
+  {
+   "id": "ni-frequency",
+   "pattern": "〜に（frequency）",
+   "level": "N5",
+   "formation": "Noun + に + Noun"
+  },
+  {
+   "id": "e",
+   "pattern": "〜へ",
+   "level": "N5",
+   "formation": "Noun + へ"
+  },
+  {
+   "id": "de-place",
+   "pattern": "〜で（place of action）",
+   "level": "N5",
+   "formation": "Noun + で"
+  },
+  {
+   "id": "de-means",
+   "pattern": "〜で（means）",
+   "level": "N5",
+   "formation": "Noun + で"
+  },
+  {
+   "id": "to-and",
+   "pattern": "〜と（and）",
+   "level": "N5",
+   "formation": "Noun + と + Noun"
+  },
+  {
+   "id": "to-with",
+   "pattern": "〜と（with）",
+   "level": "N5",
+   "formation": "Noun + と"
+  },
+  {
+   "id": "ya",
+   "pattern": "〜や",
+   "level": "N5",
+   "formation": "Noun + や + Noun"
+  },
+  {
+   "id": "ka-or",
+   "pattern": "〜か（or）",
+   "level": "N5",
+   "formation": "Noun + か + Noun"
+  },
+  {
+   "id": "mo",
+   "pattern": "〜も",
+   "level": "N5",
+   "formation": "Noun + も"
+  },
+  {
+   "id": "no",
+   "pattern": "〜の（possessive）",
+   "level": "N5",
+   "formation": "Noun + の + Noun"
+  },
+  {
+   "id": "kara-from",
+   "pattern": "〜から（from）",
+   "level": "N5",
+   "formation": "Noun + から"
+  },
+  {
+   "id": "made",
+   "pattern": "〜まで（until）",
+   "level": "N5",
+   "formation": "Noun + まで"
+  },
+  {
+   "id": "ka-question",
+   "pattern": "〜か（question）",
+   "level": "N5",
+   "formation": "Sentence + か"
+  },
+  {
+   "id": "ne",
+   "pattern": "〜ね",
+   "level": "N5",
+   "formation": "Sentence + ね"
+  },
+  {
+   "id": "yo",
+   "pattern": "〜よ",
+   "level": "N5",
+   "formation": "Sentence + よ"
+  },
+  {
+   "id": "yori",
+   "pattern": "〜より",
+   "level": "N5",
+   "formation": "Noun + より"
+  },
+  {
+   "id": "no-hou-ga-yori",
+   "pattern": "〜の方が〜より",
+   "level": "N5",
+   "formation": "Noun + の方が + Noun + より"
+  },
+  {
+   "id": "to-to-dochira-ga",
+   "pattern": "〜と〜とどちらが",
+   "level": "N5",
+   "formation": "Noun + と + Noun + とどちらが"
+  },
+  {
+   "id": "no-naka-de-ga-ichiban",
+   "pattern": "〜の中で〜が一番",
+   "level": "N5",
+   "formation": "Noun + の中で + Noun + が一番"
+  },
+  {
+   "id": "desu",
+   "pattern": "〜です",
+   "level": "N5",
+   "formation": "Noun + です / na-Adj + です / i-Adj + です"
+  },
+  {
+   "id": "da",
+   "pattern": "〜だ",
+   "level": "N5",
+   "formation": "Noun + だ / na-Adj + だ"
+  },
+  {
+   "id": "de-wa-arimasen-ja-nai",
+   "pattern": "〜ではありません / 〜じゃない",
+   "level": "N5",
+   "formation": "Noun + ではありません / na-Adj + ではありません / Noun + じゃない / na-Adj + じゃない"
+  },
+  {
+   "id": "deshita",
+   "pattern": "〜でした",
+   "level": "N5",
+   "formation": "Noun + でした / na-Adj + でした"
+  },
+  {
+   "id": "masu",
+   "pattern": "〜ます",
+   "level": "N5",
+   "formation": "Verb-stem + ます"
+  },
+  {
+   "id": "masen",
+   "pattern": "〜ません",
+   "level": "N5",
+   "formation": "Verb-stem + ません"
+  },
+  {
+   "id": "mashita",
+   "pattern": "〜ました",
+   "level": "N5",
+   "formation": "Verb-stem + ました"
+  },
+  {
+   "id": "masen-deshita",
+   "pattern": "〜ませんでした",
+   "level": "N5",
+   "formation": "Verb-stem + ませんでした"
+  },
+  {
+   "id": "nai",
+   "pattern": "〜ない",
+   "level": "N5",
+   "formation": "Verb-nai stem + ない"
+  },
+  {
+   "id": "ta",
+   "pattern": "〜た",
+   "level": "N5",
+   "formation": "Verb-ta"
+  },
+  {
+   "id": "mashou",
+   "pattern": "〜ましょう",
+   "level": "N5",
+   "formation": "Verb-stem + ましょう"
+  },
+  {
+   "id": "mashou-ka",
+   "pattern": "〜ましょうか",
+   "level": "N5",
+   "formation": "Verb-stem + ましょうか"
+  },
+  {
+   "id": "masen-ka",
+   "pattern": "〜ませんか",
+   "level": "N5",
+   "formation": "Verb-stem + ませんか"
+  },
+  {
+   "id": "tai",
+   "pattern": "〜たい",
+   "level": "N5",
+   "formation": "Verb-stem + たい"
+  },
+  {
+   "id": "ga-hoshii",
+   "pattern": "〜がほしい",
+   "level": "N5",
+   "formation": "Noun + がほしい"
+  },
+  {
+   "id": "o-kudasai",
+   "pattern": "〜をください",
+   "level": "N5",
+   "formation": "Noun + をください"
+  },
+  {
+   "id": "te-kudasai",
+   "pattern": "〜てください",
+   "level": "N5",
+   "formation": "Verb-te + ください"
+  },
+  {
+   "id": "naide-kudasai",
+   "pattern": "〜ないでください",
+   "level": "N5",
+   "formation": "Verb-nai + でください"
+  },
+  {
+   "id": "te-mo-ii",
+   "pattern": "〜てもいい",
+   "level": "N5",
+   "formation": "Verb-te + もいい"
+  },
+  {
+   "id": "te-wa-ikenai",
+   "pattern": "〜てはいけない",
+   "level": "N5",
+   "formation": "Verb-te + はいけない"
+  },
+  {
+   "id": "nakereba-naranai-nakute-wa-ikenai",
+   "pattern": "〜なければならない / 〜なくてはいけない",
+   "level": "N5",
+   "formation": "Verb-nai stem + なければならない / Verb-nai stem + なくてはいけない"
+  },
+  {
+   "id": "nakute-mo-ii",
+   "pattern": "〜なくてもいい",
+   "level": "N5",
+   "formation": "Verb-nai stem + なくてもいい"
+  },
+  {
+   "id": "te-iru",
+   "pattern": "〜ている",
+   "level": "N5",
+   "formation": "Verb-te + いる"
+  },
+  {
+   "id": "te",
+   "pattern": "〜て",
+   "level": "N5",
+   "formation": "Verb-te + Sentence"
+  },
+  {
+   "id": "te-kara",
+   "pattern": "〜てから",
+   "level": "N5",
+   "formation": "Verb-te + から"
+  },
+  {
+   "id": "tari-tari-suru",
+   "pattern": "〜たり〜たりする",
+   "level": "N5",
+   "formation": "Verb-ta + り + Verb-ta + りする"
+  },
+  {
+   "id": "ta-koto-ga-aru",
+   "pattern": "〜たことがある",
+   "level": "N5",
+   "formation": "Verb-ta + ことがある"
+  },
+  {
+   "id": "mae-ni",
+   "pattern": "〜前に",
+   "level": "N5",
+   "formation": "Verb-dict + 前に / Noun + の + 前に"
+  },
+  {
+   "id": "ato-de",
+   "pattern": "〜後で",
+   "level": "N5",
+   "formation": "Verb-ta + 後で / Noun + の + 後で"
+  },
+  {
+   "id": "nagara",
+   "pattern": "〜ながら（while）",
+   "level": "N5",
+   "formation": "Verb-stem + ながら"
+  },
+  {
+   "id": "ni-iku",
+   "pattern": "〜に行く",
+   "level": "N5",
+   "formation": "Verb-stem + に行く / Noun + に行く"
+  },
+  {
+   "id": "ga-suki-ga-kirai",
+   "pattern": "〜が好き / 〜が嫌い",
+   "level": "N5",
+   "formation": "Noun + が好き / Noun + が嫌い / Verb-dict + の + が好き"
+  },
+  {
+   "id": "ga-jouzu-ga-heta",
+   "pattern": "〜が上手 / 〜が下手",
+   "level": "N5",
+   "formation": "Noun + が上手 / Noun + が下手"
+  },
+  {
+   "id": "ga-aru-ga-iru",
+   "pattern": "〜がある / 〜がいる",
+   "level": "N5",
+   "formation": "Noun + がある / Noun + がいる"
+  },
+  {
+   "id": "kara-reason",
+   "pattern": "〜から（reason）",
+   "level": "N5",
+   "formation": "Sentence + から"
+  },
+  {
+   "id": "ga-but",
+   "pattern": "〜が（but）",
+   "level": "N5",
+   "formation": "Sentence + が"
+  },
+  {
+   "id": "deshou",
+   "pattern": "〜でしょう",
+   "level": "N5",
+   "formation": "Verb-plain / i-Adj / na-Adj / Noun + でしょう"
+  },
+  {
+   "id": "ku-naru-ni-naru",
+   "pattern": "〜くなる / 〜になる",
+   "level": "N5",
+   "formation": "i-Adj-ku + なる / na-Adj + になる / Noun + になる"
+  },
+  {
+   "id": "ni-suru",
+   "pattern": "〜にする（decide）",
+   "level": "N5",
+   "formation": "Noun + にする"
+  },
+  {
+   "id": "mada-te-inai",
+   "pattern": "まだ〜ていない",
+   "level": "N5",
+   "formation": "まだ + Verb-te + いない / まだ + Verb-te + いません"
+  },
+  {
+   "id": "mou-ta",
+   "pattern": "もう〜た",
+   "level": "N5",
+   "formation": "もう + Verb-ta / もう + Verb-stem + ました"
+  },
+  {
+   "id": "amari-nai",
+   "pattern": "あまり〜ない",
+   "level": "N5",
+   "formation": "あまり + Verb-nai / あまり + i-Adj-ku + ない / あまり + na-Adj + じゃない"
+  },
+  {
+   "id": "zenzen-nai",
+   "pattern": "全然〜ない",
+   "level": "N5",
+   "formation": "全然 + Verb-nai / 全然 + i-Adj-ku + ない / 全然 + na-Adj + じゃない"
+  },
+  {
+   "id": "dake",
+   "pattern": "〜だけ",
+   "level": "N5",
+   "formation": "Noun + だけ / Verb-dict + だけ"
+  },
+  {
+   "id": "kurai-gurai",
+   "pattern": "〜くらい / 〜ぐらい（approximately）",
+   "level": "N5",
+   "formation": "Noun + くらい / Noun + ぐらい"
+  },
+  {
+   "id": "goro",
+   "pattern": "〜ごろ",
+   "level": "N5",
+   "formation": "Noun + ごろ"
+  },
+  {
+   "id": "nani-mo-nai-dare-mo-nai",
+   "pattern": "何も〜ない / 誰も〜ない",
+   "level": "N5",
+   "formation": "何も + Verb-nai / 誰も + Verb-nai"
+  },
+  {
+   "id": "nani-ka-dare-ka-doko-ka",
+   "pattern": "何か / 誰か / どこか",
+   "level": "N5",
+   "formation": "Question word + か"
+  },
+  {
+   "id": "kore-sore-are-dore",
+   "pattern": "これ / それ / あれ / どれ",
+   "level": "N5",
+   "formation": "これ / それ / あれ / どれ"
+  },
+  {
+   "id": "kono-sono-ano-dono",
+   "pattern": "この / その / あの / どの",
+   "level": "N5",
+   "formation": "この / その / あの / どの + Noun"
+  },
+  {
+   "id": "koko-soko-asoko-doko",
+   "pattern": "ここ / そこ / あそこ / どこ",
+   "level": "N5",
+   "formation": "ここ / そこ / あそこ / どこ"
+  },
+  {
+   "id": "ku-nai-katta-ku-nakatta",
+   "pattern": "〜くない / 〜かった / 〜くなかった",
+   "level": "N5",
+   "formation": "i-Adj stem + くない / i-Adj stem + かった / i-Adj stem + くなかった"
+  },
+  {
+   "id": "na-na-adjective",
+   "pattern": "〜な（na-adjective）",
+   "level": "N5",
+   "formation": "na-Adj + な + Noun / na-Adj + です / na-Adj + ではありません / na-Adj + でした"
+  },
+  {
+   "id": "kute-de",
+   "pattern": "〜くて / 〜で",
+   "level": "N5",
+   "formation": "i-Adj-ku + て / na-Adj + で / Noun + で"
+  },
+  {
+   "id": "to-iu-named",
+   "pattern": "〜という（named）",
+   "level": "N5",
+   "formation": "Noun + という + Noun"
+  },
+  {
+   "id": "ageru-kureru-morau",
+   "pattern": "あげる / くれる / もらう",
+   "level": "N4",
+   "formation": "Noun (receiver) + に + Noun + を + あげる / Noun (giver) + が + Noun + を + くれる / Noun (giver) + に + Noun + を + もらう"
+  },
+  {
+   "id": "te-ageru",
+   "pattern": "〜てあげる",
+   "level": "N4",
+   "formation": "Verb-te + あげる"
+  },
+  {
+   "id": "te-kureru",
+   "pattern": "〜てくれる",
+   "level": "N4",
+   "formation": "Verb-te + くれる"
+  },
+  {
+   "id": "te-morau",
+   "pattern": "〜てもらう",
+   "level": "N4",
+   "formation": "Verb-te + もらう"
+  },
+  {
+   "id": "te-kudasaru-te-itadaku",
+   "pattern": "〜てくださる / 〜ていただく",
+   "level": "N4",
+   "formation": "Verb-te + くださる / Verb-te + いただく"
+  },
+  {
+   "id": "te-iku",
+   "pattern": "〜ていく",
+   "level": "N4",
+   "formation": "Verb-te + いく"
+  },
+  {
+   "id": "te-kuru",
+   "pattern": "〜てくる",
+   "level": "N4",
+   "formation": "Verb-te + くる"
+  },
+  {
+   "id": "te-shimau-chau",
+   "pattern": "〜てしまう / 〜ちゃう",
+   "level": "N4",
+   "formation": "Verb-te + しまう"
+  },
+  {
+   "id": "te-oku",
+   "pattern": "〜ておく",
+   "level": "N4",
+   "formation": "Verb-te + おく"
+  },
+  {
+   "id": "te-miru",
+   "pattern": "〜てみる",
+   "level": "N4",
+   "formation": "Verb-te + みる"
+  },
+  {
+   "id": "te-aru",
+   "pattern": "〜てある",
+   "level": "N4",
+   "formation": "Verb-te + ある"
+  },
+  {
+   "id": "toki",
+   "pattern": "〜とき",
+   "level": "N4",
+   "formation": "Verb-plain / i-Adj / na-Adj + な / Noun + の + とき"
+  },
+  {
+   "id": "aida-aida-ni",
+   "pattern": "〜間 / 〜間に",
+   "level": "N4",
+   "formation": "Verb-te + いる / Verb-dict / Noun + の + 間（に）"
+  },
+  {
+   "id": "sou-da-appearance",
+   "pattern": "〜そうだ（appearance）",
+   "level": "N4",
+   "formation": "Verb-stem / i-Adj stem / na-Adj + そうだ"
+  },
+  {
+   "id": "sou-da-hearsay",
+   "pattern": "〜そうだ（hearsay）",
+   "level": "N4",
+   "formation": "Verb-plain / i-Adj + そうだ / na-Adj + だ + そうだ / Noun + だ + そうだ"
+  },
+  {
+   "id": "rashii",
+   "pattern": "〜らしい（hearsay/conjecture）",
+   "level": "N4",
+   "formation": "Verb-plain / i-Adj / na-Adj / Noun + らしい"
+  },
+  {
+   "id": "you-da",
+   "pattern": "〜ようだ",
+   "level": "N4",
+   "formation": "Verb-plain / i-Adj + ようだ / na-Adj + な + ようだ / Noun + の + ようだ"
+  },
+  {
+   "id": "mitai",
+   "pattern": "〜みたい",
+   "level": "N4",
+   "formation": "Verb-plain / i-Adj / na-Adj / Noun + みたい"
+  },
+  {
+   "id": "sugiru",
+   "pattern": "〜すぎる",
+   "level": "N4",
+   "formation": "Verb-stem / i-Adj stem / na-Adj + すぎる"
+  },
+  {
+   "id": "kata",
+   "pattern": "〜方",
+   "level": "N4",
+   "formation": "Verb-stem + 方"
+  },
+  {
+   "id": "chuu-juu",
+   "pattern": "〜中",
+   "level": "N4",
+   "formation": "Noun + 中"
+  },
+  {
+   "id": "tsumori",
+   "pattern": "〜つもり",
+   "level": "N4",
+   "formation": "Verb-dict / Verb-nai + つもり"
+  },
+  {
+   "id": "yotei",
+   "pattern": "〜予定",
+   "level": "N4",
+   "formation": "Verb-dict + 予定 / Noun + の + 予定"
+  },
+  {
+   "id": "koto-ni-suru",
+   "pattern": "〜ことにする",
+   "level": "N4",
+   "formation": "Verb-dict / Verb-nai + ことにする"
+  },
+  {
+   "id": "koto-ni-naru",
+   "pattern": "〜ことになる",
+   "level": "N4",
+   "formation": "Verb-dict / Verb-nai + ことになる"
+  },
+  {
+   "id": "koto-ga-dekiru",
+   "pattern": "〜ことができる",
+   "level": "N4",
+   "formation": "Verb-dict + ことができる"
+  },
+  {
+   "id": "eru-rareru-potential",
+   "pattern": "〜える / 〜られる（potential）",
+   "level": "N4",
+   "formation": "Verb-dict (Group 1: final u → e) + る / Verb-nai stem + られる (Group 2)"
+  },
+  {
+   "id": "reru-rareru-passive",
+   "pattern": "〜れる / 〜られる（passive）",
+   "level": "N4",
+   "formation": "Verb-nai stem + れる (Group 1) / Verb-nai stem + られる (Group 2)"
+  },
+  {
+   "id": "seru-saseru",
+   "pattern": "〜せる / 〜させる",
+   "level": "N4",
+   "formation": "Verb-nai stem + せる (Group 1) / Verb-nai stem + させる (Group 2)"
+  },
+  {
+   "id": "serareru-saserareru",
+   "pattern": "〜せられる / 〜させられる",
+   "level": "N4",
+   "formation": "Verb-nai stem + せられる (Group 1; short form される) / Verb-nai stem + させられる (Group 2)"
+  },
+  {
+   "id": "ou-you",
+   "pattern": "〜おう / 〜よう",
+   "level": "N4",
+   "formation": "Verb-dict (Group 1: final u → o) + う / Verb-stem + よう (Group 2)"
+  },
+  {
+   "id": "you-to-omou",
+   "pattern": "〜(よ)うと思う",
+   "level": "N4",
+   "formation": "Verb-volitional + と思う"
+  },
+  {
+   "id": "e-ro",
+   "pattern": "〜え / 〜ろ",
+   "level": "N4",
+   "formation": "Verb-dict (Group 1: final u → e) / Verb-stem + ろ (Group 2)"
+  },
+  {
+   "id": "na-prohibition",
+   "pattern": "〜な（prohibition）",
+   "level": "N4",
+   "formation": "Verb-dict + な"
+  },
+  {
+   "id": "nasai",
+   "pattern": "〜なさい",
+   "level": "N4",
+   "formation": "Verb-stem + なさい"
+  },
+  {
+   "id": "ba",
+   "pattern": "〜ば",
+   "level": "N4",
+   "formation": "Verb-ba / i-Adj stem + ければ / na-Adj + なら / Noun + なら"
+  },
+  {
+   "id": "tara",
+   "pattern": "〜たら",
+   "level": "N4",
+   "formation": "Verb-ta + ら / i-Adj stem + かったら / na-Adj + だったら / Noun + だったら"
+  },
+  {
+   "id": "nara",
+   "pattern": "〜なら",
+   "level": "N4",
+   "formation": "Verb-plain / i-Adj / na-Adj / Noun + なら"
+  },
+  {
+   "id": "to",
+   "pattern": "〜と（conditional）",
+   "level": "N4",
+   "formation": "Verb-dict / Verb-nai / i-Adj + と / na-Adj + だ + と / Noun + だ + と"
+  },
+  {
+   "id": "te-mo-de-mo",
+   "pattern": "〜ても / 〜でも",
+   "level": "N4",
+   "formation": "Verb-te + も / i-Adj-ku + ても / na-Adj + でも / Noun + でも"
+  },
+  {
+   "id": "noni-although",
+   "pattern": "〜のに（although）",
+   "level": "N4",
+   "formation": "Verb-plain / i-Adj + のに / na-Adj + な + のに / Noun + な + のに"
+  },
+  {
+   "id": "noni-purpose",
+   "pattern": "〜のに（purpose）",
+   "level": "N4",
+   "formation": "Verb-dict + のに / Noun + に"
+  },
+  {
+   "id": "node",
+   "pattern": "〜ので",
+   "level": "N4",
+   "formation": "Verb-plain / i-Adj + ので / na-Adj + な + ので / Noun + な + ので"
+  },
+  {
+   "id": "te-reason",
+   "pattern": "〜て（reason）",
+   "level": "N4",
+   "formation": "Verb-te / i-Adj stem + くて / na-Adj + で / Noun + で"
+  },
+  {
+   "id": "shi",
+   "pattern": "〜し",
+   "level": "N4",
+   "formation": "Verb-plain / i-Adj + し / na-Adj + だ + し / Noun + だ + し"
+  },
+  {
+   "id": "kedo-keredomo",
+   "pattern": "〜けど / 〜けれども",
+   "level": "N4",
+   "formation": "Sentence + けど / けれども"
+  },
+  {
+   "id": "tame-ni",
+   "pattern": "〜ために",
+   "level": "N4",
+   "formation": "Verb-dict / Verb-ta / Noun + の + ために"
+  },
+  {
+   "id": "you-ni",
+   "pattern": "〜ように（purpose）",
+   "level": "N4",
+   "formation": "Verb-dict / Verb-nai + ように"
+  },
+  {
+   "id": "you-ni-suru",
+   "pattern": "〜ようにする",
+   "level": "N4",
+   "formation": "Verb-dict / Verb-nai + ようにする"
+  },
+  {
+   "id": "you-ni-naru",
+   "pattern": "〜ようになる",
+   "level": "N4",
+   "formation": "Verb-dict / Verb-nai + ようになる"
+  },
+  {
+   "id": "te-hoshii",
+   "pattern": "〜てほしい",
+   "level": "N4",
+   "formation": "Verb-te + ほしい / Verb-nai + で + ほしい"
+  },
+  {
+   "id": "tagaru",
+   "pattern": "〜たがる",
+   "level": "N4",
+   "formation": "Verb-stem + たがる"
+  },
+  {
+   "id": "garu",
+   "pattern": "〜がる",
+   "level": "N4",
+   "formation": "i-Adj stem / na-Adj + がる"
+  },
+  {
+   "id": "kamo-shirenai",
+   "pattern": "〜かもしれない",
+   "level": "N4",
+   "formation": "Verb-plain / i-Adj / na-Adj / Noun + かもしれない"
+  },
+  {
+   "id": "darou",
+   "pattern": "〜だろう",
+   "level": "N4",
+   "formation": "Verb-plain / i-Adj / na-Adj / Noun + だろう"
+  },
+  {
+   "id": "hazu-da",
+   "pattern": "〜はずだ",
+   "level": "N4",
+   "formation": "Verb-plain / i-Adj + はずだ / na-Adj + な + はずだ / Noun + の + はずだ"
+  },
+  {
+   "id": "hazu-ga-nai",
+   "pattern": "〜はずがない",
+   "level": "N4",
+   "formation": "Verb-plain / i-Adj + はずがない / na-Adj + な + はずがない / Noun + の + はずがない"
+  },
+  {
+   "id": "n-desu-no-desu",
+   "pattern": "〜んです / 〜のです",
+   "level": "N4",
+   "formation": "Verb-plain / i-Adj + んです / na-Adj + な + んです / Noun + な + んです"
+  },
+  {
+   "id": "ka-dou-ka",
+   "pattern": "〜かどうか",
+   "level": "N4",
+   "formation": "Verb-plain / i-Adj / na-Adj / Noun + かどうか"
+  },
+  {
+   "id": "ka-embedded-question",
+   "pattern": "〜か（embedded question）",
+   "level": "N4",
+   "formation": "Question word + ... + Verb-plain / i-Adj / na-Adj / Noun + か"
+  },
+  {
+   "id": "to-omou",
+   "pattern": "〜と思う",
+   "level": "N4",
+   "formation": "Verb-plain / i-Adj + と思う / na-Adj + だ + と思う / Noun + だ + と思う"
+  },
+  {
+   "id": "to-iu-say",
+   "pattern": "〜と言う",
+   "level": "N4",
+   "formation": "「Sentence」 + と言う / Sentence (plain) + と言う"
+  },
+  {
+   "id": "shika-nai",
+   "pattern": "〜しか〜ない",
+   "level": "N4",
+   "formation": "Noun + しか + Verb-nai"
+  },
+  {
+   "id": "bakari",
+   "pattern": "〜ばかり",
+   "level": "N4",
+   "formation": "Noun + ばかり"
+  },
+  {
+   "id": "ta-bakari",
+   "pattern": "〜たばかり",
+   "level": "N4",
+   "formation": "Verb-ta + ばかり"
+  },
+  {
+   "id": "tokoro-da",
+   "pattern": "〜ところだ",
+   "level": "N4",
+   "formation": "Verb-dict / Verb-te + いる / Verb-ta + ところだ"
+  },
+  {
+   "id": "yasui-nikui",
+   "pattern": "〜やすい / 〜にくい",
+   "level": "N4",
+   "formation": "Verb-stem + やすい / Verb-stem + にくい"
+  },
+  {
+   "id": "hajimeru-owaru-tsuzukeru",
+   "pattern": "〜始める / 〜終わる / 〜続ける",
+   "level": "N4",
+   "formation": "Verb-stem + 始める / Verb-stem + 終わる / Verb-stem + 続ける"
+  },
+  {
+   "id": "dasu",
+   "pattern": "〜出す",
+   "level": "N4",
+   "formation": "Verb-stem + 出す"
+  },
+  {
+   "id": "hodo-nai",
+   "pattern": "〜ほど〜ない",
+   "level": "N4",
+   "formation": "Noun / Verb-plain + ほど + i-Adj-ku + ない / na-Adj + ではない"
+  },
+  {
+   "id": "nakanaka-nai",
+   "pattern": "なかなか〜ない",
+   "level": "N4",
+   "formation": "なかなか + Verb-nai"
+  },
+  {
+   "id": "zutsu",
+   "pattern": "〜ずつ",
+   "level": "N4",
+   "formation": "Noun (quantity) + ずつ"
+  },
+  {
+   "id": "mo-emphasis",
+   "pattern": "〜も（emphasis）",
+   "level": "N4",
+   "formation": "Noun (number + counter) + も"
+  },
+  {
+   "id": "made-ni",
+   "pattern": "〜までに",
+   "level": "N4",
+   "formation": "Noun / Verb-dict + までに"
+  },
+  {
+   "id": "koto-ga-aru",
+   "pattern": "〜ことがある",
+   "level": "N4",
+   "formation": "Verb-dict / Verb-nai + ことがある"
+  },
+  {
+   "id": "nai-to-ikenai-nakucha",
+   "pattern": "〜ないといけない / 〜なくちゃ",
+   "level": "N4",
+   "formation": "Verb-nai + といけない / Verb-nai stem + なくちゃ"
+  },
+  {
+   "id": "sasete-kudasai",
+   "pattern": "〜させてください",
+   "level": "N4",
+   "formation": "Verb-nai stem + せてください (Group 1) / Verb-nai stem + させてください (Group 2)"
+  },
+  {
+   "id": "sonkeigo",
+   "pattern": "尊敬語",
+   "level": "N4",
+   "formation": "いらっしゃる（行く・来る・いる） / 召し上がる（食べる・飲む） / おっしゃる（言う） / なさる（する） / ご覧になる（見る） / くださる（くれる）"
+  },
+  {
+   "id": "kenjougo",
+   "pattern": "謙譲語",
+   "level": "N4",
+   "formation": "参る（行く・来る） / おる（いる） / いただく（食べる・飲む・もらう） / 申す（言う） / いたす（する） / 拝見する（見る） / 伺う（聞く・訪ねる）"
+  },
+  {
+   "id": "o-ni-naru",
+   "pattern": "お〜になる",
+   "level": "N4",
+   "formation": "お + Verb-stem + になる"
+  },
+  {
+   "id": "o-suru",
+   "pattern": "お〜する",
+   "level": "N4",
+   "formation": "お + Verb-stem + する / ご + Noun + する"
+  },
+  {
+   "id": "de-gozaimasu",
+   "pattern": "〜でございます",
+   "level": "N4",
+   "formation": "Noun / na-Adj + でございます"
+  },
+  {
+   "id": "te-mo-kamawanai",
+   "pattern": "〜ても構わない",
+   "level": "N4",
+   "formation": "Verb-te + も構わない / i-Adj-ku + ても構わない / na-Adj + でも構わない / Noun + でも構わない"
+  },
+  {
+   "id": "no-koto-nominalizer",
+   "pattern": "〜の / 〜こと（nominalizer）",
+   "level": "N4",
+   "formation": "Verb-plain + の / Verb-plain + こと"
+  },
+  {
+   "id": "ba-yokatta",
+   "pattern": "〜ばよかった",
+   "level": "N4",
+   "formation": "Verb-ba + よかった / Verb-nai stem + なければよかった"
+  },
+  {
+   "id": "tara-dou",
+   "pattern": "〜たらどう",
+   "level": "N4",
+   "formation": "Verb-ta + らどう"
+  },
+  {
+   "id": "hou-ga-ii",
+   "pattern": "〜ほうがいい",
+   "level": "N4",
+   "formation": "Verb-ta / Verb-nai + ほうがいい"
+  },
+  {
+   "id": "toka-toka",
+   "pattern": "〜とか〜とか",
+   "level": "N4",
+   "formation": "Noun + とか + Noun + とか / Verb-dict + とか + Verb-dict + とか"
+  },
+  {
+   "id": "nado",
+   "pattern": "〜など",
+   "level": "N4",
+   "formation": "Noun + など"
+  },
+  {
+   "id": "de-mo-suggestion",
+   "pattern": "〜でも（suggestion）",
+   "level": "N4",
+   "formation": "Noun + でも"
+  },
+  {
+   "id": "sa",
+   "pattern": "〜さ",
+   "level": "N4",
+   "formation": "i-Adj stem + さ / na-Adj + さ"
+  },
+  {
+   "id": "me",
+   "pattern": "〜目",
+   "level": "N4",
+   "formation": "Noun (number + counter) + 目"
+  },
+  {
+   "id": "oki-ni",
+   "pattern": "〜おきに",
+   "level": "N4",
+   "formation": "Noun (number + counter) + おきに"
+  },
+  {
+   "id": "ku-suru-ni-suru",
+   "pattern": "〜くする / 〜にする（make）",
+   "level": "N4",
+   "formation": "i-Adj-ku + する / na-Adj + に + する / Noun + に + する"
+  },
+  {
+   "id": "ga-suru",
+   "pattern": "〜がする",
+   "level": "N4",
+   "formation": "Noun + がする"
+  },
+  {
+   "id": "kana-kashira",
+   "pattern": "〜かな / 〜かしら",
+   "level": "N4",
+   "formation": "Verb-plain / i-Adj / na-Adj / Noun + かな / かしら"
+  },
+  {
+   "id": "te-kuremasen-ka-te-itadakemasen-ka",
+   "pattern": "〜てくれませんか / 〜ていただけませんか",
+   "level": "N4",
+   "formation": "Verb-te + くれませんか / Verb-te + いただけませんか"
+  },
+  {
+   "id": "naide",
+   "pattern": "〜ないで",
+   "level": "N4",
+   "formation": "Verb-nai + で"
+  },
+  {
+   "id": "wake-da",
+   "pattern": "〜わけだ",
+   "level": "N3",
+   "formation": "Verb-plain / i-Adj / na-Adj + な / Noun + という + わけだ"
+  },
+  {
+   "id": "wake-de-wa-nai",
+   "pattern": "〜わけではない",
+   "level": "N3",
+   "formation": "Verb-plain / i-Adj / na-Adj + な / Noun + という + わけではない"
+  },
+  {
+   "id": "wake-ga-nai",
+   "pattern": "〜わけがない",
+   "level": "N3",
+   "formation": "Verb-plain / i-Adj / na-Adj + な / Noun + の + わけがない"
+  },
+  {
+   "id": "wake-ni-wa-ikanai",
+   "pattern": "〜わけにはいかない",
+   "level": "N3",
+   "formation": "Verb-dict / Verb-nai + わけにはいかない"
+  },
+  {
+   "id": "mono-da",
+   "pattern": "〜ものだ",
+   "level": "N3",
+   "formation": "Verb-dict / Verb-ta / i-Adj / na-Adj + な + ものだ"
+  },
+  {
+   "id": "mono-de-wa-nai",
+   "pattern": "〜ものではない",
+   "level": "N3",
+   "formation": "Verb-dict + ものではない"
+  },
+  {
+   "id": "mono-mon",
+   "pattern": "〜もの / 〜もん",
+   "level": "N3",
+   "formation": "Sentence + もの / もん"
+  },
+  {
+   "id": "mono-dakara-mono-de",
+   "pattern": "〜ものだから / 〜もので",
+   "level": "N3",
+   "formation": "Verb-plain / i-Adj / na-Adj + な / Noun + な + ものだから / もので"
+  },
+  {
+   "id": "koto-da",
+   "pattern": "〜ことだ",
+   "level": "N3",
+   "formation": "Verb-dict / Verb-nai + ことだ"
+  },
+  {
+   "id": "koto-wa-nai",
+   "pattern": "〜ことはない",
+   "level": "N3",
+   "formation": "Verb-dict + ことはない"
+  },
+  {
+   "id": "koto-ni-shite-iru",
+   "pattern": "〜ことにしている",
+   "level": "N3",
+   "formation": "Verb-dict / Verb-nai + ことにしている"
+  },
+  {
+   "id": "koto-ni-natte-iru",
+   "pattern": "〜ことになっている",
+   "level": "N3",
+   "formation": "Verb-dict / Verb-nai + ことになっている"
+  },
+  {
+   "id": "koto-instruction",
+   "pattern": "〜こと（instruction）",
+   "level": "N3",
+   "formation": "Verb-dict / Verb-nai + こと"
+  },
+  {
+   "id": "you-ni-iu-you-ni-tanomu",
+   "pattern": "〜ように言う / 〜ように頼む",
+   "level": "N3",
+   "formation": "Verb-dict / Verb-nai + ように言う / ように頼む"
+  },
+  {
+   "id": "you-to-suru",
+   "pattern": "〜ようとする",
+   "level": "N3",
+   "formation": "Verb-volitional + とする"
+  },
+  {
+   "id": "sou-ni-nai-sou-mo-nai",
+   "pattern": "〜そうにない / 〜そうもない",
+   "level": "N3",
+   "formation": "Verb-stem + そうにない / そうもない"
+  },
+  {
+   "id": "ippou-da",
+   "pattern": "〜一方だ",
+   "level": "N3",
+   "formation": "Verb-dict + 一方だ"
+  },
+  {
+   "id": "ippou-de",
+   "pattern": "〜一方で",
+   "level": "N3",
+   "formation": "Verb-plain / i-Adj / na-Adj + な / Noun + である + 一方で"
+  },
+  {
+   "id": "ni-taishite",
+   "pattern": "〜に対して",
+   "level": "N3",
+   "formation": "Noun + に対して / Noun + に対する + Noun / Verb-plain / i-Adj / na-Adj + な + のに対して"
+  },
+  {
+   "id": "ni-tsuite",
+   "pattern": "〜について",
+   "level": "N3",
+   "formation": "Noun + について / Noun + についての + Noun"
+  },
+  {
+   "id": "ni-yotte-ni-yoru",
+   "pattern": "〜によって / 〜による",
+   "level": "N3",
+   "formation": "Noun + によって / Noun + による + Noun"
+  },
+  {
+   "id": "ni-yoru-to-ni-yoreba",
+   "pattern": "〜によると / 〜によれば",
+   "level": "N3",
+   "formation": "Noun + によると / Noun + によれば"
+  },
+  {
+   "id": "bakari-de-naku",
+   "pattern": "〜ばかりでなく",
+   "level": "N3",
+   "formation": "Verb-plain / i-Adj / na-Adj + な / Noun + ばかりでなく"
+  },
+  {
+   "id": "dake-de-naku",
+   "pattern": "〜だけでなく",
+   "level": "N3",
+   "formation": "Verb-plain / i-Adj / na-Adj + な / Noun + だけでなく"
+  },
+  {
+   "id": "mo-ba-mo",
+   "pattern": "〜も〜ば〜も",
+   "level": "N3",
+   "formation": "Noun + も + Verb-ba + Noun + も / Noun + も + i-Adj stem + ければ + Noun + も"
+  },
+  {
+   "id": "rashii-typical-of",
+   "pattern": "〜らしい（typical of）",
+   "level": "N3",
+   "formation": "Noun + らしい"
+  },
+  {
+   "id": "ppoi",
+   "pattern": "〜っぽい",
+   "level": "N3",
+   "formation": "Noun / Verb-stem / i-Adj stem + っぽい"
+  },
+  {
+   "id": "teki",
+   "pattern": "〜的",
+   "level": "N3",
+   "formation": "Noun + 的な + Noun / Noun + 的に"
+  },
+  {
+   "id": "you-na-you-ni-like",
+   "pattern": "〜ような / 〜ように（like）",
+   "level": "N3",
+   "formation": "Verb-plain / Noun + の + ような / ように"
+  },
+  {
+   "id": "marude-you-da",
+   "pattern": "まるで〜ようだ",
+   "level": "N3",
+   "formation": "まるで + Verb-plain / Noun + の + ようだ"
+  },
+  {
+   "id": "ni-chigai-nai",
+   "pattern": "〜に違いない",
+   "level": "N3",
+   "formation": "Verb-plain / i-Adj / na-Adj / Noun + に違いない"
+  },
+  {
+   "id": "ni-kimatte-iru",
+   "pattern": "〜に決まっている",
+   "level": "N3",
+   "formation": "Verb-plain / i-Adj / na-Adj / Noun + に決まっている"
+  },
+  {
+   "id": "ki-ga-suru",
+   "pattern": "〜気がする",
+   "level": "N3",
+   "formation": "Verb-plain / i-Adj / na-Adj + な + 気がする / Verb-plain / Noun + の + ような + 気がする"
+  },
+  {
+   "id": "zu-ni",
+   "pattern": "〜ずに",
+   "level": "N3",
+   "formation": "Verb-nai stem + ずに"
+  },
+  {
+   "id": "mama",
+   "pattern": "〜まま",
+   "level": "N3",
+   "formation": "Verb-ta / Verb-nai / i-Adj / na-Adj + な / Noun + の + まま"
+  },
+  {
+   "id": "uchi-ni",
+   "pattern": "〜うちに",
+   "level": "N3",
+   "formation": "Verb-dict / Verb-te + いる / Verb-nai / i-Adj / na-Adj + な / Noun + の + うちに"
+  },
+  {
+   "id": "tokoro-ni-tokoro-e-tokoro-o",
+   "pattern": "〜ところに / 〜ところへ / 〜ところを",
+   "level": "N3",
+   "formation": "Verb-dict / Verb-te + いる / Verb-ta + ところに / ところへ / ところを"
+  },
+  {
+   "id": "ba-hodo",
+   "pattern": "〜ば〜ほど",
+   "level": "N3",
+   "formation": "Verb-ba + Verb-dict + ほど / i-Adj stem + ければ + i-Adj + ほど / na-Adj + なら + na-Adj + な + ほど"
+  },
+  {
+   "id": "hodo",
+   "pattern": "〜ほど",
+   "level": "N3",
+   "formation": "Verb-plain / i-Adj / na-Adj + な / Noun + ほど"
+  },
+  {
+   "id": "kurai-gurai-extent",
+   "pattern": "〜くらい / 〜ぐらい（extent）",
+   "level": "N3",
+   "formation": "Verb-plain / i-Adj / na-Adj + な / Noun + くらい"
+  },
+  {
+   "id": "sae",
+   "pattern": "〜さえ",
+   "level": "N3",
+   "formation": "Noun + さえ / Noun + でさえ / Noun + にさえ"
+  },
+  {
+   "id": "sae-ba",
+   "pattern": "〜さえ〜ば",
+   "level": "N3",
+   "formation": "Noun + さえ + Verb-ba / Verb-stem + さえ + すれば / Verb-te + さえ + いれば"
+  },
+  {
+   "id": "koso",
+   "pattern": "〜こそ",
+   "level": "N3",
+   "formation": "Noun + こそ"
+  },
+  {
+   "id": "to-shite",
+   "pattern": "〜として",
+   "level": "N3",
+   "formation": "Noun + として / Noun + としての + Noun"
+  },
+  {
+   "id": "ni-totte",
+   "pattern": "〜にとって",
+   "level": "N3",
+   "formation": "Noun + にとって / Noun + にとっての + Noun"
+  },
+  {
+   "id": "ni-shite-wa",
+   "pattern": "〜にしては",
+   "level": "N3",
+   "formation": "Verb-plain / Noun + にしては"
+  },
+  {
+   "id": "ni-shite-mo",
+   "pattern": "〜にしても",
+   "level": "N3",
+   "formation": "Verb-plain / Noun + にしても"
+  },
+  {
+   "id": "ni-kanshite-ni-kansuru",
+   "pattern": "〜に関して / 〜に関する",
+   "level": "N3",
+   "formation": "Noun + に関して / Noun + に関する + Noun"
+  },
+  {
+   "id": "ni-kurabete",
+   "pattern": "〜に比べて",
+   "level": "N3",
+   "formation": "Noun + に比べて / Verb-dict + のに比べて"
+  },
+  {
+   "id": "ni-kawatte",
+   "pattern": "〜に代わって",
+   "level": "N3",
+   "formation": "Noun + に代わって / Noun + に代わり"
+  },
+  {
+   "id": "kawari-ni",
+   "pattern": "〜代わりに",
+   "level": "N3",
+   "formation": "Verb-plain / i-Adj / na-Adj + な / Noun + の + 代わりに"
+  },
+  {
+   "id": "ni-shitagatte",
+   "pattern": "〜に従って",
+   "level": "N3",
+   "formation": "Noun + に従って / Verb-dict + に従って"
+  },
+  {
+   "id": "ni-tsurete",
+   "pattern": "〜につれて",
+   "level": "N3",
+   "formation": "Verb-dict / Noun + につれて"
+  },
+  {
+   "id": "to-tomo-ni",
+   "pattern": "〜とともに",
+   "level": "N3",
+   "formation": "Noun + とともに / Verb-dict + とともに"
+  },
+  {
+   "id": "tabi-ni",
+   "pattern": "〜たびに",
+   "level": "N3",
+   "formation": "Verb-dict / Noun + の + たびに"
+  },
+  {
+   "id": "goto-ni",
+   "pattern": "〜ごとに",
+   "level": "N3",
+   "formation": "Noun + ごとに / Verb-dict + ごとに"
+  },
+  {
+   "id": "saichuu-ni",
+   "pattern": "〜最中に",
+   "level": "N3",
+   "formation": "Verb-te + いる / Noun + の + 最中に"
+  },
+  {
+   "id": "tsuide-ni",
+   "pattern": "〜ついでに",
+   "level": "N3",
+   "formation": "Verb-dict / Verb-ta / Noun + の + ついでに"
+  },
+  {
+   "id": "okage-de",
+   "pattern": "〜おかげで",
+   "level": "N3",
+   "formation": "Verb-plain / i-Adj / na-Adj + な / Noun + の + おかげで"
+  },
+  {
+   "id": "sei-de",
+   "pattern": "〜せいで",
+   "level": "N3",
+   "formation": "Verb-plain / i-Adj / na-Adj + な / Noun + の + せいで"
+  },
+  {
+   "id": "ta-totan-ta-totan-ni",
+   "pattern": "〜たとたん / 〜たとたんに",
+   "level": "N3",
+   "formation": "Verb-ta + とたん / とたんに"
+  },
+  {
+   "id": "tara-ta",
+   "pattern": "〜たら〜た",
+   "level": "N3",
+   "formation": "Verb-ta + ら ... Verb-ta"
+  },
+  {
+   "id": "tatte-datte",
+   "pattern": "〜たって / 〜だって",
+   "level": "N3",
+   "formation": "Verb-ta + って / i-Adj-ku + たって / na-Adj / Noun + だって"
+  },
+  {
+   "id": "nai-koto-wa-nai",
+   "pattern": "〜ないことはない",
+   "level": "N3",
+   "formation": "Verb-nai / i-Adj-ku + ない / na-Adj + でない + ことはない"
+  },
+  {
+   "id": "te-shou-ga-nai-te-shikata-ga-nai",
+   "pattern": "〜てしょうがない / 〜てしかたがない",
+   "level": "N3",
+   "formation": "Verb-te / i-Adj-ku + て / na-Adj + で + しょうがない / しかたがない"
+  },
+  {
+   "id": "te-tamaranai",
+   "pattern": "〜てたまらない",
+   "level": "N3",
+   "formation": "Verb-te / i-Adj-ku + て / na-Adj + で + たまらない"
+  },
+  {
+   "id": "te-hajimete",
+   "pattern": "〜てはじめて",
+   "level": "N3",
+   "formation": "Verb-te + はじめて"
+  },
+  {
+   "id": "te-bakari-iru",
+   "pattern": "〜てばかりいる",
+   "level": "N3",
+   "formation": "Verb-te + ばかりいる"
+  },
+  {
+   "id": "ba-ii",
+   "pattern": "〜ばいい",
+   "level": "N3",
+   "formation": "Verb-ba + いい / i-Adj stem + ければ + いい"
+  },
+  {
+   "id": "baai-wa",
+   "pattern": "〜場合（は）",
+   "level": "N3",
+   "formation": "Verb-plain / i-Adj / na-Adj + な / Noun + の + 場合（は）"
+  },
+  {
+   "id": "to-sureba-to-shitara",
+   "pattern": "〜とすれば / 〜としたら",
+   "level": "N3",
+   "formation": "Verb-plain / i-Adj / na-Adj + だ / Noun + だ + とすれば / としたら"
+  },
+  {
+   "id": "to-shite-mo",
+   "pattern": "〜としても",
+   "level": "N3",
+   "formation": "Verb-plain / i-Adj / na-Adj + だ / Noun + だ + としても"
+  },
+  {
+   "id": "toka-hearsay",
+   "pattern": "〜とか（hearsay）",
+   "level": "N3",
+   "formation": "Sentence + とか"
+  },
+  {
+   "id": "tte",
+   "pattern": "〜って",
+   "level": "N3",
+   "formation": "Sentence + って / Noun + って"
+  },
+  {
+   "id": "to-iu-koto-da",
+   "pattern": "〜ということだ",
+   "level": "N3",
+   "formation": "Sentence + ということだ"
+  },
+  {
+   "id": "to-iu-no-wa",
+   "pattern": "〜というのは",
+   "level": "N3",
+   "formation": "Noun / Sentence + というのは"
+  },
+  {
+   "id": "to-iu-yori",
+   "pattern": "〜というより",
+   "level": "N3",
+   "formation": "Verb-plain / i-Adj / na-Adj / Noun + というより"
+  },
+  {
+   "id": "wari-ni-wari-ni-wa",
+   "pattern": "〜わりに / 〜わりには",
+   "level": "N3",
+   "formation": "Verb-plain / i-Adj / na-Adj + な / Noun + の + わりに"
+  },
+  {
+   "id": "kuse-ni",
+   "pattern": "〜くせに",
+   "level": "N3",
+   "formation": "Verb-plain / i-Adj / na-Adj + な / Noun + の + くせに"
+  },
+  {
+   "id": "kara-ni-kakete",
+   "pattern": "〜から〜にかけて",
+   "level": "N3",
+   "formation": "Noun + から + Noun + にかけて"
+  },
+  {
+   "id": "buri",
+   "pattern": "〜ぶり",
+   "level": "N3",
+   "formation": "Noun + ぶり / Verb-stem + ぶり"
+  },
+  {
+   "id": "kke",
+   "pattern": "〜っけ",
+   "level": "N3",
+   "formation": "Verb-ta / Noun + だ / Noun + だった + っけ"
+  },
+  {
+   "id": "masu-you-ni",
+   "pattern": "〜ますように",
+   "level": "N3",
+   "formation": "Verb-stem + ますように / Verb-stem + ませんように"
+  },
+  {
+   "id": "furi-o-suru",
+   "pattern": "〜ふりをする",
+   "level": "N3",
+   "formation": "Verb-plain / i-Adj / na-Adj + な / Noun + の + ふりをする"
+  },
+  {
+   "id": "muki-muke",
+   "pattern": "〜向き / 〜向け",
+   "level": "N3",
+   "formation": "Noun + 向き / Noun + 向け"
+  },
+  {
+   "id": "gachi",
+   "pattern": "〜がち",
+   "level": "N3",
+   "formation": "Verb-stem / Noun + がち"
+  },
+  {
+   "id": "gimi",
+   "pattern": "〜気味",
+   "level": "N3",
+   "formation": "Noun / Verb-stem + 気味"
+  },
+  {
+   "id": "darake",
+   "pattern": "〜だらけ",
+   "level": "N3",
+   "formation": "Noun + だらけ"
+  },
+  {
+   "id": "kiru-kirenai",
+   "pattern": "〜切る / 〜切れない",
+   "level": "N3",
+   "formation": "Verb-stem + 切る / Verb-stem + 切れない"
+  },
+  {
+   "id": "kakeru",
+   "pattern": "〜かける",
+   "level": "N3",
+   "formation": "Verb-stem + かける / Verb-stem + かけの + Noun"
+  },
+  {
+   "id": "au",
+   "pattern": "〜合う",
+   "level": "N3",
+   "formation": "Verb-stem + 合う"
+  },
+  {
+   "id": "naosu",
+   "pattern": "〜直す",
+   "level": "N3",
+   "formation": "Verb-stem + 直す"
+  },
+  {
+   "id": "zurai",
+   "pattern": "〜づらい",
+   "level": "N3",
+   "formation": "Verb-stem + づらい"
+  },
+  {
+   "id": "beki-da-beki-de-wa-nai",
+   "pattern": "〜べきだ / 〜べきではない",
+   "level": "N3",
+   "formation": "Verb-dict + べきだ / Verb-dict + べきではない"
+  },
+  {
+   "id": "hodo-wa-nai",
+   "pattern": "〜ほど〜はない",
+   "level": "N3",
+   "formation": "Noun + ほど + i-Adj / na-Adj + な + Noun + はない"
+  },
+  {
+   "id": "shika-nai-no-choice",
+   "pattern": "〜しかない",
+   "level": "N3",
+   "formation": "Verb-dict + しかない"
+  },
+  {
+   "id": "made-even",
+   "pattern": "〜まで（even）",
+   "level": "N3",
+   "formation": "Noun + まで / Noun + にまで"
+  },
+  {
+   "id": "tokoro-datta",
+   "pattern": "〜ところだった",
+   "level": "N3",
+   "formation": "Verb-dict + ところだった"
+  },
+  {
+   "id": "kara-to-itte",
+   "pattern": "〜からといって",
+   "level": "N3",
+   "formation": "Sentence + からといって"
+  },
+  {
+   "id": "toori-ni-doori-ni",
+   "pattern": "〜とおりに / 〜どおりに",
+   "level": "N3",
+   "formation": "Verb-dict / Verb-ta / Noun + の + とおりに / Noun + どおりに"
+  },
+  {
+   "id": "nanka-nante",
+   "pattern": "〜なんか / 〜なんて",
+   "level": "N3",
+   "formation": "Noun + なんか / Noun + なんて / Sentence + なんて"
+  },
+  {
+   "id": "ni-saishite",
+   "pattern": "〜に際して",
+   "level": "N2",
+   "formation": "Noun + に際して / Verb-dict + に際して / Noun + に際しての + Noun"
+  },
+  {
+   "id": "ni-tomonatte",
+   "pattern": "〜に伴って",
+   "level": "N2",
+   "formation": "Noun + に伴って / Verb-dict + の + に伴って / Noun + に伴う + Noun"
+  },
+  {
+   "id": "ni-oujite",
+   "pattern": "〜に応じて",
+   "level": "N2",
+   "formation": "Noun + に応じて / Noun + に応じた + Noun"
+  },
+  {
+   "id": "ni-hanshite",
+   "pattern": "〜に反して",
+   "level": "N2",
+   "formation": "Noun + に反して / Noun + に反する + Noun / Noun + に反した + Noun"
+  },
+  {
+   "id": "ni-motozuite",
+   "pattern": "〜に基づいて",
+   "level": "N2",
+   "formation": "Noun + に基づいて / Noun + に基づく + Noun / Noun + に基づいた + Noun"
+  },
+  {
+   "id": "ni-watatte",
+   "pattern": "〜にわたって",
+   "level": "N2",
+   "formation": "Noun + にわたって / Noun + にわたる + Noun"
+  },
+  {
+   "id": "ni-sotte",
+   "pattern": "〜に沿って",
+   "level": "N2",
+   "formation": "Noun + に沿って / Noun + に沿った + Noun"
+  },
+  {
+   "id": "ni-kuwaete",
+   "pattern": "〜に加えて",
+   "level": "N2",
+   "formation": "Noun + に加えて"
+  },
+  {
+   "id": "o-megutte",
+   "pattern": "〜をめぐって",
+   "level": "N2",
+   "formation": "Noun + をめぐって / Noun + をめぐる + Noun"
+  },
+  {
+   "id": "o-tsuujite-o-tooshite",
+   "pattern": "〜を通じて / 〜を通して",
+   "level": "N2",
+   "formation": "Noun + を通じて / Noun + を通して"
+  },
+  {
+   "id": "o-kikkake-ni",
+   "pattern": "〜をきっかけに",
+   "level": "N2",
+   "formation": "Noun + をきっかけに / Noun + をきっかけとして / Verb-plain + の + をきっかけに"
+  },
+  {
+   "id": "o-nozoite",
+   "pattern": "〜を除いて",
+   "level": "N2",
+   "formation": "Noun + を除いて / Noun + を除き / Noun + を除く + Noun"
+  },
+  {
+   "id": "ka-no-you-da",
+   "pattern": "〜かのようだ",
+   "level": "N2",
+   "formation": "Verb-plain / i-Adj + かのようだ / na-Adj + である + かのようだ / Noun + である + かのようだ"
+  },
+  {
+   "id": "kanenai",
+   "pattern": "〜かねない",
+   "level": "N2",
+   "formation": "Verb-stem + かねない"
+  },
+  {
+   "id": "kaneru",
+   "pattern": "〜かねる",
+   "level": "N2",
+   "formation": "Verb-stem + かねる"
+  },
+  {
+   "id": "zu-ni-wa-irarenai",
+   "pattern": "〜ずにはいられない",
+   "level": "N2",
+   "formation": "Verb-nai stem + ずにはいられない"
+  },
+  {
+   "id": "zaru-o-enai",
+   "pattern": "〜ざるを得ない",
+   "level": "N2",
+   "formation": "Verb-nai stem + ざるを得ない"
+  },
+  {
+   "id": "te-wa-irarenai",
+   "pattern": "〜てはいられない",
+   "level": "N2",
+   "formation": "Verb-te + はいられない"
+  },
+  {
+   "id": "mono-ka",
+   "pattern": "〜ものか",
+   "level": "N2",
+   "formation": "Verb-dict / i-Adj / na-Adj + な + ものか"
+  },
+  {
+   "id": "mono-no",
+   "pattern": "〜ものの",
+   "level": "N2",
+   "formation": "Verb-plain / i-Adj / na-Adj + な / na-Adj + である / Noun + である + ものの"
+  },
+  {
+   "id": "mono-nara",
+   "pattern": "〜ものなら",
+   "level": "N2",
+   "formation": "Verb-dict (potential form) + ものなら"
+  },
+  {
+   "id": "kurai-nara-gurai-nara",
+   "pattern": "〜くらいなら / 〜ぐらいなら",
+   "level": "N2",
+   "formation": "Verb-dict + くらいなら / Verb-dict + ぐらいなら"
+  },
+  {
+   "id": "mono-ga-aru",
+   "pattern": "〜ものがある",
+   "level": "N2",
+   "formation": "Verb-dict / i-Adj / na-Adj + な + ものがある"
+  },
+  {
+   "id": "koto-ka",
+   "pattern": "〜ことか",
+   "level": "N2",
+   "formation": "Question word + … + Verb-plain / i-Adj / na-Adj + な + ことか"
+  },
+  {
+   "id": "koto-ni-wa",
+   "pattern": "〜ことに（は）",
+   "level": "N2",
+   "formation": "Verb-ta / i-Adj / na-Adj + な + ことに（は）"
+  },
+  {
+   "id": "koto-dakara",
+   "pattern": "〜ことだから",
+   "level": "N2",
+   "formation": "Noun + の + ことだから"
+  },
+  {
+   "id": "koto-naku",
+   "pattern": "〜ことなく",
+   "level": "N2",
+   "formation": "Verb-dict + ことなく"
+  },
+  {
+   "id": "koto-kara",
+   "pattern": "〜ことから",
+   "level": "N2",
+   "formation": "Verb-plain / i-Adj / na-Adj + な / na-Adj + である / Noun + である + ことから"
+  },
+  {
+   "id": "nai-koto-ni-wa",
+   "pattern": "〜ないことには",
+   "level": "N2",
+   "formation": "Verb-nai / i-Adj-ku + ない / na-Adj + でない / Noun + でない + ことには"
+  },
+  {
+   "id": "koto-wa-ga",
+   "pattern": "〜ことは〜が",
+   "level": "N2",
+   "formation": "Verb-plain + ことは + Verb-plain + が / i-Adj + ことは + i-Adj + が / na-Adj + な + ことは + na-Adj + だ + が"
+  },
+  {
+   "id": "ageku",
+   "pattern": "〜あげく",
+   "level": "N2",
+   "formation": "Verb-ta + あげく / Noun + の + あげく"
+  },
+  {
+   "id": "amari-ni",
+   "pattern": "〜あまり（に）",
+   "level": "N2",
+   "formation": "Verb-dict / Verb-ta / na-Adj + な / Noun + の + あまり（に）"
+  },
+  {
+   "id": "ue-ni",
+   "pattern": "〜上（に）",
+   "level": "N2",
+   "formation": "Verb-plain / i-Adj / na-Adj + な / Noun + である + 上（に）"
+  },
+  {
+   "id": "ue-de",
+   "pattern": "〜上で",
+   "level": "N2",
+   "formation": "Verb-ta + 上で / Noun + の + 上で / Verb-dict + 上で"
+  },
+  {
+   "id": "ijou-wa",
+   "pattern": "〜以上（は）",
+   "level": "N2",
+   "formation": "Verb-plain / na-Adj + である / Noun + である + 以上（は）"
+  },
+  {
+   "id": "kara-ni-wa",
+   "pattern": "〜からには",
+   "level": "N2",
+   "formation": "Verb-plain / Noun + である + からには"
+  },
+  {
+   "id": "kara-koso",
+   "pattern": "〜からこそ",
+   "level": "N2",
+   "formation": "Verb-plain / i-Adj / na-Adj + だ / Noun + だ + からこそ"
+  },
+  {
+   "id": "kara-shite",
+   "pattern": "〜からして",
+   "level": "N2",
+   "formation": "Noun + からして"
+  },
+  {
+   "id": "kara-suru-to-kara-sureba",
+   "pattern": "〜からすると / 〜からすれば",
+   "level": "N2",
+   "formation": "Noun + からすると / Noun + からすれば"
+  },
+  {
+   "id": "kara-miru-to-kara-mireba",
+   "pattern": "〜から見ると / 〜から見れば",
+   "level": "N2",
+   "formation": "Noun + から見ると / Noun + から見れば"
+  },
+  {
+   "id": "kara-iu-to-kara-itte",
+   "pattern": "〜からいうと / 〜からいって",
+   "level": "N2",
+   "formation": "Noun + からいうと / Noun + からいって"
+  },
+  {
+   "id": "sai-ni",
+   "pattern": "〜際（に）",
+   "level": "N2",
+   "formation": "Verb-dict / Verb-ta / Noun + の + 際（に）"
+  },
+  {
+   "id": "shidai",
+   "pattern": "〜次第",
+   "level": "N2",
+   "formation": "Verb-stem + 次第 / Noun + 次第"
+  },
+  {
+   "id": "shidai-da-shidai-de",
+   "pattern": "〜次第だ / 〜次第で",
+   "level": "N2",
+   "formation": "Noun + 次第だ / Noun + 次第で / Noun + 次第では"
+  },
+  {
+   "id": "sue-ni",
+   "pattern": "〜末（に）",
+   "level": "N2",
+   "formation": "Verb-ta + 末（に） / Noun + の + 末（に）"
+  },
+  {
+   "id": "ta-tokoro-de",
+   "pattern": "〜たところで",
+   "level": "N2",
+   "formation": "Verb-ta + ところで"
+  },
+  {
+   "id": "ta-tokoro",
+   "pattern": "〜たところ",
+   "level": "N2",
+   "formation": "Verb-ta + ところ"
+  },
+  {
+   "id": "bakari-ka",
+   "pattern": "〜ばかりか",
+   "level": "N2",
+   "formation": "Verb-plain / i-Adj / na-Adj + な / Noun + ばかりか"
+  },
+  {
+   "id": "bakari-ni",
+   "pattern": "〜ばかりに",
+   "level": "N2",
+   "formation": "Verb-plain / i-Adj / na-Adj + な / na-Adj + である / Noun + である + ばかりに"
+  },
+  {
+   "id": "bakari-da",
+   "pattern": "〜ばかりだ",
+   "level": "N2",
+   "formation": "Verb-dict + ばかりだ"
+  },
+  {
+   "id": "wa-mochiron-wa-motoyori",
+   "pattern": "〜はもちろん / 〜はもとより",
+   "level": "N2",
+   "formation": "Noun + はもちろん / Noun + はもとより"
+  },
+  {
+   "id": "wa-tomokaku",
+   "pattern": "〜はともかく",
+   "level": "N2",
+   "formation": "Noun + はともかく / Noun + はともかくとして"
+  },
+  {
+   "id": "wa-sateoki",
+   "pattern": "〜はさておき",
+   "level": "N2",
+   "formation": "Noun + はさておき"
+  },
+  {
+   "id": "hanmen",
+   "pattern": "〜反面 / 〜半面",
+   "level": "N2",
+   "formation": "Verb-plain / i-Adj / na-Adj + な / na-Adj + である / Noun + である + 反面"
+  },
+  {
+   "id": "nagara-mo",
+   "pattern": "〜ながら（も）",
+   "level": "N2",
+   "formation": "Verb-stem / Verb-nai / i-Adj / na-Adj / Noun + ながら（も）"
+  },
+  {
+   "id": "tsutsu-tsutsu-mo",
+   "pattern": "〜つつ / 〜つつも",
+   "level": "N2",
+   "formation": "Verb-stem + つつ / Verb-stem + つつも"
+  },
+  {
+   "id": "tsutsu-aru",
+   "pattern": "〜つつある",
+   "level": "N2",
+   "formation": "Verb-stem + つつある"
+  },
+  {
+   "id": "ppanashi",
+   "pattern": "〜っぱなし",
+   "level": "N2",
+   "formation": "Verb-stem + っぱなし"
+  },
+  {
+   "id": "nuku",
+   "pattern": "〜抜く",
+   "level": "N2",
+   "formation": "Verb-stem + 抜く"
+  },
+  {
+   "id": "uru-enai",
+   "pattern": "〜得る / 〜得ない",
+   "level": "N2",
+   "formation": "Verb-stem + 得る / Verb-stem + 得ない"
+  },
+  {
+   "id": "gatai",
+   "pattern": "〜がたい",
+   "level": "N2",
+   "formation": "Verb-stem + がたい"
+  },
+  {
+   "id": "you-ga-nai",
+   "pattern": "〜ようがない",
+   "level": "N2",
+   "formation": "Verb-stem + ようがない / Noun + の + しようがない"
+  },
+  {
+   "id": "you-de-wa",
+   "pattern": "〜ようでは",
+   "level": "N2",
+   "formation": "Verb-plain + ようでは"
+  },
+  {
+   "id": "te-naranai",
+   "pattern": "〜てならない",
+   "level": "N2",
+   "formation": "Verb-te + ならない / i-Adj-ku + てならない / na-Adj + でならない"
+  },
+  {
+   "id": "te-koso",
+   "pattern": "〜てこそ",
+   "level": "N2",
+   "formation": "Verb-te + こそ"
+  },
+  {
+   "id": "te-kara-de-nai-to",
+   "pattern": "〜てからでないと",
+   "level": "N2",
+   "formation": "Verb-te + からでないと / Verb-te + からでなければ"
+  },
+  {
+   "id": "te-irai",
+   "pattern": "〜て以来",
+   "level": "N2",
+   "formation": "Verb-te + 以来 / Noun + 以来"
+  },
+  {
+   "id": "ni-suginai",
+   "pattern": "〜に過ぎない",
+   "level": "N2",
+   "formation": "Verb-plain / Noun + に過ぎない"
+  },
+  {
+   "id": "ni-kagiru",
+   "pattern": "〜に限る",
+   "level": "N2",
+   "formation": "Verb-dict / Verb-nai / Noun + に限る"
+  },
+  {
+   "id": "ni-kagirazu",
+   "pattern": "〜に限らず",
+   "level": "N2",
+   "formation": "Noun + に限らず"
+  },
+  {
+   "id": "ni-kagitte",
+   "pattern": "〜に限って",
+   "level": "N2",
+   "formation": "Noun + に限って"
+  },
+  {
+   "id": "ni-kagiri",
+   "pattern": "〜に限り",
+   "level": "N2",
+   "formation": "Noun + に限り"
+  },
+  {
+   "id": "kagiri",
+   "pattern": "〜かぎり",
+   "level": "N2",
+   "formation": "Verb-dict / Verb-te + いる / i-Adj / na-Adj + である / Noun + である + かぎり"
+  },
+  {
+   "id": "nai-kagiri",
+   "pattern": "〜ないかぎり",
+   "level": "N2",
+   "formation": "Verb-nai + かぎり"
+  },
+  {
+   "id": "ni-kakete-wa",
+   "pattern": "〜にかけては",
+   "level": "N2",
+   "formation": "Noun + にかけては / Noun + にかけても"
+  },
+  {
+   "id": "ni-kotaete",
+   "pattern": "〜にこたえて",
+   "level": "N2",
+   "formation": "Noun + にこたえて / Noun + にこたえる + Noun"
+  },
+  {
+   "id": "ni-sakidatte",
+   "pattern": "〜に先立って",
+   "level": "N2",
+   "formation": "Noun + に先立って / Verb-dict + に先立って / Noun + に先立つ + Noun"
+  },
+  {
+   "id": "ni-shiro-ni-seyo",
+   "pattern": "〜にしろ / 〜にせよ",
+   "level": "N2",
+   "formation": "Verb-plain / i-Adj / na-Adj / Noun + にしろ・にせよ"
+  },
+  {
+   "id": "ni-sureba-ni-shitara",
+   "pattern": "〜にすれば / 〜にしたら",
+   "level": "N2",
+   "formation": "Noun + にすれば / Noun + にしたら"
+  },
+  {
+   "id": "ni-soui-nai",
+   "pattern": "〜に相違ない",
+   "level": "N2",
+   "formation": "Verb-plain / i-Adj / na-Adj / Noun + に相違ない"
+  },
+  {
+   "id": "ni-koshita-koto-wa-nai",
+   "pattern": "〜に越したことはない",
+   "level": "N2",
+   "formation": "Verb-dict / Verb-nai / i-Adj / na-Adj / Noun + に越したことはない"
+  },
+  {
+   "id": "ni-hoka-naranai",
+   "pattern": "〜にほかならない",
+   "level": "N2",
+   "formation": "Noun + にほかならない / Verb-plain + から + にほかならない"
+  },
+  {
+   "id": "ni-mo-kakawarazu",
+   "pattern": "〜にもかかわらず",
+   "level": "N2",
+   "formation": "Verb-plain / i-Adj / na-Adj + である / Noun + にもかかわらず"
+  },
+  {
+   "id": "ni-atatte",
+   "pattern": "〜にあたって",
+   "level": "N2",
+   "formation": "Noun + にあたって / Verb-dict + にあたって / Noun + にあたっての + Noun"
+  },
+  {
+   "id": "ni-oite-ni-okeru",
+   "pattern": "〜において / 〜における",
+   "level": "N2",
+   "formation": "Noun + において / Noun + における + Noun"
+  },
+  {
+   "id": "ni-kakawarazu",
+   "pattern": "〜にかかわらず",
+   "level": "N2",
+   "formation": "Noun + にかかわらず / Verb-dict + Verb-nai + にかかわらず"
+  },
+  {
+   "id": "ni-kakawaru",
+   "pattern": "〜にかかわる",
+   "level": "N2",
+   "formation": "Noun + にかかわる"
+  },
+  {
+   "id": "ni-tsuki",
+   "pattern": "〜につき",
+   "level": "N2",
+   "formation": "Noun + につき"
+  },
+  {
+   "id": "ni-mukete",
+   "pattern": "〜に向けて",
+   "level": "N2",
+   "formation": "Noun + に向けて / Noun + に向けた + Noun"
+  },
+  {
+   "id": "no-moto-de-no-moto-ni",
+   "pattern": "〜のもとで / 〜のもとに",
+   "level": "N2",
+   "formation": "Noun + のもとで / Noun + のもとに"
+  },
+  {
+   "id": "nuki-de-nuki-ni",
+   "pattern": "〜抜きで / 〜抜きに",
+   "level": "N2",
+   "formation": "Noun + 抜きで / Noun + 抜きに / Noun + 抜きの + Noun"
+  },
+  {
+   "id": "o-komete",
+   "pattern": "〜をこめて",
+   "level": "N2",
+   "formation": "Noun + をこめて"
+  },
+  {
+   "id": "o-chuushin-ni",
+   "pattern": "〜を中心に",
+   "level": "N2",
+   "formation": "Noun + を中心に / Noun + を中心として / Noun + を中心とした + Noun"
+  },
+  {
+   "id": "o-moto-ni",
+   "pattern": "〜をもとに",
+   "level": "N2",
+   "formation": "Noun + をもとに / Noun + をもとにして / Noun + をもとにした + Noun"
+  },
+  {
+   "id": "o-towazu",
+   "pattern": "〜を問わず",
+   "level": "N2",
+   "formation": "Noun + を問わず"
+  },
+  {
+   "id": "o-hajime",
+   "pattern": "〜をはじめ",
+   "level": "N2",
+   "formation": "Noun + をはじめ / Noun + をはじめとして / Noun + をはじめとする + Noun"
+  },
+  {
+   "id": "o-to-shite",
+   "pattern": "〜を〜として",
+   "level": "N2",
+   "formation": "Noun + を + Noun + として / Noun + を + Noun + とする"
+  },
+  {
+   "id": "ka-to-iu-to",
+   "pattern": "〜かというと",
+   "level": "N2",
+   "formation": "Verb-plain / i-Adj / na-Adj / Noun + かというと / Question word + … + かというと"
+  },
+  {
+   "id": "ka-to-omottara-ka-to-omou-to",
+   "pattern": "〜かと思ったら / 〜かと思うと",
+   "level": "N2",
+   "formation": "Verb-ta + かと思ったら / Verb-ta + かと思うと"
+  },
+  {
+   "id": "ka-nai-ka-no-uchi-ni",
+   "pattern": "〜か〜ないかのうちに",
+   "level": "N2",
+   "formation": "Verb-dict + か + Verb-nai + かのうちに / Verb-ta + か + Verb-nai + かのうちに"
+  },
+  {
+   "id": "kiri",
+   "pattern": "〜きり",
+   "level": "N2",
+   "formation": "Verb-ta + きり / Noun + きり"
+  },
+  {
+   "id": "ge",
+   "pattern": "〜げ",
+   "level": "N2",
+   "formation": "i-Adj stem + げ / na-Adj + げ / Verb-stem + たげ"
+  },
+  {
+   "id": "kko-nai",
+   "pattern": "〜っこない",
+   "level": "N2",
+   "formation": "Verb-stem + っこない"
+  },
+  {
+   "id": "dokoro-ka",
+   "pattern": "〜どころか",
+   "level": "N2",
+   "formation": "Verb-plain / i-Adj / na-Adj / Noun + どころか"
+  },
+  {
+   "id": "dokoro-de-wa-nai",
+   "pattern": "〜どころではない",
+   "level": "N2",
+   "formation": "Verb-dict / Noun + どころではない"
+  },
+  {
+   "id": "to-wa-kagiranai",
+   "pattern": "〜とは限らない",
+   "level": "N2",
+   "formation": "Verb-plain / i-Adj / na-Adj / Noun + とは限らない"
+  },
+  {
+   "id": "to-iu-mono-da",
+   "pattern": "〜というものだ",
+   "level": "N2",
+   "formation": "Verb-plain / i-Adj / na-Adj / Noun + というものだ"
+  },
+  {
+   "id": "to-iu-mono-de-wa-nai",
+   "pattern": "〜というものではない",
+   "level": "N2",
+   "formation": "Verb-plain / i-Adj / na-Adj / Noun + というものではない"
+  },
+  {
+   "id": "to-itte-mo",
+   "pattern": "〜といっても",
+   "level": "N2",
+   "formation": "Verb-plain / i-Adj / na-Adj / Noun + といっても"
+  },
+  {
+   "id": "to-ieba-to-iu-to",
+   "pattern": "〜といえば / 〜というと",
+   "level": "N2",
+   "formation": "Noun + といえば / Noun + というと"
+  },
+  {
+   "id": "hoka-nai",
+   "pattern": "〜ほかない",
+   "level": "N2",
+   "formation": "Verb-dict + ほかない / Verb-dict + よりほかない"
+  },
+  {
+   "id": "mai",
+   "pattern": "〜まい",
+   "level": "N2",
+   "formation": "Verb-dict + まい / Verb-stem (ichidan verbs) + まい"
+  },
+  {
+   "id": "you-de-wa-nai-ka",
+   "pattern": "〜（よ）うではないか",
+   "level": "N2",
+   "formation": "Verb-volitional + ではないか / Verb-volitional + ではありませんか"
+  },
+  {
+   "id": "mo-kamawazu",
+   "pattern": "〜もかまわず",
+   "level": "N2",
+   "formation": "Noun + もかまわず / Verb-plain + の + もかまわず"
+  },
+  {
+   "id": "jou",
+   "pattern": "〜上",
+   "level": "N2",
+   "formation": "Noun + 上 / Noun + 上の + Noun"
+  },
+  {
+   "id": "osore-ga-aru",
+   "pattern": "〜おそれがある",
+   "level": "N2",
+   "formation": "Verb-dict + おそれがある / Noun + の + おそれがある"
+  },
+  {
+   "id": "sei-ka",
+   "pattern": "〜せいか",
+   "level": "N2",
+   "formation": "Verb-plain / i-Adj / na-Adj + な / Noun + の + せいか"
+  },
+  {
+   "id": "dake-atte-dake-ni",
+   "pattern": "〜だけあって / 〜だけに",
+   "level": "N2",
+   "formation": "Verb-plain / i-Adj / na-Adj + な / Noun + だけあって・だけに"
+  },
+  {
+   "id": "dake-no-koto-wa-aru",
+   "pattern": "〜だけのことはある",
+   "level": "N2",
+   "formation": "Verb-plain / i-Adj / na-Adj + な / Noun + だけのことはある"
+  },
+  {
+   "id": "tatoe-te-mo",
+   "pattern": "たとえ〜ても",
+   "level": "N2",
+   "formation": "たとえ + Verb-te + も / たとえ + i-Adj-ku + ても / たとえ + na-Adj + でも / たとえ + Noun + でも"
+  },
+  {
+   "id": "yara-yara",
+   "pattern": "〜やら〜やら",
+   "level": "N2",
+   "formation": "Noun + やら + Noun + やら / Verb-dict + やら + Verb-dict + やら / i-Adj + やら + i-Adj + やら"
+  },
+  {
+   "id": "zu-ni-sumu-naide-sumu",
+   "pattern": "〜ずに済む / 〜ないで済む",
+   "level": "N2",
+   "formation": "Verb-nai stem + ずに済む / Verb-nai + で済む"
+  },
+  {
+   "id": "you-ni-yotte-wa",
+   "pattern": "〜ようによっては",
+   "level": "N2",
+   "formation": "Verb-stem + ようによっては"
+  },
+  {
+   "id": "gatera",
+   "pattern": "〜がてら",
+   "level": "N1",
+   "formation": "Verb-stem / Noun + がてら"
+  },
+  {
+   "id": "katawara",
+   "pattern": "〜かたわら",
+   "level": "N1",
+   "formation": "Verb-dict / Noun + の + かたわら"
+  },
+  {
+   "id": "ga-hayai-ka",
+   "pattern": "〜が早いか",
+   "level": "N1",
+   "formation": "Verb-dict + が早いか"
+  },
+  {
+   "id": "sura",
+   "pattern": "〜すら",
+   "level": "N1",
+   "formation": "Noun (+ particle) + すら"
+  },
+  {
+   "id": "zukume",
+   "pattern": "〜ずくめ",
+   "level": "N1",
+   "formation": "Noun + ずくめ"
+  },
+  {
+   "id": "tara-saigo-ga-saigo",
+   "pattern": "〜たら最後 / 〜が最後",
+   "level": "N1",
+   "formation": "Verb-ta + ら最後 / Verb-ta + が最後"
+  },
+  {
+   "id": "te-kara-to-iu-mono",
+   "pattern": "〜てからというもの",
+   "level": "N1",
+   "formation": "Verb-te + からというもの"
+  },
+  {
+   "id": "te-yamanai",
+   "pattern": "〜てやまない",
+   "level": "N1",
+   "formation": "Verb-te + やまない"
+  },
+  {
+   "id": "to-aimatte",
+   "pattern": "〜と相まって",
+   "level": "N1",
+   "formation": "Noun + と相まって / Noun + も相まって"
+  },
+  {
+   "id": "tomo-naru-to-tomo-nareba",
+   "pattern": "〜ともなると / 〜ともなれば",
+   "level": "N1",
+   "formation": "Noun / Verb-dict + ともなると / Noun / Verb-dict + ともなれば"
+  },
+  {
+   "id": "nara-de-wa",
+   "pattern": "〜ならでは",
+   "level": "N1",
+   "formation": "Noun + ならではの + Noun / Noun + ならではだ"
+  },
+  {
+   "id": "beku",
+   "pattern": "〜べく",
+   "level": "N1",
+   "formation": "Verb-dict + べく (する → すべく)"
+  },
+  {
+   "id": "you-mono-nara",
+   "pattern": "〜(よ)うものなら",
+   "level": "N1",
+   "formation": "Verb-volitional + ものなら"
+  },
+  {
+   "id": "ni-itaru-ni-itatte-ni-itatte-wa",
+   "pattern": "〜に至る / 〜に至って / 〜に至っては",
+   "level": "N1",
+   "formation": "Noun / Verb-dict + に至る / Noun / Verb-dict + に至って / Noun + に至っては"
+  },
+  {
+   "id": "o-kinjienai",
+   "pattern": "〜を禁じ得ない",
+   "level": "N1",
+   "formation": "Noun + を禁じ得ない"
+  },
+  {
+   "id": "o-yogi-naku-sareru",
+   "pattern": "〜を余儀なくされる",
+   "level": "N1",
+   "formation": "Noun + を余儀なくされる"
+  },
+  {
+   "id": "atte-no",
+   "pattern": "〜あっての",
+   "level": "N1",
+   "formation": "Noun + あっての + Noun / Noun + あってのことだ"
+  },
+  {
+   "id": "ikan-de-ikan-ni-yorazu",
+   "pattern": "〜いかんで / 〜いかんによらず",
+   "level": "N1",
+   "formation": "Noun (+ の) + いかんで / Noun (+ の) + いかんによらず"
+  },
+  {
+   "id": "you-ga-you-to",
+   "pattern": "〜(よ)うが / 〜(よ)うと",
+   "level": "N1",
+   "formation": "Verb-volitional + が / Verb-volitional + と / i-Adj stem + かろうが / na-Adj + だろうが / Noun + だろうが"
+  },
+  {
+   "id": "you-ga-mai-ga-you-to-mai-to",
+   "pattern": "〜(よ)うが〜まいが / 〜(よ)うと〜まいと",
+   "level": "N1",
+   "formation": "Verb-volitional + が + Verb-dict + まいが / Verb-volitional + と + Verb-dict + まいと"
+  },
+  {
+   "id": "you-ni-mo-nai",
+   "pattern": "〜(よ)うにも〜ない",
+   "level": "N1",
+   "formation": "Verb-volitional + にも + Verb-nai (potential of the same verb)"
+  },
+  {
+   "id": "kagiri-da",
+   "pattern": "〜かぎりだ",
+   "level": "N1",
+   "formation": "i-Adj / na-Adj + な + かぎりだ"
+  },
+  {
+   "id": "katagata",
+   "pattern": "〜かたがた",
+   "level": "N1",
+   "formation": "Noun + かたがた"
+  },
+  {
+   "id": "ka-to-omoikiya",
+   "pattern": "〜かと思いきや",
+   "level": "N1",
+   "formation": "Verb-plain / i-Adj / na-Adj / Noun + かと思いきや"
+  },
+  {
+   "id": "kirai-ga-aru",
+   "pattern": "〜きらいがある",
+   "level": "N1",
+   "formation": "Verb-dict / Verb-nai / Noun + の + きらいがある"
+  },
+  {
+   "id": "kiwamaru-kiwamari-nai",
+   "pattern": "〜極まる / 〜極まりない",
+   "level": "N1",
+   "formation": "na-Adj + 極まる / na-Adj + 極まりない"
+  },
+  {
+   "id": "no-kiwami",
+   "pattern": "〜の極み",
+   "level": "N1",
+   "formation": "Noun + の極み"
+  },
+  {
+   "id": "gotoki-gotoku",
+   "pattern": "〜ごとき / 〜ごとく",
+   "level": "N1",
+   "formation": "Noun + の + ごとく / Verb-plain + (が) + ごとく / Noun + (の) + ごとき + Noun"
+  },
+  {
+   "id": "koto-tote",
+   "pattern": "〜こととて",
+   "level": "N1",
+   "formation": "Verb-plain / na-Adj + な / Noun + の + こととて"
+  },
+  {
+   "id": "koto-nashi-ni",
+   "pattern": "〜ことなしに",
+   "level": "N1",
+   "formation": "Verb-dict + ことなしに"
+  },
+  {
+   "id": "shimatsu-da",
+   "pattern": "〜始末だ",
+   "level": "N1",
+   "formation": "Verb-dict + 始末だ / この + 始末だ"
+  },
+  {
+   "id": "zu-jimai",
+   "pattern": "〜ずじまい",
+   "level": "N1",
+   "formation": "Verb-nai stem + ずじまい (する → せずじまい)"
+  },
+  {
+   "id": "zu-ni-wa-okanai-nai-de-wa-okanai",
+   "pattern": "〜ずにはおかない / 〜ないではおかない",
+   "level": "N1",
+   "formation": "Verb-nai stem + ずにはおかない (する → せずにはおかない) / Verb-nai + ではおかない"
+  },
+  {
+   "id": "zu-ni-wa-sumanai-nai-de-wa-sumanai",
+   "pattern": "〜ずにはすまない / 〜ないではすまない",
+   "level": "N1",
+   "formation": "Verb-nai stem + ずにはすまない (する → せずにはすまない) / Verb-nai + ではすまない"
+  },
+  {
+   "id": "soba-kara",
+   "pattern": "〜そばから",
+   "level": "N1",
+   "formation": "Verb-dict / Verb-ta + そばから"
+  },
+  {
+   "id": "tari-tomo",
+   "pattern": "〜たりとも",
+   "level": "N1",
+   "formation": "Noun (一 + counter) + たりとも"
+  },
+  {
+   "id": "dani",
+   "pattern": "〜だに",
+   "level": "N1",
+   "formation": "Verb-dict + だに / Noun + だに"
+  },
+  {
+   "id": "taru",
+   "pattern": "〜たる",
+   "level": "N1",
+   "formation": "Noun + たる + Noun / Noun + たるもの"
+  },
+  {
+   "id": "tsu-tsu",
+   "pattern": "〜つ〜つ",
+   "level": "N1",
+   "formation": "Verb-stem + つ + Verb-stem + つ"
+  },
+  {
+   "id": "de-are-de-are-de-are",
+   "pattern": "〜であれ / 〜であれ〜であれ",
+   "level": "N1",
+   "formation": "Noun + であれ / Question word + であれ / Noun + であれ + Noun + であれ"
+  },
+  {
+   "id": "te-shikaru-beki-da",
+   "pattern": "〜てしかるべきだ",
+   "level": "N1",
+   "formation": "Verb-te + しかるべきだ / i-Adj-ku + て + しかるべきだ / na-Adj + であって + しかるべきだ"
+  },
+  {
+   "id": "de-wa-aru-mai-shi",
+   "pattern": "〜ではあるまいし",
+   "level": "N1",
+   "formation": "Noun + ではあるまいし / Verb-dict + の + ではあるまいし"
+  },
+  {
+   "id": "temae",
+   "pattern": "〜手前",
+   "level": "N1",
+   "formation": "Verb-plain / Noun + の + 手前"
+  },
+  {
+   "id": "te-mo-sashitsukae-nai",
+   "pattern": "〜てもさしつかえない",
+   "level": "N1",
+   "formation": "Verb-te + もさしつかえない / i-Adj-ku + て + もさしつかえない / na-Adj + でもさしつかえない / Noun + でもさしつかえない"
+  },
+  {
+   "id": "to-atte",
+   "pattern": "〜とあって",
+   "level": "N1",
+   "formation": "Verb-plain / i-Adj / na-Adj / Noun + とあって"
+  },
+  {
+   "id": "to-areba",
+   "pattern": "〜とあれば",
+   "level": "N1",
+   "formation": "Verb-plain / Noun + とあれば"
+  },
+  {
+   "id": "to-ii-to-ii",
+   "pattern": "〜といい〜といい",
+   "level": "N1",
+   "formation": "Noun + といい + Noun + といい"
+  },
+  {
+   "id": "to-itta-tokoro-da",
+   "pattern": "〜といったところだ",
+   "level": "N1",
+   "formation": "Noun / Verb-dict + といったところだ"
+  },
+  {
+   "id": "to-iedomo",
+   "pattern": "〜といえども",
+   "level": "N1",
+   "formation": "Verb-plain / i-Adj / na-Adj / Noun + といえども"
+  },
+  {
+   "id": "to-ittara-nai",
+   "pattern": "〜といったらない",
+   "level": "N1",
+   "formation": "i-Adj / na-Adj / Noun + といったらない"
+  },
+  {
+   "id": "to-kitara",
+   "pattern": "〜ときたら",
+   "level": "N1",
+   "formation": "Noun + ときたら"
+  },
+  {
+   "id": "to-shita-tokoro-de-ni-shita-tokoro-de",
+   "pattern": "〜としたところで / 〜にしたところで",
+   "level": "N1",
+   "formation": "Verb-plain / Noun + としたところで / Noun + にしたところで"
+  },
+  {
+   "id": "to-wa",
+   "pattern": "〜とは",
+   "level": "N1",
+   "formation": "Verb-plain / i-Adj / na-Adj / Noun + とは"
+  },
+  {
+   "id": "to-bakari-ni",
+   "pattern": "〜とばかりに",
+   "level": "N1",
+   "formation": "Sentence + とばかりに"
+  },
+  {
+   "id": "to-mo-naku-to-mo-nashi-ni",
+   "pattern": "〜ともなく / 〜ともなしに",
+   "level": "N1",
+   "formation": "Verb-dict + ともなく / Verb-dict + ともなしに / Question word + (particle) + ともなく"
+  },
+  {
+   "id": "nai-made-mo",
+   "pattern": "〜ないまでも",
+   "level": "N1",
+   "formation": "Verb-nai + までも"
+  },
+  {
+   "id": "nai-mono-de-mo-nai",
+   "pattern": "〜ないものでもない",
+   "level": "N1",
+   "formation": "Verb-nai + ものでもない"
+  },
+  {
+   "id": "nagara-ni-nagara-no",
+   "pattern": "〜ながらに / 〜ながらの",
+   "level": "N1",
+   "formation": "Noun + ながらに / Noun + ながらの + Noun / Verb-stem + ながらに"
+  },
+  {
+   "id": "nakushite-wa",
+   "pattern": "〜なくして(は)",
+   "level": "N1",
+   "formation": "Noun + なくして(は)"
+  },
+  {
+   "id": "nashi-ni-wa",
+   "pattern": "〜なしに(は)",
+   "level": "N1",
+   "formation": "Noun + なしに(は)"
+  },
+  {
+   "id": "nara-iza-shirazu-wa-iza-shirazu",
+   "pattern": "〜ならいざしらず / 〜はいざしらず",
+   "level": "N1",
+   "formation": "Noun + ならいざしらず / Noun + はいざしらず / Verb-plain + (の) + ならいざしらず"
+  },
+  {
+   "id": "nara-mada-shimo",
+   "pattern": "〜ならまだしも",
+   "level": "N1",
+   "formation": "Noun + ならまだしも / Verb-plain + (の) + ならまだしも"
+  },
+  {
+   "id": "nari",
+   "pattern": "〜なり",
+   "level": "N1",
+   "formation": "Verb-dict + なり"
+  },
+  {
+   "id": "nari-nari",
+   "pattern": "〜なり〜なり",
+   "level": "N1",
+   "formation": "Noun + なり + Noun + なり / Verb-dict + なり + Verb-dict + なり"
+  },
+  {
+   "id": "nari-ni-nari-no",
+   "pattern": "〜なりに / 〜なりの",
+   "level": "N1",
+   "formation": "Noun + なりに / Noun + なりの + Noun / i-Adj + なりに / Verb-plain + なりに"
+  },
+  {
+   "id": "ni-wa-ataranai",
+   "pattern": "〜には当たらない",
+   "level": "N1",
+   "formation": "Verb-dict + には当たらない / Noun + には当たらない"
+  },
+  {
+   "id": "ni-atte",
+   "pattern": "〜にあって",
+   "level": "N1",
+   "formation": "Noun + にあって(は / も)"
+  },
+  {
+   "id": "ni-kataku-nai",
+   "pattern": "〜に難くない",
+   "level": "N1",
+   "formation": "Verb-dict + に難くない / Noun + に難くない"
+  },
+  {
+   "id": "ni-shite",
+   "pattern": "〜にして",
+   "level": "N1",
+   "formation": "Noun + にして"
+  },
+  {
+   "id": "ni-sokushite",
+   "pattern": "〜に即して",
+   "level": "N1",
+   "formation": "Noun + に即して / Noun + に即した + Noun"
+  },
+  {
+   "id": "ni-taeru-ni-taenai",
+   "pattern": "〜に堪える / 〜に堪えない",
+   "level": "N1",
+   "formation": "Verb-dict + に堪える / Noun + に堪える / Verb-dict + に堪えない / Noun + に堪えない"
+  },
+  {
+   "id": "ni-taru",
+   "pattern": "〜に足る",
+   "level": "N1",
+   "formation": "Verb-dict + に足る + Noun / Noun + に足る + Noun"
+  },
+  {
+   "id": "ni-todomarazu",
+   "pattern": "〜にとどまらず",
+   "level": "N1",
+   "formation": "Noun / Verb-plain + にとどまらず"
+  },
+  {
+   "id": "ni-hikikae",
+   "pattern": "〜にひきかえ",
+   "level": "N1",
+   "formation": "Noun + にひきかえ / Verb-plain + の + にひきかえ"
+  },
+  {
+   "id": "ni-mo-mashite",
+   "pattern": "〜にもまして",
+   "level": "N1",
+   "formation": "Noun + にもまして / Question word + にもまして"
+  },
+  {
+   "id": "no-itari",
+   "pattern": "〜の至り",
+   "level": "N1",
+   "formation": "Noun + の至り"
+  },
+  {
+   "id": "nomi-narazu",
+   "pattern": "〜のみならず",
+   "level": "N1",
+   "formation": "Noun / Verb-plain / i-Adj + のみならず / na-Adj + である + のみならず / Noun + である + のみならず"
+  },
+  {
+   "id": "wa-oroka",
+   "pattern": "〜はおろか",
+   "level": "N1",
+   "formation": "Noun + はおろか"
+  },
+  {
+   "id": "ba-koso",
+   "pattern": "〜ばこそ",
+   "level": "N1",
+   "formation": "Verb-ba + こそ / i-Adj stem + ければこそ / na-Adj + であればこそ / Noun + であればこそ"
+  },
+  {
+   "id": "ba-sore-made-da",
+   "pattern": "〜ばそれまでだ",
+   "level": "N1",
+   "formation": "Verb-ba + それまでだ"
+  },
+  {
+   "id": "bekarazu-bekarazaru",
+   "pattern": "〜べからず / 〜べからざる",
+   "level": "N1",
+   "formation": "Verb-dict + べからず / Verb-dict + べからざる + Noun (する → すべからず)"
+  },
+  {
+   "id": "beku-mo-nai",
+   "pattern": "〜べくもない",
+   "level": "N1",
+   "formation": "Verb-dict + べくもない (する → すべくもない)"
+  },
+  {
+   "id": "majiki",
+   "pattern": "〜まじき",
+   "level": "N1",
+   "formation": "Noun + に + あるまじき + Noun / Verb-dict + まじき + Noun"
+  },
+  {
+   "id": "made-mo-nai",
+   "pattern": "〜までもない",
+   "level": "N1",
+   "formation": "Verb-dict + までもない"
+  },
+  {
+   "id": "made-da-made-no-koto-da",
+   "pattern": "〜までだ / 〜までのことだ",
+   "level": "N1",
+   "formation": "Verb-dict + までだ / Verb-ta + までだ / Verb-dict + までのことだ"
+  },
+  {
+   "id": "mamire",
+   "pattern": "〜まみれ",
+   "level": "N1",
+   "formation": "Noun + まみれ"
+  },
+  {
+   "id": "meku",
+   "pattern": "〜めく",
+   "level": "N1",
+   "formation": "Noun + めく / Noun + めいた + Noun"
+  },
+  {
+   "id": "mo-saru-koto-nagara",
+   "pattern": "〜もさることながら",
+   "level": "N1",
+   "formation": "Noun + もさることながら"
+  },
+  {
+   "id": "mono-o",
+   "pattern": "〜ものを",
+   "level": "N1",
+   "formation": "Verb-plain / i-Adj / na-Adj + な + ものを"
+  },
+  {
+   "id": "ya-ina-ya",
+   "pattern": "〜や否や",
+   "level": "N1",
+   "formation": "Verb-dict + や否や / Verb-dict + や"
+  },
+  {
+   "id": "yue-ni",
+   "pattern": "〜ゆえ(に)",
+   "level": "N1",
+   "formation": "Noun + (の) + ゆえ(に) / Verb-plain + (が) + ゆえ(に) / i-Adj + (が) + ゆえ(に) / na-Adj + である + がゆえに"
+  },
+  {
+   "id": "o-oite",
+   "pattern": "〜をおいて",
+   "level": "N1",
+   "formation": "Noun + をおいて(ほかに)〜ない"
+  },
+  {
+   "id": "o-kawakiri-ni",
+   "pattern": "〜を皮切りに",
+   "level": "N1",
+   "formation": "Noun + を皮切りに / Verb-plain + の + を皮切りに"
+  },
+  {
+   "id": "o-ki-ni",
+   "pattern": "〜を機に",
+   "level": "N1",
+   "formation": "Noun + を機に / Verb-plain + の + を機に"
+  },
+  {
+   "id": "o-kagiri-ni",
+   "pattern": "〜を限りに",
+   "level": "N1",
+   "formation": "Noun + を限りに"
+  },
+  {
+   "id": "o-motte",
+   "pattern": "〜をもって",
+   "level": "N1",
+   "formation": "Noun + をもって"
+  },
+  {
+   "id": "o-mono-tomo-sezu",
+   "pattern": "〜をものともせず",
+   "level": "N1",
+   "formation": "Noun + をものともせず(に)"
+  },
+  {
+   "id": "o-yoso-ni",
+   "pattern": "〜をよそに",
+   "level": "N1",
+   "formation": "Noun + をよそに"
+  },
+  {
+   "id": "n-ga-tame-ni",
+   "pattern": "〜んがため(に)",
+   "level": "N1",
+   "formation": "Verb-nai stem + んがため(に) (する → せんがため)"
+  },
+  {
+   "id": "n-bakari",
+   "pattern": "〜んばかり",
+   "level": "N1",
+   "formation": "Verb-nai stem + んばかり (する → せんばかり)"
+  },
+  {
+   "id": "ue-wa",
+   "pattern": "〜うえは",
+   "level": "N1",
+   "formation": "Verb-dict / Verb-ta + うえは"
+  },
+  {
+   "id": "tada-nomi",
+   "pattern": "ただ〜のみ",
+   "level": "N1",
+   "formation": "ただ + Noun + のみ / ただ + Verb-dict + のみ"
+  },
+  {
+   "id": "dano-dano",
+   "pattern": "〜だの〜だの",
+   "level": "N1",
+   "formation": "Noun / Verb-plain / i-Adj / na-Adj + だの + ... + だの"
+  },
+  {
+   "id": "te-habakaranai",
+   "pattern": "〜てはばからない",
+   "level": "N1",
+   "formation": "Verb-te + はばからない"
+  },
+  {
+   "id": "tomo-arou",
+   "pattern": "〜ともあろう",
+   "level": "N1",
+   "formation": "Noun + ともあろう + Noun"
+  },
+  {
+   "id": "ni-kakotsukete",
+   "pattern": "〜にかこつけて",
+   "level": "N1",
+   "formation": "Noun + にかこつけて"
+  },
+  {
+   "id": "ni-iwasereba",
+   "pattern": "〜に言わせれば",
+   "level": "N1",
+   "formation": "Noun + に言わせれば / Noun + に言わせると"
+  },
+  {
+   "id": "ni-kamakete",
+   "pattern": "〜にかまけて",
+   "level": "N1",
+   "formation": "Noun + にかまけて"
+  },
+  {
+   "id": "kai-mo-naku",
+   "pattern": "〜かいもなく",
+   "level": "N1",
+   "formation": "Verb-ta + かいもなく / Noun + の + かいもなく"
+  },
+  {
+   "id": "kitte-no",
+   "pattern": "〜きっての",
+   "level": "N1",
+   "formation": "Noun + きっての + Noun"
+  },
+  {
+   "id": "zu-tomo",
+   "pattern": "〜ずとも",
+   "level": "N1",
+   "formation": "Verb-nai stem + ずとも (する → せずとも)"
+  },
+  {
+   "id": "to-wa-ie",
+   "pattern": "〜とはいえ",
+   "level": "N1",
+   "formation": "Verb-plain / i-Adj / na-Adj / Noun + とはいえ"
+  },
+  {
+   "id": "beku-shite",
+   "pattern": "〜べくして",
+   "level": "N1",
+   "formation": "Verb-dict + べくして + Verb-ta (same verb)"
+  },
+  {
+   "id": "jimiru-jimita",
+   "pattern": "〜じみる / 〜じみた",
+   "level": "N1",
+   "formation": "Noun + じみる / Noun + じみた + Noun"
+  },
+  {
+   "id": "gurumi",
+   "pattern": "〜ぐるみ",
+   "level": "N1",
+   "formation": "Noun + ぐるみ"
+  },
+  {
+   "id": "ni-mo-hodo-ga-aru",
+   "pattern": "〜にもほどがある",
+   "level": "N1",
+   "formation": "Noun / na-Adj / i-Adj / Verb-dict + にもほどがある"
+  },
+  {
+   "id": "o-ii-koto-ni",
+   "pattern": "〜をいいことに",
+   "level": "N1",
+   "formation": "Noun + をいいことに / Verb-plain + の + をいいことに"
+  },
+  {
+   "id": "ni-nottotte",
+   "pattern": "〜に則って",
+   "level": "N1",
+   "formation": "Noun + に則って / Noun + に則った + Noun"
+  },
+  {
+   "id": "kare-kare",
+   "pattern": "〜かれ〜かれ",
+   "level": "N1",
+   "formation": "i-Adj stem + かれ + i-Adj stem + かれ"
+  },
+  {
+   "id": "koto-kono-ue-nai",
+   "pattern": "〜ことこの上ない",
+   "level": "N1",
+   "formation": "i-Adj + ことこの上ない / na-Adj + な + ことこの上ない"
+  },
+  {
+   "id": "to-mieru-to-miete",
+   "pattern": "〜とみえる / 〜とみえて",
+   "level": "N1",
+   "formation": "Verb-plain / i-Adj / na-Adj / Noun + とみえる / Verb-plain / i-Adj / na-Adj / Noun + とみえて"
+  },
+  {
+   "id": "o-fumaete",
+   "pattern": "〜を踏まえて",
+   "level": "N1",
+   "formation": "Noun + を踏まえて / Noun + を踏まえた + Noun"
+  },
+  {
+   "id": "nai-to-mo-kagiranai",
+   "pattern": "〜ないとも限らない",
+   "level": "N1",
+   "formation": "Verb-nai + とも限らない"
+  }
+ ]
+}

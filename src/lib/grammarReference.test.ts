@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildReferenceIndex,
+  curatedGrammarByPattern,
   matchOwnPattern,
   normalizePatternKey,
   referenceKeys,
@@ -46,5 +47,26 @@ describe('matchOwnPattern', () => {
 
   it('returns null for colloquial or sentence-specific patterns', () => {
     expect(matchOwnPattern({ id: 'p4', canonicalName: 'もう〜じゃん' }, index)).toBeNull();
+  });
+});
+
+describe('curatedGrammarByPattern', () => {
+  const te: ReferencePattern = { id: 'temiru', pattern: '〜てみる', level: 'N4' };
+  const to1: ReferencePattern = { id: 'to-named', pattern: '〜という（named）', level: 'N4' };
+  const to2: ReferencePattern = { id: 'to-quote', pattern: '〜という（quote）', level: 'N4' };
+  const noId: ReferencePattern = { pattern: '〜ばかり', level: 'N4' };
+  const index = buildReferenceIndex([te, to1, to2, noId]);
+
+  it('maps unambiguous matches to the curated id and drops ambiguous, unmatched and id-less ones', () => {
+    const map = curatedGrammarByPattern(
+      [
+        { id: 'p1', canonicalName: '～てみる' },
+        { id: 'p2', canonicalName: '〜という' },
+        { id: 'p3', canonicalName: 'もう〜じゃん' },
+        { id: 'p4', canonicalName: '〜ばかり' },
+      ],
+      index,
+    );
+    expect([...map]).toEqual([['p1', 'temiru']]);
   });
 });

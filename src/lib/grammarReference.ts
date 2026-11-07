@@ -78,3 +78,20 @@ export function matchOwnPattern(
   }
   return entries.length > 0 ? { entries, ambiguous: entries.length > 1 } : null;
 }
+
+/**
+ * Learner pattern id -> the one curated entry id it resolves to. Ambiguous matches (several curated senses) and
+ * patterns without a curated id are left out: only high-confidence links may count as grammar the learner is missing.
+ */
+export function curatedGrammarByPattern(
+  patterns: readonly OwnPattern[],
+  index: ReadonlyMap<string, ReferencePattern[]>,
+): Map<string, string> {
+  const byPattern = new Map<string, string>();
+  for (const own of patterns) {
+    const match = matchOwnPattern(own, index);
+    const id = match && !match.ambiguous ? match.entries[0]!.id : undefined;
+    if (id) byPattern.set(own.id, id);
+  }
+  return byPattern;
+}
