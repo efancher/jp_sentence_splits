@@ -55,6 +55,16 @@ describe('phrase shadow helpers', () => {
     expect(phraseTextFromAlignment(withSilence, { startMs: 0, endMs: 1500 })).toBe('サイトに');
   });
 
+  it('marks a word the aligner could not place instead of dropping it silently', () => {
+    const withUnknown = [
+      { text: '今回', start: 0.32, end: 1.3 },
+      { text: '<eps>', start: 1.3, end: 1.89 },
+      { text: '<unk>', start: 1.89, end: 2.89 },
+      { text: 'の', start: 3.25, end: 4.42 },
+    ];
+    expect(phraseTextFromAlignment(withUnknown, { startMs: 320, endMs: 4420 })).toBe('今回…の');
+  });
+
   it('finds the vocabulary whose surface sits inside the phrase', () => {
     const links = [
       { vocabularyItemId: 'v-cat', surfaceForm: '猫' },

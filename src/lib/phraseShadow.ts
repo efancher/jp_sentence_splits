@@ -41,6 +41,9 @@ export function isPhraseRange(range: { startMs: number; endMs: number } | null |
   return clipDurationMs <= 0 || length < clipDurationMs * WHOLE_CLIP_SHARE;
 }
 
+/** A word the aligner could not place (numerals, rare words): spoken, but its text is unknown. */
+const UNKNOWN_TOKEN = '<unk>';
+
 /**
  * The text of the aligned words that fall mostly (over half their length) inside the marked
  * span, joined in order. Alignment times are seconds from the start of the clip.
@@ -54,13 +57,13 @@ export function phraseTextFromAlignment(
   return words
     .filter((word) => {
       const length = word.end - word.start;
-      if (length <= 0 || !word.text || word.text.startsWith('<')) return false;
+      if (length <= 0 || !word.text || (word.text.startsWith('<') && word.text !== UNKNOWN_TOKEN)) return false;
       const overlap = Math.min(word.end, end) - Math.max(word.start, start);
       if (overlap > length / 2) return true;
       // A particle token stretched over trailing silence counts once its audible part (capped) is inside.
       return isParticleToken(word) && length * 1000 > PARTICLE_MAX_MS && overlap * 1000 >= PARTICLE_MAX_MS - 1;
     })
-    .map((word) => word.text)
+    .map((word) => (word.text === UNKNOWN_TOKEN ? '…' : word.text))
     .join('');
 }
 
