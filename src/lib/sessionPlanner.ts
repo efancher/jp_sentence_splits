@@ -1016,7 +1016,11 @@ function buildShadowSteps(
       targetKind: 'shadow',
       bookId: candidate.bookId,
       sentenceId: candidate.sentenceId,
-      label: candidate.phrase ? `Shadow a phrase: ${candidate.phraseText ?? candidate.label}` : `Shadow: ${candidate.label}`,
+      label: candidate.phrase
+        ? candidate.phraseText
+          ? `Shadow a phrase: ${candidate.phraseText}`
+          : `Shadow a phrase from: ${candidate.label}`
+        : `Shadow: ${candidate.label}`,
       estimatedMinutes: perItemMinutes,
       reason: candidate.phrase
         ? `${candidate.reason} — ${candidate.phraseText ? 'use the suggested phrase' : 'mark a phrase'}, shadow it, then rate it`

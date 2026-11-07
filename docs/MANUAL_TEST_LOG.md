@@ -61,7 +61,7 @@ These items are the real-device pass the automated tests cannot give.
 
 | # | Feature | How to reach it | Status | Notes |
 |---|---|---|---|---|
-| P1 | Settings → "Pause sentence shadowing in the daily plan" turns the plan's shadowing steps into "Shadow a phrase: …" steps; unticking restores "Shadow: …" | ☰ → Settings, then Home → start today's session | ⬜ | The step label shows the suggested phrase when the clip's alignment is cached, otherwise the sentence start. |
+| P1 | Settings → "Pause sentence shadowing in the daily plan" turns the plan's shadowing steps into "Shadow a phrase: …" steps; unticking restores "Shadow: …" | ☰ → Settings, then Home → start today's session | ⬜ | The step label shows the suggested phrase when the clip's alignment is cached, otherwise "Shadow a phrase from: <sentence>". |
 | P2 | Shadow pane shows "Suggested phrase (covers 〇〇): …" + "Use this phrase"; tapping it narrows the Loop window sliders and shows the rating row | A shadowing step, or `/books/:bookId/shadow/:sentenceId` | ⬜ | On a first visit the line may appear a few seconds after open (the pane caches the alignment first). If it never appears, run the book's "Precompute word audio alignment" and reopen. |
 | P3 | Dragging the Loop window sliders updates "Phrase: …" and the seconds range live | Same pane | ⬜ | The row stays hidden while the window covers about the whole clip. |
 | P4 | Not yet / Close / Got it log one event each tap, and "Logged …" confirms it | Same pane | ⬜ | Check Export all data still succeeds and the sync badge shows no conflict; a clip with no alignment still logs (phrase text empty). |
