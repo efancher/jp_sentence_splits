@@ -126,6 +126,17 @@ export function validateChunkReply(reply: string, chunk: WizardTranscriptSeg[]):
   return warnings[0] ?? null;
 }
 
+/**
+ * A mid-part stretch with no sentences is worth one retry, but a second reply
+ * with the same gap usually means the transcript there is music, a repeated
+ * caption or other non-speech the assistant rightly skipped. Stopping the whole
+ * run on it is worse than keeping the part: the merged reply is checked again
+ * in the review stage, which shows the same warning.
+ */
+export function isSoftChunkProblem(problem: string): boolean {
+  return problem.startsWith('No sentences between');
+}
+
 export function mergeChunkReplies(replies: string[]): string {
   const lines = replies.map((reply) => splitCombinedReply(reply).sentences);
   return ['=== SENTENCES ===', ...lines, END_MARKER].join('\n');
@@ -178,11 +189,12 @@ export async function runSegmentChunks(input: {
         const { reply, backend } = await run(buildChunkPrompt(chunk, index, chunks.length));
         input.onProgress({ index, total: chunks.length, attempt, backend });
         const problem = validateChunkReply(reply, chunk);
-        if (problem) {
+        if (problem && !(attempt === MAX_ATTEMPTS_PER_CHUNK && isSoftChunkProblem(problem))) {
           lastError = problem;
           input.onNote?.(`${label}: reply rejected (${problem}) — attempt ${attempt} of ${MAX_ATTEMPTS_PER_CHUNK}`);
           continue;
         }
+        if (problem) input.onNote?.(`${label}: kept despite a warning (${problem}) — the review step will flag it`);
         replies[index] = reply;
         input.onChunkDone(index, reply);
         input.onNote?.(`${label}: saved (${backend ?? 'assistant'})`);
