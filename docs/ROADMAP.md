@@ -770,6 +770,22 @@ Constraints and decisions:
 - Proper nouns and odd UniDic splits can inflate unknown counts; audit the
   default-checked tokens before trusting a threshold.
 
+**Import pipeline (new material keeps arriving).** The vocabulary score is derived
+live from `vocabularySuggestions` plus the introduced-sentence set, so new
+imports need no extra scoring step, and they do not change the known set until
+they are introduced. What import must guarantee: (a) morphology is present at
+commit. The YouTube mining and Quick Import pages and Shadowmine packages
+(`shadowingImport.ts`) already write it; `csvImport.ts` and
+`import-anki-sentences.ts` write `[]`, so either tokenize at commit or run
+`backfill:vocabulary-suggestions` before relying on the score, otherwise those
+sentences read as "no content words" and silently drop out of ranking (treat an
+empty suggestion list as "not scorable", never "0 unknowns"). (b) grammar links
+are produced and matched to the curated reference at import time (the grammar
+links extra, then `matchOwnPattern`), so new sentences arrive with high-confidence
+patterns. (c) a per-book "ready to pick up" summary after import (this
+diagnostic scoped to the new book: unknown-count histogram and top unlocking
+words). Keep it advisory, no import blocking.
+
 Steps: (1) [done 2026-11-07] `src/lib/unknownLemmas.ts` (content lemmas,
 known set, unknown-per-sentence, unlock value) with fixture tests, and the
 `diagnose:i-plus-one` script; (2) unknown-count ordering as an
