@@ -13,7 +13,7 @@
  */
 import openJlptGrammar from '../src/data/openJlptGrammar.json';
 import type { VocabularySuggestion } from '../src/domain/types';
-import { buildGrammarDetector, buildReferenceIndex, curatedGrammarByPattern } from '../src/lib/grammarReference';
+import { buildGrammarDetector, buildReferenceIndex, curatedGrammarByPattern, wordSpansForDetection } from '../src/lib/grammarReference';
 import { grammarLevelCosts } from '../src/lib/iPlusOne';
 import {
   buildKnownLemmaSet,
@@ -116,7 +116,8 @@ async function main(): Promise<void> {
   const linked = new Set(entriesBySentence.keys());
   const detect = buildGrammarDetector(openJlptGrammar.patterns);
   for (const sentence of sentences) {
-    for (const entryId of detect(sentence.japanese ?? '')) {
+    const words = wordSpansForDetection((sentence.vocabulary_suggestions ?? []) as VocabularySuggestion[]);
+    for (const entryId of detect(sentence.japanese ?? '', words)) {
       if (!entriesBySentence.has(sentence.id)) entriesBySentence.set(sentence.id, new Set());
       entriesBySentence.get(sentence.id)!.add(entryId);
       if (introduced.has(sentence.id)) knownGrammar.add(entryId);

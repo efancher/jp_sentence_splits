@@ -813,13 +813,12 @@ here"). On 2026-11-07 data: 27 curated patterns known; the 1-2-unknown pool
 the sentence text (fixed text of each entry; ~65% of candidates carry grammar,
 50 patterns known, pool 2,273 -> ~1,890 with level-aware pacing: an unmet
 pattern above the easiest JLPT level under 60% met costs extra) and each
-sentence-led book page has a "Ready to pick up" panel. Left over: tighten the
-detector for short forms that over-match (かった inside 分かった; tokenize
-against the morphology instead of substrings), resolve ambiguous `（note）`
-matches (e.g. ながら（while）/（も）, currently skipped), merge duplicate learner
-patterns and the junk pattern "NEW" (harmless now: it has no curated match and
-no cards; clean-up needs the user's go-ahead because it writes prod, see
-`npm run merge:grammar-patterns`), and any grammar study surface.
+sentence-led book page has a "Ready to pick up" panel. The duplicate learner
+patterns were merged and the junk "NEW" pattern soft-deleted (2026-11-07), and
+matches no longer start partway through a verb/noun token (`wordSpansForDetection`;
+removed ~16 false matches). Left over: resolve ambiguous `（note）` matches (e.g.
+ながら（while）/（も）, currently skipped), other short-form over-matches that
+begin on a token boundary, and any grammar study surface.
 
 ## Possibilities (reader as the single study surface)
 

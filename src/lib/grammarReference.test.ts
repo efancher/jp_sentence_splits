@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildGrammarDetector,
+  wordSpansForDetection,
   buildReferenceIndex,
   detectableSegments,
   curatedGrammarByPattern,
@@ -92,6 +93,16 @@ describe('buildGrammarDetector', () => {
 
   it('drops a match inside a longer entry match', () => {
     expect(detect('行ったところで無駄だ')).toEqual(['tatokorode']);
+  });
+
+  it('ignores a match that starts partway through a content word', () => {
+    const detectShort = buildGrammarDetector([{ id: 'katta', pattern: '〜かった' }]);
+    // 分かった: 分かっ is one word, so かった is not the い-adjective past.
+    const token = (start: number, end: number, pos: string) => ({ start, end, pos, selectedByDefault: true });
+    expect(detectShort('よく分かった')).toEqual(['katta']);
+    expect(detectShort('よく分かった', wordSpansForDetection([token(2, 5, '動詞/一般')]))).toEqual([]);
+    // い-adjectives carry their own inflection, so かった there is the real thing.
+    expect(detectShort('楽しかった', wordSpansForDetection([token(0, 4, '形容詞/一般')]))).toEqual(['katta']);
   });
 
   it('needs both halves of a split pattern, in order', () => {

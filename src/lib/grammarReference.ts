@@ -122,9 +122,26 @@ export function detectableSegments(entry: ReferencePattern): string[][] {
 /**
  * Finds curated grammar in a sentence's text without any AI link: each entry's fixed text must appear (split
  * patterns in order, close together). Entries whose fixed text is shared by another entry (different senses of one
- * form) are skipped, and a match inside a longer entry's match (ところ inside たところで) is dropped.
+ * form) are skipped, and a match inside a longer entry's match (ところ inside たところで) is dropped. Optional
+ * `words` (the sentence's content-word spans from morphology) stop a match starting partway through a word.
  */
-export function buildGrammarDetector(entries: readonly ReferencePattern[]): (japanese: string) => string[] {
+export type TextSpan = { start: number; end: number };
+
+/**
+ * The content-word spans that a grammar match must not start inside. い-adjective tokens are left out: they carry their
+ * own inflection (楽しかっ + た), so 〜かった legitimately starts partway through one, unlike 分かっ + た.
+ */
+export function wordSpansForDetection(
+  tokens: readonly { start: number; end: number; pos: string; selectedByDefault: boolean }[],
+): TextSpan[] {
+  return tokens
+    .filter((token) => token.selectedByDefault && !token.pos.startsWith('形容詞'))
+    .map(({ start, end }) => ({ start, end }));
+}
+
+export function buildGrammarDetector(
+  entries: readonly ReferencePattern[],
+): (japanese: string, words?: readonly TextSpan[]) => string[] {
   const detectable = entries
     .filter((entry) => entry.id)
     .map((entry) => ({ id: entry.id!, alternatives: detectableSegments(entry) }))
@@ -143,8 +160,16 @@ export function buildGrammarDetector(entries: readonly ReferencePattern[]): (jap
     .filter((entry) => entry.alternatives.length > 0);
 
   /** Span of the segments found in order and close together, or null. */
-  const locate = (japanese: string, segments: readonly string[]): { start: number; end: number } | null => {
-    const start = japanese.indexOf(segments[0]!);
+  const locate = (
+    japanese: string,
+    segments: readonly string[],
+    words: readonly TextSpan[],
+  ): { start: number; end: number } | null => {
+    // A match may not begin partway through a word (かった inside 分かった).
+    let start = japanese.indexOf(segments[0]!);
+    while (start >= 0 && words.some((word) => start > word.start && start < word.end)) {
+      start = japanese.indexOf(segments[0]!, start + 1);
+    }
     if (start < 0) return null;
     let end = start + segments[0]!.length;
     for (const segment of segments.slice(1)) {
@@ -155,16 +180,16 @@ export function buildGrammarDetector(entries: readonly ReferencePattern[]): (jap
     return { start, end };
   };
 
-  return (japanese) => {
+  return (japanese, words = []) => {
     const spans: Array<{ id: string; start: number; end: number }> = [];
     for (const { id, alternatives } of usable) {
       for (const segments of alternatives) {
-        let found = locate(japanese, segments);
+        let found = locate(japanese, segments, words);
         // A pattern ending in a る-verb (〜ことがある) still shows up conjugated (あります, あった).
         const last = segments[segments.length - 1]!;
         const stem = [...segments.slice(0, -1), last.slice(0, -1)];
         if (!found && last.endsWith('る') && stem.join('').length >= MIN_LITERAL_LENGTH) {
-          found = locate(japanese, stem);
+          found = locate(japanese, stem, words);
         }
         if (found) {
           spans.push({ id, ...found });

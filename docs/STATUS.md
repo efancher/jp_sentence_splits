@@ -39,8 +39,10 @@ and possible extensions. This snapshot does not certify a live deployment.
   itself (`buildGrammarDetector`: each entry's fixed text, split patterns in
   order, conjugated る-verb endings, longest match wins, entries sharing text
   skipped, fixed text under 3 characters ignored), so ~65% of candidates carry
-  grammar instead of ~19% via AI links; weak spots are short forms such as
-  かった also matching 分かった. Level-aware pacing (`grammarLevelCosts`): an
+  grammar instead of ~19% via AI links. A match may not start partway through
+  a verb or noun token from the sentence's morphology (かった inside 分かっ+た),
+  though い-adjective tokens are exempt since they carry their own inflection
+  (楽しかっ+た); sentences without morphology fall back to plain text. Level-aware pacing (`grammarLevelCosts`): an
   unmet pattern above the easiest JLPT level under 60% met costs extra, so N2
   stays out of the one-new-piece pool while N4 is unmet. Vocabulary still leads
   ranking. The "new here" line names new patterns too, and a sentence-led book

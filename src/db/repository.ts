@@ -27,7 +27,7 @@ import {
   type SequentialBookStatus,
   type SequentialSentenceStatus,
 } from '../lib/sequentialStudy';
-import { buildGrammarDetector, buildReferenceIndex, curatedGrammarByPattern } from '../lib/grammarReference';
+import { buildGrammarDetector, buildReferenceIndex, curatedGrammarByPattern, wordSpansForDetection } from '../lib/grammarReference';
 import { grammarLevelCosts, orderByIPlusOne, type IPlusOneItem } from '../lib/iPlusOne';
 import {
   effectiveLegacyDrillsPaused,
@@ -11116,7 +11116,7 @@ async function loadCuratedGrammar(
   const detect = buildGrammarDetector(reference.patterns);
   for (const row of rows) {
     if (!row) continue;
-    for (const entryId of detect(row.japanese)) {
+    for (const entryId of detect(row.japanese, wordSpansForDetection(row.vocabularySuggestions ?? []))) {
       const entries = entriesBySentence.get(row.id) ?? [];
       if (!entries.includes(entryId)) entries.push(entryId);
       entriesBySentence.set(row.id, entries);
