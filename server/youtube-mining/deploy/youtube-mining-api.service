@@ -30,7 +30,7 @@ Environment=MINING_YTDLP_JS_RUNTIME_PATH=%h/.local/bin/node
 # punctuation-free auto-captions. Pair with ANALYSIS_SOURCE_WORD_TIMESTAMPS=0
 # on shadowing-analysis-api (that's the real speedup — its word-timestamp
 # DTW pass is single-threaded Python).
-Environment=MINING_ASR_TIMEOUT_SECONDS=3600
+Environment=MINING_ASR_TIMEOUT_SECONDS=7200
 # Keep job scratch dirs + stage checkpoints off /tmp so a resume survives a
 # reboot (checkpoints let a job started on one device be finished on
 # another — see app/jobs.py `_write_checkpoint`). Same tree as the source

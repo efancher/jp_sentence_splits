@@ -473,6 +473,15 @@ def _fetch_transcript(job: Job, url: str) -> None:
             )
             job.transcript_source = "asr"
         else:
+            if not caption_cues:
+                # Podcasts have no caption track, so a failed ASR pass leaves
+                # nothing to segment — say so rather than let a later stage
+                # fail with "no segmented sentences".
+                raise RuntimeError(
+                    "Transcription failed or timed out (see "
+                    "MINING_ASR_TIMEOUT_SECONDS) and this source has no "
+                    "captions to fall back on."
+                )
             job.set_message("Splitting sentences…")
             raw_cues = caption_cues
             # ASR was unreachable / empty → YouTube auto-captions: no

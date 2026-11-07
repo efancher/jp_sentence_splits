@@ -517,3 +517,14 @@ def test_commit_endpoint_clips_every_row_inline(client: TestClient) -> None:
     # …but the clip is still fetchable the old way too.
     audio = client.get(f"/jobs/{job_id}/clips/{sentences[1]['sentenceId']}/audio")
     assert audio.status_code == 200
+
+
+def test_asr_failure_without_captions_reports_clear_error(
+    client: TestClient, monkeypatch
+) -> None:
+    # A podcast: no caption track, and the ASR pass timed out (-> None).
+    monkeypatch.setattr(jobs.subtitles, "load_cues_from_dir", lambda *_a, **_k: [])
+    create = client.post("/jobs", json={"url": "https://www.youtube.com/watch?v=vid12345678"})
+    status = _wait_until_ready(client, create.json()["jobId"])
+    assert status["status"] == "error"
+    assert "no captions to fall back on" in status["error"]
