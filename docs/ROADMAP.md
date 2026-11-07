@@ -734,10 +734,9 @@ Constraints and decisions:
   before). Count the sentence's default-checked `vocabularySuggestions`
   (`selectedByDefault`, the picker's content-vs-function rule), keyed by
   lemma expression + reading.
-- **"Known" is conservative today**: lemmas from introduced sentences only. Open:
-  also count confirmed `vocabulary_items` and imported Anki words (would make
-  the pool larger), a minimum-exposure count instead of "seen once", and a
-  struggle signal from self-ratings. Never derive FSRS ratings from this.
+- **"Known" is conservative**: lemmas from introduced sentences plus words with a
+  reviewed reading/meaning card (done 2026-11-07). Open: a minimum-exposure
+  count instead of "seen once", and a struggle signal from self-ratings. Never derive FSRS ratings from this.
 - **Rank by unlock value** among 1-2-unknown sentences: how many other
   candidates become closer to ready if the unknown word is learned.
 - **Stretch cadence** is a setting (start ~1 in 5 sentences with more unknowns);
@@ -791,14 +790,19 @@ known set, unknown-per-sentence, unlock value) with fixture tests, and the
 `diagnose:i-plus-one` script; (2) [done 2026-11-07] unknown-count ordering as
 an opt-in per-book ranking behind `settings.iPlusOneOrdering`
 (`src/lib/iPlusOne.ts`, hooked into `findExploreCandidates`), including the
-1-in-5 stretch cadence and unlock-value ranking; (3) [filler weighting done
-2026-11-07: `lemmaWeight` x0.2 for 感動詞 and pure discourse markers, x0.5 for
-proper nouns, ranking only; frequent real words like ちょっと/やる/わかる are
-deliberately untouched] remaining: down-weight lemmas that are really grammar
-(しれる from かもしれない), make the stretch cadence a setting, count confirmed vocabulary items and
-exposure counts as known, show "new here: X" on the lesson step, and rank across
-books (ordering is per book today); (4) grammar as items (curated OpenJLPT
-patterns, see above).
+1-in-5 stretch cadence and unlock-value ranking; (3) [done 2026-11-07] tuning: `lemmaWeight` x0.2 for 感動詞 and pure
+discourse markers, x0.3 for grammar-bound verbs (only しれる so far), x0.5 for
+proper nouns (ranking only; frequent real words like ちょっと/やる/わかる are
+deliberately untouched); stretch cadence is a setting
+(`settings.iPlusOneStretchEvery`); words with a reviewed reading/meaning card
+count as known (+72 lemmas, ~+130 sentences in the 1-2 pool on 2026-11-07
+data; all 1,099 picked vocabulary items would add ~800 lemmas, but that is
+"picked", not "learned", so it is not used); the lesson reason line says "new
+here: X"; ranking is across books (one global rank, per-book order kept, books
+merged by next rank). Left over: a longer grammar-bound list (add only lemmas
+with no life outside a pattern), an exposure-count threshold or struggle signal
+instead of "seen once", and a per-book "ready to pick up" screen; (4) grammar
+as items (curated OpenJLPT patterns, see above).
 
 ## Possibilities (reader as the single study surface)
 

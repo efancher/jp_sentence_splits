@@ -5,6 +5,7 @@ import {
   addMinutesToTodaySession,
   addSentencesToBook,
   createBook,
+  ensureStudyItem,
   getDb,
   setBookSentenceStatus,
   updateSettings,
@@ -31,9 +32,13 @@ function sentenceOf(id: string, words: string[]): Sentence {
   };
 }
 
-async function lessonOrder(): Promise<string[]> {
+async function lessonSteps() {
   const session = await addMinutesToTodaySession(60);
-  return session.steps.filter((step) => step.targetKind === 'sentence_learning').map((step) => step.sentenceId!);
+  return session.steps.filter((step) => step.targetKind === 'sentence_learning');
+}
+
+async function lessonOrder(): Promise<string[]> {
+  return (await lessonSteps()).map((step) => step.sentenceId!);
 }
 
 /** One finished sentence (so 猫 and 犬 are known) then three new ones, in reading order hard -> i+1 -> all-known. */
@@ -70,5 +75,68 @@ describe('walkthrough supply: i+1 ordering (settings.iPlusOneOrdering)', () => {
     await seed();
     await updateSettings({ iPlusOneOrdering: true, sequentialStudyMode: true });
     expect(await lessonOrder()).toEqual(['hard', 'i1', 'easy']);
+  });
+
+  it('says which words are new on the lesson step', async () => {
+    await seed();
+    await updateSettings({ iPlusOneOrdering: true });
+    const steps = await lessonSteps();
+    expect(steps.find((step) => step.sentenceId === 'i1')?.reason).toContain('new here: 空');
+    expect(steps.find((step) => step.sentenceId === 'easy')?.reason).not.toContain('new here');
+  });
+
+  it('ranks sentences across books, keeping each book in its own order', async () => {
+    const first = await createBook({ title: 'First' });
+    const second = await createBook({ title: 'Second' });
+    const rows = [
+      sentenceOf('done', ['猫', '犬']),
+      sentenceOf('a-hard', ['雨', '傘', '風', '雲']),
+      sentenceOf('a-i1', ['猫', '空']),
+      sentenceOf('b-i1', ['犬', '海']),
+    ];
+    await getDb().sentences.bulkPut(rows);
+    await addSentencesToBook(first.id, ['done', 'a-hard', 'a-i1']);
+    await addSentencesToBook(second.id, ['b-i1']);
+    await setBookSentenceStatus(first.id, 'done', 'complete');
+    await updateSettings({ iPlusOneOrdering: true });
+    const order = await lessonOrder();
+    // Both i+1 sentences come before the harder one, even though First is listed before Second.
+    expect(order.indexOf('b-i1')).toBeLessThan(order.indexOf('a-hard'));
+    expect(order.indexOf('a-i1')).toBeLessThan(order.indexOf('a-hard'));
+  });
+
+  async function seedStretch(): Promise<void> {
+    const book = await createBook({ title: 'Stretch' });
+    const ready = Array.from({ length: 5 }, (_, i) => sentenceOf(`r${i}`, ['猫', `新${i}`]));
+    const rows = [sentenceOf('done', ['猫']), sentenceOf('hard', ['雨', '傘', '風', '雲']), ...ready];
+    await getDb().sentences.bulkPut(rows);
+    await addSentencesToBook(book.id, rows.map((row) => row.id));
+    await setBookSentenceStatus(book.id, 'done', 'complete');
+  }
+
+  it('draws a harder sentence every fifth slot by default', async () => {
+    await seedStretch();
+    await updateSettings({ iPlusOneOrdering: true });
+    expect((await lessonOrder()).indexOf('hard')).toBe(4);
+  });
+
+  it('can turn the stretch sentences off', async () => {
+    await seedStretch();
+    await updateSettings({ iPlusOneOrdering: true, iPlusOneStretchEvery: 0 });
+    expect((await lessonOrder()).indexOf('hard')).toBe(5);
+  });
+
+  it('counts a word with a reviewed reading card as known', async () => {
+    await seed();
+    await updateSettings({ iPlusOneOrdering: true });
+    // 'hard' has four unknowns; with 雨 and 傘 reviewed it has two and becomes i+1.
+    const rain = { id: 'v-rain', expression: '雨', reading: '雨', meaning: 'rain', createdAt: T, updatedAt: T };
+    const umbrella = { id: 'v-umbrella', expression: '傘', reading: '傘', meaning: 'umbrella', createdAt: T, updatedAt: T };
+    await getDb().vocabularyItems.bulkPut([rain, umbrella]);
+    for (const item of [rain, umbrella]) {
+      const card = await ensureStudyItem('vocabularyItem', item.id, 'reading_retrieval');
+      await getDb().studyItems.update(card.id, { fsrsState: { ...card.fsrsState, state: 'review', reps: 3 } });
+    }
+    expect(await lessonOrder()).toEqual(['i1', 'hard', 'easy']);
   });
 });

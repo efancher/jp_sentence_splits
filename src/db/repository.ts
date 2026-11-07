@@ -27,14 +27,15 @@ import {
   type SequentialBookStatus,
   type SequentialSentenceStatus,
 } from '../lib/sequentialStudy';
-import { orderByIPlusOne } from '../lib/iPlusOne';
+import { orderByIPlusOne, type IPlusOneItem } from '../lib/iPlusOne';
 import {
   effectiveLegacyDrillsPaused,
   effectiveSentenceFirstPlanning,
   isIPlusOneOrdering,
+  iPlusOneStretchEvery,
   isSequentialStudyMode,
 } from '../lib/sentenceLed';
-import { buildKnownLemmaSet } from '../lib/unknownLemmas';
+import { buildKnownLemmaSet, lemmaKey, unknownLemmasForSentence } from '../lib/unknownLemmas';
 import { sessionStepCategory } from '../lib/sessionStepCategory';
 import { sentencesDueForFreshTry } from '../lib/sentenceJourney';
 import { emptyStageCounts, sentenceStage, type StageCounts } from '../lib/sentenceStages';
@@ -11053,23 +11054,52 @@ export async function findListeningToolCandidates(
   }));
 }
 
-/** Content lemmas of every introduced sentence (`getIntroducedSentenceIds`) — the "known" side of i+1 ordering. */
-async function loadKnownLemmaSet(): Promise<Set<string>> {
-  const memberships = await readAllBookSentencesForPass();
-  const introduced = await getIntroducedSentenceIds([...new Set(memberships.map((row) => row.sentenceId))]);
-  const rows = await getDb().sentences.bulkGet([...introduced]);
-  return buildKnownLemmaSet(rows.map((row) => row?.vocabularySuggestions));
+/** i+1 ordering inputs shared by every book: one global rank and each sentence's not-yet-met words. */
+interface IPlusOneContext {
+  /** Position in the i+1 order over every not-yet-introduced book sentence (lower = sooner). */
+  rank: Map<string, number>;
+  /** Display forms of the content words in the sentence the learner has not met yet. */
+  newWords: Map<string, string[]>;
 }
 
-/** A book's new-sentence memberships (reading order in) reordered by i+1 — a permutation, never a filter. */
-async function reorderForIPlusOne(memberships: BookSentence[], known: ReadonlySet<string>): Promise<BookSentence[]> {
-  const rows = await getDb().sentences.bulkGet(memberships.map((item) => item.sentenceId));
-  const order = orderByIPlusOne(
-    memberships.map((item, index) => ({ sentenceId: item.sentenceId, suggestions: rows[index]?.vocabularySuggestions })),
-    known,
+/**
+ * The "known" lemmas for i+1: content words of every introduced sentence
+ * (`getIntroducedSentenceIds`) plus words with a reading/meaning study item
+ * that has been reviewed at least once (pitch-only practice doesn't count).
+ */
+async function loadKnownLemmaSet(introducedRows: (Sentence | undefined)[]): Promise<Set<string>> {
+  const vocabulary = await getDb().vocabularyItems.toArray();
+  const reviewed = await getIntroducedReadingVocabularyItemIds(vocabulary.map((item) => item.id));
+  const reviewedKeys = vocabulary
+    .filter((item) => reviewed.has(item.id))
+    .map((item) => lemmaKey(item.expression, item.reading));
+  return buildKnownLemmaSet(
+    introducedRows.map((row) => row?.vocabularySuggestions),
+    reviewedKeys,
   );
-  const byId = new Map(memberships.map((item) => [item.sentenceId, item]));
-  return order.map((id) => byId.get(id)!);
+}
+
+/**
+ * Ranks every not-yet-introduced sentence across all books at once (so
+ * unlock value and the stretch cadence are global, not per book). A pure
+ * permutation of reading order; callers sort their own lists by `rank`.
+ */
+async function loadIPlusOneContext(stretchEvery: number): Promise<IPlusOneContext> {
+  const memberships = await readAllBookSentencesForPass();
+  const sentenceIds = [...new Set(memberships.map((row) => row.sentenceId))];
+  const introduced = await getIntroducedSentenceIds(sentenceIds);
+  const rows = await getDb().sentences.bulkGet(sentenceIds);
+  const known = await loadKnownLemmaSet(rows.filter((row) => row && introduced.has(row.id)));
+  const items: IPlusOneItem[] = [];
+  const newWords = new Map<string, string[]>();
+  rows.forEach((row, index) => {
+    if (!row || introduced.has(sentenceIds[index]!)) return;
+    items.push({ sentenceId: row.id, suggestions: row.vocabularySuggestions });
+    const words = unknownLemmasForSentence(row.vocabularySuggestions, known).map((key) => key.split('|')[0]!);
+    if (words.length > 0) newWords.set(row.id, words);
+  });
+  const order = orderByIPlusOne(items, known, { stretchEvery });
+  return { rank: new Map(order.map((id, index) => [id, index])), newWords };
 }
 
 /** Explore candidates: books with sentences not yet started, most-recently-opened first ("continue where you left off" reusing Book.lastOpenedAt, the same signal BookDetailPage's touchBookOpened already maintains). */
@@ -11077,13 +11107,13 @@ async function findExploreCandidates(
   limit: number,
   sentenceFirst = false,
   sequential = false,
-  iPlusOne = false,
+  iPlusOne?: { stretchEvery: number },
 ): Promise<ExploreCandidate[]> {
   const db = getDb();
-  // i+1 order: the lemmas met in introduced sentences, computed once for every book (see orderByIPlusOne).
-  const knownLemmas =
+  // i+1 order: ranked once across every book (see orderByIPlusOne); each book keeps its own order by that rank.
+  const iPlusOneContext =
     iPlusOne && sentenceFirst && !sequential
-      ? await traceStep('explore: i+1 known lemmas', () => loadKnownLemmaSet())
+      ? await traceStep('explore: i+1 context', () => loadIPlusOneContext(iPlusOne.stretchEvery))
       : undefined;
   const [allBooks, coverageByBookId, suspendedIndex] = await Promise.all([
     db.books.toArray(),
@@ -11168,8 +11198,11 @@ async function findExploreCandidates(
     // the window already previewed, lessons that qualify for it come first.
     // Order only: nothing is added, gated or skipped, and sequential mode keeps
     // its strict episode order.
-    const newInOrder = knownLemmas
-      ? await traceStep('explore: orderByIPlusOne', () => reorderForIPlusOne(inReadingOrder, knownLemmas), rowCount)
+    const newInOrder = iPlusOneContext
+      ? [...inReadingOrder].sort(
+          (a, b) =>
+            (iPlusOneContext.rank.get(a.sentenceId) ?? Infinity) - (iPlusOneContext.rank.get(b.sentenceId) ?? Infinity),
+        )
       : inReadingOrder;
     const unstarted =
       sentenceFirst && !sequential ? await traceStep('explore: floatGrowthEligibleFirst', () => floatGrowthEligibleFirst(newInOrder)) : newInOrder;
@@ -11223,6 +11256,14 @@ async function findExploreCandidates(
         ...(parkedGlossSet.has(item.sentenceId) ? { parkedGloss: true } : {}),
         ...(revisitSet.has(item.sentenceId) && weakWordRevisits.get(item.sentenceId)?.length
           ? { weakWords: weakWordRevisits.get(item.sentenceId) }
+          : {}),
+        ...(iPlusOneContext && !revisitSet.has(item.sentenceId) && iPlusOneContext.rank.has(item.sentenceId)
+          ? {
+              iPlusOneRank: iPlusOneContext.rank.get(item.sentenceId),
+              ...(iPlusOneContext.newWords.get(item.sentenceId)
+                ? { newWords: iPlusOneContext.newWords.get(item.sentenceId)!.slice(0, 3) }
+                : {}),
+            }
           : {}),
         // Patched below, once readiness is known for every candidate
         // sentence at once (batched, not N+1) — see classifyExploreSentences
@@ -12508,7 +12549,7 @@ async function gatherSessionPlannerInput(
         EXPLORE_CANDIDATE_LIMIT + exclude.bookIds.size,
         effectiveSentenceFirstPlanning(settings),
         isSequentialStudyMode(settings),
-        isIPlusOneOrdering(settings),
+        isIPlusOneOrdering(settings) ? { stretchEvery: iPlusOneStretchEvery(settings) } : undefined,
       ),
     ),
     legacyPaused

@@ -409,6 +409,10 @@ export interface ExploreCandidate {
     parkedGloss?: true;
     /** Words in this walked-through sentence the learner hasn't retained; why it was brought back (`getWeakWordSentenceSignal`). */
     weakWords?: string[];
+    /** i+1 ordering only: this sentence's place in the order over every book (lower = sooner); new sentences are served across books by it. */
+    iPlusOneRank?: number;
+    /** i+1 ordering only: content words here the learner has not met yet (a few, for the lesson's reason line). */
+    newWords?: string[];
   }[];
 }
 
@@ -731,8 +735,30 @@ function classifyExploreSentences(
   }
   // Revisits (a second look at something already walked through) come before first lessons.
   return sentenceFirst
-    ? [...entries.filter((e) => e.sentence.revisit), ...entries.filter((e) => !e.sentence.revisit)]
+    ? [...entries.filter((e) => e.sentence.revisit), ...mergeByIPlusOneRank(entries.filter((e) => !e.sentence.revisit))]
     : entries;
+}
+
+/**
+ * i+1 ordering ranks new sentences across every book. Each book's own order
+ * (already ranked, then adjusted for Sentence Growth) is kept; books are merged
+ * by whichever next sentence ranks soonest. Without ranks (setting off) the
+ * book-then-position order is returned unchanged.
+ */
+function mergeByIPlusOneRank(entries: ExploreSentenceEntry[]): ExploreSentenceEntry[] {
+  if (!entries.some((entry) => entry.sentence.iPlusOneRank !== undefined)) return entries;
+  const queues = new Map<ExploreCandidate, ExploreSentenceEntry[]>();
+  for (const entry of entries) queues.set(entry.candidate, [...(queues.get(entry.candidate) ?? []), entry]);
+  const rankOf = (entry: ExploreSentenceEntry) => entry.sentence.iPlusOneRank ?? Infinity;
+  const merged: ExploreSentenceEntry[] = [];
+  while (merged.length < entries.length) {
+    let best: ExploreSentenceEntry[] | undefined;
+    for (const queue of queues.values()) {
+      if (queue.length > 0 && (!best || rankOf(queue[0]!) < rankOf(best[0]!))) best = queue;
+    }
+    merged.push(best!.shift()!);
+  }
+  return merged;
 }
 
 function exploreEntryCost(entry: ExploreSentenceEntry): number {
@@ -762,7 +788,7 @@ function exploreStepFor(entry: ExploreSentenceEntry): PlannerStepDraft {
         ? `Has words that haven't stuck: ${sentence.weakWords.join('、')} — walk through it again`
         : sentence.revisit
         ? `You walked through this in ${candidate.label} on an earlier day — try saying it without cues`
-        : `Next sentence in ${candidate.label} — walk through it, practise a target, then try saying it`,
+        : `Next sentence in ${candidate.label}${sentence.newWords?.length ? ` (new here: ${sentence.newWords.join('、')})` : ''} — walk through it, practise a target, then try saying it`,
       status: 'pending',
       ...(sentence.revisit ? { revisit: true } : {}),
     };

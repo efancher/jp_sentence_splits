@@ -858,6 +858,11 @@ export interface AppSettings {
    */
   iPlusOneOrdering?: boolean;
   /**
+   * With `iPlusOneOrdering`: every Nth new sentence is a harder one (3+ unknown
+   * words). 0 turns the stretch sentences off; unset means every fifth.
+   */
+  iPlusOneStretchEvery?: number;
+  /**
    * Background-generate the meaning choices (correct meaning + wrong-meaning
    * bank) for sentences that have none, via the `meaning-assist` Edge
    * Function (needs sign-in + deploy). Treated as on when undefined.

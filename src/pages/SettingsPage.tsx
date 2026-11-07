@@ -16,6 +16,7 @@ import {
 } from '../db/database';
 import { useJapaneseSpeech } from '../hooks/useJapaneseSpeech';
 import { filterJapaneseVoices } from '../lib/speech';
+import { iPlusOneStretchEvery } from '../lib/sentenceLed';
 import {
   exportFullBackup,
   refreshVocabularySuggestionDefaults,
@@ -384,10 +385,26 @@ export function SettingsPage() {
         <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
           Within each book, new sentences are ordered by how many of their
           content words you have already met &mdash; sentences with just one
-          or two new words come first, and every fifth one is a harder
-          sentence so you keep stretching. Nothing is hidden or skipped, and
-          it has no effect in &ldquo;Focus on episodes already started&rdquo;.
+          or two new words come first, with a harder sentence now and then so
+          you keep stretching. Sentences are ranked across all your books, and
+          the lesson says which words are new. Nothing is hidden or skipped,
+          and it has no effect in &ldquo;Focus on episodes already started&rdquo;.
         </p>
+        <label className="row">
+          Harder sentence
+          <select
+            value={iPlusOneStretchEvery(settings)}
+            disabled={!settings.iPlusOneOrdering}
+            onChange={(event) => {
+              void updateSettings({ iPlusOneStretchEvery: Number(event.target.value) });
+            }}
+          >
+            <option value={3}>every 3rd</option>
+            <option value={5}>every 5th</option>
+            <option value={8}>every 8th</option>
+            <option value={0}>never</option>
+          </select>
+        </label>
         <label className="row">
           <input
             type="checkbox"

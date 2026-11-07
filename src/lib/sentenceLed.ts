@@ -1,8 +1,9 @@
 import type { AppSettings } from '../domain/types';
+import { I_PLUS_ONE_STRETCH_EVERY } from './iPlusOne';
 
 type FlowSettings = Pick<
   AppSettings,
-  'sentenceLedFlow' | 'legacyDrillsPaused' | 'sentenceFirstPlanning' | 'sequentialStudyMode' | 'iPlusOneOrdering'
+  'sentenceLedFlow' | 'legacyDrillsPaused' | 'sentenceFirstPlanning' | 'sequentialStudyMode' | 'iPlusOneOrdering' | 'iPlusOneStretchEvery'
 >;
 
 /** Sentence-led flow is the default; only an explicit `false` turns it off. */
@@ -63,4 +64,10 @@ export function isSequentialStudyMode(settings: Partial<FlowSettings> | undefine
 /** Opt-in: offer a book's new sentences by known-word coverage (i+1) instead of reading order. */
 export function isIPlusOneOrdering(settings: Partial<FlowSettings> | undefined): boolean {
   return settings?.iPlusOneOrdering ?? false;
+}
+
+/** Every Nth i+1 slot is a harder sentence; 0 = never. Falls back to the default for anything that isn't a whole number >= 0. */
+export function iPlusOneStretchEvery(settings: Partial<FlowSettings> | undefined): number {
+  const value = settings?.iPlusOneStretchEvery;
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : I_PLUS_ONE_STRETCH_EVERY;
 }

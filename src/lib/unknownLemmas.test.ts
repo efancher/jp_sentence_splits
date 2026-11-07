@@ -94,6 +94,11 @@ describe('lemmaWeight', () => {
     expect(lemmaWeight('東京', '名詞/固有名詞')).toBe(LEMMA_WEIGHT.properNoun);
   });
 
+  it('down-weights a verb that only exists inside a grammar pattern (かもしれない)', () => {
+    expect(lemmaWeight('しれる', '動詞/一般')).toBe(LEMMA_WEIGHT.grammarBound);
+    expect(lemmaWeight('知る', '動詞/一般')).toBe(LEMMA_WEIGHT.normal);
+  });
+
   it('leaves frequent real words alone, whatever their tag', () => {
     expect(lemmaWeight('ちょっと', '副詞')).toBe(LEMMA_WEIGHT.normal);
     expect(lemmaWeight('やる', '動詞/非自立可能')).toBe(LEMMA_WEIGHT.normal);

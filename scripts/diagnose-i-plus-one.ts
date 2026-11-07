@@ -39,11 +39,12 @@ async function main(): Promise<void> {
   const top = Number(flag('top') ?? 15);
   const client = await createScriptSupabaseClient();
   const { id: ownerId } = await requireAuthedUser(client);
-  const [bookSentences, events, studyItems, sentences] = await Promise.all([
+  const [bookSentences, events, studyItems, sentences, vocabularyItems] = await Promise.all([
     fetchAll<Row>(client, 'book_sentences', 'id,book_id,sentence_id,status', ownerId, (r) => r),
     fetchAll<Row>(client, 'sentence_learning_events', 'id,sentence_id,action', ownerId, (r) => r),
-    fetchAll<Row>(client, 'study_items', 'id,subject_id,subject_type', ownerId, (r) => r),
+    fetchAll<Row>(client, 'study_items', 'id,subject_id,subject_type,activity_type,fsrs_state', ownerId, (r) => r),
     fetchAll<Row>(client, 'sentences', 'id,vocabulary_suggestions', ownerId, (r) => r),
+    fetchAll<Row>(client, 'vocabulary_items', 'id,expression,reading', ownerId, (r) => r),
   ]);
 
   const introduced = new Set<string>();
@@ -59,7 +60,21 @@ async function main(): Promise<void> {
   const candidates = [...bookOf.keys()].filter(
     (id) => !introduced.has(id) && (!bookFilter || bookOf.get(id) === bookFilter),
   );
-  const known = buildKnownLemmaSet([...introduced].map((id) => suggestionsBySentence.get(id)));
+  // Words with a reviewed reading/meaning card also count as known (the planner's loadKnownLemmaSet; pitch-only practice doesn't).
+  const reviewedItemIds = new Set<string>();
+  for (const item of studyItems) {
+    if (
+      item.subject_type === 'vocabularyItem' &&
+      ['reading_retrieval', 'cloze', 'reading_production'].includes(item.activity_type) &&
+      item.fsrs_state?.state !== 'new'
+    ) {
+      reviewedItemIds.add(item.subject_id);
+    }
+  }
+  const reviewedKeys = vocabularyItems
+    .filter((item) => reviewedItemIds.has(item.id))
+    .map((item) => lemmaKey(item.expression, item.reading));
+  const known = buildKnownLemmaSet([...introduced].map((id) => suggestionsBySentence.get(id)), reviewedKeys);
 
   const scored: Array<{ id: string; unknown: string[] }> = [];
   const unscorable = { 'no-tokens': 0, 'no-content-words': 0 };

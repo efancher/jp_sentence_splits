@@ -63,17 +63,27 @@ export function unknownLemmasForSentence(
  */
 const DISCOURSE_MARKERS = new Set(['まあ', 'あの', 'えっと', 'えーと', 'ええ', 'ねえ', 'さあ', 'ほら']);
 
+/**
+ * Verbs that UniDic splits out of a fixed grammar pattern and that are only ever
+ * met inside it (しれる from かもしれない), so learning the pattern, not the
+ * word, is what they stand for. Short on purpose: only lemmas with no life
+ * outside the pattern.
+ */
+const GRAMMAR_BOUND_LEMMAS = new Set(['しれる']);
+
 /** How much a lemma is worth introducing a whole sentence for, 0..1 (see `unlockValueByLemma`). */
-export const LEMMA_WEIGHT = { filler: 0.2, properNoun: 0.5, normal: 1 } as const;
+export const LEMMA_WEIGHT = { filler: 0.2, grammarBound: 0.3, properNoun: 0.5, normal: 1 } as const;
 
 /**
  * Ranking weight for introducing a lemma: interjections/fillers (感動詞) and
- * discourse markers rarely repay a lesson, and a name is learnt on sight.
+ * discourse markers rarely repay a lesson, a name is learnt on sight, and a
+ * grammar-bound verb is really a pattern, not a word.
  * Applies to which new word to teach next only — such a word still counts as
  * unknown when deciding whether a sentence is i+1.
  */
 export function lemmaWeight(expression: string, pos: string | undefined): number {
   if (pos?.startsWith('感動詞') || DISCOURSE_MARKERS.has(expression)) return LEMMA_WEIGHT.filler;
+  if (GRAMMAR_BOUND_LEMMAS.has(expression)) return LEMMA_WEIGHT.grammarBound;
   if (pos?.startsWith('名詞/固有名詞')) return LEMMA_WEIGHT.properNoun;
   return LEMMA_WEIGHT.normal;
 }
