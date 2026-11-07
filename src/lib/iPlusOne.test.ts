@@ -3,10 +3,11 @@ import { describe, expect, it } from 'vitest';
 import { orderByIPlusOne, type IPlusOneItem } from './iPlusOne';
 import { buildKnownLemmaSet, lemmaKey, type LemmaSource } from './unknownLemmas';
 
-const tok = (word: string, selectedByDefault = true): LemmaSource => ({
+const tok = (word: string, selectedByDefault = true, pos?: string): LemmaSource => ({
   expression: word,
   reading: word,
   selectedByDefault,
+  ...(pos ? { pos } : {}),
 });
 const sentence = (sentenceId: string, ...words: string[]): IPlusOneItem => ({
   sentenceId,
@@ -32,6 +33,24 @@ describe('orderByIPlusOne', () => {
       sentence('shared-b', '犬', '空'),
     ];
     expect(orderByIPlusOne(items, known)).toEqual(['shared-a', 'shared-b', 'lonely']);
+  });
+
+  it('does not let a widely shared filler outrank a content word', () => {
+    const filler = (sentenceId: string): IPlusOneItem => ({
+      sentenceId,
+      suggestions: [tok('猫'), tok('うん', true, '感動詞/一般')],
+    });
+    const items: IPlusOneItem[] = [
+      filler('filler-1'),
+      filler('filler-2'),
+      filler('filler-3'),
+      sentence('content', '猫', '空'),
+      sentence('content-2', '犬', '空'),
+    ];
+    // うん unlocks three sentences, 空 two; unweighted, the うん sentences would lead.
+    const order = orderByIPlusOne(items, known);
+    expect(order.slice(0, 2)).toEqual(['content', 'content-2']);
+    expect([...order].sort()).toEqual(['content', 'content-2', 'filler-1', 'filler-2', 'filler-3']);
   });
 
   it('breaks ties by fewer unknowns, then reading order', () => {

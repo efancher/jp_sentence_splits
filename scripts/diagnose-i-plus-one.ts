@@ -14,6 +14,8 @@
 import type { VocabularySuggestion } from '../src/domain/types';
 import {
   buildKnownLemmaSet,
+  lemmaKey,
+  lemmaWeight,
   scoreSentence,
   unknownCountHistogram,
   unlockValueByLemma,
@@ -86,8 +88,17 @@ async function main(): Promise<void> {
   console.log('\nper book (total candidates, with 1-2 unknown):');
   for (const [book, { total, ready }] of perBook) console.log(`  ${book}\t${total}\t${ready}`);
 
-  const value = unlockValueByLemma(scored.map((s) => s.unknown));
-  console.log(`\ntop ${top} unknown lemmas by unlock value:`);
+  // Same down-weighting of fillers, discourse markers and names as the planner's i+1 ordering (orderByIPlusOne).
+  const weights = new Map<string, number>();
+  for (const { id } of scored) {
+    for (const suggestion of suggestionsBySentence.get(id) ?? []) {
+      if (!suggestion.selectedByDefault) continue;
+      const key = lemmaKey(suggestion.expression, suggestion.reading);
+      if (!weights.has(key)) weights.set(key, lemmaWeight(suggestion.expression, suggestion.pos));
+    }
+  }
+  const value = unlockValueByLemma(scored.map((s) => s.unknown), undefined, (key) => weights.get(key) ?? 1);
+  console.log(`\ntop ${top} unknown lemmas by (weighted) unlock value:`);
   for (const [lemma, score] of [...value.entries()].sort((a, b) => b[1] - a[1]).slice(0, top)) {
     console.log(`  ${score.toFixed(1)}\t${lemma}`);
   }

@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildKnownLemmaSet,
+  LEMMA_WEIGHT,
   lemmaKey,
+  lemmaWeight,
   scoreSentence,
   sentenceContentLemmas,
   unknownCountHistogram,
@@ -80,6 +82,31 @@ describe('unlockValueByLemma', () => {
     expect(value.get('a')).toBeCloseTo(1.5);
     expect(value.get('b')).toBeCloseTo(0.5);
     expect(value.has('c')).toBe(false);
+  });
+});
+
+describe('lemmaWeight', () => {
+  it('down-weights interjections, fillers, discourse markers and proper nouns', () => {
+    expect(lemmaWeight('うん', '感動詞/一般')).toBe(LEMMA_WEIGHT.filler);
+    expect(lemmaWeight('あの', '感動詞/フィラー')).toBe(LEMMA_WEIGHT.filler);
+    expect(lemmaWeight('まあ', '副詞')).toBe(LEMMA_WEIGHT.filler);
+    expect(lemmaWeight('あの', '連体詞')).toBe(LEMMA_WEIGHT.filler);
+    expect(lemmaWeight('東京', '名詞/固有名詞')).toBe(LEMMA_WEIGHT.properNoun);
+  });
+
+  it('leaves frequent real words alone, whatever their tag', () => {
+    expect(lemmaWeight('ちょっと', '副詞')).toBe(LEMMA_WEIGHT.normal);
+    expect(lemmaWeight('やる', '動詞/非自立可能')).toBe(LEMMA_WEIGHT.normal);
+    expect(lemmaWeight('学校', '名詞/普通名詞')).toBe(LEMMA_WEIGHT.normal);
+    expect(lemmaWeight('学校', undefined)).toBe(LEMMA_WEIGHT.normal);
+  });
+});
+
+describe('unlockValueByLemma weighting', () => {
+  it('scales each lemma share by its weight', () => {
+    const value = unlockValueByLemma([['a'], ['a', 'b']], 2, (key) => (key === 'a' ? 0.5 : 1));
+    expect(value.get('a')).toBeCloseTo(0.5 + 0.25);
+    expect(value.get('b')).toBeCloseTo(0.5);
   });
 });
 

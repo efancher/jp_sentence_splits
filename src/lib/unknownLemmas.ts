@@ -14,7 +14,8 @@ import type { VocabularySuggestion } from '../domain/types';
  * the picker have them) or card history (cards are paused under the
  * sentence-led flow).
  */
-export type LemmaSource = Pick<VocabularySuggestion, 'expression' | 'reading' | 'selectedByDefault'>;
+export type LemmaSource = Pick<VocabularySuggestion, 'expression' | 'reading' | 'selectedByDefault'> &
+  Partial<Pick<VocabularySuggestion, 'pos'>>;
 
 export function lemmaKey(expression: string, reading: string): string {
   return `${expression}|${reading}`;
@@ -54,6 +55,29 @@ export function unknownLemmasForSentence(
   return sentenceContentLemmas(suggestions).filter((key) => !known.has(key));
 }
 
+/**
+ * Pure discourse markers that UniDic tags as ordinary adverbs/demonstratives
+ * (or as fillers only some of the time), so POS alone misses them. Deliberately
+ * short and limited to words that carry no meaning of their own; real words
+ * that merely happen to be frequent (ちょっと, やる, わかる) are not listed.
+ */
+const DISCOURSE_MARKERS = new Set(['まあ', 'あの', 'えっと', 'えーと', 'ええ', 'ねえ', 'さあ', 'ほら']);
+
+/** How much a lemma is worth introducing a whole sentence for, 0..1 (see `unlockValueByLemma`). */
+export const LEMMA_WEIGHT = { filler: 0.2, properNoun: 0.5, normal: 1 } as const;
+
+/**
+ * Ranking weight for introducing a lemma: interjections/fillers (感動詞) and
+ * discourse markers rarely repay a lesson, and a name is learnt on sight.
+ * Applies to which new word to teach next only — such a word still counts as
+ * unknown when deciding whether a sentence is i+1.
+ */
+export function lemmaWeight(expression: string, pos: string | undefined): number {
+  if (pos?.startsWith('感動詞') || DISCOURSE_MARKERS.has(expression)) return LEMMA_WEIGHT.filler;
+  if (pos?.startsWith('名詞/固有名詞')) return LEMMA_WEIGHT.properNoun;
+  return LEMMA_WEIGHT.normal;
+}
+
 export type SentenceScore =
   | { scorable: true; unknown: string[]; total: number }
   | { scorable: false; reason: 'no-tokens' | 'no-content-words' };
@@ -80,16 +104,18 @@ export function scoreSentence(
  * How many not-yet-ready sentences each unknown lemma would bring within
  * reach: a sentence with `n` unknowns (1..maxUnknown) gives each of its
  * unknowns `1 / n`, so learning the lone unknown of an i+1 sentence outweighs
- * one of five. Used to rank which new word to introduce next.
+ * one of five. Used to rank which new word to introduce next. `weightOf`
+ * scales each lemma's share (see `lemmaWeight`); the default counts all equally.
  */
 export function unlockValueByLemma(
   unknownLemmasBySentence: Iterable<readonly string[]>,
   maxUnknown = 2,
+  weightOf: (key: string) => number = () => 1,
 ): Map<string, number> {
   const value = new Map<string, number>();
   for (const unknown of unknownLemmasBySentence) {
     if (unknown.length === 0 || unknown.length > maxUnknown) continue;
-    for (const key of unknown) value.set(key, (value.get(key) ?? 0) + 1 / unknown.length);
+    for (const key of unknown) value.set(key, (value.get(key) ?? 0) + weightOf(key) / unknown.length);
   }
   return value;
 }

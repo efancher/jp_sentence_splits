@@ -20,9 +20,12 @@ and possible extensions. This snapshot does not certify a live deployment.
   untokenized sentences go last, never "0 unknowns". Order only (a permutation:
   nothing gated or dropped); off in sequential study mode; Sentence Growth
   floating still applies on top. Ordering is per book, so which book is offered
-  is unchanged. Limits: known set ignores confirmed vocabulary items and
-  exposure counts; unlock-value ranking favours filler words; grammar is not
-  yet considered. Measure with `npm run diagnose:i-plus-one`.
+  is unchanged. The unlock-value ranking down-weights interjections/fillers
+  and discourse markers (x0.2) and proper nouns (x0.5) via `lemmaWeight`
+  (2026-11-07), for ranking only: those words still count as unknown. Limits:
+  known set ignores confirmed vocabulary items and exposure counts; a lemma
+  that is really part of a grammar pattern (しれる from かもしれない) still ranks
+  as a word; grammar is not yet considered. Measure with `npm run diagnose:i-plus-one`.
 - "Fresh try" revisits: automatic ones (parked checks, spaced schedule) are capped
   at `EXPLORE_REVISITS_PER_BOOK` per book per plan, counted after sentences in
   suspended episodes are dropped and only while that book has new lessons waiting

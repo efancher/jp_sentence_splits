@@ -1,4 +1,4 @@
-import { scoreSentence, unlockValueByLemma, type LemmaSource } from './unknownLemmas';
+import { lemmaKey, lemmaWeight, scoreSentence, unlockValueByLemma, type LemmaSource } from './unknownLemmas';
 
 /** A sentence with 1..this many unknown content lemmas is an "i+1" sentence. */
 export const I_PLUS_ONE_MAX_UNKNOWN = 2;
@@ -18,7 +18,8 @@ export interface IPlusOneItem {
  *
  * Tiers, in the order they are served:
  * 1. i+1: 1-2 unknown content lemmas, those whose unknown words unlock the
- *    most other sentences first (`unlockValueByLemma`), then fewer unknowns,
+ *    most other sentences first (`unlockValueByLemma`, with fillers, discourse
+ *    markers and names down-weighted by `lemmaWeight`), then fewer unknowns,
  *    then reading order.
  * 2. all-known: no unknown lemma (little to learn, but never wasted).
  * 3. stretch: 3+ unknowns, fewest unknowns first. Every
@@ -41,9 +42,18 @@ export function orderByIPlusOne(
     const score = scoreSentence(item.suggestions, known);
     return { id: item.sentenceId, position, scorable: score.scorable, unknown: score.scorable ? score.unknown : [] };
   });
+  const weights = new Map<string, number>();
+  for (const item of items) {
+    for (const suggestion of item.suggestions ?? []) {
+      if (!suggestion.selectedByDefault) continue;
+      const key = lemmaKey(suggestion.expression, suggestion.reading);
+      if (!weights.has(key)) weights.set(key, lemmaWeight(suggestion.expression, suggestion.pos));
+    }
+  }
   const value = unlockValueByLemma(
     scored.filter((entry) => entry.scorable).map((entry) => entry.unknown),
     maxUnknown,
+    (key) => weights.get(key) ?? 1,
   );
   const unlock = (entry: (typeof scored)[number]) =>
     entry.unknown.reduce((sum, key) => sum + (value.get(key) ?? 0), 0);

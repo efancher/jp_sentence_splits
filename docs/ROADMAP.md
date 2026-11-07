@@ -791,9 +791,11 @@ known set, unknown-per-sentence, unlock value) with fixture tests, and the
 `diagnose:i-plus-one` script; (2) [done 2026-11-07] unknown-count ordering as
 an opt-in per-book ranking behind `settings.iPlusOneOrdering`
 (`src/lib/iPlusOne.ts`, hooked into `findExploreCandidates`), including the
-1-in-5 stretch cadence and unlock-value ranking; (3) remaining: tune the
-ranking (frequency/word-type weighting, since fillers like ちょっと top the unlock
-list), make the stretch cadence a setting, count confirmed vocabulary items and
+1-in-5 stretch cadence and unlock-value ranking; (3) [filler weighting done
+2026-11-07: `lemmaWeight` x0.2 for 感動詞 and pure discourse markers, x0.5 for
+proper nouns, ranking only; frequent real words like ちょっと/やる/わかる are
+deliberately untouched] remaining: down-weight lemmas that are really grammar
+(しれる from かもしれない), make the stretch cadence a setting, count confirmed vocabulary items and
 exposure counts as known, show "new here: X" on the lesson step, and rank across
 books (ordering is per book today); (4) grammar as items (curated OpenJLPT
 patterns, see above).
