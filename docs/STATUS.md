@@ -11,6 +11,18 @@ and possible extensions. This snapshot does not certify a live deployment.
 - Sentence-led learning is on by default. A completed walkthrough introduces one
   `reading_in_context` card; word/grammar cards stay paused. Introduction gates
   use sentence learning events, started book membership or a sentence card.
+- i+1 sentence order (opt-in, `settings.iPlusOneOrdering`, local to the device,
+  2026-11-07): within each book, new lessons are ordered by known-word coverage
+  instead of reading order (`orderByIPlusOne`, `findExploreCandidates`). Known =
+  content lemmas (default-checked `vocabularySuggestions`) of introduced
+  sentences; 1-2 unknown lemmas first (words that unlock the most other
+  sentences leading), then all-known, with every 5th slot a harder sentence;
+  untokenized sentences go last, never "0 unknowns". Order only (a permutation:
+  nothing gated or dropped); off in sequential study mode; Sentence Growth
+  floating still applies on top. Ordering is per book, so which book is offered
+  is unchanged. Limits: known set ignores confirmed vocabulary items and
+  exposure counts; unlock-value ranking favours filler words; grammar is not
+  yet considered. Measure with `npm run diagnose:i-plus-one`.
 - "Fresh try" revisits: automatic ones (parked checks, spaced schedule) are capped
   at `EXPLORE_REVISITS_PER_BOOK` per book per plan, counted after sentences in
   suspended episodes are dropped and only while that book has new lessons waiting

@@ -374,6 +374,23 @@ export function SettingsPage() {
         <label className="row">
           <input
             type="checkbox"
+            checked={settings.iPlusOneOrdering ?? false}
+            onChange={(event) => {
+              void updateSettings({ iPlusOneOrdering: event.target.checked });
+            }}
+          />
+          Offer new sentences you almost already know first
+        </label>
+        <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+          Within each book, new sentences are ordered by how many of their
+          content words you have already met &mdash; sentences with just one
+          or two new words come first, and every fifth one is a harder
+          sentence so you keep stretching. Nothing is hidden or skipped, and
+          it has no effect in &ldquo;Focus on episodes already started&rdquo;.
+        </p>
+        <label className="row">
+          <input
+            type="checkbox"
             checked={settings.autoMeaningChoices ?? false}
             onChange={(event) => {
               void updateSettings({ autoMeaningChoices: event.target.checked });

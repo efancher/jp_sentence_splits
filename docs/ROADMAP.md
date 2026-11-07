@@ -788,9 +788,15 @@ advisory, never blocking an import.
 
 Steps: (1) [done 2026-11-07] `src/lib/unknownLemmas.ts` (content lemmas,
 known set, unknown-per-sentence, unlock value) with fixture tests, and the
-`diagnose:i-plus-one` script; (2) unknown-count ordering as an
-opt-in candidate ranking behind a setting; (3) stretch cadence and unlock-value
-ranking; (4) grammar as items.
+`diagnose:i-plus-one` script; (2) [done 2026-11-07] unknown-count ordering as
+an opt-in per-book ranking behind `settings.iPlusOneOrdering`
+(`src/lib/iPlusOne.ts`, hooked into `findExploreCandidates`), including the
+1-in-5 stretch cadence and unlock-value ranking; (3) remaining: tune the
+ranking (frequency/word-type weighting, since fillers like ちょっと top the unlock
+list), make the stretch cadence a setting, count confirmed vocabulary items and
+exposure counts as known, show "new here: X" on the lesson step, and rank across
+books (ordering is per book today); (4) grammar as items (curated OpenJLPT
+patterns, see above).
 
 ## Possibilities (reader as the single study surface)
 

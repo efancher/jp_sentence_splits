@@ -850,6 +850,14 @@ export interface AppSettings {
    */
   sequentialStudyMode?: boolean;
   /**
+   * i+1 sentence order (opt-in, local to this device): a book's new sentences
+   * are offered by how much of them is already known — 1-2 unknown content
+   * words first, with a harder sentence every few — instead of reading order.
+   * Order only; nothing is gated or dropped. Ignored in sequential study mode
+   * and outside the sentence-first planner. See `src/lib/iPlusOne.ts`.
+   */
+  iPlusOneOrdering?: boolean;
+  /**
    * Background-generate the meaning choices (correct meaning + wrong-meaning
    * bank) for sentences that have none, via the `meaning-assist` Edge
    * Function (needs sign-in + deploy). Treated as on when undefined.

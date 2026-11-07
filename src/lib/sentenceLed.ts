@@ -2,7 +2,7 @@ import type { AppSettings } from '../domain/types';
 
 type FlowSettings = Pick<
   AppSettings,
-  'sentenceLedFlow' | 'legacyDrillsPaused' | 'sentenceFirstPlanning' | 'sequentialStudyMode'
+  'sentenceLedFlow' | 'legacyDrillsPaused' | 'sentenceFirstPlanning' | 'sequentialStudyMode' | 'iPlusOneOrdering'
 >;
 
 /** Sentence-led flow is the default; only an explicit `false` turns it off. */
@@ -58,4 +58,9 @@ export function effectiveSentenceFirstPlanning(settings: Partial<FlowSettings> |
 
 export function isSequentialStudyMode(settings: Partial<FlowSettings> | undefined): boolean {
   return settings?.sequentialStudyMode ?? false;
+}
+
+/** Opt-in: offer a book's new sentences by known-word coverage (i+1) instead of reading order. */
+export function isIPlusOneOrdering(settings: Partial<FlowSettings> | undefined): boolean {
+  return settings?.iPlusOneOrdering ?? false;
 }

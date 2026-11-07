@@ -27,11 +27,14 @@ import {
   type SequentialBookStatus,
   type SequentialSentenceStatus,
 } from '../lib/sequentialStudy';
+import { orderByIPlusOne } from '../lib/iPlusOne';
 import {
   effectiveLegacyDrillsPaused,
   effectiveSentenceFirstPlanning,
+  isIPlusOneOrdering,
   isSequentialStudyMode,
 } from '../lib/sentenceLed';
+import { buildKnownLemmaSet } from '../lib/unknownLemmas';
 import { sessionStepCategory } from '../lib/sessionStepCategory';
 import { sentencesDueForFreshTry } from '../lib/sentenceJourney';
 import { emptyStageCounts, sentenceStage, type StageCounts } from '../lib/sentenceStages';
@@ -11050,13 +11053,38 @@ export async function findListeningToolCandidates(
   }));
 }
 
+/** Content lemmas of every introduced sentence (`getIntroducedSentenceIds`) — the "known" side of i+1 ordering. */
+async function loadKnownLemmaSet(): Promise<Set<string>> {
+  const memberships = await readAllBookSentencesForPass();
+  const introduced = await getIntroducedSentenceIds([...new Set(memberships.map((row) => row.sentenceId))]);
+  const rows = await getDb().sentences.bulkGet([...introduced]);
+  return buildKnownLemmaSet(rows.map((row) => row?.vocabularySuggestions));
+}
+
+/** A book's new-sentence memberships (reading order in) reordered by i+1 — a permutation, never a filter. */
+async function reorderForIPlusOne(memberships: BookSentence[], known: ReadonlySet<string>): Promise<BookSentence[]> {
+  const rows = await getDb().sentences.bulkGet(memberships.map((item) => item.sentenceId));
+  const order = orderByIPlusOne(
+    memberships.map((item, index) => ({ sentenceId: item.sentenceId, suggestions: rows[index]?.vocabularySuggestions })),
+    known,
+  );
+  const byId = new Map(memberships.map((item) => [item.sentenceId, item]));
+  return order.map((id) => byId.get(id)!);
+}
+
 /** Explore candidates: books with sentences not yet started, most-recently-opened first ("continue where you left off" reusing Book.lastOpenedAt, the same signal BookDetailPage's touchBookOpened already maintains). */
 async function findExploreCandidates(
   limit: number,
   sentenceFirst = false,
   sequential = false,
+  iPlusOne = false,
 ): Promise<ExploreCandidate[]> {
   const db = getDb();
+  // i+1 order: the lemmas met in introduced sentences, computed once for every book (see orderByIPlusOne).
+  const knownLemmas =
+    iPlusOne && sentenceFirst && !sequential
+      ? await traceStep('explore: i+1 known lemmas', () => loadKnownLemmaSet())
+      : undefined;
   const [allBooks, coverageByBookId, suspendedIndex] = await Promise.all([
     db.books.toArray(),
     traceStep('explore: getBookVocabularyCoverage', () => getBookVocabularyCoverage()),
@@ -11140,8 +11168,11 @@ async function findExploreCandidates(
     // the window already previewed, lessons that qualify for it come first.
     // Order only: nothing is added, gated or skipped, and sequential mode keeps
     // its strict episode order.
+    const newInOrder = knownLemmas
+      ? await traceStep('explore: orderByIPlusOne', () => reorderForIPlusOne(inReadingOrder, knownLemmas), rowCount)
+      : inReadingOrder;
     const unstarted =
-      sentenceFirst && !sequential ? await traceStep('explore: floatGrowthEligibleFirst', () => floatGrowthEligibleFirst(inReadingOrder)) : inReadingOrder;
+      sentenceFirst && !sequential ? await traceStep('explore: floatGrowthEligibleFirst', () => floatGrowthEligibleFirst(newInOrder)) : newInOrder;
     // Shelved (suspended-episode) sentences are dropped *before* the cap, or the
     // oldest due ones — often in shelved episodes — would eat the cap and then vanish.
     const shelvedIds = new Set(memberships.filter((item) => !notShelved(item)).map((item) => item.sentenceId));
@@ -12477,6 +12508,7 @@ async function gatherSessionPlannerInput(
         EXPLORE_CANDIDATE_LIMIT + exclude.bookIds.size,
         effectiveSentenceFirstPlanning(settings),
         isSequentialStudyMode(settings),
+        isIPlusOneOrdering(settings),
       ),
     ),
     legacyPaused
