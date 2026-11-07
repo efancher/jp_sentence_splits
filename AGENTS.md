@@ -29,7 +29,11 @@ in this file are relative to the repository root.
 ## Validation
 
 Use npm and `package-lock.json`; Node 22 matches CI. For a fresh checkout, install
-with `npm ci`. Select checks for the affected behavior:
+with `npm ci`. Claude worktrees symlink `node_modules` from the shared checkout
+(`.claude/settings.json`), so skip `npm ci` there unless `package-lock.json`
+changed. `npm run check:quick` (typecheck, lint, tests affected by changes vs
+`origin/main`) is the fast routine check; use the full `npm run check` before
+pushing broad changes. Select checks for the affected behavior:
 
 | Change | Checks from the repository root |
 | --- | --- |

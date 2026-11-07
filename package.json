@@ -21,6 +21,7 @@
     "report:r2-usage": "tsx scripts/report-r2-usage.ts",
     "backup:r2-audio": "tsx scripts/backup-r2-reference-audio.ts",
     "check": "npm run typecheck && npm run test",
+    "check:quick": "npm run typecheck && npm run lint && vitest run --changed origin/main --passWithNoTests",
     "ci": "npm run check && npm run build:pages",
     "jmdict:lookup": "tsx scripts/lookup-jmdict.ts",
     "generate:common-words-asset": "tsx scripts/generate-common-words-asset.ts",
