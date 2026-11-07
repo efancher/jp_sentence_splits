@@ -15,6 +15,8 @@ export interface PageTiming {
   initial: boolean;
   /** Gave up waiting; the page was still showing a placeholder. */
   timedOut: boolean;
+  /** Round trip of one trivial IndexedDB read issued as navigation began; high = the queue was already backed up. */
+  idbProbeMs?: number;
   at: string;
 }
 
@@ -79,14 +81,18 @@ export function trackPageLoad(options: {
   initial: boolean;
   startedAt: number;
   syncState: () => { running: boolean; stage: string };
+  /** Resolves with the round trip (ms) of a trivial IndexedDB read. */
+  probeIdb?: () => Promise<number>;
 }): () => void {
-  const { path, root, initial, startedAt, syncState } = options;
+  const { path, root, initial, startedAt, syncState, probeIdb } = options;
   if (!root) return () => undefined;
   let last = performance.now();
   let maxStall = 0;
   let clearStreak = 0;
   // Sync state as the page started loading is what matters, not after it settled.
   const startSync = syncState();
+  let idbProbeMs: number | undefined;
+  probeIdb?.().then((ms) => { idbProbeMs = ms; }, () => undefined);
   const finish = (timedOut: boolean) => {
     window.clearInterval(timer);
     record({
@@ -97,6 +103,7 @@ export function trackPageLoad(options: {
       syncStage: startSync.stage,
       initial,
       timedOut,
+      idbProbeMs,
       at: new Date().toISOString(),
     });
   };
@@ -127,17 +134,29 @@ export interface StepRun {
   name: string;
   totalMs: number;
   steps: Record<string, number>;
+  /** Sizes of what the run read (rows, ids), so a slow step can be set against how much it handled. */
+  counts: Record<string, number>;
   at: string;
 }
 
 const STEP_RUN_MIN_MS = 300;
 const MAX_STEP_RUNS = 15;
 const finishedRuns: StepRun[] = [];
-const inFlight = new Set<{ name: string; startedAt: number; steps: Record<string, number>; last: number }>();
+const inFlight = new Set<{ name: string; startedAt: number; steps: Record<string, number>; counts: Record<string, number>; last: number }>();
 
-export function stepTimer(name: string): { mark: (label: string) => void; done: () => void } {
+export interface StepTimer {
+  /** Time since the previous mark; for steps that run one after another. */
+  mark: (label: string) => void;
+  /** Time one promise takes by itself; for steps that run concurrently, where `mark` would blur them together. */
+  track: <T>(label: string, work: Promise<T>) => Promise<T>;
+  /** Record how much a step handled (rows, ids). */
+  count: (label: string, value: number) => void;
+  done: () => void;
+}
+
+export function stepTimer(name: string): StepTimer {
   const startedAt = performance.now();
-  const run = { name, startedAt, steps: {} as Record<string, number>, last: startedAt };
+  const run = { name, startedAt, steps: {} as Record<string, number>, counts: {} as Record<string, number>, last: startedAt };
   inFlight.add(run);
   return {
     mark(label) {
@@ -145,11 +164,22 @@ export function stepTimer(name: string): { mark: (label: string) => void; done: 
       run.steps[label] = (run.steps[label] ?? 0) + Math.round(now - run.last);
       run.last = now;
     },
+    track(label, work) {
+      const began = performance.now();
+      const record = () => { run.steps[label] = (run.steps[label] ?? 0) + Math.round(performance.now() - began); };
+      return work.then(
+        (value) => { record(); return value; },
+        (error) => { record(); throw error; },
+      );
+    },
+    count(label, value) {
+      run.counts[label] = value;
+    },
     done() {
       inFlight.delete(run);
       const totalMs = Math.round(performance.now() - startedAt);
       if (totalMs < STEP_RUN_MIN_MS) return;
-      finishedRuns.push({ name, totalMs, steps: run.steps, at: new Date().toISOString() });
+      finishedRuns.push({ name, totalMs, steps: run.steps, counts: run.counts, at: new Date().toISOString() });
       if (finishedRuns.length > MAX_STEP_RUNS) finishedRuns.shift();
     },
   };
@@ -161,6 +191,6 @@ export function summarizeStepRuns(): { finished: StepRun[]; inFlight: unknown[] 
     finished: [...finishedRuns],
     inFlight: [...inFlight]
       .filter((run) => now - run.startedAt >= STEP_RUN_MIN_MS)
-      .map((run) => ({ name: run.name, runningMs: Math.round(now - run.startedAt), stepsSoFar: run.steps })),
+      .map((run) => ({ name: run.name, runningMs: Math.round(now - run.startedAt), stepsSoFar: run.steps, counts: run.counts })),
   };
 }

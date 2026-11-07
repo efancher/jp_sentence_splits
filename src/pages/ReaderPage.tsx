@@ -197,23 +197,7 @@ export function ReaderPage() {
         const sentence = sentences[index];
         if (sentence) rows.push({ membership, sentence });
       });
-      // A chapter view needs only its own sentences' extras, not every row in the book.
-      const book = await withChapterExtras(
-        rawBook,
-        chapterId ? await readExtrasForSentences(rows.map((row) => row.sentence.id)) : undefined,
-      );
-      timer.mark('extras');
-      const chapter = chapterId
-        ? book.chapters.find((item) => item.id === chapterId) ?? null
-        : null;
-      const analyses = await db.analyses.bulkGet(rows.map((row) => row.sentence.id));
-      timer.mark('analyses');
-      const chunksBySentence = new Map(
-        analyses.flatMap((analysis) => (analysis ? [[analysis.sentenceId, analysis.chunks] as const] : [])),
-      );
-      const particleChecksBySentence = new Map(
-        analyses.flatMap((analysis) => (analysis?.particleChecks ? [[analysis.sentenceId, analysis.particleChecks] as const] : [])),
-      );
+      const sentenceIds = rows.map((row) => row.sentence.id);
       const contentExpressions = [
         ...new Set(
           rows.flatMap((row) =>
@@ -223,15 +207,45 @@ export function ReaderPage() {
           ),
         ),
       ];
-      const { savedMeanings, knownExpressions } = await getSavedWordStatus(contentExpressions, { skipStrength: true });
-      timer.mark('savedWordStatus');
-      // The words a learner can tap in each sentence: its content words, in sentence order. A word that has no
-      // vocabulary item yet (an unconfirmed AI draft) gets one on the first answer, so '' marks "not created yet".
-      const links = await db.sentenceVocabulary.where('sentenceId').anyOf(rows.map((row) => row.sentence.id)).toArray();
-      const expressions = [...new Set(rows.flatMap((row) => row.sentence.vocabularySuggestions.filter((item) => item.selectedByDefault).map((item) => item.expression)))];
-      const existingItems = expressions.length ? await db.vocabularyItems.where('expression').anyOf(expressions).toArray() : [];
-      const linkedItems = await db.vocabularyItems.bulkGet([...new Set(links.map((link) => link.vocabularyItemId))]);
-      timer.mark('vocabulary');
+      timer.count('sentences', rows.length);
+      timer.count('expressions', contentExpressions.length);
+      // These reads don't depend on one another. Run back to back, each waits its turn behind sync writes in
+      // IndexedDB (a slow iPhone load spent 15s in one of them); issued together they share that wait.
+      const [book, analyses, { savedMeanings, knownExpressions }, { links, existingItems, linkedItems }, grammarRows] = await Promise.all([
+        // A chapter view needs only its own sentences' extras, not every row in the book.
+        timer.track('extras', (async () =>
+          withChapterExtras(rawBook, chapterId ? await readExtrasForSentences(sentenceIds) : undefined))()),
+        timer.track('analyses', db.analyses.bulkGet(sentenceIds)),
+        timer.track('savedWordStatus', getSavedWordStatus(contentExpressions, { skipStrength: true })),
+        // The words a learner can tap in each sentence: its content words, in sentence order. A word that has no
+        // vocabulary item yet (an unconfirmed AI draft) gets one on the first answer, so '' marks "not created yet".
+        timer.track('vocabulary', (async () => {
+          const links = await db.sentenceVocabulary.where('sentenceId').anyOf(sentenceIds).toArray();
+          const [existingItems, linkedItems] = await Promise.all([
+            contentExpressions.length ? db.vocabularyItems.where('expression').anyOf(contentExpressions).toArray() : [],
+            db.vocabularyItems.bulkGet([...new Set(links.map((link) => link.vocabularyItemId))]),
+          ]);
+          timer.count('vocabularyLinks', links.length);
+          return { links, existingItems, linkedItems };
+        })()),
+        // Grammar patterns linked to each sentence, positioned in its text, so they can be tapped like words.
+        timer.track('grammar', (async () => {
+          const grammarLinks = await withoutUnseenAiLinks(await db.sentenceGrammar.where('sentenceId').anyOf(sentenceIds).toArray());
+          const patternRows = await db.grammarPatterns.bulkGet([...new Set(grammarLinks.map((link) => link.grammarPatternId))]);
+          timer.count('grammarLinks', grammarLinks.length);
+          return { grammarLinks, patternRows };
+        })()),
+      ]);
+      const { grammarLinks, patternRows } = grammarRows;
+      const chapter = chapterId
+        ? book.chapters.find((item) => item.id === chapterId) ?? null
+        : null;
+      const chunksBySentence = new Map(
+        analyses.flatMap((analysis) => (analysis ? [[analysis.sentenceId, analysis.chunks] as const] : [])),
+      );
+      const particleChecksBySentence = new Map(
+        analyses.flatMap((analysis) => (analysis?.particleChecks ? [[analysis.sentenceId, analysis.particleChecks] as const] : [])),
+      );
       const itemById = new Map(linkedItems.flatMap((item) => (item ? [[item.id, item] as const] : [])));
       const wordsBySentence = new Map<string, ReaderWord[]>();
       for (const row of rows) {
@@ -254,10 +268,6 @@ export function ReaderPage() {
         }
         wordsBySentence.set(row.sentence.id, words);
       }
-      // Grammar patterns linked to each sentence, positioned in its text, so they can be tapped like words.
-      const grammarLinks = await withoutUnseenAiLinks(await db.sentenceGrammar.where('sentenceId').anyOf(rows.map((row) => row.sentence.id)).toArray());
-      const patternRows = await db.grammarPatterns.bulkGet([...new Set(grammarLinks.map((link) => link.grammarPatternId))]);
-      timer.mark('grammar');
       const patternById = new Map(patternRows.flatMap((pattern) => (pattern ? [[pattern.id, pattern] as const] : [])));
       const patternsBySentence = new Map<string, ReaderPattern[]>();
       for (const row of rows) {

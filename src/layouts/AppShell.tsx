@@ -13,6 +13,7 @@ import { autoGenerateMeaningChecks } from '../lib/meaningCheckAutogen';
 import { summarizePageTimings, summarizeStepRuns, trackPageLoad } from '../lib/pageTiming';
 import { loadWordFrequency } from '../lib/wordFrequency';
 import { registerReportContext } from '../lib/reportContext';
+import { getStorageSnapshot, probeIdb, refreshStorageSnapshot } from '../lib/storageDiagnostics';
 import { getRecentSyncLogs } from '../sync/logger';
 import { getSyncProgress } from '../sync/progress';
 
@@ -88,6 +89,7 @@ export function AppShell() {
       root: mainRef.current,
       initial,
       startedAt: initial ? 0 : performance.now(),
+      probeIdb,
       syncState: () => {
         const progress = getSyncProgress();
         return { running: progress.running, stage: progress.stage };
@@ -95,17 +97,29 @@ export function AppShell() {
     });
   }, [location.pathname]);
 
+  // Table sizes for slow-page reports: counted once the app has settled, and again whenever a report is built.
+  useEffect(() => {
+    const timer = window.setTimeout(() => void refreshStorageSnapshot(), 5_000);
+    return () => window.clearTimeout(timer);
+  }, []);
+
   useEffect(
     () =>
-      registerReportContext('pageTimings', () => ({
-        recent: summarizePageTimings(),
-        stepRuns: summarizeStepRuns(),
-        syncLastCycle: getSyncProgress().lastCycle,
-        syncLogs: getRecentSyncLogs()
-          .filter((event) => event.code === 'PULL_TIMING' || event.code === 'AUDIO_HYDRATE')
-          .slice(-15)
-          .map((event) => `${event.at} ${event.message}`),
-      })),
+      registerReportContext('pageTimings', () => {
+        // Async, so this report carries the previous count and the next one a fresh one.
+        void refreshStorageSnapshot();
+        return {
+          recent: summarizePageTimings(),
+          stepRuns: summarizeStepRuns(),
+          storage: getStorageSnapshot(),
+          visibility: document.visibilityState,
+          syncLastCycle: getSyncProgress().lastCycle,
+          syncLogs: getRecentSyncLogs()
+            .filter((event) => event.code === 'PULL_TIMING' || event.code === 'AUDIO_HYDRATE')
+            .slice(-15)
+            .map((event) => `${event.at} ${event.message}`),
+        };
+      }),
     [],
   );
 
