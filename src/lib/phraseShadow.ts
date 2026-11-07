@@ -54,7 +54,7 @@ export function phraseTextFromAlignment(
   return words
     .filter((word) => {
       const length = word.end - word.start;
-      if (length <= 0) return false;
+      if (length <= 0 || !word.text || word.text.startsWith('<')) return false;
       const overlap = Math.min(word.end, end) - Math.max(word.start, start);
       if (overlap > length / 2) return true;
       // A particle token stretched over trailing silence counts once its audible part (capped) is inside.

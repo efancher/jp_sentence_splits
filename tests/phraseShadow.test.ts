@@ -46,6 +46,15 @@ describe('phrase shadow helpers', () => {
     expect(phraseTextFromAlignment(words, { startMs: 800, endMs: 1650 })).toBe('います');
   });
 
+  it('leaves aligner silence tokens out of the text', () => {
+    const withSilence = [
+      { text: 'サイト', start: 0, end: 0.6 },
+      { text: 'に', start: 0.6, end: 0.7 },
+      { text: '<eps>', start: 0.7, end: 1.5 },
+    ];
+    expect(phraseTextFromAlignment(withSilence, { startMs: 0, endMs: 1500 })).toBe('サイトに');
+  });
+
   it('finds the vocabulary whose surface sits inside the phrase', () => {
     const links = [
       { vocabularyItemId: 'v-cat', surfaceForm: '猫' },
