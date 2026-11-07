@@ -4,15 +4,18 @@
  * suggestions that start checked in the vocab picker) they have not met in an introduced sentence, then prints
  * the distribution, per-book 1-2-unknown pool and the highest unlock-value words. Nothing is written.
  *
- * Usage: npm run diagnose:i-plus-one [-- --top 15]
+ * Usage: npm run diagnose:i-plus-one [-- --top 15] [--book <bookId>]
+ *   --book  scope the candidate list to one book (the post-import "ready to pick up" summary); the known set
+ *           still comes from every introduced sentence.
+ * Untokenized sentences (CSV/Anki imports write [] until backfill:vocabulary-suggestions runs) are reported as
+ * not scorable, never counted as zero unknowns.
  * "Introduced" matches getIntroducedSentenceIds: walkthrough_completed, started in a book, or has a sentence card.
  */
 import type { VocabularySuggestion } from '../src/domain/types';
 import {
   buildKnownLemmaSet,
-  sentenceContentLemmas,
+  scoreSentence,
   unknownCountHistogram,
-  unknownLemmasForSentence,
   unlockValueByLemma,
 } from '../src/lib/unknownLemmas';
 import { fetchAll, requireAuthedUser } from './lib/scriptHelpers';
@@ -50,15 +53,25 @@ async function main(): Promise<void> {
     sentences.map((s) => [s.id as string, (s.vocabulary_suggestions ?? []) as VocabularySuggestion[]]),
   );
   const bookOf = new Map(bookSentences.map((b) => [b.sentence_id as string, b.book_id as string]));
-  const candidates = [...bookOf.keys()].filter((id) => !introduced.has(id));
+  const bookFilter = flag('book');
+  const candidates = [...bookOf.keys()].filter(
+    (id) => !introduced.has(id) && (!bookFilter || bookOf.get(id) === bookFilter),
+  );
   const known = buildKnownLemmaSet([...introduced].map((id) => suggestionsBySentence.get(id)));
 
-  const scored = candidates
-    .filter((id) => sentenceContentLemmas(suggestionsBySentence.get(id)).length > 0)
-    .map((id) => ({ id, unknown: unknownLemmasForSentence(suggestionsBySentence.get(id), known) }));
+  const scored: Array<{ id: string; unknown: string[] }> = [];
+  const unscorable = { 'no-tokens': 0, 'no-content-words': 0 };
+  for (const id of candidates) {
+    const score = scoreSentence(suggestionsBySentence.get(id), known);
+    if (score.scorable) scored.push({ id, unknown: score.unknown });
+    else unscorable[score.reason] += 1;
+  }
 
-  console.log(`sentences in books ${bookOf.size}; introduced ${introduced.size}; candidates ${candidates.length}`);
-  console.log(`candidates with content lemmas ${scored.length}; known lemmas ${known.size}`);
+  console.log(`sentences in books ${bookOf.size}; introduced ${introduced.size}; candidates ${candidates.length}${bookFilter ? ` (book ${bookFilter})` : ''}`);
+  console.log(`scorable ${scored.length}; not scorable: no tokens ${unscorable['no-tokens']}, no content words ${unscorable['no-content-words']}; known lemmas ${known.size}`);
+  if (unscorable['no-tokens'] > 0) {
+    console.log('WARNING: untokenized sentences are excluded from i+1 ranking — run `npm run backfill:vocabulary-suggestions -- --apply`.');
+  }
   console.log('\nunknown content lemmas per candidate:');
   console.log(formatHistogram(unknownCountHistogram(scored.map((s) => s.unknown.length), 10)));
 

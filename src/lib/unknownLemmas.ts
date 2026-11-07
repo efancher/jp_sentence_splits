@@ -54,6 +54,28 @@ export function unknownLemmasForSentence(
   return sentenceContentLemmas(suggestions).filter((key) => !known.has(key));
 }
 
+export type SentenceScore =
+  | { scorable: true; unknown: string[]; total: number }
+  | { scorable: false; reason: 'no-tokens' | 'no-content-words' };
+
+/**
+ * Scores one sentence for i+1 ranking. An empty suggestion list means the
+ * sentence was never tokenized (CSV/Anki imports write `[]` until
+ * `backfill:vocabulary-suggestions` runs), which is "not scorable", never
+ * "zero unknowns" — otherwise untokenized imports would look perfectly easy
+ * and jump the queue. A tokenized sentence with no default-checked content
+ * word (interjections, names only) is also unscorable, for a different reason.
+ */
+export function scoreSentence(
+  suggestions: readonly LemmaSource[] | undefined,
+  known: ReadonlySet<string>,
+): SentenceScore {
+  if (!suggestions || suggestions.length === 0) return { scorable: false, reason: 'no-tokens' };
+  const lemmas = sentenceContentLemmas(suggestions);
+  if (lemmas.length === 0) return { scorable: false, reason: 'no-content-words' };
+  return { scorable: true, unknown: lemmas.filter((key) => !known.has(key)), total: lemmas.length };
+}
+
 /**
  * How many not-yet-ready sentences each unknown lemma would bring within
  * reach: a sentence with `n` unknowns (1..maxUnknown) gives each of its

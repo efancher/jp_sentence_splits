@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildKnownLemmaSet,
   lemmaKey,
+  scoreSentence,
   sentenceContentLemmas,
   unknownCountHistogram,
   unknownLemmasForSentence,
@@ -49,6 +50,27 @@ describe('known set and unknown lemmas', () => {
 
   it('treats an all-known sentence as having no unknowns', () => {
     expect(unknownLemmasForSentence([tok('雨', 'あめ')], buildKnownLemmaSet(introduced))).toEqual([]);
+  });
+});
+
+describe('scoreSentence', () => {
+  const known = buildKnownLemmaSet([[tok('雨', 'あめ')]]);
+
+  it('scores a tokenized sentence by its unknown content lemmas', () => {
+    expect(scoreSentence([tok('雨', 'あめ'), tok('止む', 'やむ')], known)).toEqual({
+      scorable: true,
+      unknown: [lemmaKey('止む', 'やむ')],
+      total: 2,
+    });
+  });
+
+  it('treats an untokenized sentence as not scorable rather than zero unknowns', () => {
+    expect(scoreSentence([], known)).toEqual({ scorable: false, reason: 'no-tokens' });
+    expect(scoreSentence(undefined, known)).toEqual({ scorable: false, reason: 'no-tokens' });
+  });
+
+  it('treats a sentence with only function words as not scorable', () => {
+    expect(scoreSentence([tok('は', 'は', false)], known)).toEqual({ scorable: false, reason: 'no-content-words' });
   });
 });
 
