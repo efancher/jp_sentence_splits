@@ -100,18 +100,24 @@ async function main() {
     console.log(`  ${apply ? 'cut ' : 'would cut'} ${label}  ${startMs}-${endMs}ms of ${info.title}`);
     if (!apply) continue;
 
-    const res = await postJson('/source-audio/clip', { url: info.url, cuts: [{ startMs, endMs }] });
-    const clip = res.clips?.[0];
-    if (!clip?.audioBase64 || !(clip.durationMs >= (endMs - startMs) * MIN_CLIP_RATIO)) {
+    let clip: Row | undefined;
+    try {
+      clip = (await postJson('/source-audio/clip', { url: info.url, cuts: [{ startMs, endMs }] })).clips?.[0];
+    } catch (error) {
+      // An uncached source the box can't re-download (e.g. a bot-blocked YouTube video) fails alone.
+      console.log(`    FAILED: ${error instanceof Error ? error.message.slice(0, 160) : String(error)}`);
+      continue;
+    }
+    if (!clip?.audioBase64 || !(Number(clip.durationMs) >= (endMs - startMs) * MIN_CLIP_RATIO)) {
       console.log(`    FAILED: clip missing or too short (${clip?.durationMs}ms for ${endMs - startMs}ms)`);
       continue;
     }
-    const bytes = Buffer.from(clip.audioBase64, 'base64');
+    const bytes = Buffer.from(String(clip.audioBase64), 'base64');
     const bookId = bookOf.get(String(s.id))!;
     const audioId = `audio_fill_${hashString(`${sourceId}:${s.id}`)}`;
     const storagePath = `${user.id}/${bookId}/${audioId}.m4a`;
     const { error: upErr } = await uploadReferenceClip(supabase, storagePath, bytes, {
-      contentType: clip.mimeType ?? 'audio/mp4',
+      contentType: String(clip.mimeType ?? 'audio/mp4'),
       upsert: true,
     });
     if (upErr) throw new Error(`upload ${storagePath}: ${upErr.message}`);
