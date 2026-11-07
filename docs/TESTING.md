@@ -78,6 +78,19 @@ retains these artifacts for seven days.
   reporting and lint to the existing typecheck/build workflow. Relevant pull
   requests now trigger the real-Postgres workflow too.
 
+## Known flaky tests
+
+Tests that have failed in a full-suite or CI run but pass standalone. Check here
+before treating a red run as a regression: rerun the failed job first, and add
+a row when a new one shows up (test, symptom, first seen, status). Fix the test
+rather than leaving it listed; remove the row once it has stayed green.
+
+| Test | Symptom | First seen | Status |
+| --- | --- | --- | --- |
+| `tests/vocabularyListPage.test.tsx` "lets the user edit a vocabulary item meaning inline" | `findByText('Saved')` times out under full-suite CPU load; 8/8 pass standalone | 2026-11-07 (Deploy run 42390107268) | Open; already given a 5s window, so a second occurrence means the wait needs rethinking |
+| `tests/shadowPage.test.tsx` delete-attempt test | Intermittent under the full suite | Early phases ([archive](STATUS_ARCHIVE.md)) | Unverified since; confirm it still flakes before keeping the row |
+| `tests/ui.test.tsx` timing-based `waitFor` | Intermittent under the full suite | Early phases ([archive](STATUS_ARCHIVE.md)) | Unverified since; confirm it still flakes before keeping the row |
+
 ## Remaining priorities
 
 The initial performance harness is documented in [PERFORMANCE.md](PERFORMANCE.md):
