@@ -9861,12 +9861,13 @@ export async function logPhraseShadow(input: {
 }): Promise<SentenceLearningEvent | null> {
   if (!isPhraseRange(input.range, input.clipDurationMs)) return null;
   const db = getDb();
-  const [alignment, links, settings] = await Promise.all([
+  const [alignment, links, settings, sentence] = await Promise.all([
     db.referenceAlignments.get(input.sentenceAudioId),
     db.sentenceVocabulary.where('sentenceId').equals(input.sentenceId).toArray(),
     ensureSettings(db),
+    db.sentences.get(input.sentenceId),
   ]);
-  const text = alignment ? phraseTextFromAlignment(alignment.result.words, input.range) : '';
+  const text = alignment ? phraseTextFromAlignment(alignment.result.words, input.range, sentence?.japanese) : '';
   return logSentenceLearningEvent({
     visitId: input.visitId ?? createId('phrase_visit'),
     action: 'phrase_shadow',
@@ -9906,7 +9907,7 @@ export async function suggestPhraseShadow(input: {
     if (input.surfaceForm) return null;
     const range = weakestChunkRange(alignment.words, sentence.japanese, weakestFirst, input.clipDurationMs);
     if (!range) return null;
-    const text = phraseTextFromAlignment(alignment.words, range);
+    const text = phraseTextFromAlignment(alignment.words, range, sentence.japanese);
     return text ? { ...range, text, wordLabel: '' } : null;
   };
   const candidates = links.filter((link) => link.surfaceForm && (!input.surfaceForm || link.surfaceForm === input.surfaceForm));
@@ -9921,7 +9922,7 @@ export async function suggestPhraseShadow(input: {
     if (!isPhraseRange(range, input.clipDurationMs)) continue;
     return {
       ...range,
-      text: phraseTextFromAlignment(alignment.words, range),
+      text: phraseTextFromAlignment(alignment.words, range, sentence.japanese),
       wordLabel: vocabById.get(link.vocabularyItemId)?.expression ?? link.surfaceForm!,
     };
   }

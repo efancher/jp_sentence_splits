@@ -65,6 +65,24 @@ describe('phrase shadow helpers', () => {
     expect(phraseTextFromAlignment(withUnknown, { startMs: 320, endMs: 4420 })).toBe('今回…の');
   });
 
+  it('fills a word the aligner could not place from the sentence text', () => {
+    const japanese = '今回、30回目のエピソードは、日本の春の行事について話します。';
+    const aligned = [
+      { text: '<eps>', start: 0, end: 0.32 },
+      { text: '今回', start: 0.32, end: 1.3 },
+      { text: '<eps>', start: 1.3, end: 1.89 },
+      { text: '<unk>', start: 1.89, end: 2.89 },
+      { text: '<eps>', start: 2.89, end: 3.25 },
+      { text: 'の', start: 3.25, end: 4.42 },
+      { text: 'エピソード', start: 4.83, end: 6.31 },
+    ];
+    expect(phraseTextFromAlignment(aligned, { startMs: 320, endMs: 4420 }, japanese)).toBe('今回、30回目の');
+    // Without the sentence there is nothing to fill from, so the gap is marked.
+    expect(phraseTextFromAlignment(aligned, { startMs: 320, endMs: 4420 })).toBe('今回…の');
+    // A neighbour that is not in the sentence leaves the gap marked rather than guessing.
+    expect(phraseTextFromAlignment(aligned, { startMs: 320, endMs: 4420 }, '全然ちがう文です')).toBe('今回…の');
+  });
+
   it('finds the vocabulary whose surface sits inside the phrase', () => {
     const links = [
       { vocabularyItemId: 'v-cat', surfaceForm: '猫' },

@@ -45,17 +45,48 @@ export function isPhraseRange(range: { startMs: number; endMs: number } | null |
 const UNKNOWN_TOKEN = '<unk>';
 
 /**
+ * What an `<unk>` token stood for, read off the sentence: the aligned words either side are found in
+ * order in `japanese`, and the text between them is the unknown word (a numeral such as 30回目, or a
+ * rare word). Keyed by word index; only unknown words whose neighbours both locate are filled, so a
+ * mismatch leaves the gap unfilled rather than guessing. A run of unknowns gives its text to the first.
+ */
+function unknownWordTexts(words: readonly Pick<WordAlignment, 'text'>[], japanese: string): Map<number, string> {
+  const out = new Map<number, string>();
+  const known = (text: string) => !!text && !text.startsWith('<');
+  let cursor = 0;
+  for (let i = 0; i < words.length; i += 1) {
+    const { text } = words[i];
+    if (known(text)) {
+      const at = japanese.indexOf(text, cursor);
+      if (at >= 0) cursor = at + text.length;
+    } else if (text === UNKNOWN_TOKEN && !out.has(i)) {
+      let next = i + 1;
+      while (next < words.length && !known(words[next].text)) next += 1;
+      const at = next < words.length ? japanese.indexOf(words[next].text, cursor) : japanese.length;
+      if (at < cursor) continue;
+      for (let j = i; j < next; j += 1) if (words[j].text === UNKNOWN_TOKEN) out.set(j, j === i ? japanese.slice(cursor, at) : '');
+      cursor = at;
+    }
+  }
+  return out;
+}
+
+/**
  * The text of the aligned words that fall mostly (over half their length) inside the marked
- * span, joined in order. Alignment times are seconds from the start of the clip.
+ * span, joined in order. Alignment times are seconds from the start of the clip. With the
+ * sentence text, a word the aligner could not place is filled in from it; otherwise it shows as "…".
  */
 export function phraseTextFromAlignment(
   words: readonly Pick<WordAlignment, 'start' | 'end' | 'text'>[],
   range: { startMs: number; endMs: number },
+  japanese?: string,
 ): string {
   const start = range.startMs / 1000;
   const end = range.endMs / 1000;
-  return words
-    .filter((word) => {
+  const unknowns = japanese ? unknownWordTexts(words, japanese) : new Map<number, string>();
+  const text = words
+    .map((word, index) => ({ word, index }))
+    .filter(({ word }) => {
       const length = word.end - word.start;
       if (length <= 0 || !word.text || (word.text.startsWith('<') && word.text !== UNKNOWN_TOKEN)) return false;
       const overlap = Math.min(word.end, end) - Math.max(word.start, start);
@@ -63,8 +94,10 @@ export function phraseTextFromAlignment(
       // A particle token stretched over trailing silence counts once its audible part (capped) is inside.
       return isParticleToken(word) && length * 1000 > PARTICLE_MAX_MS && overlap * 1000 >= PARTICLE_MAX_MS - 1;
     })
-    .map((word) => (word.text === UNKNOWN_TOKEN ? '…' : word.text))
+    .map(({ word, index }) => (word.text === UNKNOWN_TOKEN ? (unknowns.get(index) ?? '…') : word.text))
     .join('');
+  // Filled text can open or close on the sentence's own punctuation, which is not part of the phrase.
+  return text.replace(/^[\s、。，．,.!?！？]+|[\s、。，．,.!?！？]+$/g, '');
 }
 
 /**

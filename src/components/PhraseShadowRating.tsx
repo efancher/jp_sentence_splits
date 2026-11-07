@@ -48,9 +48,10 @@ export function PhraseShadowRating({
 
   // The words of the marked span, from the cached alignment, so the learner can see which phrase they are rating.
   const phraseText = useLiveQuery(async () => {
-    const alignment = await getDb().referenceAlignments.get(sentenceAudioId);
-    return alignment ? phraseTextFromAlignment(alignment.result.words, range) : '';
-  }, [sentenceAudioId, range.startMs, range.endMs]);
+    const db = getDb();
+    const [alignment, sentence] = await Promise.all([db.referenceAlignments.get(sentenceAudioId), db.sentences.get(sentenceId)]);
+    return alignment ? phraseTextFromAlignment(alignment.result.words, range, sentence?.japanese) : '';
+  }, [sentenceAudioId, sentenceId, range.startMs, range.endMs]);
 
   // What the words inside the span mean, so the learner knows what they are saying (null when nothing is glossed).
   const gloss = useLiveQuery(async () => {
