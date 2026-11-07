@@ -1,6 +1,6 @@
 /**
  * One-time correction for vocabulary_items.meaning rows imported before
- * scripts/lib/ankiImport.ts's vocabularyMeaning() decoded HTML entities —
+ * the (since-removed) Anki importer's vocabularyMeaning() decoded HTML entities —
  * Anki stores fields as HTML, so an apostrophe in WkMeaning/HintGlossary
  * was imported as the literal text `&#x27;` instead of `'`. Found live on
  * /vocabulary (でしょ's meaning rendering as "don&#x27;t you agree?...").
@@ -14,7 +14,7 @@
  * in `sentences`.
  *
  * Not a recurring backfill — this corrects historical data for a bug
- * that's now fixed at the source (ankiImport.ts). No GitHub Actions
+ * that's now fixed at the source (the Anki importer, since removed). No GitHub Actions
  * workflow; run once, locally.
  *
  * Dry-run by default; --apply required to write. Idempotent: only rows

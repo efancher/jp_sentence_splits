@@ -15,7 +15,7 @@
  * left untouched entirely; this script only fills the specific documented
  * gap, never reconciles or overwrites.
  *
- * Mirrors import-anki-sentences.ts's exact get-or-create shape for
+ * Mirrors the (since-removed) Anki sentence importer's exact get-or-create shape for
  * vocabulary_items (normalizeExpressionKey dedup) and a
  * fetch-existing-then-reuse-id-by-character shape for kanji, reusing
  * src/sync/mappers.ts's row mappers rather than hand-rolling the Postgres
@@ -27,7 +27,7 @@
  * (e.g. a mid-batch unique-constraint violation) is also safe to just
  * re-run, since already-written rows are picked up as "existing" next time.
  *
- * Known, accepted limitation (matches import-anki-sentences.ts's existing,
+ * Known, accepted limitation (matches the (since-removed) Anki sentence importer's existing,
  * pre-this-script pattern — not new here): the read snapshot
  * (confirmedAnalyses/existing* below) isn't a single atomic transaction, so
  * a live confirm through AnalyzePage for the same word landing between the
