@@ -35,9 +35,17 @@ and possible extensions. This snapshot does not certify a live deployment.
   unambiguously to the vendored OpenJLPT list (`src/data/openJlptGrammar.json`,
   CC BY-SA 4.0, id/pattern/level/formation only; regenerate with
   `npm run vendor:openjlpt-grammar`); a pattern is known once an introduced
-  sentence carries it. Only ~19% of sentences carry a curated link, so grammar
-  refines the ranking but vocabulary still leads. The "new here" line names new
-  patterns too. Measure with `npm run diagnose:i-plus-one`.
+  sentence carries it. Curated patterns are also found from the sentence text
+  itself (`buildGrammarDetector`: each entry's fixed text, split patterns in
+  order, conjugated る-verb endings, longest match wins, entries sharing text
+  skipped, fixed text under 3 characters ignored), so ~65% of candidates carry
+  grammar instead of ~19% via AI links; weak spots are short forms such as
+  かった also matching 分かった. Level-aware pacing (`grammarLevelCosts`): an
+  unmet pattern above the easiest JLPT level under 60% met costs extra, so N2
+  stays out of the one-new-piece pool while N4 is unmet. Vocabulary still leads
+  ranking. The "new here" line names new patterns too, and a sentence-led book
+  page has a "Ready to pick up" panel (`getBookReadyToPickUp`, computed when
+  opened) listing the book's next sentences within two new pieces. Measure with `npm run diagnose:i-plus-one`.
 - "Fresh try" revisits: automatic ones (parked checks, spaced schedule) are capped
   at `EXPLORE_REVISITS_PER_BOOK` per book per plan, counted after sentences in
   suspended episodes are dropped and only while that book has new lessons waiting

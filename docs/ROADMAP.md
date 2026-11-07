@@ -801,19 +801,25 @@ data; all 1,099 picked vocabulary items would add ~800 lemmas, but that is
 here: X"; ranking is across books (one global rank, per-book order kept, books
 merged by next rank). Left over: a longer grammar-bound list (add only lemmas
 with no life outside a pattern), an exposure-count threshold or struggle signal
-instead of "seen once", and a per-book "ready to pick up" screen; (4) [first
-slice done 2026-11-07] grammar as items: the OpenJLPT list is vendored as a
+instead of "seen once" (the per-book "ready to pick up" panel shipped, see
+step 4); (4) [done 2026-11-07, refinements open] grammar as items: the OpenJLPT list is vendored as a
 trimmed derived file (`src/data/openJlptGrammar.json`, id/pattern/level/formation,
 CC BY-SA 4.0 attribution inside; `npm run vendor:openjlpt-grammar` regenerates
 it), unambiguous learner-pattern matches give each sentence curated grammar
 entries, an entry is known once an introduced sentence carries it, and unmet
 entries count as unknown pieces in `orderByIPlusOne` (and are named in "new
 here"). On 2026-11-07 data: 27 curated patterns known; the 1-2-unknown pool
-2,273 -> 2,231 sentences. Left over: detect curated patterns from morphology
-(`formation` tokens) so the other ~80% of sentences carry grammar, merge
-duplicate learner patterns and clean junk, resolve ambiguous `（note）` matches
-(e.g. ながら（while）/（も） collapse to one key), level-aware pacing (do not
-offer N2 patterns before N4 ones are met), and any grammar study surface.
+2,273 -> 2,231 sentences. Same day, curated patterns are also detected from
+the sentence text (fixed text of each entry; ~65% of candidates carry grammar,
+50 patterns known, pool 2,273 -> ~1,890 with level-aware pacing: an unmet
+pattern above the easiest JLPT level under 60% met costs extra) and each
+sentence-led book page has a "Ready to pick up" panel. Left over: tighten the
+detector for short forms that over-match (かった inside 分かった; tokenize
+against the morphology instead of substrings), resolve ambiguous `（note）`
+matches (e.g. ながら（while）/（も）, currently skipped), merge duplicate learner
+patterns and the junk pattern "NEW" (harmless now: it has no curated match and
+no cards; clean-up needs the user's go-ahead because it writes prod, see
+`npm run merge:grammar-patterns`), and any grammar study surface.
 
 ## Possibilities (reader as the single study surface)
 

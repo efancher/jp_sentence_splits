@@ -6,6 +6,7 @@ import {
   addSentencesToBook,
   createBook,
   ensureStudyItem,
+  getBookReadyToPickUp,
   getDb,
   setBookSentenceStatus,
   updateSettings,
@@ -138,6 +139,25 @@ describe('walkthrough supply: i+1 ordering (settings.iPlusOneOrdering)', () => {
       await getDb().studyItems.update(card.id, { fsrsState: { ...card.fsrsState, state: 'review', reps: 3 } });
     }
     expect(await lessonOrder()).toEqual(['i1', 'hard', 'easy']);
+  });
+
+  it("lists a book's sentences within two new pieces, with what is new", async () => {
+    const book = await createBook({ title: 'Ready Book' });
+    const rows = [
+      sentenceOf('done', ['猫', '犬']),
+      sentenceOf('hard', ['雨', '傘', '風', '雲']),
+      sentenceOf('i1', ['猫', '空']),
+      sentenceOf('easy', ['猫', '犬']),
+    ];
+    await getDb().sentences.bulkPut(rows);
+    await addSentencesToBook(book.id, rows.map((row) => row.id));
+    await setBookSentenceStatus(book.id, 'done', 'complete');
+    const ready = await getBookReadyToPickUp(book.id);
+    expect(ready.total).toBe(2);
+    expect(ready.items.map((item) => [item.sentenceId, item.newPieces])).toEqual([
+      ['i1', ['空']],
+      ['easy', []],
+    ]);
   });
 
   it('counts unmet curated grammar patterns as unknowns, and names them as new here', async () => {

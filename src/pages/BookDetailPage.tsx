@@ -21,6 +21,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Snackbar } from '../components/Snackbar';
 import { VocabChips } from '../components/VocabChips';
 import { BookSharingPanel } from '../components/BookSharingPanel';
+import { ReadyToPickUpPanel } from '../components/ReadyToPickUpPanel';
 import { SequentialStudyPanel } from '../components/SequentialStudyPanel';
 import { BookComprehensionCheckBatch } from '../components/BookComprehensionCheckBatch';
 import { BookChunkingBatch } from '../components/BookChunkingBatch';
@@ -673,6 +674,7 @@ export function BookDetailPage() {
   return (
     <div className="stack">
       <SequentialStudyPanel bookId={data.book.id} />
+      {sentenceLed ? <ReadyToPickUpPanel bookId={data.book.id} /> : null}
       <section className="panel stack">
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <h2 style={{ margin: 0 }}>{data.book.title}</h2>

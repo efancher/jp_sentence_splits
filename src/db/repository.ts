@@ -11160,6 +11160,46 @@ async function loadIPlusOneContext(stretchEvery: number): Promise<IPlusOneContex
   return { rank: new Map(order.map((id, index) => [id, index])), newWords };
 }
 
+export interface ReadyToPickUp {
+  sentenceId: string;
+  japanese: string;
+  translation: string;
+  /** Words and curated grammar patterns in the sentence the learner has not met yet (at most two). */
+  newPieces: string[];
+}
+
+/**
+ * A book's sentences that are ready to pick up next under i+1: at most two unmet pieces (words plus curated
+ * grammar), in the global i+1 order, so the book page can show what the planner would offer from it.
+ */
+export async function getBookReadyToPickUp(
+  bookId: string,
+  limit = 8,
+): Promise<{ total: number; items: ReadyToPickUp[] }> {
+  const [context, memberships, suspended] = await Promise.all([
+    loadIPlusOneContext(0),
+    readAllBookSentencesForPass(),
+    loadSuspendedBookIndex(),
+  ]);
+  const ready = memberships
+    .filter((row) => row.bookId === bookId && !(suspended && membershipIsShelved(row, suspended)))
+    .filter((row) => context.rank.has(row.sentenceId) && (context.newWords.get(row.sentenceId)?.length ?? 0) <= 2)
+    .sort((a, b) => context.rank.get(a.sentenceId)! - context.rank.get(b.sentenceId)!);
+  const unique = [...new Set(ready.map((row) => row.sentenceId))];
+  const rows = await getDb().sentences.bulkGet(unique.slice(0, limit));
+  const items = rows.flatMap((row) =>
+    row
+      ? [{
+          sentenceId: row.id,
+          japanese: row.japanese,
+          translation: row.translation,
+          newPieces: context.newWords.get(row.id) ?? [],
+        }]
+      : [],
+  );
+  return { total: unique.length, items };
+}
+
 /** Explore candidates: books with sentences not yet started, most-recently-opened first ("continue where you left off" reusing Book.lastOpenedAt, the same signal BookDetailPage's touchBookOpened already maintains). */
 async function findExploreCandidates(
   limit: number,
