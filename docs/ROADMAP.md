@@ -742,10 +742,31 @@ Constraints and decisions:
   candidates become closer to ready if the unknown word is learned.
 - **Stretch cadence** is a setting (start ~1 in 5 sentences with more unknowns);
   keep the older book-order flow selectable.
-- **Grammar later.** `sentence_grammar` is 100% `ai_suggested` (54 of 2,530 links
-  confirmed) and only 27 unknown patterns appear in candidates, so grammar adds
-  almost no sequencing signal today. Revisit once pattern linking is reliable
-  (see the grammar-links extra); skip the no-auto-link families.
+- **Grammar: curated reference, vocabulary first.** `sentence_grammar` is 100%
+  `ai_suggested` (54 of 2,530 links confirmed), so raw links are low confidence.
+  Plan: treat a learner pattern as high confidence only when it resolves to an
+  entry in a curated list. Chosen reference: OpenJLPT's grammar dataset (526
+  patterns N5-N1 with level, formation tokens, examples, tags; CC BY-SA 4.0,
+  hand-written, single-author, levels are community consensus because the JLPT
+  publishes no official list). Fetch it at run time or keep it as a derived
+  dataset with attribution and share-alike; do not copy it into the repo
+  unlabelled. Matching is `src/lib/grammarReference.ts`; measure with
+  `npm run diagnose:grammar-reference`. 2026-11-07 result: 132 of 378 learner
+  patterns resolve (23 ambiguous, N5 38 / N4 49 / N3 34 / N2 10 / N1 1);
+  1,458 of 2,530 links resolve; 970 of 5,232 candidates carry a curated link;
+  counting by curated entry (several learner patterns collapse to one, e.g. two
+  passive patterns), unknown entries per linked candidate are 0 -> 572,
+  1 -> 339, 2 -> 53. Grammar therefore covers ~19% of candidates; it can refine
+  vocabulary-led ranking but cannot drive it. The 246 unmatched patterns are
+  mostly colloquial/sentence-specific or junk (one is literally named "NEW").
+  Open: merge duplicate learner patterns that map to one curated entry;
+  clean unmatched junk; detect curated patterns from morphology using the
+  `formation` tokens instead of relying on AI links; cross-check levels against
+  the Tanos grammar lists (CC BY, .doc/.pdf only; Bluskyo/JLPT_Vocabulary
+  converts only the Tanos vocab/kanji lists, not grammar, and tanos.co.uk was
+  unreachable from the dev sandbox, so convert manually if wanted). Other leads
+  not evaluated: the MIT Ruby `jlpt` gem (grammar-pattern extraction) and NINJAL
+  日本語文型バンク (reportedly N5/N4 only, license unconfirmed).
 - Proper nouns and odd UniDic splits can inflate unknown counts; audit the
   default-checked tokens before trusting a threshold.
 
