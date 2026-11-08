@@ -39,8 +39,8 @@ export const FOLLOW_UP_PURPOSE: Record<FollowUpTool, string> = {
 /** Share of offers drawn uniformly from the available tools instead of by the rule. */
 export const FOLLOW_UP_RANDOM_RATE = 0.4;
 
-/** Rule order when nothing says otherwise: a weak word first, then the listening pair, then sound. */
-const RULE_ORDER: readonly FollowUpTool[] = ['meaning', 'tiles', 'dictate', 'shadow'];
+/** Rule order when nothing says otherwise: a weak word first, then the listening pair (Dictation before the easier Ear tiles, 2026-11-08), then sound. */
+const RULE_ORDER: readonly FollowUpTool[] = ['meaning', 'dictate', 'tiles', 'shadow'];
 
 export interface FollowUpChoice {
   tool: FollowUpTool;

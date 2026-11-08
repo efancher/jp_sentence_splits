@@ -192,7 +192,7 @@ and possible extensions. This snapshot does not certify a live deployment.
   reading/listening/Ear Tiles/dictation cards from Review and from the planner's batches.
   "Needed help" on a Read check now offers one follow-up on that sentence (2026-11-04,
   `chooseFollowUp` in `src/lib/followUpOffer.ts`): Word check when the sentence has a content word
-  not yet known by strength, otherwise Ear tiles, Dictation or Shadowing, whichever can open. About
+  not yet known by strength, otherwise Dictation, Ear tiles (2026-11-08: Dictation first) or Shadowing, whichever can open. About
   40% of offers are drawn at random among the available tools as a baseline for comparing
   activities. An unrevealed Read check on a walked sentence also shows "I haven't walked this"
   (2026-11-08): it logs a synced `walkthrough_reset` event (migration `20261108000000`), and

@@ -8,9 +8,10 @@ describe('chooseFollowUp', () => {
     expect(chooseFollowUp({ available: [], draw: 0.9, pick: 0 })).toBeNull();
   });
 
-  it('follows the rule outside the random share: listening first, Word check only for a weak word', () => {
+  it('follows the rule outside the random share: Dictation before Ear tiles, Word check only for a weak word', () => {
     const draw = FOLLOW_UP_RANDOM_RATE + 0.01;
-    expect(chooseFollowUp({ available: ALL, draw, pick: 0 })).toEqual({ tool: 'tiles', source: 'rule' });
+    expect(chooseFollowUp({ available: ALL, draw, pick: 0 })).toEqual({ tool: 'dictate', source: 'rule' });
+    expect(chooseFollowUp({ available: ['tiles', 'shadow'], draw, pick: 0 })).toEqual({ tool: 'tiles', source: 'rule' });
     expect(chooseFollowUp({ available: ALL, weakWord: true, draw, pick: 0 })).toEqual({ tool: 'meaning', source: 'rule' });
     expect(chooseFollowUp({ available: ['dictate', 'shadow'], draw, pick: 0 })).toEqual({ tool: 'dictate', source: 'rule' });
   });

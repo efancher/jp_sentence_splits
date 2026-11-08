@@ -963,9 +963,10 @@ control).
   itself bundles these checks was not located in code. The learner's screenshot
   (2026-11-08) shows it is the Read check's follow-up offer ("Try Ear tiles on
   it?" after "needed help", `chooseFollowUp` in `followUpOffer.ts`), not the
-  Fresh try. Its rule order is still Word check (weak word), Ear tiles, Dictation,
-  Shadowing, so Dictation is only offered after those; it was left unchanged
-  because the random-baseline rows still need data.
+  Fresh try. Its rule order was Word check (weak word), Ear tiles, Dictation,
+  Shadowing; Dictation now comes before Ear tiles (2026-11-08, learner's call).
+  Offer rows before and after that date are not directly comparable in the
+  "After a follow-up offer" panel.
   *Open:* how many separate steps a day is tolerable (the plan's time budget
   bounds it today), and whether the typed dictation match should count toward
   `/progress` (see the writing-ladder note above).
