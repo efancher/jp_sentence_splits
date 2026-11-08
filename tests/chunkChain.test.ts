@@ -137,4 +137,24 @@ describe('planChunkChain', () => {
     expect(planChunkChain(SPOKEN, withUnk)).toEqual({ rungs: [], rejection: 'unreliable-alignment' });
     expect(planChunkChain(SPOKEN, [])).toEqual({ rungs: [], rejection: 'unreliable-alignment' });
   });
+
+  it('still plans when an unplaced token only trails the cuts it uses', () => {
+    // The aligner can only be verified as a prefix of the text, so trouble at the end costs only the
+    // cuts beyond it; the cuts at 友達 and 映画 are still placed.
+    const unkAtEnd = alignment([
+      ['私', 0, 0.4],
+      ['は', 0.4, 0.6],
+      ['昨日', 0.8, 1.6],
+      ['友達', 1.8, 2.4],
+      ['と', 2.4, 2.6],
+      ['駅', 2.8, 3.2],
+      ['で', 3.2, 3.4],
+      ['映画', 3.6, 4.2],
+      ['を', 4.2, 4.4],
+      ['<unk>', 4.6, 5.4],
+    ]);
+    const plan = planChunkChain(SPOKEN, unkAtEnd);
+    expect(plan.rejection).toBeNull();
+    expect(plan.rungs.map((rung) => rung.startMs)).toEqual([3600, 1800, 0]);
+  });
 });

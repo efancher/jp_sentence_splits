@@ -47,33 +47,30 @@ export interface ChainPlan {
 }
 
 /**
- * Start time of every chunk after the first, in clip milliseconds, or null when the aligner's tokens
- * can't be trusted to place them (an `<unk>` blob, a numeral expansion or a squashed token anywhere):
- * a rung cut in the wrong place would play the wrong audio, so the caller falls back to the whole sentence.
+ * Start time of every chunk after the first, in clip milliseconds; null for a chunk whose start the
+ * aligner can't be trusted to place (the token that starts it doesn't verify against the text, or a
+ * squashed token sits beside it). A rung cut in the wrong place would play the wrong audio, so such a
+ * cut is dropped and the other cuts still serve; trouble far from a cut doesn't matter.
  */
 function chunkStartTimes(
   japanese: string,
   chunkStarts: readonly number[],
   alignment: readonly WordAlignment[],
-): number[] | null {
+): (number | null)[] {
   const usable = alignment.filter((word) => word.text && word.text !== '<eps>');
-  if (usable.length === 0) return null;
-  if (hasSquashedNeighbour(usable, 0, usable.length - 1)) return null;
-
-  const tokenRawStarts: number[] = [];
-  for (let index = 0; index < usable.length; index += 1) {
+  const tokenRawStarts = usable.map((_, index) => {
     const range = verifiedTokenCharRange(usable, japanese, index);
-    if (!range) return null;
-    tokenRawStarts.push(alignerRangeToRawIndices(japanese, range.start, range.end).start);
-  }
+    return range ? alignerRangeToRawIndices(japanese, range.start, range.end).start : null;
+  });
 
-  const times: number[] = [];
-  for (const rawStart of chunkStarts) {
-    const token = tokenRawStarts.findIndex((start) => start >= rawStart);
+  return chunkStarts.map((rawStart) => {
+    const token = tokenRawStarts.findIndex((start) => start !== null && start >= rawStart);
     if (token < 0) return null;
-    times.push(usable[token]!.start * 1000);
-  }
-  return times;
+    // The token before the cut must also verify, or the cut could land inside an unplaced blob.
+    if (token > 0 && tokenRawStarts[token - 1] === null) return null;
+    if (hasSquashedNeighbour(usable, Math.max(0, token - 1), token)) return null;
+    return usable[token]!.start * 1000;
+  });
 }
 
 /**
@@ -98,7 +95,7 @@ export function planChunkChain(
     chunks.slice(1).map((chunk) => chunk.start),
     alignment,
   );
-  if (!cutTimes) return { rungs: [], rejection: 'unreliable-alignment' };
+  if (cutTimes.every((time) => time === null)) return { rungs: [], rejection: 'unreliable-alignment' };
 
   // Sized by duration: each rung adds at least `step` of new audio, and `step` grows with the sentence
   // so the chain never exceeds MAX_RUNGS.
@@ -106,7 +103,8 @@ export function planChunkChain(
   const rungs: ChainRung[] = [];
   let previousSpan = 0;
   for (let chunkIndex = chunks.length - 1; chunkIndex >= 1; chunkIndex -= 1) {
-    const startMs = cutTimes[chunkIndex - 1]!;
+    const startMs = cutTimes[chunkIndex - 1];
+    if (startMs === null || startMs === undefined) continue;
     const span = endMs - startMs;
     const required = rungs.length === 0 ? Math.max(MIN_FIRST_RUNG_MS, step) : step;
     // A cut too close to the sentence's own start would leave a whole-sentence rung barely longer than it.
@@ -130,6 +128,9 @@ export function planChunkChain(
     chunkIndex: 0,
     whole: true,
   });
-  if (rungs.length < MIN_RUNGS) return { rungs: [], rejection: 'too-short' };
+  if (rungs.length < MIN_RUNGS) {
+    const unplaced = cutTimes.some((time) => time === null);
+    return { rungs: [], rejection: unplaced ? 'unreliable-alignment' : 'too-short' };
+  }
   return { rungs, rejection: null };
 }
