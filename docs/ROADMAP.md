@@ -758,8 +758,9 @@ Constraints and decisions:
   (`selectedByDefault`, the picker's content-vs-function rule), keyed by
   lemma expression + reading.
 - **"Known" is conservative**: lemmas from introduced sentences plus words with a
-  reviewed reading/meaning card (done 2026-11-07). Open: a minimum-exposure
-  count instead of "seen once", and a struggle signal from self-ratings. Never derive FSRS ratings from this.
+  reviewed reading/meaning card (done 2026-11-07). Grammar patterns now need two
+  introduced sentences and no shaky reader evidence (done 2026-11-08). Open: the
+  same bar for words. Never derive FSRS ratings from this.
 - **Rank by unlock value** among 1-2-unknown sentences: how many other
   candidates become closer to ready if the unknown word is learned.
 - **Stretch cadence** is a setting (start ~1 in 5 sentences with more unknowns);
@@ -814,7 +815,7 @@ known set, unknown-per-sentence, unlock value) with fixture tests, and the
 an opt-in per-book ranking behind `settings.iPlusOneOrdering`
 (`src/lib/iPlusOne.ts`, hooked into `findExploreCandidates`), including the
 1-in-5 stretch cadence and unlock-value ranking; (3) [done 2026-11-07] tuning: `lemmaWeight` x0.2 for 感動詞 and pure
-discourse markers, x0.3 for grammar-bound verbs (only しれる so far), x0.5 for
+discourse markers, x0.3 for grammar-bound verbs (しれる, いける, ござる, なさる, and について's つく), x0.5 for
 proper nouns (ranking only; frequent real words like ちょっと/やる/わかる are
 deliberately untouched); stretch cadence is a setting
 (`settings.iPlusOneStretchEvery`); words with a reviewed reading/meaning card
@@ -822,14 +823,12 @@ count as known (+72 lemmas, ~+130 sentences in the 1-2 pool on 2026-11-07
 data; all 1,099 picked vocabulary items would add ~800 lemmas, but that is
 "picked", not "learned", so it is not used); the lesson reason line says "new
 here: X"; ranking is across books (one global rank, per-book order kept, books
-merged by next rank). Left over: a longer grammar-bound list (add only lemmas
-with no life outside a pattern), an exposure-count threshold or struggle signal
-instead of "seen once" (the per-book "ready to pick up" panel shipped, see
+merged by next rank). Left over: more grammar-bound lemmas as the audit finds them (the per-book "ready to pick up" panel shipped, see
 step 4); (4) [done 2026-11-07, refinements open] grammar as items: the OpenJLPT list is vendored as a
 trimmed derived file (`src/data/openJlptGrammar.json`, id/pattern/level/formation,
 CC BY-SA 4.0 attribution inside; `npm run vendor:openjlpt-grammar` regenerates
 it), unambiguous learner-pattern matches give each sentence curated grammar
-entries, an entry is known once an introduced sentence carries it, and unmet
+entries, an entry is met once two introduced sentences carry it and it is not shaky (2026-11-08; was one), and unmet
 entries count as unknown pieces in `orderByIPlusOne` (and are named in "new
 here"). On 2026-11-07 data: 27 curated patterns known; the 1-2-unknown pool
 2,273 -> 2,231 sentences. Same day, curated patterns are also detected from

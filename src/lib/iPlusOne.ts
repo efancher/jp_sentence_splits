@@ -155,3 +155,21 @@ export function grammarLevelCosts(
   }
   return costs;
 }
+
+/** Introduced sentences a curated grammar entry must appear in before it counts as met (one sighting is not enough). */
+export const GRAMMAR_MIN_EXPOSURES = 2;
+
+/**
+ * Curated grammar entries the learner counts as met: seen in at least `GRAMMAR_MIN_EXPOSURES` introduced sentences
+ * and not currently shaky (the learner tapped it and its weakest facet is below the reader's known bar). A
+ * sequencing signal only; it never grades or schedules anything.
+ */
+export function knownGrammarEntries(
+  exposures: ReadonlyMap<string, number>,
+  shaky: ReadonlySet<string> = new Set(),
+  minExposures: number = GRAMMAR_MIN_EXPOSURES,
+): Set<string> {
+  const known = new Set<string>();
+  for (const [id, count] of exposures) if (count >= minExposures && !shaky.has(id)) known.add(id);
+  return known;
+}

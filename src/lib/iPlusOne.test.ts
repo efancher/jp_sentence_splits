@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { episodeMomentumBoost, grammarLevelCosts, orderByIPlusOne, type IPlusOneItem } from './iPlusOne';
+import { episodeMomentumBoost, grammarLevelCosts, knownGrammarEntries, orderByIPlusOne, type IPlusOneItem } from './iPlusOne';
 import { buildKnownLemmaSet, lemmaKey, type LemmaSource } from './unknownLemmas';
 
 const tok = (word: string, selectedByDefault = true, pos?: string): LemmaSource => ({
@@ -175,5 +175,21 @@ describe('orderByIPlusOne with grammar', () => {
     ];
     expect(orderByIPlusOne(items, known)).toEqual(['a', 'b']);
     expect(orderByIPlusOne(items, known, { knownGrammar: new Set() })).toEqual(['b', 'a']);
+  });
+});
+
+describe('knownGrammarEntries', () => {
+  const exposures = new Map([['a', 1], ['b', 2], ['c', 5]]);
+
+  it('needs more than one introduced sentence', () => {
+    expect([...knownGrammarEntries(exposures)].sort()).toEqual(['b', 'c']);
+  });
+
+  it('drops a pattern the learner tapped and found shaky, however often seen', () => {
+    expect([...knownGrammarEntries(exposures, new Set(['c']))]).toEqual(['b']);
+  });
+
+  it('honours a custom exposure bar', () => {
+    expect([...knownGrammarEntries(exposures, new Set(), 1)].sort()).toEqual(['a', 'b', 'c']);
   });
 });

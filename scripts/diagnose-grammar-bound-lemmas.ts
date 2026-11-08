@@ -39,7 +39,7 @@ async function main(): Promise<void> {
     for (const suggestion of suggestions) {
       if (!suggestion.selectedByDefault || suggestion.pos.startsWith('名詞')) continue;
       const key = `${suggestion.expression}|${suggestion.pos}`;
-      const stat = stats.get(key) ?? { expression: suggestion.expression, pos: suggestion.pos, count: 0, entries: new Map(), contexts: [] };
+      const stat: Stat = stats.get(key) ?? { expression: suggestion.expression, pos: suggestion.pos, count: 0, entries: new Map(), contexts: [] };
       stat.count += 1;
       for (const id of ids) stat.entries.set(id, (stat.entries.get(id) ?? 0) + 1);
       if (stat.contexts.length < samples) {

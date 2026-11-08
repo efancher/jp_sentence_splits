@@ -39,7 +39,7 @@ import {
   type SequentialSentenceStatus,
 } from '../lib/sequentialStudy';
 import { buildGrammarDetector, buildReferenceIndex, curatedGrammarByPattern, wordSpansForDetection } from '../lib/grammarReference';
-import { grammarLevelCosts, orderByIPlusOne, type IPlusOneItem } from '../lib/iPlusOne';
+import { grammarLevelCosts, knownGrammarEntries, orderByIPlusOne, type IPlusOneItem } from '../lib/iPlusOne';
 import {
   effectiveLegacyDrillsPaused,
   effectiveSentenceFirstPlanning,
@@ -11552,7 +11552,8 @@ async function loadKnownLemmaSet(introducedRows: (Sentence | undefined)[]): Prom
 
 /**
  * Curated grammar (vendored OpenJLPT list) per sentence, via the learner's own pattern links. Only unambiguous
- * matches count (see `curatedGrammarByPattern`); `known` is every curated entry carried by an introduced sentence.
+ * matches count (see `curatedGrammarByPattern`); `known` is every curated entry carried by at least
+ * `GRAMMAR_MIN_EXPOSURES` introduced sentences and not shaky (`knownGrammarEntries`).
  */
 async function loadCuratedGrammar(
   introduced: ReadonlySet<string>,
@@ -11573,14 +11574,23 @@ async function loadCuratedGrammar(
   const byPattern = curatedGrammarByPattern(patterns, index);
   const names = new Map(reference.patterns.map((entry) => [entry.id!, entry.pattern]));
   const entriesBySentence = new Map<string, string[]>();
-  const known = new Set<string>();
+  const sightings = new Map<string, Set<string>>();
+  const sight = (entryId: string, sentenceId: string) => {
+    const set = sightings.get(entryId) ?? new Set<string>();
+    set.add(sentenceId);
+    sightings.set(entryId, set);
+  };
+  const strengthByPattern = await loadGrammarPatternStrengths();
+  const shaky = new Set<string>();
   for (const link of links) {
     const entryId = byPattern.get(link.grammarPatternId);
     if (!entryId) continue;
+    const strength = strengthByPattern.get(link.grammarPatternId);
+    if (strength !== undefined && strength < READER_KNOWN_STRENGTH) shaky.add(entryId);
     const entries = entriesBySentence.get(link.sentenceId) ?? [];
     if (!entries.includes(entryId)) entries.push(entryId);
     entriesBySentence.set(link.sentenceId, entries);
-    if (introduced.has(link.sentenceId)) known.add(entryId);
+    if (introduced.has(link.sentenceId)) sight(entryId, link.sentenceId);
   }
   // Text detection covers the sentences the AI never linked (see buildGrammarDetector).
   const detect = buildGrammarDetector(reference.patterns);
@@ -11590,9 +11600,10 @@ async function loadCuratedGrammar(
       const entries = entriesBySentence.get(row.id) ?? [];
       if (!entries.includes(entryId)) entries.push(entryId);
       entriesBySentence.set(row.id, entries);
-      if (introduced.has(row.id)) known.add(entryId);
+      if (introduced.has(row.id)) sight(entryId, row.id);
     }
   }
+  const known = knownGrammarEntries(new Map([...sightings].map(([id, set]) => [id, set.size])), shaky);
   const levels = new Map<string, string | undefined>();
   for (const entries of entriesBySentence.values()) {
     for (const id of entries) levels.set(id, reference.patterns.find((entry) => entry.id === id)?.level);

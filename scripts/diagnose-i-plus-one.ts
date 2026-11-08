@@ -14,7 +14,7 @@
 import openJlptGrammar from '../src/data/openJlptGrammar.json';
 import type { VocabularySuggestion } from '../src/domain/types';
 import { buildGrammarDetector, buildReferenceIndex, curatedGrammarByPattern, wordSpansForDetection } from '../src/lib/grammarReference';
-import { grammarLevelCosts } from '../src/lib/iPlusOne';
+import { grammarLevelCosts, knownGrammarEntries } from '../src/lib/iPlusOne';
 import {
   buildKnownLemmaSet,
   lemmaKey,
@@ -105,13 +105,14 @@ async function main(): Promise<void> {
     buildReferenceIndex(openJlptGrammar.patterns),
   );
   const entriesBySentence = new Map<string, Set<string>>();
-  const knownGrammar = new Set<string>();
+  const sightings = new Map<string, Set<string>>();
+  const sight = (entryId: string, sentenceId: string) => sightings.set(entryId, (sightings.get(entryId) ?? new Set()).add(sentenceId));
   for (const link of links) {
     const entryId = byPattern.get(link.grammar_pattern_id);
     if (!entryId) continue;
     if (!entriesBySentence.has(link.sentence_id)) entriesBySentence.set(link.sentence_id, new Set());
     entriesBySentence.get(link.sentence_id)!.add(entryId);
-    if (introduced.has(link.sentence_id)) knownGrammar.add(entryId);
+    if (introduced.has(link.sentence_id)) sight(entryId, link.sentence_id);
   }
   const linked = new Set(entriesBySentence.keys());
   const detect = buildGrammarDetector(openJlptGrammar.patterns);
@@ -120,9 +121,11 @@ async function main(): Promise<void> {
     for (const entryId of detect(sentence.japanese ?? '', words)) {
       if (!entriesBySentence.has(sentence.id)) entriesBySentence.set(sentence.id, new Set());
       entriesBySentence.get(sentence.id)!.add(entryId);
-      if (introduced.has(sentence.id)) knownGrammar.add(entryId);
+      if (introduced.has(sentence.id)) sight(entryId, sentence.id);
     }
   }
+  // Same bar as the planner (knownGrammarEntries), minus the shaky-evidence cut (learning events aren't read here).
+  const knownGrammar = knownGrammarEntries(new Map([...sightings].map(([id, set]) => [id, set.size])));
   const levelOf = new Map(openJlptGrammar.patterns.map((entry) => [entry.id, entry.level as string | undefined]));
   const present = new Map<string, string | undefined>();
   for (const entries of entriesBySentence.values()) for (const id of entries) present.set(id, levelOf.get(id));
@@ -136,7 +139,7 @@ async function main(): Promise<void> {
     (s) => s.unknown.length + [...(entriesBySentence.get(s.id) ?? [])].reduce((sum, id) => sum + unmet(id), 0),
   );
   console.log(
-    `\nsentences with curated grammar: ${entriesBySentence.size} (${linked.size} via AI links); known curated patterns ${knownGrammar.size}; level-costed ${cost.size} of ${present.size} in use`,
+    `\nsentences with curated grammar: ${entriesBySentence.size} (${linked.size} via AI links); curated patterns seen once+ ${sightings.size}, met (>= 2 introduced sentences) ${knownGrammar.size}; level-costed ${cost.size} of ${present.size} in use`,
   );
   console.log('unknown lemmas + unmet curated grammar (level-weighted) per candidate:');
   console.log(formatHistogram(unknownCountHistogram(withGrammar, 10)));

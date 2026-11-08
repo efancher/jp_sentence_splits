@@ -185,6 +185,7 @@ describe('walkthrough supply: i+1 ordering (settings.iPlusOneOrdering)', () => {
     const book = await createBook({ title: 'Grammar Book' });
     const rows = [
       sentenceOf('done', ['猫', '犬']),
+      sentenceOf('done2', ['猫', '犬']),
       sentenceOf('x', ['猫', '空']),
       sentenceOf('y', ['猫', '雲']),
       sentenceOf('z', ['猫', '犬']),
@@ -192,7 +193,8 @@ describe('walkthrough supply: i+1 ordering (settings.iPlusOneOrdering)', () => {
     await getDb().sentences.bulkPut(rows);
     await addSentencesToBook(book.id, rows.map((row) => row.id));
     await setBookSentenceStatus(book.id, 'done', 'complete');
-    // Curated entries: てみる (met in 'done'), たことがある and ておく (new in 'x').
+    await setBookSentenceStatus(book.id, 'done2', 'complete');
+    // Curated entries: てみる (met: two introduced sentences carry it), たことがある and ておく (new in 'x').
     const pattern = (id: string, canonicalName: string) => ({
       id, canonicalName, normalizedKey: canonicalName, aliases: [], shortMeaning: '', provenance: 'manual' as const,
       createdAt: T, updatedAt: T,
@@ -208,6 +210,7 @@ describe('walkthrough supply: i+1 ordering (settings.iPlusOneOrdering)', () => {
     });
     await getDb().sentenceGrammar.bulkPut([
       link('done', 'p-temiru'),
+      link('done2', 'p-temiru'),
       link('x', 'p-temiru'),
       link('x', 'p-takoto'),
       link('x', 'p-teoku'),

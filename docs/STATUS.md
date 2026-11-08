@@ -30,16 +30,19 @@ and possible extensions. This snapshot does not certify a live deployment.
   a clearly more useful word still wins. Order only (a permutation: nothing
   gated or dropped); off in sequential study mode. The unlock-value ranking
   down-weights interjections/fillers and discourse markers (x0.2), grammar-bound
-  verbs (しれる, x0.3) and proper nouns (x0.5) via `lemmaWeight`, for ranking
-  only: those words still count as unknown. Limits: only しれる is on the
-  grammar-bound list; exposure counts and self-ratings are not used.
+  verbs (しれる, いける, ござる, なさる and について's つく, x0.3; `diagnose:grammar-bound-lemmas` audits candidates) and proper nouns (x0.5) via `lemmaWeight`, for ranking
+  only: those words still count as unknown. Limits: the grammar-bound list is
+  short on purpose; word exposure counts and self-ratings are not used.
   Grammar (2026-11-07): an unmet curated pattern counts as one more unknown
   piece, so "1-2 new pieces" covers words plus patterns. A sentence's curated
   patterns are its AI/manual `sentence_grammar` links that resolve
   unambiguously to the vendored OpenJLPT list (`src/data/openJlptGrammar.json`,
   CC BY-SA 4.0, id/pattern/level/formation only; regenerate with
-  `npm run vendor:openjlpt-grammar`); a pattern is known once an introduced
-  sentence carries it. Curated patterns are also found from the sentence text
+  `npm run vendor:openjlpt-grammar`); a pattern is met once at least two introduced
+  sentences carry it (`knownGrammarEntries`, `GRAMMAR_MIN_EXPOSURES`) and the
+  learner has not tapped it and found it shaky (weakest facet below
+  `READER_KNOWN_STRENGTH`); sequencing only, never a rating. On 2026-11-08 data
+  47 patterns were seen once, 25 met. Curated patterns are also found from the sentence text
   itself (`buildGrammarDetector`, with per-entry over-match guards in `src/lib/grammarDetectionGuards.ts`, audited by `npm run diagnose:grammar-detection`; shared-text senses resolve by context when each owner has a guard, listed by `npm run diagnose:grammar-ambiguous`; eleven measured short (under 3 characters) entries are allowlisted via `diagnose:grammar-short`: each entry's fixed text, split patterns in
   order, conjugated る-verb endings, longest match wins, entries sharing text
   skipped, fixed text under 3 characters ignored), so ~65% of candidates carry
