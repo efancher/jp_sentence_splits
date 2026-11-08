@@ -1037,6 +1037,18 @@ Targets are constants; no settings UI.
   screens and "Forms you have met" chips that filter by matched text. The full
   "Your encounters" list below still shows every encounter, highlighting the span
   where one is stored.
+- **Merge two sentences** (`mergeAdjacentSentences()` in
+  `src/db/repository.ts`, pure helpers in `src/lib/mergeSentences.ts`) — on
+  `BookDetailPage`, select exactly two neighbouring sentences and use "Merge the
+  two selected into one sentence": edit the joined Japanese (add a dropped
+  connective such as が) and translation, then confirm. The merged sentence takes
+  the first one's place and book status, keeps the better-reviewed card per
+  activity type and surviving vocabulary links, and retires both originals via
+  `cascadeRetireSentenceLocal` (analysis/grammar links dropped). Readings come
+  from `POST /resegment` annotate-only, falling back to stitched readings when
+  the mining service is down; if both sentences have clips the combined span is
+  re-cut from the source (`POST /source-audio/clip`) and the merge is refused if
+  that fails. Local-first counterpart of `scripts/merge-adjacent-sentences.ts`.
 - **Re-segment captions** (`ResegmentSourcePage.tsx`, route
   `/books/:bookId/resegment`, button on `BookDetailPage` for
   `sourceKey` starting `shadowing:`) — rebuilds a source's sentences on

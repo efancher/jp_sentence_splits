@@ -1,9 +1,15 @@
 /**
  * Pure planning helpers for `scripts/merge-adjacent-sentences.ts`: merge two
  * neighbouring sentences (one mined sentence that was split at a comma pause
- * and lost its clause-final connective) into one. No DB, no network.
+ * and lost its clause-final connective) into one. No DB, no network. The
+ * status/card/video-position helpers are shared with the in-app merge.
  */
-import type { StudyStatus } from '../../src/domain/types';
+export {
+  mergedStatus,
+  planStudyItemMoves,
+  withVideoPosition,
+  type MergeStudyItem,
+} from '../../src/lib/mergeSentences';
 
 const STRIP_RE = /[\s。、．，！？!?「」『』（）()･・…]/g;
 const compact = (text: string): string => text.replace(STRIP_RE, '');
@@ -40,58 +46,4 @@ export function validateMergedText(
     return { ok: false, reason: `unexpected text between the sentences: "${middle}"` };
   }
   return { ok: true, connective: middle };
-}
-
-const STATUS_RANK: Record<StudyStatus, number> = {
-  unstarted: 0,
-  in_progress: 1,
-  needs_review: 2,
-  complete: 3,
-};
-
-/** The merged sentence keeps the most advanced membership status of the two. */
-export function mergedStatus(a: StudyStatus, b: StudyStatus): StudyStatus {
-  return STATUS_RANK[a] >= STATUS_RANK[b] ? a : b;
-}
-
-export interface MergeStudyItem {
-  id: string;
-  subjectId: string;
-  activityType: string;
-  reviewCount: number;
-  fsrsReps: number;
-}
-
-/**
- * Same collision rule as `buildResegmentPlan`: per activity type the card with
- * more reviews keeps its FSRS history (then more reps, then id for
- * determinism); the other is retired. `study_items_uidx` is unique on
- * (owner, subject_type, subject_id, activity_type) among live rows, so two
- * survivors on the merged sentence would collide anyway.
- */
-export function planStudyItemMoves(items: MergeStudyItem[]): {
-  move: MergeStudyItem[];
-  retire: MergeStudyItem[];
-} {
-  const byActivity = new Map<string, MergeStudyItem[]>();
-  for (const item of items) {
-    const list = byActivity.get(item.activityType) ?? [];
-    list.push(item);
-    byActivity.set(item.activityType, list);
-  }
-  const move: MergeStudyItem[] = [];
-  const retire: MergeStudyItem[] = [];
-  for (const list of byActivity.values()) {
-    list.sort((x, y) => y.reviewCount - x.reviewCount || y.fsrsReps - x.fsrsReps || x.id.localeCompare(y.id));
-    move.push(list[0]!);
-    retire.push(...list.slice(1));
-  }
-  return { move, retire };
-}
-
-/** Rewrite (or append) the `Video position:` line in a shadowing userNotes. */
-export function withVideoPosition(notes: string | undefined, startMs: number, endMs: number): string {
-  const line = `Video position: ${(startMs / 1000).toFixed(3)}–${(endMs / 1000).toFixed(3)} seconds`;
-  if (!notes) return line;
-  return /Video position:[^\n]*/.test(notes) ? notes.replace(/Video position:[^\n]*/, line) : `${notes}\n${line}`;
 }

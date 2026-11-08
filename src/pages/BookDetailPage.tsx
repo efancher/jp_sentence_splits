@@ -41,6 +41,7 @@ import {
   deleteBook,
   deleteBookCascade,
   deleteSentencesCascade,
+  mergeAdjacentSentences,
   duplicateBookOrdering,
   exportBookBackup,
   exportBookMiningPackage,
@@ -67,6 +68,7 @@ import {
   filterToIntroducedSentenceIds,
 } from '../db/repository';
 import { isSentenceLedFlow } from '../lib/sentenceLed';
+import { suggestMergedJapanese, suggestMergedTranslation } from '../lib/mergeSentences';
 import {
   getAlignmentBackfillJob,
   startAlignmentBackfill,
@@ -480,6 +482,24 @@ export function BookDetailPage() {
     () => (data?.rows ?? []).map((row) => row.membership.sentenceId),
     [data],
   );
+
+  const [mergeDraft, setMergeDraft] = useState<{
+    firstId: string;
+    secondId: string;
+    japanese: string;
+    translation: string;
+  } | null>(null);
+  const [mergeError, setMergeError] = useState('');
+  const [mergingPair, setMergingPair] = useState(false);
+  // Exactly two selected sentences that sit next to each other in the book.
+  const mergeCandidate = useMemo(() => {
+    if (selected.size !== 2 || !data) return null;
+    const index = data.rows.findIndex((row) => selected.has(row.membership.sentenceId));
+    const first = data.rows[index]?.sentence;
+    const second = data.rows[index + 1]?.sentence;
+    if (!first || !second || !selected.has(second.id)) return null;
+    return { first, second };
+  }, [selected, data]);
 
   const settings = useLiveQuery(() => readSettings(), []);
   const sentenceStudyItems = useLiveQuery(
@@ -1125,6 +1145,112 @@ export function BookDetailPage() {
         {selected.size ? (
           <div className="panel stack">
             <strong>{selected.size} selected</strong>
+            {selected.size === 2 ? (
+              <div className="stack">
+                {mergeDraft ? (
+                  <>
+                    <label>
+                      Merged Japanese (add any dropped connective, e.g. が)
+                      <textarea
+                        lang="ja"
+                        rows={2}
+                        value={mergeDraft.japanese}
+                        onChange={(event) =>
+                          setMergeDraft({ ...mergeDraft, japanese: event.target.value })
+                        }
+                      />
+                    </label>
+                    <label>
+                      Merged translation
+                      <textarea
+                        rows={2}
+                        value={mergeDraft.translation}
+                        onChange={(event) =>
+                          setMergeDraft({ ...mergeDraft, translation: event.target.value })
+                        }
+                      />
+                    </label>
+                    <p className="muted">
+                      Study cards and vocabulary carry over; analysis and grammar links
+                      are dropped and the audio is re-cut to span both.
+                    </p>
+                    {mergeError ? <p className="error">{mergeError}</p> : null}
+                    <div className="row">
+                      <button
+                        type="button"
+                        disabled={mergingPair}
+                        onClick={async () => {
+                          setMergingPair(true);
+                          setMergeError('');
+                          try {
+                            const result = await mergeAdjacentSentences(
+                              bookId,
+                              mergeDraft.firstId,
+                              mergeDraft.secondId,
+                              {
+                                japanese: mergeDraft.japanese,
+                                translation: mergeDraft.translation,
+                              },
+                            );
+                            setMergeDraft(null);
+                            setSelected(new Set());
+                            setSnack({
+                              message: result.annotated
+                                ? 'Merged into one sentence.'
+                                : 'Merged. Readings were stitched together because the mining service was unreachable.',
+                            });
+                          } catch (error) {
+                            setMergeError(error instanceof Error ? error.message : String(error));
+                          } finally {
+                            setMergingPair(false);
+                          }
+                        }}
+                      >
+                        {mergingPair ? 'Merging…' : 'Confirm merge'}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={mergingPair}
+                        onClick={() => {
+                          setMergeDraft(null);
+                          setMergeError('');
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      disabled={!mergeCandidate}
+                      onClick={() => {
+                        if (!mergeCandidate) return;
+                        setMergeError('');
+                        setMergeDraft({
+                          firstId: mergeCandidate.first.id,
+                          secondId: mergeCandidate.second.id,
+                          japanese: suggestMergedJapanese(
+                            mergeCandidate.first.japanese,
+                            mergeCandidate.second.japanese,
+                          ),
+                          translation: suggestMergedTranslation(
+                            mergeCandidate.first.translation,
+                            mergeCandidate.second.translation,
+                          ),
+                        });
+                      }}
+                    >
+                      Merge the two selected into one sentence
+                    </button>
+                    {!mergeCandidate ? (
+                      <p className="muted">Only neighbouring sentences can be merged.</p>
+                    ) : null}
+                  </>
+                )}
+              </div>
+            ) : null}
             <label>
               Chapter
               <select

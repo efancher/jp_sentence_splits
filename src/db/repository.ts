@@ -55,6 +55,7 @@ import type { ReviewDocument } from '../lib/reviewDocument';
 import type { BackupPayload } from '../domain/schemas';
 import type {
   AlignmentResult,
+  SourceReference,
   ConstructionLayer,
   ContextWalkthrough,
   EffectiveGameSignal,
@@ -285,7 +286,19 @@ import {
   type ResegmentPlan,
   type ResegmentPlannedSentence,
 } from '../lib/resegmentPlan';
-import { recomputeSuggestionDefaults, suggestionsFromTokens } from '../lib/vocabularySuggestions';
+import {
+  mergedStatus,
+  planStudyItemMoves,
+  suggestMergedJapanese,
+  suggestMergedTranslation,
+  validateMergedJapanese,
+  withVideoPosition as withMergedVideoPosition,
+} from '../lib/mergeSentences';
+import {
+  recomputeSuggestionDefaults,
+  suggestionsFromTokens,
+  type MorphologyToken,
+} from '../lib/vocabularySuggestions';
 import {
   classifyReviewError,
   computeGraduatedSubjectIds,
@@ -1193,6 +1206,38 @@ type SourceClipFn = (
   cuts: { startMs: number; endMs: number }[],
 ) => Promise<{ blob: Blob; durationMs: number; mimeType?: string }[]>;
 
+/**
+ * Upload freshly cut reference clips to Supabase Storage + queue their
+ * metadata. Optional and never blocks (or fails) the local write that made them.
+ */
+async function uploadNewReferenceAudio(bookId: string, records: SentenceAudio[]): Promise<void> {
+  try {
+    const { ensureSyncMeta } = await import('../sync/queue');
+    const { getSupabase } = await import('../sync/supabaseClient');
+    const { uploadReferenceAudio } = await import('../sync/audioSync');
+    const { syncLog } = await import('../sync/logger');
+    const meta = await ensureSyncMeta();
+    if (!meta.syncReferenceAudio) return;
+    const supabase = getSupabase();
+    const userId = (await supabase?.auth.getSession())?.data.session?.user?.id;
+    if (!userId) return;
+    for (const record of records) {
+      // One clip's upload failing (network blip, transient storage
+      // error) must not abort every clip after it in the batch — that
+      // silently strands the rest with no local sign anything went
+      // wrong (2026-09-27 incident: ~half a podcast episode's clips
+      // never reached Storage this way, no error surfaced anywhere).
+      try {
+        await uploadReferenceAudio({ audio: record, bookId, ownerId: userId });
+      } catch (err) {
+        syncLog('warn', err instanceof Error ? err.message : String(err), 'AUDIO_UPLOAD_SKIP');
+      }
+    }
+  } catch {
+    // Local apply must succeed even if the optional upload fails.
+  }
+}
+
 export async function applyResegmentation(
   bookId: string,
   plan: ResegmentPlan,
@@ -1587,37 +1632,284 @@ export async function applyResegmentation(
 
   // Upload the re-cut clips to Supabase Storage + queue their metadata, the
   // same optional/never-block way the shadowing import does.
-  if (newAudioRecords.length) {
-    void (async () => {
-      try {
-        const { ensureSyncMeta } = await import('../sync/queue');
-        const { getSupabase } = await import('../sync/supabaseClient');
-        const { uploadReferenceAudio } = await import('../sync/audioSync');
-        const { syncLog } = await import('../sync/logger');
-        const meta = await ensureSyncMeta();
-        if (!meta.syncReferenceAudio) return;
-        const supabase = getSupabase();
-        const userId = (await supabase?.auth.getSession())?.data.session?.user?.id;
-        if (!userId) return;
-        for (const record of newAudioRecords) {
-          // One clip's upload failing (network blip, transient storage
-          // error) must not abort every clip after it in the batch — that
-          // silently strands the rest with no local sign anything went
-          // wrong (2026-09-27 incident: ~half a podcast episode's clips
-          // never reached Storage this way, no error surfaced anywhere).
-          try {
-            await uploadReferenceAudio({ audio: record, bookId, ownerId: userId });
-          } catch (err) {
-            syncLog('warn', err instanceof Error ? err.message : String(err), 'AUDIO_UPLOAD_SKIP');
-          }
-        }
-      } catch {
-        // Local apply must succeed even if the optional upload fails.
-      }
-    })();
-  }
+  if (newAudioRecords.length) void uploadNewReferenceAudio(bookId, newAudioRecords);
 
   return { batchId, newSentenceIds: [...new Set(newIds)] };
+}
+
+export interface MergeAdjacentSentencesOptions {
+  /** Merged Japanese; defaults to the two sentences joined with 、. */
+  japanese?: string;
+  /** Merged English; defaults to the two translations joined. */
+  translation?: string;
+  /** Test seams — default to the mining service. */
+  annotate?: typeof import('../lib/miningApi').resegmentSentences;
+  clipFromSource?: SourceClipFn;
+}
+
+export interface MergeAdjacentSentencesResult {
+  sentenceId: string;
+  /** Readings/morphology came from the mining service (else the two halves' were stitched). */
+  annotated: boolean;
+  /** A new reference clip spanning both sentences was cut. */
+  audioRecut: boolean;
+}
+
+/**
+ * Merge two neighbouring sentences of one book into a single new sentence
+ * (a caption split at a pause, a drama line cut mid-clause). The merged
+ * sentence takes the first one's place, inherits the most advanced book
+ * status, the better-reviewed study card per activity type, and vocabulary
+ * links whose surface survives; both originals are retired with everything
+ * offset-bound to them (analysis, grammar links, inbox, clips). Learning
+ * events stay on the old ids as history. Mirrors
+ * `scripts/merge-adjacent-sentences.ts`, run locally instead of on the box.
+ *
+ * The audio re-cut is network-bound, so it happens before the write
+ * transaction; if both sentences have clips and the span can't be cut, the
+ * merge is refused rather than silently losing the audio.
+ */
+export async function mergeAdjacentSentences(
+  bookId: string,
+  firstId: string,
+  secondId: string,
+  options: MergeAdjacentSentencesOptions = {},
+): Promise<MergeAdjacentSentencesResult> {
+  const db = getDb();
+  const timestamp = nowIso();
+
+  const [a, b] = await db.sentences.bulkGet([firstId, secondId]);
+  if (!a || !b || firstId === secondId) throw new Error('Both sentences must exist.');
+
+  const memberships = await db.bookSentences.where('bookId').equals(bookId).sortBy('position');
+  const indexA = memberships.findIndex((m) => m.sentenceId === firstId);
+  const indexB = memberships.findIndex((m) => m.sentenceId === secondId);
+  if (indexA < 0 || indexB < 0) throw new Error('Both sentences must be in this book.');
+  if (indexB !== indexA + 1) {
+    throw new Error('Only neighbouring sentences can be merged (first, then the one right after it).');
+  }
+  for (const id of [firstId, secondId]) {
+    if ((await db.bookSentences.where('sentenceId').equals(id).count()) > 1) {
+      throw new Error('A sentence that is in more than one book cannot be merged.');
+    }
+  }
+  const memberA = memberships[indexA]!;
+  const memberB = memberships[indexB]!;
+
+  const japanese = (options.japanese ?? suggestMergedJapanese(a.japanese, b.japanese)).trim();
+  const translation = (options.translation ?? suggestMergedTranslation(a.translation, b.translation)).trim();
+  const valid = validateMergedJapanese(a.japanese, b.japanese, japanese);
+  if (!valid.ok) throw new Error(valid.reason);
+  const normalizedKey = normalizeSentenceKey(japanese);
+  const newId = sentenceIdFromNormalizedKey(normalizedKey);
+  if (await db.sentences.get(newId)) throw new Error('A sentence with that exact text already exists.');
+
+  // Audio: one clip over the combined span, cut from the pristine source.
+  const oldAudio = (await db.sentenceAudio.where('sentenceId').anyOf([firstId, secondId]).toArray()).filter(
+    (row) => row.blob != null && row.blob.size !== 0,
+  );
+  const audioA = oldAudio.find((row) => row.sentenceId === firstId);
+  const audioB = oldAudio.find((row) => row.sentenceId === secondId);
+  let newAudio: SentenceAudio | undefined;
+  if (audioA && audioB) {
+    const sourceUrl = audioA.sourceUrl ?? audioB.sourceUrl ?? (await db.books.get(bookId))?.sourceUrl;
+    if (!sourceUrl || audioA.sourceId !== audioB.sourceId) {
+      throw new Error("These sentences' clips come from different sources, so the audio can't be re-cut.");
+    }
+    const startMs = Math.min(audioA.startMs, audioB.startMs);
+    const endMs = Math.max(audioA.endMs, audioB.endMs);
+    const clipFromSource: SourceClipFn =
+      options.clipFromSource ?? (async (...args) => (await import('../lib/miningApi')).clipFromSource(...args));
+    let clip: Awaited<ReturnType<SourceClipFn>>[number] | undefined;
+    try {
+      [clip] = await clipFromSource(sourceUrl, [{ startMs, endMs }]);
+    } catch (error) {
+      throw new Error(
+        `Couldn't re-cut the audio (is the mining service reachable?): ${error instanceof Error ? error.message : error}`,
+      );
+    }
+    if (!clip || !(clip.durationMs >= (endMs - startMs) * 0.8)) {
+      throw new Error("Couldn't re-cut the audio: the clip came back missing or too short.");
+    }
+    newAudio = {
+      id: `audio_merge_${hashString(`${audioA.sourceId}:${newId}`)}`,
+      sentenceId: newId,
+      sourceId: audioA.sourceId,
+      sourceSentenceId: `${audioA.sourceId}:merge-${newId}`,
+      sourceTitle: audioA.sourceTitle,
+      sourceUrl,
+      mimeType: 'audio/mp4',
+      durationMs: clip.durationMs,
+      startMs,
+      endMs,
+      blob: clip.blob,
+      importedAt: timestamp,
+    };
+  }
+
+  // Readings + morphology for the merged text (annotate only — no merge/split).
+  let annotated = false;
+  let readingOnly: string;
+  let inlineReading: string;
+  let vocabularySuggestions: VocabularySuggestion[];
+  try {
+    const annotate =
+      options.annotate ?? (async (...args) => (await import('../lib/miningApi')).resegmentSentences(...args));
+    const [cue] = await annotate(
+      [{ japanese, startMs: newAudio?.startMs ?? 0, endMs: newAudio?.endMs ?? 0 }],
+      { merge: false, split: false, generateKana: true },
+    );
+    if (!cue || cue.japanese.replace(/\s/g, '') !== japanese.replace(/\s/g, '')) {
+      throw new Error('annotate returned different text');
+    }
+    const tokens = (cue.tokens ?? []) as MorphologyToken[];
+    readingOnly = String(cue.reading ?? '').trim();
+    inlineReading = inlineReadingFromTokens(japanese, tokens);
+    vocabularySuggestions = suggestionsFromTokens(japanese, tokens);
+    annotated = true;
+  } catch {
+    // Mining service unavailable: stitch the halves' readings and shift the
+    // second half's suggestion offsets into the merged text.
+    readingOnly = `${a.readingOnly}${b.readingOnly}`;
+    inlineReading = `${a.inlineReading}${b.inlineReading}`;
+    const headLength = a.japanese.trim().replace(/[。．.！？!?\s]+$/, '').length;
+    const shift = japanese.length - b.japanese.trim().length;
+    vocabularySuggestions = [
+      ...a.vocabularySuggestions.filter((s) => s.end <= headLength),
+      ...b.vocabularySuggestions.map((s) => ({ ...s, start: s.start + shift, end: s.end + shift })),
+    ];
+  }
+
+  const shadowingRef = a.sourceReferences.find((ref) => ref.cardType === 'SHADOWING');
+  const sourceReferences: SourceReference[] =
+    shadowingRef && newAudio
+      ? [
+          {
+            ...shadowingRef,
+            cardId: `${shadowingRef.cardId.split(':')[0]}:merge-${newId}`,
+            userNotes: withMergedVideoPosition(shadowingRef.userNotes, newAudio.startMs, newAudio.endMs),
+          },
+        ]
+      : [...a.sourceReferences, ...b.sourceReferences];
+
+  const merged: Sentence = {
+    id: newId,
+    normalizedKey,
+    japanese,
+    readingOnly,
+    inlineReading,
+    translation,
+    targetVocabulary: [],
+    vocabularySuggestions,
+    sourceReferences,
+    conflicts: [],
+    firstOccurrenceIndex: a.firstOccurrenceIndex,
+    importBatchIds: [...new Set([...a.importBatchIds, ...b.importBatchIds])],
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+
+  const sink: PendingSyncOp[] = [];
+  let changedSessions: PlannerSession[] = [];
+  await db.transaction(
+    'rw',
+    [
+      db.sentences,
+      db.bookSentences,
+      db.analyses,
+      db.sentenceVocabulary,
+      db.sentenceGrammar,
+      db.studyItems,
+      db.reviews,
+      db.inbox,
+      db.books,
+      db.sentenceAudio,
+      db.plannerSessions,
+    ],
+    async () => {
+      await db.sentences.put(merged);
+      sink.push({ entity: 'sentences', recordId: merged.id, payload: merged });
+
+      // Study cards: the better-reviewed one per activity type moves across.
+      const cards = (
+        await db.studyItems.where('subjectId').anyOf([firstId, secondId]).toArray()
+      ).filter((item) => item.subjectType === 'sentence');
+      const summaries = await Promise.all(
+        cards.map(async (item) => ({
+          id: item.id,
+          subjectId: item.subjectId,
+          activityType: item.activityType,
+          fsrsReps: item.fsrsState.reps,
+          reviewCount: await db.reviews.where('studyItemId').equals(item.id).count(),
+        })),
+      );
+      const { move } = planStudyItemMoves(summaries);
+      const keepStudyItemIds = new Set(move.map((m) => m.id));
+      for (const m of move) {
+        const item = cards.find((c) => c.id === m.id)!;
+        const updated: StudyItem = { ...item, subjectId: newId, updatedAt: timestamp };
+        await db.studyItems.put(updated);
+        sink.push({ entity: 'study_items', recordId: updated.id, payload: updated });
+      }
+
+      // Vocabulary links whose surface survives move across (deduped by word);
+      // the rest go with the cascade, taking their per-occurrence cards.
+      const linked = new Set<string>();
+      for (const id of [firstId, secondId]) {
+        for (const link of await db.sentenceVocabulary.where('sentenceId').equals(id).toArray()) {
+          const survives = !link.surfaceForm || japanese.includes(link.surfaceForm);
+          if (!survives || linked.has(link.vocabularyItemId)) continue;
+          linked.add(link.vocabularyItemId);
+          const moved: SentenceVocabulary = { ...link, sentenceId: newId };
+          await db.sentenceVocabulary.put(moved);
+          sink.push({ entity: 'sentence_vocabulary', recordId: moved.id, payload: moved });
+        }
+      }
+
+      for (const id of [firstId, secondId]) {
+        await cascadeRetireSentenceLocal(db, id, sink, keepStudyItemIds);
+      }
+      changedSessions = await dropSentencesFromOpenSessionsLocal(db, new Set([firstId, secondId]));
+
+      // The merged sentence takes the first one's place; renumber to close the gap.
+      const remaining = memberships.filter((m) => m.id !== memberA.id && m.id !== memberB.id);
+      const membership: BookSentence = {
+        id: createId('bs'),
+        bookId,
+        sentenceId: newId,
+        position: memberA.position,
+        status: mergedStatus(memberA.status, memberB.status),
+        addedAt: memberA.addedAt,
+        lastStudiedAt: memberA.lastStudiedAt ?? memberB.lastStudiedAt,
+        note: memberA.note,
+        chapterId: memberA.chapterId,
+      };
+      const ordered = [...remaining, membership].sort((x, y) => x.position - y.position);
+      const rows = ordered.map((row, index) => ({ ...row, position: index }));
+      await db.bookSentences.bulkPut(rows);
+      const oldPositions = new Map(remaining.map((r) => [r.id, r.position]));
+      for (const row of rows) {
+        if (row.id === membership.id || row.position !== oldPositions.get(row.id)) {
+          sink.push({ entity: 'book_sentences', recordId: row.id, payload: row });
+        }
+      }
+
+      const book = await db.books.get(bookId);
+      if (book) {
+        const updatedBook = { ...book, updatedAt: timestamp };
+        await db.books.put(updatedBook);
+        sink.push({ entity: 'books', recordId: book.id, payload: updatedBook });
+      }
+
+      if (newAudio) await db.sentenceAudio.put(newAudio);
+    },
+  );
+
+  notifySyncMany(sink);
+  for (const session of changedSessions) notifySync('planner_sessions', session.id, session);
+  if (newAudio) void uploadNewReferenceAudio(bookId, [newAudio]);
+
+  return { sentenceId: newId, annotated, audioRecut: Boolean(newAudio) };
 }
 
 /**
