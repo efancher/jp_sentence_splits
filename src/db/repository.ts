@@ -23,6 +23,7 @@ import {
   isPhraseRange,
   orderLinksByWeakness,
   phraseShadowTargetKey,
+  snapRangeToWordBoundaries,
   phraseTextFromAlignment,
   wordIdsInPhrase,
   type PhraseShadowOutcome,
@@ -10225,11 +10226,15 @@ export async function suggestPhraseShadow(input: {
     db.sentenceVocabulary.where('sentenceId').equals(input.sentenceId).toArray(),
   ]);
   if (!alignment || !sentence) return null;
+  // Never end or start a phrase inside a word the aligner split into several tokens (食べ|ログ).
+  const snapToWords = (range: { startMs: number; endMs: number }) =>
+    snapRangeToWordBoundaries(alignment.words, sentence.japanese, sentence.vocabularySuggestions ?? [], range);
   // No word could be placed (or none is linked): still never leave the pane on the whole sentence.
   const chunkFallback = (weakestFirst: readonly string[]) => {
     if (input.surfaceForm) return null;
-    const range = weakestChunkRange(alignment.words, sentence.japanese, weakestFirst, input.clipDurationMs);
-    if (!range) return null;
+    const chunk = weakestChunkRange(alignment.words, sentence.japanese, weakestFirst, input.clipDurationMs);
+    if (!chunk) return null;
+    const range = snapToWords(chunk);
     const text = phraseTextFromAlignment(alignment.words, range, sentence.japanese);
     return text ? { ...range, text, wordLabel: '' } : null;
   };
@@ -10241,7 +10246,7 @@ export async function suggestPhraseShadow(input: {
     const spans = isolatedWordSpans(alignment.words, sentence.japanese, link.surfaceForm!);
     const span = spans?.withParticle ?? spans?.wordOnly;
     if (!span) continue;
-    const range = expandToPhrase(alignment.words, span, input.clipDurationMs);
+    const range = snapToWords(expandToPhrase(alignment.words, span, input.clipDurationMs));
     if (!isPhraseRange(range, input.clipDurationMs)) continue;
     return {
       ...range,

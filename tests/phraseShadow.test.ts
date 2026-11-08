@@ -20,6 +20,7 @@ import {
   phraseShadowWordIds,
   phraseShadowsBySentence,
   phraseTextFromAlignment,
+  snapRangeToWordBoundaries,
   wordIdsInPhrase,
 } from '../src/lib/phraseShadow';
 import { buildWordEvidence } from '../src/lib/wordEvidence';
@@ -253,5 +254,34 @@ describe('logPhraseShadow and the shadowing pause', () => {
     });
     const aligned = await getSessionPlannerInput(60);
     expect(aligned.shadowCandidates.find((c) => c.sentenceId === sentence.id)?.phraseText).toContain('寝て');
+  });
+});
+
+describe('snapRangeToWordBoundaries', () => {
+  const sentence = '日本で食べログという';
+  const tokens = [
+    { text: '日本', start: 0, end: 0.4 },
+    { text: 'で', start: 0.4, end: 0.5 },
+    { text: '食べ', start: 0.5, end: 0.9 },
+    { text: 'ログ', start: 0.9, end: 1.3 },
+    { text: 'という', start: 1.3, end: 1.8 },
+  ];
+  const spans = [
+    { start: 0, end: 2 },
+    { start: 2, end: 3 },
+    { start: 3, end: 7 },
+    { start: 7, end: 10 },
+  ];
+
+  it('widens an end that lands inside a word to the word end', () => {
+    expect(snapRangeToWordBoundaries(tokens, sentence, spans, { startMs: 0, endMs: 900 })).toEqual({ startMs: 0, endMs: 1300 });
+  });
+
+  it('widens a start that lands inside a word to the word start', () => {
+    expect(snapRangeToWordBoundaries(tokens, sentence, spans, { startMs: 900, endMs: 1800 })).toEqual({ startMs: 500, endMs: 1800 });
+  });
+
+  it('leaves a range on word edges alone', () => {
+    expect(snapRangeToWordBoundaries(tokens, sentence, spans, { startMs: 0, endMs: 500 })).toEqual({ startMs: 0, endMs: 500 });
   });
 });

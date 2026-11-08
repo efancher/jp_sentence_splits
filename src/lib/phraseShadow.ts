@@ -1,3 +1,4 @@
+import { alignerRangeToRawIndices, verifiedTokenCharRange } from './isolatedWordRange';
 import type { ContextWalkthrough, SentenceLearningEvent, WordAlignment } from '../domain/types';
 
 /**
@@ -314,4 +315,51 @@ export function orderLinksByWeakness<T extends { vocabularyItemId: string }>(
     .map((link, index) => ({ link, index, strength: strengthByWord.get(link.vocabularyItemId) ?? middle }))
     .sort((a, b) => a.strength - b.strength || a.index - b.index)
     .map((entry) => entry.link);
+}
+
+function lastIndexWhere<T>(items: readonly T[], test: (item: T, index: number) => boolean): number {
+  for (let i = items.length - 1; i >= 0; i -= 1) if (test(items[i], i)) return i;
+  return -1;
+}
+
+/**
+ * Moves a phrase's edges out to whole words. The aligner splits compounds into several tokens
+ * (食べログ → 食べ + ログ), so a range cut at a token boundary can end or start mid-word. `wordSpans`
+ * are the sentence's morphological words as raw [start, end) character ranges; an edge that falls
+ * strictly inside one is widened to that word's far edge. Unchanged when the tokens don't verifiably
+ * spell the sentence (no trustworthy character offsets) or no word spans are known.
+ */
+export function snapRangeToWordBoundaries(
+  words: readonly Pick<WordAlignment, 'start' | 'end' | 'text'>[],
+  japanese: string,
+  wordSpans: readonly { start: number; end: number }[],
+  range: { startMs: number; endMs: number },
+): { startMs: number; endMs: number } {
+  const spoken = words.filter((word) => word.text && !word.text.startsWith('<') && word.end > word.start);
+  if (spoken.length === 0 || wordSpans.length === 0) return range;
+  const rawOf = (index: number) => {
+    const chars = verifiedTokenCharRange(spoken, japanese, index);
+    return chars ? alignerRangeToRawIndices(japanese, chars.start, chars.end) : null;
+  };
+  let startMs = range.startMs;
+  let endMs = range.endMs;
+  const lastIndex = lastIndexWhere(spoken, (word) => word.start * 1000 < endMs - 1);
+  const lastRaw = lastIndex >= 0 ? rawOf(lastIndex) : null;
+  if (lastRaw) {
+    const word = wordSpans.find((span) => span.start < lastRaw.end && lastRaw.end < span.end);
+    if (word) {
+      const closing = spoken.findIndex((_, i) => i > lastIndex && (rawOf(i)?.end ?? 0) >= word.end);
+      if (closing >= 0) endMs = Math.max(endMs, spoken[closing].end * 1000);
+    }
+  }
+  const firstIndex = spoken.findIndex((word) => word.end * 1000 > startMs + 1);
+  const firstRaw = firstIndex >= 0 ? rawOf(firstIndex) : null;
+  if (firstRaw) {
+    const word = wordSpans.find((span) => span.start < firstRaw.start && firstRaw.start < span.end);
+    if (word) {
+      const opening = lastIndexWhere(spoken.slice(0, firstIndex), (_, i) => (rawOf(i)?.start ?? Infinity) <= word.start);
+      if (opening >= 0) startMs = Math.min(startMs, spoken[opening].start * 1000);
+    }
+  }
+  return { startMs: Math.round(startMs), endMs: Math.round(endMs) };
 }
