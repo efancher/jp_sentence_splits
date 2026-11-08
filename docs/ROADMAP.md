@@ -156,12 +156,17 @@ The items below retain unfinished work, optional refinements and future ideas.
     repeats once, Not yet drops, 12 ratings max). Each rating logs a `phrase_shadow`
     event keyed `chain-rung:<n>` (no credited words, not a pronunciation attempt);
     when the chain ends, one ordinary `phrase_shadow` Got it over the highest Got-it
-    rung credits its words once. **Still to do:** divider adjustment (tap/drag, snapped
-    to aligned word boundaries), the cold whole-sentence comparison on a random subset,
-    a Playwright spec, and STATUS/AI_OVERVIEW when it ships. **Manual test:** open a
+    rung credits its words once. **Also shipped on the branch:** "Adjust steps" (tap an
+    aligned word to start or stop a step there; cuts snap to word starts, `rungsFromCutTimes`;
+    per visit, not saved), a cold whole-sentence try opening ~25% of runs (`chain-cold:0`,
+    skippable, no credit; `COLD_PASS_SHARE`), `npm run diagnose:chunk-chain-outcomes` (read-only:
+    cold rating vs the chain's last rating per visit), and `e2e/chunk-chain.spec.ts`.
+    **Still to do:** read the outcomes diagnostic once there are a few dozen cold pairs.
+    **Manual test:** open a
     Shadow pane for a clip with a stored alignment and 8+ words; tap Chunk chain, loop
     the first step, Next, rate Got it up to the whole sentence, then check the finish
-    message and that Review shows no new cards; repeat with Not yet to see it drop.
+    message and that Review shows no new cards; repeat with Not yet to see it drop; try
+    Adjust steps and confirm the loop follows the moved step.
     `phraseShadowsBySentence` still includes rung events (it is unused by the planner).
 
 - [~] **Progressive glossing.** Slices 1-2 shipped 2026-10-01 (STATUS), including feasibility script, try-unaided, partial translation, self-report, park-and-prepare, readiness tiers, progress panel, heuristic の attachment skill, planner revisit. Left: AI-verified dependency reference and clause skills. Diagnostic refreshed 2026-10-15: 50/64 analysed sentences have a settled heuristic decision; attachment coverage is 25 の decisions. Pilot drafted 2026-10-16: 12 real sentences, 8 promising, 2 needing chunk repairs, 2 deferred for context/ambiguity; see `research/GLOSS_CLAUSE_PILOT.md`. References are self-reviewed drafts, not independently validated. Opt-in span-based preview shipped and expanded to all active unique sentences (365 questions, 64 reviewed notes as of 2026-10-17, after replacing 46 no-choice questions with connective-link questions and noting 29 too-short ones), including the repaired examples and missing-question notices; independent reference review still required before auto-grading. Helpful/disputed reactions sync as of 2026-10-17 (`clause_question_feedback`; `npm run diagnose:clause-feedback`) so the dispute rate can guide that review.

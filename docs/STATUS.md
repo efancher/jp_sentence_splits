@@ -75,6 +75,18 @@ and possible extensions. This snapshot does not certify a live deployment.
   `shadowRequests`), which `findShadowCandidates` skips, and skips the sentence's
   open session step. A later Sound flag clears the snooze. Shadowing is not an
   FSRS card (the review-card attempt of 2026-10-30 was reverted the same day).
+- Chunk chain shadowing (2026-11-08, branch `worktree-chunk-chain-shadowing-plan`, not merged):
+  the Shadow pane offers "Chunk chain" when the cached alignment plans 3+ duration-sized
+  rungs from the Ear Tiles chunks (`src/lib/chunkChain.ts`; per-cut alignment trust, so
+  ~14% of clips today, limited by the 62% with no stored alignment). Shadow the last
+  phrase, then the last two, up to the whole sentence; the first rung is Next-only, later
+  rungs are self-rated (Got it climbs, Close repeats once, Not yet drops). "Adjust steps"
+  moves the dividers (snapped to aligned word starts); ~25% of runs open with a skippable
+  cold whole-sentence try. Rung and cold ratings are `phrase_shadow` events keyed
+  `chain-rung:<n>` / `chain-cold:0` (no word credit, no FSRS, no Review); one ordinary
+  `phrase_shadow` Got it over the highest Got-it rung credits its words once.
+  `npm run diagnose:chunk-chain-outcomes` compares cold vs chain-end ratings. Plan:
+  ROADMAP "Phrase shadowing".
 - Phrase shadowing (2026-11-03, trial): after marking a span narrower than the clip on
   the Shadow pane, "How did this phrase go?" offers Not yet / Close / Got it, logged
   as a `phrase_shadow` `sentence_learning_events` row (`rangeStartMs`/`rangeEndMs`,
