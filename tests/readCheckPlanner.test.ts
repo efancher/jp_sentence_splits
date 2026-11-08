@@ -8,6 +8,7 @@ import {
   ensureStudyItem,
   getDb,
   getSessionPlannerInput,
+  resetSentenceWalkthrough,
   updateSettings,
 } from '../src/db/repository';
 import type { Sentence } from '../src/domain/types';
@@ -71,6 +72,14 @@ describe('Read checks replace sentence review cards in the plan', () => {
     expect(ids).not.toContain(justWalked.id);
     expect(input.readCheckCandidates![0]!.reason).toContain('needed help');
     expect(input.readCheckCandidates![0]!.waiting).toBe(5);
+  });
+
+  it('drops a sentence from the Read check pool once its walkthrough is reset', async () => {
+    const { due, book } = await setup();
+    const poolIds = async () => ((await getSessionPlannerInput(60)).readCheckCandidates ?? []).map((c) => c.sentenceId);
+    expect(await poolIds()).toContain(due.id);
+    await resetSentenceWalkthrough({ sentenceId: due.id, bookId: book.id });
+    expect(await poolIds()).not.toContain(due.id);
   });
 
   it('drafts one-minute Read check steps that open the reader and count as review, not lessons', async () => {

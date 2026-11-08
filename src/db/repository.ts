@@ -8,6 +8,7 @@ import { stepTimer } from '../lib/pageTiming';
 import { FREQUENCY_WAIT_MS, loadWordFrequency, lookupWordBand } from '../lib/wordFrequency';
 import { frequencyBandPrior, planWeakWordSentences, READER_KNOWN_STRENGTH, wordStrength } from '../lib/wordStrength';
 import { readCheckReason, sentencesDueForReadCheck } from '../lib/readCheck';
+import { withoutResetWalkthroughs } from '../lib/sentenceLearning';
 import {
   expandToPhrase,
   weakestChunkRange,
@@ -10126,6 +10127,26 @@ export async function logSentenceLearningEvent(
 }
 
 /**
+ * "I haven't actually walked this one": appends a `walkthrough_reset` event so earlier walkthroughs stop
+ * counting as walked (progress line, Read check pool). The history is kept; no Review, no FSRS, and any
+ * reading card already seeded for the sentence is left as it is.
+ */
+export async function resetSentenceWalkthrough(input: {
+  sentenceId: string;
+  bookId: string;
+  chapterId?: string;
+  visitId?: string;
+}): Promise<SentenceLearningEvent> {
+  return logSentenceLearningEvent({
+    visitId: input.visitId ?? createId('visit'),
+    action: 'walkthrough_reset',
+    sentenceId: input.sentenceId,
+    bookId: input.bookId,
+    chapterId: input.chapterId,
+  });
+}
+
+/**
  * Logs one self-rated phrase shadow: the learner marked a span of the sentence's reference clip, shadowed
  * it and judged the pass. The span's text and the vocabulary inside it come from the cached forced alignment
  * and the sentence's own links (no alignment yet: the event still logs, with no text and no words credited).
@@ -10318,7 +10339,7 @@ export async function listSentenceLearningEvents(bookId: string): Promise<Senten
       .filter((event) => event.bookId === bookId)
       .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
   }
-  return getDb().sentenceLearningEvents.where('bookId').equals(bookId).sortBy('timestamp');
+  return withoutResetWalkthroughs(await getDb().sentenceLearningEvents.where('bookId').equals(bookId).sortBy('timestamp'));
 }
 
 export async function getEpisodePreparationContext(
@@ -11080,7 +11101,7 @@ async function buildReviewPriorityInputs(
  * sentences qualify; anything else would just come up as a first lesson anyway.
  */
 export async function requestFreshTry(sentenceId: string, now: Date = new Date()): Promise<'queued' | 'not_walked'> {
-  const events = await getDb().sentenceLearningEvents.where('sentenceId').equals(sentenceId).toArray();
+  const events = withoutResetWalkthroughs(await getDb().sentenceLearningEvents.where('sentenceId').equals(sentenceId).toArray());
   if (!events.some((event) => event.action === 'walkthrough_completed')) return 'not_walked';
   const settings = await ensureSettings(getDb());
   await updateSettings({ freshTryRequests: { ...settings.freshTryRequests, [sentenceId]: now.toISOString() } });
@@ -12375,7 +12396,7 @@ export async function countSentencesSeededSince(activityType: string, sinceIso: 
 /** Every learning event, loaded once per planning pass (shadowing and Read checks both scan it). */
 function readAllLearningEventsForPass(): Promise<SentenceLearningEvent[]> {
   return plannerShared('sentenceLearningEvents', ['sentenceLearningEvents'], () =>
-    loadSnapshot(getDb(), 'sentenceLearningEvents', () => getDb().sentenceLearningEvents.toArray()),
+    loadSnapshot(getDb(), 'sentenceLearningEvents', async () => withoutResetWalkthroughs(await getDb().sentenceLearningEvents.toArray())),
   );
 }
 
@@ -12697,7 +12718,7 @@ async function sentenceIdsWithAudioClip(sentenceIds: string[]): Promise<Set<stri
 
 async function learningEventsForSentences(sentenceIds: string[]): Promise<SentenceLearningEvent[]> {
   if (sentenceIds.length <= SMALL_TABLE_ANY_OF_LIMIT) {
-    return getDb().sentenceLearningEvents.where('sentenceId').anyOf(sentenceIds).toArray();
+    return withoutResetWalkthroughs(await getDb().sentenceLearningEvents.where('sentenceId').anyOf(sentenceIds).toArray());
   }
   const wanted = new Set(sentenceIds);
   return (await readAllLearningEventsForPass()).filter((event) => wanted.has(event.sentenceId));

@@ -193,7 +193,12 @@ and possible extensions. This snapshot does not certify a live deployment.
   `chooseFollowUp` in `src/lib/followUpOffer.ts`): Word check when the sentence has a content word
   not yet known by strength, otherwise Ear tiles, Dictation or Shadowing, whichever can open. About
   40% of offers are drawn at random among the available tools as a baseline for comparing
-  activities. Each offer logs a synced `follow_up_offer` event (`followup:<tool>:<rule|random>`,
+  activities. An unrevealed Read check on a walked sentence also shows "I haven't walked this"
+  (2026-11-08): it logs a synced `walkthrough_reset` event (migration `20261108000000`), and
+  `withoutResetWalkthroughs` then ignores that sentence's earlier `walkthrough_completed` events
+  wherever walked status is read (progress line, Read check pool, `requestFreshTry`). History is
+  kept; a seeded reading card and the "introduced" status via that card are left as they are.
+  Each offer logs a synced `follow_up_offer` event (`followup:<tool>:<rule|random>`,
   migration `20261104000000`) under the Read check's visit; the follow-up tool shares that
   `visitId`, so "taken" is inferred from its own events. Nothing reads these yet: the after-effect
   comparison panel and grammar/pronunciation outcome evidence are still to build

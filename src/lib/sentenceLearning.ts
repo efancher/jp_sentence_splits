@@ -189,6 +189,26 @@ export interface SentenceProgress {
   gist?: 'got_it' | 'needed_help';
 }
 
+/**
+ * Drops `walkthrough_completed` events that a later `walkthrough_reset` on the same sentence cancelled, so
+ * "walked through" (progress line, Read check pool, journey) reflects only walkthroughs after the reset.
+ * Other events are kept; the reset itself stays in the list as the record.
+ */
+export function withoutResetWalkthroughs<T extends Pick<SentenceLearningEvent, 'action' | 'sentenceId' | 'timestamp'>>(events: readonly T[]): T[] {
+  const resetAt = new Map<string, string>();
+  for (const event of events) {
+    if (event.action !== 'walkthrough_reset') continue;
+    const seen = resetAt.get(event.sentenceId);
+    if (seen === undefined || event.timestamp > seen) resetAt.set(event.sentenceId, event.timestamp);
+  }
+  if (resetAt.size === 0) return [...events];
+  return events.filter((event) => {
+    if (event.action !== 'walkthrough_completed') return true;
+    const at = resetAt.get(event.sentenceId);
+    return at === undefined || event.timestamp > at;
+  });
+}
+
 /** Derived, read-only view of lesson evidence for one sentence; never persisted or scheduled. */
 export function summariseSentenceProgress(events: SentenceLearningEvent[], sentenceId: string): SentenceProgress {
   const progress: SentenceProgress = { walkedThrough: false, targetsPractised: 0, writtenAttempts: 0, spokenAttempts: 0 };

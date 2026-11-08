@@ -117,6 +117,7 @@ export function ReadCheckPanel({
   offer,
   onTakeOffer,
   onClose,
+  onResetWalked,
 }: {
   revealed: boolean;
   hasAudio: boolean;
@@ -128,6 +129,8 @@ export function ReadCheckPanel({
   offer?: FollowUpTool;
   onTakeOffer?: () => void;
   onClose: () => void;
+  /** Present when the sentence counts as walked through: lets the learner say it was not really walked. */
+  onResetWalked?: () => void;
 }) {
   const [recorded, setRecorded] = useState(false);
   return (
@@ -139,6 +142,12 @@ export function ReadCheckPanel({
             <button type="button" className="primary" onClick={onReveal}>Show help and meaning</button>
             {hasAudio ? <button type="button" onClick={onPlay}>{playing ? 'Stop' : 'Listen'}</button> : null}
             <button type="button" onClick={onClose}>Close</button>
+            {onResetWalked ? (
+              <button type="button" onClick={() => { onResetWalked(); onClose(); }}
+                title="Clear the walked-through status for this sentence; it leaves the Read check pool until you walk it through">
+                I haven't walked this
+              </button>
+            ) : null}
           </div>
         </>
       ) : !recorded ? (

@@ -1872,7 +1872,13 @@ export type SentenceLearningAction =
    * outcome: the offer was taken when the follow-up tool logs its own events under the same `visitId`
    * (the Read check's). Evidence only, never a review.
    */
-  | 'follow_up_offer';
+  | 'follow_up_offer'
+  /**
+   * The learner said they had not really walked this sentence through (an accidental or click-through
+   * walkthrough). Walkthroughs logged before it stop counting as walked (`withoutResetWalkthroughs`);
+   * the history stays, since events are append-only. No outcome, never a review.
+   */
+  | 'walkthrough_reset';
 
 /**
  * Append-only lesson evidence from inside a passage (sentence-first plan, Phase 2).

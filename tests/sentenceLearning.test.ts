@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { resetDbForTests } from '../src/db/database';
-import { getDb, listSentenceLearningEvents, logSentenceLearningEvent } from '../src/db/repository';
+import { getDb, listSentenceLearningEvents, logSentenceLearningEvent, resetSentenceWalkthrough } from '../src/db/repository';
 import type { SentenceLearningEvent } from '../src/domain/types';
-import { describeSentenceProgress, summariseSentenceProgress, glossableWords, locateTargetSpan, maskSpan, pickCompareUses, selectSentenceTargets, sentenceWordHelp, summariseTargetActivity, findDueTransferRecheck, pickHeldBackContext, type CompareSentence } from '../src/lib/sentenceLearning';
+import { describeSentenceProgress, summariseSentenceProgress, withoutResetWalkthroughs, glossableWords, locateTargetSpan, maskSpan, pickCompareUses, selectSentenceTargets, sentenceWordHelp, summariseTargetActivity, findDueTransferRecheck, pickHeldBackContext, type CompareSentence } from '../src/lib/sentenceLearning';
 
 const sentences: CompareSentence[] = [
   { id: 'a', japanese: '本を読みます。', position: 1 },
@@ -299,5 +299,36 @@ describe('sentence progress', () => {
 
   it('is empty without evidence', () => {
     expect(describeSentenceProgress(summariseSentenceProgress([], 's1'))).toBe('');
+  });
+});
+
+describe('walkthrough reset', () => {
+  const ev = (over: Partial<SentenceLearningEvent>): SentenceLearningEvent => ({
+    id: Math.random().toString(), timestamp: '2026-10-12T20:54:00Z', visitId: 'v', action: 'walkthrough_completed',
+    bookId: 'b', sentenceId: 's1', ...over,
+  });
+
+  it('cancels earlier walkthroughs on that sentence only, and a later walkthrough counts again', () => {
+    const events = [
+      ev({}),
+      ev({ sentenceId: 's2' }),
+      ev({ action: 'walkthrough_reset', timestamp: '2026-11-08T10:00:00Z' }),
+    ];
+    const kept = withoutResetWalkthroughs(events);
+    expect(summariseSentenceProgress(kept, 's1').walkedThrough).toBe(false);
+    expect(summariseSentenceProgress(kept, 's2').walkedThrough).toBe(true);
+    const again = withoutResetWalkthroughs([...events, ev({ timestamp: '2026-11-09T10:00:00Z' })]);
+    expect(summariseSentenceProgress(again, 's1').walkedThrough).toBe(true);
+  });
+
+  it('is logged by resetSentenceWalkthrough and drops the sentence from listed walkthroughs', async () => {
+    resetDbForTests(`sl-reset-${Math.random()}`);
+    await logSentenceLearningEvent({ visitId: 'v1', action: 'walkthrough_completed', sentenceId: 's1', bookId: 'b', timestamp: '2026-10-12T20:54:00Z' });
+    expect(summariseSentenceProgress(await listSentenceLearningEvents('b'), 's1').walkedThrough).toBe(true);
+    const reset = await resetSentenceWalkthrough({ sentenceId: 's1', bookId: 'b' });
+    expect(reset.action).toBe('walkthrough_reset');
+    const listed = await listSentenceLearningEvents('b');
+    expect(summariseSentenceProgress(listed, 's1').walkedThrough).toBe(false);
+    expect(listed.some((event) => event.action === 'walkthrough_reset')).toBe(true);
   });
 });
