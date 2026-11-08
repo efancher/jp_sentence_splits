@@ -20,6 +20,7 @@ import {
   getSkillCoverage,
   getFollowUpEffect,
   getStepUsefulness,
+  getGrammarStrengthReport,
   getReviewTroubleReport,
 } from '../db/repository';
 import { EPISODE_STAGE_LABELS, EPISODE_STAGE_ORDER } from '../lib/episodeProgress';
@@ -181,6 +182,7 @@ export function ProgressPage() {
   const skillCoverage = useLiveQuery(() => getSkillCoverage(), []);
   const fsrsConfidence = useLiveQuery(() => getFsrsConfidenceSnapshot(), []);
   const stepUsefulness = useLiveQuery(() => getStepUsefulness(), []);
+  const grammarStrength = useLiveQuery(() => getGrammarStrengthReport(), []);
   const followUpEffect = useLiveQuery(() => getFollowUpEffect(), []);
   const troubleReport = useLiveQuery(() => getReviewTroubleReport(), []);
   const gateFunnel = useLiveQuery(() => getGateFunnelSnapshot(), []);
@@ -773,6 +775,33 @@ export function ProgressPage() {
             <p className="muted" style={{ margin: 0, fontSize: '0.8rem' }}>
               Last {stepUsefulness.windowDays} days — which planner step kinds actually get done
               vs. quietly skipped every time.
+            </p>
+          </>
+        )}
+      </section>
+
+      <section className="panel stack">
+        <h3 style={{ margin: 0 }}>Grammar strength</h3>
+        {grammarStrength === undefined ? (
+          <p className="muted">Loading…</p>
+        ) : grammarStrength.counts.unchecked + grammarStrength.counts.shaky + grammarStrength.counts.solid === 0 ? (
+          <p className="muted">No grammar patterns linked to sentences yet.</p>
+        ) : (
+          <>
+            <StatRow label="Solid" value={String(grammarStrength.counts.solid)} hint="patterns you've shown you know" />
+            <StatRow label="Shaky" value={String(grammarStrength.counts.shaky)} hint="some evidence, not yet solid" />
+            <StatRow label="Unchecked" value={String(grammarStrength.counts.unchecked)} hint="no tap, check or review yet" />
+            {grammarStrength.weakest.map((row) => (
+              <StatRow
+                key={row.patternId}
+                label={row.name}
+                value={`${Math.round(row.strength * 100)}%`}
+                hint={`${row.sentences} sentence${row.sentences === 1 ? '' : 's'}`}
+              />
+            ))}
+            <p className="muted" style={{ margin: 0, fontSize: '0.8rem' }}>
+              From your reader taps and Grammar checks, the same signal that marks patterns in the reader and
+              brings sentences back. Untapped patterns are unseen, not weak.
             </p>
           </>
         )}

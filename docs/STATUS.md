@@ -157,12 +157,16 @@ and possible extensions. This snapshot does not certify a live deployment.
   reader's `GrammarCheckPanel`: it names the pattern's text, hides what it is
   and does, then you judge your recall (evidence on the `use` facet only).
   The pattern asked about is the weakest tapped one, else an unchecked one
-  (`pickGrammarCheckPatternId`). Counts as a grammar step in the session.
+  (`pickGrammarCheckPatternId`). An optional typed answer before the reveal is shown
+  back after it (not stored or graded). /progress "Grammar strength" shows pattern
+  counts by level and the weakest ones (`getGrammarStrengthReport`). Counts as a
+  grammar step in the session.
   Missing evidence is shown in the reader (2026-11-08): on the focused sentence
   each tappable word and grammar pattern has an evidence level
   (`getReaderEvidenceLevels`: `unchecked` = never tapped/reviewed/walked, `shaky`
   = strength below 0.6, `solid`). Unchecked ones get a thicker amber underline,
-  shaky a muted one, solid keep the plain underline, and a line under the
+  shaky a muted one, solid words keep the plain underline, solid grammar patterns
+  get a green solid one, and a line under the
   sentence names the unchecked ones. A tap makes an unchecked item shaky at
   once; the next load decides the real level. Display only, grades nothing.
   Words start from a JMdict frequency-band prior (fetched on demand from

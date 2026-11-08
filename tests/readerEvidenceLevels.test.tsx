@@ -67,4 +67,20 @@ describe('KaraokeSentenceText evidence styling', () => {
     expect(container.querySelector('.karaoke-evidence-shaky')).toHaveTextContent('海');
     expect(container.querySelectorAll('.karaoke-word-checkable')).toHaveLength(3);
   });
+
+  it('marks a solid grammar pattern green but leaves solid words plain', () => {
+    const { container } = render(
+      <KaraokeSentenceText
+        japanese="空を食べました"
+        vocabularySuggestions={[suggestion('空', 0)]}
+        isWordTappable={(token) => token.text === '空'}
+        onWordTap={() => undefined}
+        patternSpans={[{ id: 'p-solid', start: 1, end: 7 }]}
+        onPatternTap={() => undefined}
+        evidenceOf={() => 'solid'}
+      />,
+    );
+    expect(container.querySelectorAll('.karaoke-evidence-solid').length).toBeGreaterThan(0);
+    expect(container.querySelector('.karaoke-word-checkable:not(.karaoke-pattern-checkable)')).not.toHaveClass('karaoke-evidence-solid');
+  });
 });

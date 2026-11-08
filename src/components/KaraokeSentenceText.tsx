@@ -85,8 +85,10 @@ export function buildSentenceTokens(
  * kana line underneath (`sentence.readingOnly`) is the actual pronunciation
  * guide, kept separate so the kanji sentence line isn't mistaken for it.
  */
-function evidenceClass(level: EvidenceLevel | undefined): string {
-  return level === 'unchecked' || level === 'shaky' ? ` karaoke-evidence-${level}` : '';
+function evidenceClass(level: EvidenceLevel | undefined, isPattern: boolean): string {
+  if (level === 'unchecked' || level === 'shaky') return ` karaoke-evidence-${level}`;
+  // Known grammar gets its own mark (green, solid line); known words stay plain so the line isn't busy.
+  return level === 'solid' && isPattern ? ' karaoke-evidence-solid' : '';
 }
 
 export function KaraokeSentenceText({
@@ -162,7 +164,7 @@ export function KaraokeSentenceText({
             ref={(el) => {
               wordRefs.current[index] = el;
             }}
-            className={`karaoke-word${index === displayedTokenIndex || (selectedWordStart !== undefined && token.start === selectedWordStart && isWordTappable?.(token)) ? ' karaoke-word-active' : ''}${token.gloss ? ' karaoke-word-tappable' : ''}${isWordTappable?.(token) && onWordTap ? ' karaoke-word-checkable' : ''}${patternOf(token) !== undefined ? ' karaoke-pattern-checkable' : ''}${selectedPatternId !== undefined && patternOf(token) === selectedPatternId ? ' karaoke-word-active' : ''}${evidenceClass(evidenceOf?.(token, patternOf(token)))}`}
+            className={`karaoke-word${index === displayedTokenIndex || (selectedWordStart !== undefined && token.start === selectedWordStart && isWordTappable?.(token)) ? ' karaoke-word-active' : ''}${token.gloss ? ' karaoke-word-tappable' : ''}${isWordTappable?.(token) && onWordTap ? ' karaoke-word-checkable' : ''}${patternOf(token) !== undefined ? ' karaoke-pattern-checkable' : ''}${selectedPatternId !== undefined && patternOf(token) === selectedPatternId ? ' karaoke-word-active' : ''}${evidenceClass(evidenceOf?.(token, patternOf(token)), patternOf(token) !== undefined)}`}
             {...(patternOf(token) !== undefined
               ? {
                   role: 'button',

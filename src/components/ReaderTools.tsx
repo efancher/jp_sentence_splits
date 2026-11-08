@@ -336,6 +336,7 @@ export function GrammarCheckPanel({
   const [target, setTarget] = useState<ReaderPattern | undefined | 'loading'>('loading');
   const [revealed, setRevealed] = useState(false);
   const [recorded, setRecorded] = useState(false);
+  const [guess, setGuess] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -363,12 +364,22 @@ export function GrammarCheckPanel({
         What is the grammar in <strong className="jp">{target.surface}</strong> doing here?
       </p>
       {!revealed ? (
-        <div className="row" style={{ gap: '0.4rem' }}>
-          <button type="button" onClick={() => setRevealed(true)}>Show the pattern</button>
-          <button type="button" onClick={onClose}>Close</button>
-        </div>
+        <>
+          <input
+            type="text"
+            value={guess}
+            onChange={(event) => setGuess(event.target.value)}
+            placeholder="Say it in your own words (optional)"
+            aria-label="Your answer"
+          />
+          <div className="row" style={{ gap: '0.4rem' }}>
+            <button type="button" onClick={() => setRevealed(true)}>Show the pattern</button>
+            <button type="button" onClick={onClose}>Close</button>
+          </div>
+        </>
       ) : (
         <div className="stack" style={{ gap: '0.25rem' }}>
+          {guess.trim() ? <p className="muted" style={{ margin: 0 }}>You wrote: {guess.trim()}</p> : null}
           <p style={{ margin: 0 }}>
             <strong className="jp">{target.name}</strong>
             {target.occurrenceExplanation || target.shortMeaning ? <> — {target.occurrenceExplanation || target.shortMeaning}</> : null}

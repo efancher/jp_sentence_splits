@@ -852,9 +852,14 @@ untouched sentence, see amber underlines and the hint, tap one and give a call,
 see it turn muted and drop from the hint. Grammar check shipped (2026-11-08): weak-grammar revisits draft a recall step
 (`/grammar-check/:sentenceId`, `GrammarCheckPanel`). Manual test: tap a weak
 sentence's Grammar check step, see the pattern text without its meaning, show it,
-and give a call. Still missing vs vocabulary: a typed
-target before reveal, known-pattern highlighting in
-the reader, and a /progress panel for grammar strength. Left over: resolve ambiguous `（note）` matches (e.g.
+and give a call. Grammar parity finished (2026-11-08): the Grammar check has an
+optional "say it in your own words" box before the reveal (shown back as "You wrote",
+never graded or stored); solid grammar patterns get a green solid underline in the
+reader (solid words stay plain); /progress has a "Grammar strength" panel
+(`getGrammarStrengthReport`: solid/shaky/unchecked counts plus the weakest tapped
+patterns). Manual test: type a guess in a Grammar check and see it after the reveal;
+give a pattern a few "I knew it" taps and see it turn green; open /progress and
+check the counts move. Left over: resolve ambiguous `（note）` matches (e.g.
 ながら（while）/（も）, currently skipped), other short-form over-matches that
 begin on a token boundary, and any grammar study surface.
 

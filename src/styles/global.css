@@ -636,7 +636,7 @@ strong.jp {
   text-underline-offset: 0.3em;
 }
 
-/* Evidence on a tappable item: no signal yet (amber) or some but not solid (muted). Solid items keep the plain underline. */
+/* Evidence on a tappable item: no signal yet (amber) or some but not solid (muted). Solid words keep the plain underline; solid patterns turn green. */
 .karaoke-evidence-unchecked {
   text-decoration-color: var(--warning, #d98e04);
   text-decoration-thickness: 3px;
@@ -644,6 +644,12 @@ strong.jp {
 
 .karaoke-evidence-shaky {
   text-decoration-color: var(--muted, #8a8a8a);
+}
+
+/* A grammar pattern with solid evidence: a green solid underline, so known grammar reads differently from unseen. */
+.karaoke-evidence-solid {
+  text-decoration-style: solid;
+  text-decoration-color: var(--success, #2e8b57);
 }
 
 .reader-evidence-hint {

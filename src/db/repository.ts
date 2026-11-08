@@ -11290,6 +11290,45 @@ export async function getReaderEvidenceLevels(
   return levels;
 }
 
+export interface GrammarStrengthReport {
+  /** Patterns the learner has met in a sentence, by evidence level (same thresholds as the reader markers). */
+  counts: Record<EvidenceLevel, number>;
+  /** The shakiest patterns that have some evidence, weakest first. */
+  weakest: Array<{ patternId: string; name: string; strength: number; sentences: number }>;
+}
+
+/**
+ * The /progress grammar-strength panel: how many linked patterns are unchecked / shaky / solid, and which
+ * tapped ones are weakest. Display only; the same signal the reader markers and weak-grammar revisits use.
+ */
+export async function getGrammarStrengthReport(limit = 5): Promise<GrammarStrengthReport> {
+  const db = getDb();
+  const [links, strengthByPattern] = await Promise.all([db.sentenceGrammar.toArray(), loadGrammarPatternStrengths()]);
+  const sentencesByPattern = new Map<string, Set<string>>();
+  for (const link of links) {
+    const set = sentencesByPattern.get(link.grammarPatternId);
+    if (set) set.add(link.sentenceId);
+    else sentencesByPattern.set(link.grammarPatternId, new Set([link.sentenceId]));
+  }
+  const counts: Record<EvidenceLevel, number> = { unchecked: 0, shaky: 0, solid: 0 };
+  for (const id of sentencesByPattern.keys()) counts[evidenceLevel(strengthByPattern.get(id))] += 1;
+  const weakIds = [...sentencesByPattern.keys()]
+    .filter((id) => strengthByPattern.has(id) && strengthByPattern.get(id)! < READER_KNOWN_STRENGTH)
+    .sort((a, b) => strengthByPattern.get(a)! - strengthByPattern.get(b)!)
+    .slice(0, limit);
+  const patterns = weakIds.length > 0 ? await db.grammarPatterns.where('id').anyOf(weakIds).toArray() : [];
+  const nameById = new Map(patterns.map((pattern) => [pattern.id, pattern.canonicalName]));
+  return {
+    counts,
+    weakest: weakIds.map((id) => ({
+      patternId: id,
+      name: nameById.get(id) ?? id,
+      strength: strengthByPattern.get(id)!,
+      sentences: sentencesByPattern.get(id)!.size,
+    })),
+  };
+}
+
 /**
  * The pattern a Grammar check should ask about: the weakest one with evidence, else the first with none yet
  * (an unchecked pattern is unseen, not weak, but still worth a look when nothing is known to be weak).

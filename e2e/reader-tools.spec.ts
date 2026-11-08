@@ -396,7 +396,9 @@ test('a planner Grammar check hides the pattern, then logs your own call on what
   const panel = page.getByRole('group', { name: 'Grammar check' });
   await expect(panel).toBeVisible();
   await expect(panel).not.toContainText('polite past');
+  await panel.getByLabel('Your answer').fill('past tense');
   await panel.getByRole('button', { name: 'Show the pattern' }).click();
+  await expect(panel).toContainText('You wrote: past tense');
   await expect(panel).toContainText('polite past');
   await panel.getByRole('button', { name: 'Needed help' }).click();
   await expect(panel).toContainText('Recorded.');
