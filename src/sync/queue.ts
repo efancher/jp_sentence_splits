@@ -292,6 +292,14 @@ export async function openConflictCount(): Promise<number> {
   return open.length;
 }
 
+function isSatisfiedDeleteConflict(conflict: SyncConflict): boolean {
+  const local = conflict.localPayload;
+  const remote = conflict.remotePayload as { deleted_at?: unknown } | null;
+  if (!local || typeof local !== 'object' || !remote) return false;
+  const keys = Object.keys(local);
+  return keys.length === 1 && keys[0] === 'id' && remote.deleted_at != null;
+}
+
 /**
  * Auto-resolves already-open conflicts whose frozen local/remote payloads no
  * longer show a real difference under the current `conflictDiff.ts`
@@ -303,6 +311,9 @@ export async function openConflictCount(): Promise<number> {
  * differences" (reported via Report sync issue, 2026-09-14 — "the diff
  * doesn't show a difference" on conflicts that predated the fix). Called
  * once per sync cycle; cheap, since it only touches already-open conflicts.
+ * Also settles a queued delete (payload is just `{ id }`) whose cloud row is
+ * already tombstoned — e.g. the server's sentence cascade trigger got there
+ * first (see `pushOne`).
  */
 export async function sweepNoopConflicts(): Promise<number> {
   const open = await listOpenConflicts();
@@ -313,7 +324,8 @@ export async function sweepNoopConflicts(): Promise<number> {
         conflict.localPayload,
         conflict.remotePayload,
         conflict.entity,
-      )
+      ) ||
+      isSatisfiedDeleteConflict(conflict)
     ) {
       await resolveConflictLocally(conflict.id, 'auto_noop');
       swept += 1;

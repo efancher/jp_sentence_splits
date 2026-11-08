@@ -1049,6 +1049,11 @@ Targets are constants; no settings UI.
   the mining service is down; if both sentences have clips the combined span is
   re-cut from the source (`POST /source-audio/clip`) and the merge is refused if
   that fails. Local-first counterpart of `scripts/merge-adjacent-sentences.ts`.
+  Sync note (2026-11-08): the server's `sentences` soft-delete cascade trigger
+  tombstones the originals' `book_sentences`/`reference_audio` rows (bumping
+  their version) before the client's own child deletes are pushed, which used
+  to raise four "conflicts" per merge. `pushOne` now treats a delete of an
+  already-tombstoned row as done, and `sweepNoopConflicts` clears earlier ones.
 - **Re-segment captions** (`ResegmentSourcePage.tsx`, route
   `/books/:bookId/resegment`, button on `BookDetailPage` for
   `sourceKey` starting `shadowing:`) — rebuilds a source's sentences on

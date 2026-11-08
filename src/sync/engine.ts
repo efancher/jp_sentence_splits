@@ -448,11 +448,28 @@ async function pushOne(item: SyncQueueItem, userId: string): Promise<void> {
   if (item.operation === 'delete') {
     const { data: existing, error: readError } = await supabase
       .from(table)
-      .select('version')
+      .select('version,deleted_at')
       .eq(idCol, item.recordId)
       .maybeSingle();
     if (readError) throw new Error(readError.message);
     if (!existing) {
+      return;
+    }
+    // Already tombstoned: the delete is done whoever did it. Typically the
+    // server's sentences cascade trigger soft-deleted this book_sentences /
+    // reference_audio child (bumping its version) when the parent sentence's
+    // delete, pushed earlier in the same cycle, landed — the lock below would
+    // then misreport it as a conflict (2026-11-08, merging two sentences).
+    if ((existing as { deleted_at?: string | null }).deleted_at != null) {
+      const version = Number(existing.version);
+      await putRecordMeta({
+        entity: item.entity,
+        recordId: item.recordId,
+        version,
+        syncedVersion: version,
+        deletedAt: (existing as { deleted_at: string }).deleted_at,
+        updatedAt: new Date().toISOString(),
+      });
       return;
     }
     if (
