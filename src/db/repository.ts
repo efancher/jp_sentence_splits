@@ -6,6 +6,7 @@ import { isReadingAnswerCorrect, surfaceReadingFromInline } from '../lib/reading
 import { buildWordEvidence } from '../lib/wordEvidence';
 import { stepTimer } from '../lib/pageTiming';
 import { FREQUENCY_WAIT_MS, loadWordFrequency, lookupWordBand } from '../lib/wordFrequency';
+import { buildGrammarEvidence, grammarStrength } from '../lib/grammarEvidence';
 import { frequencyBandPrior, planWeakWordSentences, READER_KNOWN_STRENGTH, wordStrength } from '../lib/wordStrength';
 import { readCheckReason, sentencesDueForReadCheck } from '../lib/readCheck';
 import { withoutResetWalkthroughs } from '../lib/sentenceLearning';
@@ -11247,17 +11248,61 @@ async function floatGrowthEligibleFirst<T extends { sentenceId: string }>(items:
 }
 
 /**
- * Walked-through sentences worth another walkthrough for the weak words they
- * contain: last walked at least WEAK_WORD_REVISIT_MIN_GAP_DAYS ago, not already
- * `excluded`, ranked by `getWeakWordSentenceSignal`. Returns sentence id → the
- * weak words to name in the step's reason, in pick order. Selection only.
+ * The grammar twin of `getWeakWordSentenceSignal`: which of `sentenceIds` carry grammar patterns the learner
+ * hasn't retained, from their reader taps (`buildGrammarEvidence`). A pattern's strength is its weakest facet
+ * that has any evidence (spotting it, understanding it); a pattern with no taps is unseen, not weak. `labels`
+ * names each pick's weak patterns. Selection only: no due dates, no FSRS effect.
+ */
+export async function getWeakGrammarSentenceSignal(
+  sentenceIds: string[],
+): Promise<{ order: string[]; labels: Map<string, string[]> }> {
+  if (sentenceIds.length === 0) return { order: [], labels: new Map() };
+  const db = getDb();
+  const evidence = buildGrammarEvidence(await readAllLearningEventsForPass());
+  if (evidence.size === 0) return { order: [], labels: new Map() };
+  const now = Date.now();
+  const strengthByPattern = new Map<string, number>();
+  for (const [patternId, items] of evidence) {
+    const facets = (['spot', 'use'] as const).filter((facet) =>
+      items.some((item) => item.facet === (facet === 'spot' ? 'reading' : 'meaning')),
+    );
+    strengthByPattern.set(patternId, Math.min(...facets.map((facet) => grammarStrength(items, facet, now))));
+  }
+  const links = await db.sentenceGrammar.where('sentenceId').anyOf(sentenceIds).toArray();
+  const patternsBySentence = new Map<string, string[]>();
+  for (const link of links) {
+    if (!strengthByPattern.has(link.grammarPatternId)) continue;
+    const list = patternsBySentence.get(link.sentenceId);
+    if (list) list.push(link.grammarPatternId);
+    else patternsBySentence.set(link.sentenceId, [link.grammarPatternId]);
+  }
+  const plan = planWeakWordSentences(
+    sentenceIds.map((sentenceId) => ({ sentenceId, wordIds: patternsBySentence.get(sentenceId) ?? [] })),
+    strengthByPattern,
+  );
+  const patternIds = [...new Set([...plan.weakWordsBySentence.values()].flat())];
+  const patterns = new Map(
+    (await db.grammarPatterns.bulkGet(patternIds)).filter((p): p is GrammarPattern => Boolean(p)).map((p) => [p.id, p.canonicalName]),
+  );
+  const labels = new Map<string, string[]>();
+  for (const [sentenceId, ids] of plan.weakWordsBySentence) {
+    labels.set(sentenceId, ids.map((id) => patterns.get(id)).filter((x): x is string => Boolean(x)));
+  }
+  return { order: plan.order, labels };
+}
+
+/**
+ * Walked-through sentences worth another walkthrough for the weak words (or, after the words, weak grammar
+ * patterns) they contain: last walked at least WEAK_WORD_REVISIT_MIN_GAP_DAYS ago, not already `excluded`,
+ * ranked by `getWeakWordSentenceSignal` then `getWeakGrammarSentenceSignal`. Returns sentence id → the weak
+ * words and the weak patterns to name in the step's reason, in pick order. Selection only.
  */
 async function findWeakWordRevisits(
   events: SentenceLearningEvent[],
   excluded: ReadonlySet<string>,
   limit: number,
   now: Date = new Date(),
-): Promise<Map<string, string[]>> {
+): Promise<Map<string, { words: string[]; grammar: string[] }>> {
   const lastWalk = new Map<string, string>();
   for (const event of events) {
     if (event.action !== 'walkthrough_completed') continue;
@@ -11270,7 +11315,12 @@ async function findWeakWordRevisits(
     .map(([id]) => id);
   // Planner runs call this once per book; the shared strengths scan reads five whole tables, so reuse it.
   const signal = await getWeakWordSentenceSignal(candidates, PLANNER_STRENGTH_CACHE_MS);
-  return new Map(signal.order.slice(0, limit).map((id) => [id, signal.labels.get(id) ?? []]));
+  const grammar = await getWeakGrammarSentenceSignal(candidates);
+  // Weak words lead; weak grammar fills the remaining room, so grammar revisits never crowd out word ones.
+  const picked = [...new Set([...signal.order, ...grammar.order])].slice(0, limit);
+  return new Map(
+    picked.map((id) => [id, { words: signal.labels.get(id) ?? [], grammar: grammar.labels.get(id) ?? [] }]),
+  );
 }
 
 /**
@@ -11659,7 +11709,7 @@ async function findExploreCandidates(
       ? await traceStep('explore: findWeakWordRevisits', () =>
           findWeakWordRevisits(bookEvents, new Set([...requestedIds, ...shelvedIds]), automaticRevisitCap),
         )
-      : new Map<string, string[]>();
+      : new Map<string, { words: string[]; grammar: string[] }>();
     const revisitIds = sentenceFirst
       ? [
           ...new Set([
@@ -11696,8 +11746,11 @@ async function findExploreCandidates(
         vocabularyConfirmed: analysisRows[index]?.vocabularyReviewStatus === 'confirmed',
         ...(revisitSet.has(item.sentenceId) ? { revisit: true } : {}),
         ...(parkedGlossSet.has(item.sentenceId) ? { parkedGloss: true } : {}),
-        ...(revisitSet.has(item.sentenceId) && weakWordRevisits.get(item.sentenceId)?.length
-          ? { weakWords: weakWordRevisits.get(item.sentenceId) }
+        ...(revisitSet.has(item.sentenceId) && weakWordRevisits.get(item.sentenceId)?.words.length
+          ? { weakWords: weakWordRevisits.get(item.sentenceId)!.words }
+          : {}),
+        ...(revisitSet.has(item.sentenceId) && weakWordRevisits.get(item.sentenceId)?.grammar.length
+          ? { weakGrammar: weakWordRevisits.get(item.sentenceId)!.grammar }
           : {}),
         ...(iPlusOneContext && !revisitSet.has(item.sentenceId) && iPlusOneContext.rank.has(item.sentenceId)
           ? {

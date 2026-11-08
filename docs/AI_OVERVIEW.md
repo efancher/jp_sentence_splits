@@ -413,7 +413,7 @@ the only "when". In sentence-first planning the same signal also adds
 walked-through sentences (last walked at least
 `WEAK_WORD_REVISIT_MIN_GAP_DAYS` = 3 days ago) as the lowest-priority revisit
 source, inside the existing per-book revisit cap, with the weak words named in
-the step's reason (`findWeakWordRevisits`). Each such revisit also drafts a
+the step's reason (`findWeakWordRevisits`). The same pass also picks sentences carrying weak grammar patterns (`getWeakGrammarSentenceSignal`: `buildGrammarEvidence` taps → `grammarStrength`, min over tapped facets → `planWeakWordSentences` over `sentenceGrammar` links; weak words take the room first, then `ExploreCandidate.sentences[].weakGrammar` feeds a "Has grammar that hasn't stuck: …" reason; no Word check for grammar yet). Each such word revisit also drafts a
 cheap **Word check** step (up to `WORD_CHECK_STEPS_PER_PLAN` = 2 per plan, 1
 minute each, bucket `glossing`, `targetKind: sentence_learning` with the
 additive `wordCheck: true`): "Recall what a word here means (怪我 haven't stuck)

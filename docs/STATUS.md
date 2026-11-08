@@ -148,6 +148,11 @@ and possible extensions. This snapshot does not certify a live deployment.
   from its second review (answers feed the model; the rating stays explicit).
   Each weak-word revisit also drafts a Word check step (max 2 per plan) that opens
   the reader's word check at `/books/:bookId/check/:sentenceId`.
+  Grammar (2026-11-08): the same revisits also cover weak grammar patterns
+  (`getWeakGrammarSentenceSignal`, from the reader's grammar taps; a pattern is
+  weak by its weakest tapped facet, untapped is unseen not weak). Weak words
+  fill the revisit room first; the reason reads "Has grammar that hasn't
+  stuck: …". No Word-check equivalent yet.
   Words start from a JMdict frequency-band prior (fetched on demand from
   `public/wordFrequency.json`; none offline). Meaning has no recall evidence
   yet; see AI_OVERVIEW for the model.

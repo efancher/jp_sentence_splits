@@ -843,8 +843,11 @@ removed ~16 false matches). Episode momentum (2026-11-08): sentences from
 episodes with many started sentences get up to +50% on unlock value
 (`episodeMomentumBoost`, capped at 10 started) and win ties. Retesting exists
 only at sentence level (Read checks 1-64 days, Fresh try revisits, weak-word
-revisits); nothing schedules grammar specifically and `grammarStrength` is not
-read by the planner. Left over: resolve ambiguous `（note）` matches (e.g.
+revisits). Grammar parity, first slice (2026-11-08): weak grammar patterns (from
+reader grammar taps) now bring walked sentences back like weak words
+(`getWeakGrammarSentenceSignal`). Still missing vs vocabulary: a grammar Word-check
+equivalent, a typed/recall target before reveal, known-pattern highlighting in
+the reader, and a /progress panel for grammar strength. Left over: resolve ambiguous `（note）` matches (e.g.
 ながら（while）/（も）, currently skipped), other short-form over-matches that
 begin on a token boundary, and any grammar study surface.
 

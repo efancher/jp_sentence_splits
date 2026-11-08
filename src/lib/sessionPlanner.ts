@@ -409,6 +409,8 @@ export interface ExploreCandidate {
     parkedGloss?: true;
     /** Words in this walked-through sentence the learner hasn't retained; why it was brought back (`getWeakWordSentenceSignal`). */
     weakWords?: string[];
+    /** Grammar patterns in this walked-through sentence the learner hasn't retained (`getWeakGrammarSentenceSignal`). */
+    weakGrammar?: string[];
     /** i+1 ordering only: this sentence's place in the order over every book (lower = sooner); new sentences are served across books by it. */
     iPlusOneRank?: number;
     /** i+1 ordering only: content words here the learner has not met yet (a few, for the lesson's reason line). */
@@ -786,6 +788,8 @@ function exploreStepFor(entry: ExploreSentenceEntry): PlannerStepDraft {
         ? `You parked a structure check in this sentence in ${candidate.label} — try it again`
         : sentence.revisit && sentence.weakWords?.length
         ? `Has words that haven't stuck: ${sentence.weakWords.join('、')} — walk through it again`
+        : sentence.revisit && sentence.weakGrammar?.length
+        ? `Has grammar that hasn't stuck: ${sentence.weakGrammar.join('、')} — walk through it again`
         : sentence.revisit
         ? `You walked through this in ${candidate.label} on an earlier day — try saying it without cues`
         : `Next sentence in ${candidate.label}${sentence.newWords?.length ? ` (new here: ${sentence.newWords.join('、')})` : ''} — walk through it, practise a target, then try saying it`,
