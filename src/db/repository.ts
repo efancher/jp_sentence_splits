@@ -3,7 +3,7 @@ import type { Table } from 'dexie';
 import { openContentReports, type OpenContentReport } from '../lib/contentReports';
 import { isSentenceLedFlow } from '../lib/sentenceLed';
 import { isReadingAnswerCorrect, surfaceReadingFromInline } from '../lib/readingAnswer';
-import { buildWordEvidence } from '../lib/wordEvidence';
+import { buildWordEvidence, strugglingWordIds } from '../lib/wordEvidence';
 import { stepTimer } from '../lib/pageTiming';
 import { FREQUENCY_WAIT_MS, loadWordFrequency, lookupWordBand } from '../lib/wordFrequency';
 import { grammarPatternStrengths } from '../lib/grammarEvidence';
@@ -11535,11 +11535,15 @@ async function loadKnownLemmaSet(introducedRows: (Sentence | undefined)[]): Prom
   const reviewedKeys = vocabulary
     .filter((item) => reviewed.has(item.id))
     .map((item) => lemmaKey(item.expression, item.reading));
-  return buildKnownLemmaSet(
+  const known = buildKnownLemmaSet(
     introducedRows.map((row) => row?.vocabularySuggestions),
     reviewedKeys,
     WORD_MIN_EXPOSURES,
   );
+  // A word the learner keeps missing in the reader / Word check is unknown again, however often it was seen.
+  const struggling = strugglingWordIds(await readAllLearningEventsForPass(), Date.now());
+  for (const item of vocabulary) if (struggling.has(item.id)) known.delete(lemmaKey(item.expression, item.reading));
+  return known;
 }
 
 /**

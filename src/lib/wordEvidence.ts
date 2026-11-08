@@ -1,6 +1,6 @@
 import type { Review, SentenceLearningEvent, StudyItem } from '../domain/types';
 import { phraseShadowWordIds } from './phraseShadow';
-import type { WordEvidence } from './wordStrength';
+import { READER_KNOWN_STRENGTH, wordStrength, type WordEvidence } from './wordStrength';
 
 /**
  * Turns existing review and lesson history into `WordEvidence` for the word
@@ -129,4 +129,31 @@ function readingFeedbackWordId(key: string | undefined): string | undefined {
 
 function meaningCheckWordId(key: string | undefined): string | undefined {
   return key?.startsWith(MEANING_CHECK_KEY_PREFIX) ? key.slice(MEANING_CHECK_KEY_PREFIX.length) : undefined;
+}
+
+/** Failed taps (the latest included) before a word that otherwise counts as known is treated as unknown again. */
+export const WORD_STRUGGLE_MIN_FAILURES = 2;
+
+/**
+ * Words the learner keeps missing in the reader / Word check: at least `minFailures` failed taps, the latest tap a
+ * failure, and a direct-evidence strength below the known line. A single miss never counts, and a later "got it"
+ * recovers the word. Sequencing only (i+1 treats the word as unknown); never a rating. Shared by the planner and
+ * `diagnose:i-plus-one`.
+ */
+export function strugglingWordIds(
+  events: NonNullable<WordEvidenceInput['learningEvents']>,
+  now: number,
+  minFailures: number = WORD_STRUGGLE_MIN_FAILURES,
+): Set<string> {
+  const out = new Set<string>();
+  const evidence = buildWordEvidence({ reviews: [], studyItems: [], wordsBySentence: new Map(), learningEvents: events });
+  for (const [wordId, items] of evidence) {
+    const failures = items.filter((item) => item.success === false).length;
+    if (failures < minFailures) continue;
+    const latest = items.reduce((a, b) => (b.at > a.at ? b : a));
+    if (latest.success !== false) continue;
+    const facets = (['reading', 'meaning'] as const).filter((facet) => items.some((item) => item.facet === facet));
+    if (Math.min(...facets.map((facet) => wordStrength(items, facet, now))) < READER_KNOWN_STRENGTH) out.add(wordId);
+  }
+  return out;
 }

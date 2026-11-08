@@ -762,11 +762,10 @@ Constraints and decisions:
   introduced sentences and no shaky reader evidence (done 2026-11-08). Words
   need two introduced sentences too (`WORD_MIN_EXPOSURES`; reviewed-card words stay known; done 2026-11-08).
   Measured by `diagnose:i-plus-one` (which also applies the shaky cut): the 1-2-unknown pool went 2,564 -> 2,287
-  (words only) and 2,069 -> 1,895 (words + grammar); known lemmas 556 -> 313. Open: a struggle signal for words
-  (a tapped-and-shaky word is still known if seen twice). Measured 2026-11-08 (diagnostic only, not shipped): 63 words
-  have reader/Word-check evidence, 41 with a failure as the latest tap, 20 of those currently known; making them
-  unknown shrinks the pool 2,286 -> 2,138 (words) and 1,894 -> 1,792 (with grammar). One word, 思う, accounts for
-  ~530 candidate sentences, so a per-word cut is lumpy; consider only demoting after repeated failures.
+  (words only) and 2,069 -> 1,895 (words + grammar); known lemmas 556 -> 313. Word struggle cut shipped 2026-11-08: two or more failed
+  reader/Word-check taps with the latest a failure (`strugglingWordIds`) makes a word unknown again; measured 13
+  known words flipped, pool 2,286 -> 2,229 (words) and 1,894 -> 1,851 (with grammar). A single miss was rejected
+  (20 words, one of them, 思う, in ~530 sentences). Open: nothing for words beyond tuning the threshold.
   Never derive FSRS ratings from this.
 - **Rank by unlock value** among 1-2-unknown sentences: how many other
   candidates become closer to ready if the unknown word is learned.

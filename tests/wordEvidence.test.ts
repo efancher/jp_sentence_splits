@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildWordEvidence } from '../src/lib/wordEvidence';
+import { buildWordEvidence, strugglingWordIds } from '../src/lib/wordEvidence';
 
 const ts = '2026-10-30T00:00:00.000Z';
 const at = Date.parse(ts);
@@ -67,5 +67,33 @@ describe('buildWordEvidence', () => {
       ],
     });
     expect(map.size).toBe(0);
+  });
+});
+
+describe('strugglingWordIds', () => {
+  const tap = (wordId: string, outcome: 'got_it' | 'not_yet', minutes: number) => ({
+    sentenceId: 's1',
+    timestamp: new Date(at + minutes * 60_000).toISOString(),
+    action: 'target_practice' as const,
+    outcome,
+    support: 'target_masked' as const,
+    target: { kind: 'vocabulary' as never, key: `vocab-read:${wordId}`, label: '' },
+  });
+
+  it('needs repeated failures, the latest being a failure', () => {
+    const now = at + 3_600_000;
+    expect(strugglingWordIds([tap('a', 'not_yet', 0)], now).size).toBe(0);
+    expect([...strugglingWordIds([tap('a', 'not_yet', 0), tap('a', 'not_yet', 1)], now)]).toEqual(['a']);
+  });
+
+  it('lets a later success recover the word', () => {
+    const now = at + 3_600_000;
+    const events = [tap('a', 'not_yet', 0), tap('a', 'not_yet', 1), tap('a', 'got_it', 2)];
+    expect(strugglingWordIds(events, now).size).toBe(0);
+  });
+
+  it('honours a custom minimum', () => {
+    const events = [tap('a', 'not_yet', 0)];
+    expect([...strugglingWordIds(events, at + 60_000, 1)]).toEqual(['a']);
   });
 });
