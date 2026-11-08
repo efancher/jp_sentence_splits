@@ -32,7 +32,9 @@ and possible extensions. This snapshot does not certify a live deployment.
   down-weights interjections/fillers and discourse markers (x0.2), grammar-bound
   verbs (しれる, いける, ござる, なさる and について's つく, x0.3; `diagnose:grammar-bound-lemmas` audits candidates) and proper nouns (x0.5) via `lemmaWeight`, for ranking
   only: those words still count as unknown. Limits: the grammar-bound list is
-  short on purpose; word exposure counts and self-ratings are not used.
+  short on purpose. A lemma counts as known once two introduced sentences carry it
+  (`WORD_MIN_EXPOSURES`) or it has a reviewed reading/meaning card; self-ratings are
+  not used (2026-11-08: pool 2,564 -> 2,287 words only, 2,069 -> 1,895 with grammar).
   Grammar (2026-11-07): an unmet curated pattern counts as one more unknown
   piece, so "1-2 new pieces" covers words plus patterns. A sentence's curated
   patterns are its AI/manual `sentence_grammar` links that resolve

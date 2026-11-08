@@ -47,7 +47,7 @@ import {
   iPlusOneStretchEvery,
   isSequentialStudyMode,
 } from '../lib/sentenceLed';
-import { buildKnownLemmaSet, lemmaKey, unknownLemmasForSentence } from '../lib/unknownLemmas';
+import { buildKnownLemmaSet, lemmaKey, unknownLemmasForSentence, WORD_MIN_EXPOSURES } from '../lib/unknownLemmas';
 import { sessionStepCategory } from '../lib/sessionStepCategory';
 import { sentencesDueForFreshTry } from '../lib/sentenceJourney';
 import { emptyStageCounts, sentenceStage, type StageCounts } from '../lib/sentenceStages';
@@ -11526,7 +11526,7 @@ interface IPlusOneContext {
 
 /**
  * The "known" lemmas for i+1: content words of every introduced sentence
- * (`getIntroducedSentenceIds`) plus words with a reading/meaning study item
+ * (`getIntroducedSentenceIds`) seen in at least `WORD_MIN_EXPOSURES` of them, plus words with a reading/meaning study item
  * that has been reviewed at least once (pitch-only practice doesn't count).
  */
 async function loadKnownLemmaSet(introducedRows: (Sentence | undefined)[]): Promise<Set<string>> {
@@ -11538,6 +11538,7 @@ async function loadKnownLemmaSet(introducedRows: (Sentence | undefined)[]): Prom
   return buildKnownLemmaSet(
     introducedRows.map((row) => row?.vocabularySuggestions),
     reviewedKeys,
+    WORD_MIN_EXPOSURES,
   );
 }
 

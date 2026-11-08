@@ -18,12 +18,12 @@ import { grammarPatternStrengths } from '../src/lib/grammarEvidence';
 import { grammarLevelCosts, knownGrammarEntries } from '../src/lib/iPlusOne';
 import {
   buildKnownLemmaSet,
-  sentenceContentLemmas,
   lemmaKey,
   lemmaWeight,
   scoreSentence,
   unknownCountHistogram,
   unlockValueByLemma,
+  WORD_MIN_EXPOSURES,
 } from '../src/lib/unknownLemmas';
 import { READER_KNOWN_STRENGTH } from '../src/lib/wordStrength';
 import { fetchAll, requireAuthedUser } from './lib/scriptHelpers';
@@ -80,7 +80,7 @@ async function main(): Promise<void> {
   const reviewedKeys = vocabularyItems
     .filter((item) => reviewedItemIds.has(item.id))
     .map((item) => lemmaKey(item.expression, item.reading));
-  const known = buildKnownLemmaSet([...introduced].map((id) => suggestionsBySentence.get(id)), reviewedKeys);
+  const known = buildKnownLemmaSet([...introduced].map((id) => suggestionsBySentence.get(id)), reviewedKeys, WORD_MIN_EXPOSURES);
 
   const scored: Array<{ id: string; unknown: string[] }> = [];
   const unscorable = { 'no-tokens': 0, 'no-content-words': 0 };
@@ -154,11 +154,8 @@ async function main(): Promise<void> {
   console.log('unknown lemmas + unmet curated grammar (level-weighted) per candidate:');
   console.log(formatHistogram(unknownCountHistogram(withGrammar, 10)));
 
-  // What a two-sighting bar for words would do: a lemma seen in one introduced sentence stays unknown (reviewed-card words stay known).
-  const wordSightings = new Map<string, number>();
-  for (const id of introduced) for (const key of sentenceContentLemmas(suggestionsBySentence.get(id))) wordSightings.set(key, (wordSightings.get(key) ?? 0) + 1);
-  const knownTwice = new Set<string>(reviewedKeys);
-  for (const [key, n] of wordSightings) if (n >= 2) knownTwice.add(key);
+  // Planner bar (WORD_MIN_EXPOSURES sightings) against the old seen-once bar: reviewed-card words stay known either way.
+  const knownOnce = buildKnownLemmaSet([...introduced].map((id) => suggestionsBySentence.get(id)), reviewedKeys);
   const pool = (knownSet: ReadonlySet<string>) => {
     let words = 0;
     let withGrammarPool = 0;
@@ -171,11 +168,11 @@ async function main(): Promise<void> {
     }
     return { words, withGrammarPool };
   };
-  const once = pool(known);
-  const twice = pool(knownTwice);
+  const once = pool(knownOnce);
+  const twice = pool(known);
   console.log(`\nword exposure bar (1-2 unknown pool: words only / words + grammar):`);
-  console.log(`  seen once counts as known: ${once.words} / ${once.withGrammarPool}   (known lemmas ${known.size})`);
-  console.log(`  needs two sightings:       ${twice.words} / ${twice.withGrammarPool}   (known lemmas ${knownTwice.size})`);
+  console.log(`  seen once counts as known: ${once.words} / ${once.withGrammarPool}   (known lemmas ${knownOnce.size})`);
+  console.log(`  planner (>= ${WORD_MIN_EXPOSURES} sightings): ${twice.words} / ${twice.withGrammarPool}   (known lemmas ${known.size})`);
 
   const perBook = new Map<string, { total: number; ready: number }>();
   for (const { id, unknown } of scored) {

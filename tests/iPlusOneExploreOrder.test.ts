@@ -42,11 +42,12 @@ async function lessonOrder(): Promise<string[]> {
   return (await lessonSteps()).map((step) => step.sentenceId!);
 }
 
-/** One finished sentence (so 猫 and 犬 are known) then three new ones, in reading order hard -> i+1 -> all-known. */
+/** Two finished sentences (so 猫 and 犬 are known: a word needs two sightings) then three new ones, in reading order hard -> i+1 -> all-known. */
 async function seed(): Promise<void> {
   const book = await createBook({ title: 'i+1 Book' });
   const rows = [
     sentenceOf('done', ['猫', '犬']),
+    sentenceOf('done2', ['猫', '犬']),
     sentenceOf('hard', ['雨', '傘', '風', '雲']),
     sentenceOf('i1', ['猫', '空']),
     sentenceOf('easy', ['猫', '犬']),
@@ -54,6 +55,7 @@ async function seed(): Promise<void> {
   await getDb().sentences.bulkPut(rows);
   await addSentencesToBook(book.id, rows.map((row) => row.id));
   await setBookSentenceStatus(book.id, 'done', 'complete');
+  await setBookSentenceStatus(book.id, 'done2', 'complete');
 }
 
 describe('walkthrough supply: i+1 ordering (settings.iPlusOneOrdering)', () => {
@@ -127,6 +129,16 @@ describe('walkthrough supply: i+1 ordering (settings.iPlusOneOrdering)', () => {
     expect((await lessonOrder()).indexOf('hard')).toBe(5);
   });
 
+  it('keeps a word seen in only one introduced sentence unknown (needs two sightings)', async () => {
+    const book = await createBook({ title: 'Once' });
+    const rows = [sentenceOf('done', ['猫', '犬']), sentenceOf('next', ['猫', '犬']), sentenceOf('hard', ['雨', '傘', '風'])];
+    await getDb().sentences.bulkPut(rows);
+    await addSentencesToBook(book.id, rows.map((row) => row.id));
+    await setBookSentenceStatus(book.id, 'done', 'complete');
+    const ready = await getBookReadyToPickUp(book.id);
+    expect(ready.items.map((item) => [item.sentenceId, item.newPieces])).toEqual([['next', ['猫', '犬']]]);
+  });
+
   it('counts a word with a reviewed reading card as known', async () => {
     await seed();
     await updateSettings({ iPlusOneOrdering: true });
@@ -166,6 +178,7 @@ describe('walkthrough supply: i+1 ordering (settings.iPlusOneOrdering)', () => {
     const book = await createBook({ title: 'Ready Book' });
     const rows = [
       sentenceOf('done', ['猫', '犬']),
+      sentenceOf('done2', ['猫', '犬']),
       sentenceOf('hard', ['雨', '傘', '風', '雲']),
       sentenceOf('i1', ['猫', '空']),
       sentenceOf('easy', ['猫', '犬']),
@@ -173,6 +186,7 @@ describe('walkthrough supply: i+1 ordering (settings.iPlusOneOrdering)', () => {
     await getDb().sentences.bulkPut(rows);
     await addSentencesToBook(book.id, rows.map((row) => row.id));
     await setBookSentenceStatus(book.id, 'done', 'complete');
+    await setBookSentenceStatus(book.id, 'done2', 'complete');
     const ready = await getBookReadyToPickUp(book.id);
     expect(ready.total).toBe(2);
     expect(ready.items.map((item) => [item.sentenceId, item.newPieces])).toEqual([

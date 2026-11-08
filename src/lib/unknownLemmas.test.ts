@@ -44,6 +44,12 @@ describe('known set and unknown lemmas', () => {
     expect([...known].sort()).toEqual([lemmaKey('傘', 'かさ'), lemmaKey('雨', 'あめ'), lemmaKey('降る', 'ふる')].sort());
   });
 
+  it('can require a lemma in several introduced sentences, trusting extras regardless', () => {
+    const twice = [[tok('雨', 'あめ'), tok('降る', 'ふる')], [tok('雨', 'あめ')], undefined];
+    const known = buildKnownLemmaSet(twice, [lemmaKey('傘', 'かさ')], 2);
+    expect([...known].sort()).toEqual([lemmaKey('傘', 'かさ'), lemmaKey('雨', 'あめ')].sort());
+  });
+
   it('reports unknown content lemmas and ignores function words', () => {
     const known = buildKnownLemmaSet(introduced);
     const candidate = [tok('雨', 'あめ'), tok('は', 'は', false), tok('止む', 'やむ'), tok('傘', 'かさ')];

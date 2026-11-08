@@ -34,18 +34,28 @@ export function sentenceContentLemmas(suggestions: readonly LemmaSource[] | unde
 /**
  * Lemmas the learner has met: the content words of every introduced sentence
  * (`getIntroducedSentenceIds`), plus any extra keys the caller already trusts
- * (e.g. confirmed vocabulary items).
+ * (e.g. confirmed vocabulary items). With `minExposures` above 1 a lemma met in fewer introduced sentences stays
+ * unknown unless it is an extra key.
  */
 export function buildKnownLemmaSet(
   introducedSentences: Iterable<readonly LemmaSource[] | undefined>,
   extraKnownKeys: Iterable<string> = [],
+  minExposures: number = 1,
 ): Set<string> {
   const known = new Set<string>(extraKnownKeys);
+  const sightings = new Map<string, number>();
   for (const suggestions of introducedSentences) {
-    for (const key of sentenceContentLemmas(suggestions)) known.add(key);
+    for (const key of sentenceContentLemmas(suggestions)) sightings.set(key, (sightings.get(key) ?? 0) + 1);
   }
+  for (const [key, count] of sightings) if (count >= minExposures) known.add(key);
   return known;
 }
+
+/**
+ * Introduced sentences a lemma must appear in before i+1 counts it as met (the planner passes this; extra keys such
+ * as reviewed-card words are trusted regardless). Mirrors `GRAMMAR_MIN_EXPOSURES`.
+ */
+export const WORD_MIN_EXPOSURES = 2;
 
 /** Content lemmas of a sentence the learner has not met yet. */
 export function unknownLemmasForSentence(
