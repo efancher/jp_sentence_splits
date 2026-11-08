@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-import { getWordMeaningCheckTarget } from '../db/repository';
+import { getWordMeaningCheckTarget, pickGrammarCheckPatternId } from '../db/repository';
 import type { Sentence } from '../domain/types';
 import { gradeDictation, typedAsKana } from '../lib/dictationAnswer';
 import { FOLLOW_UP_LABEL, FOLLOW_UP_PURPOSE, type FollowUpTool } from '../lib/followUpOffer';
@@ -315,6 +315,78 @@ export function PatternFeedbackPanel({
         <div><button type="button" onClick={() => setShown(true)}>Show the pattern</button></div>
       )}
       <div><button type="button" onClick={onClose}>Close</button></div>
+    </div>
+  );
+}
+
+/**
+ * A recall check on one grammar pattern in the sentence, the grammar twin of the word meaning check: it names
+ * the stretch of text, hides what the pattern is and does until the learner asks, then they judge their own
+ * recall. Evidence only (the `use` facet); it grades no card.
+ */
+export function GrammarCheckPanel({
+  patterns,
+  onRecord,
+  onClose,
+}: {
+  patterns: ReaderPattern[];
+  onRecord: (outcome: ReaderToolOutcome, pattern: ReaderPattern) => void;
+  onClose: () => void;
+}) {
+  const [target, setTarget] = useState<ReaderPattern | undefined | 'loading'>('loading');
+  const [revealed, setRevealed] = useState(false);
+  const [recorded, setRecorded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    // A snapshot per open, like the word check: the pattern must not change while the learner is thinking.
+    void pickGrammarCheckPatternId(patterns.map((pattern) => pattern.patternId)).then(
+      (id) => { if (!cancelled) setTarget(patterns.find((pattern) => pattern.patternId === id)); },
+      () => { if (!cancelled) setTarget(undefined); },
+    );
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- a snapshot per open; the array identity changes on every render
+  }, []);
+
+  if (target === 'loading') return <p className="muted">Picking a pattern…</p>;
+  if (!target) {
+    return (
+      <div className="stack" style={{ gap: '0.25rem' }}>
+        <p className="muted" style={{ margin: 0 }}>No grammar pattern to check in this sentence.</p>
+        <div><button type="button" onClick={onClose}>Close</button></div>
+      </div>
+    );
+  }
+  return (
+    <div className="stack" style={{ gap: '0.35rem' }} role="group" aria-label="Grammar check">
+      <p style={{ margin: 0 }}>
+        What is the grammar in <strong className="jp">{target.surface}</strong> doing here?
+      </p>
+      {!revealed ? (
+        <div className="row" style={{ gap: '0.4rem' }}>
+          <button type="button" onClick={() => setRevealed(true)}>Show the pattern</button>
+          <button type="button" onClick={onClose}>Close</button>
+        </div>
+      ) : (
+        <div className="stack" style={{ gap: '0.25rem' }}>
+          <p style={{ margin: 0 }}>
+            <strong className="jp">{target.name}</strong>
+            {target.occurrenceExplanation || target.shortMeaning ? <> — {target.occurrenceExplanation || target.shortMeaning}</> : null}
+          </p>
+          {!recorded ? (
+            <div className="row" style={{ gap: '0.4rem', alignItems: 'center' }}>
+              <span className="muted">Did you have it?</span>
+              <button type="button" onClick={() => { onRecord('got_it', target); setRecorded(true); }}>Got it</button>
+              <button type="button" onClick={() => { onRecord('needed_help', target); setRecorded(true); }}>Needed help</button>
+            </div>
+          ) : (
+            <div className="row" style={{ gap: '0.4rem', alignItems: 'center' }}>
+              <span className="muted">Recorded.</span>
+              <button type="button" onClick={onClose}>Close</button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

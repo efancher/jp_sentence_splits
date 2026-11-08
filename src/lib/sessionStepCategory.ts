@@ -31,12 +31,13 @@ export const SESSION_STEP_CATEGORY_ORDER: SessionStepCategory[] = [
 
 /** The learner-facing kind of a step. Older persisted fresh tries lack `revisit`, so the label prefix is the fallback. */
 export function sessionStepCategory(
-  step: Pick<PlannerSessionStep, 'targetKind' | 'bucket' | 'revisit' | 'label'> & Partial<Pick<PlannerSessionStep, 'wordCheck' | 'readCheck' | 'readerTool'>>,
+  step: Pick<PlannerSessionStep, 'targetKind' | 'bucket' | 'revisit' | 'label'> & Partial<Pick<PlannerSessionStep, 'wordCheck' | 'grammarCheck' | 'readCheck' | 'readerTool'>>,
 ): SessionStepCategory {
   switch (step.targetKind) {
     case 'sentence_learning':
       // A Word check recalls a word's meaning, so it counts as vocabulary, not a sentence lesson.
       if (step.wordCheck) return 'vocabulary';
+      if (step.grammarCheck) return 'grammar';
       // A Read check stands in for the sentence review cards.
       if (step.readCheck || step.readerTool) return 'review';
       return step.revisit || step.label.startsWith('Fresh try') ? 'fresh_try' : 'learn_sentence';

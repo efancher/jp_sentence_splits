@@ -374,3 +374,37 @@ test('the focused sentence names its unchecked grammar, and a tap clears it from
   await expect(page.locator('.karaoke-pattern-checkable.karaoke-evidence-shaky').first()).toBeVisible();
   await expect(hint).not.toContainText('〜ました');
 });
+
+test('a planner Grammar check hides the pattern, then logs your own call on what it does', async ({ page }) => {
+  await seed(page);
+  await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('satori-glossbook');
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const now = new Date().toISOString();
+    const tx = db.transaction(['grammarPatterns', 'sentenceGrammar'], 'readwrite');
+    tx.objectStore('grammarPatterns').put({ id: 'g-mashita', canonicalName: '〜ました', normalizedKey: 'mashita', aliases: [],
+      shortMeaning: 'polite past', provenance: 'manual', createdAt: now, updatedAt: now });
+    tx.objectStore('sentenceGrammar').put({ id: 'sg-1', sentenceId: 's-0', grammarPatternId: 'g-mashita', surfaceForm: '食べました',
+      start: 6, end: 11, confirmedByLearner: true, source: 'manual', createdAt: now, updatedAt: now });
+    await new Promise<void>((resolve, reject) => { tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error); });
+    db.close();
+  });
+  await page.goto('/#/books/book/grammar-check/s-0');
+  const panel = page.getByRole('group', { name: 'Grammar check' });
+  await expect(panel).toBeVisible();
+  await expect(panel).not.toContainText('polite past');
+  await panel.getByRole('button', { name: 'Show the pattern' }).click();
+  await expect(panel).toContainText('polite past');
+  await panel.getByRole('button', { name: 'Needed help' }).click();
+  await expect(panel).toContainText('Recorded.');
+
+  await expect.poll(async () => (await storedCounts(page)).events.filter((event) => event.target?.key.startsWith('grammar-')).length).toBe(1);
+  const stored = await storedCounts(page);
+  const use = stored.events.find((event) => event.target?.key === 'grammar-use:g-mashita')!;
+  expect([use.action, use.support, use.outcome]).toEqual(['target_practice', 'target_masked', 'needed_help']);
+  expect(stored.reviews).toBe(0);
+  expect(stored.studyItems).toBe(0);
+});

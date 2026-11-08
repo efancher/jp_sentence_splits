@@ -14,6 +14,7 @@ const SENTENCE_ROUTES = [
   '/books/:bookId/practice/:sentenceId',
   '/books/:bookId/learn/:sentenceId',
   '/books/:bookId/check/:sentenceId',
+  '/books/:bookId/grammar-check/:sentenceId',
   '/books/:bookId/recall/:sentenceId',
   '/books/:bookId/speak/:sentenceId',
   '/books/:bookId/tiles/:sentenceId',

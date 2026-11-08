@@ -11,6 +11,7 @@ import {
   BASELINE_SESSION_ALLOCATION,
   EXPLORE_STEP_MINUTES,
   WORD_CHECK_STEPS_PER_PLAN,
+  GRAMMAR_CHECK_STEPS_PER_PLAN,
   LISTENING_TOOL_STEPS_PER_PLAN,
   LISTENING_TOOL_STEP_MINUTES,
   READ_CHECK_STEPS_PER_PLAN,
@@ -540,6 +541,8 @@ export interface PlannerStepDraft {
   targetCount?: number;
   /** A Word check in the reader (see PlannerSessionStep.wordCheck), not a walkthrough. */
   wordCheck?: boolean;
+  /** A Grammar check in the reader (see PlannerSessionStep.grammarCheck), not a walkthrough. */
+  grammarCheck?: boolean;
   /** A Read check in the reader (see PlannerSessionStep.readCheck), not a walkthrough. */
   readCheck?: boolean;
   /** An Ear tiles or Dictation round in the reader (see PlannerSessionStep.readerTool). */
@@ -912,7 +915,39 @@ function buildExploreSteps(
     wordChecks += 1;
   }
 
+  // Grammar checks: the grammar twin, for sentences brought back for patterns that haven't stuck.
+  let grammarChecks = 0;
+  for (const entry of entries) {
+    if (grammarChecks >= GRAMMAR_CHECK_STEPS_PER_PLAN) break;
+    if (!consumed.has(entry) || !isGrammarCheckCandidate(entry)) continue;
+    if (EXPLORE_STEP_MINUTES.grammarCheck > remaining) break;
+    steps.push(grammarCheckStepFor(entry));
+    remaining -= EXPLORE_STEP_MINUTES.grammarCheck;
+    grammarChecks += 1;
+  }
+
   return steps;
+}
+
+function grammarCheckStepFor(entry: ExploreSentenceEntry): PlannerStepDraft {
+  const { candidate, sentence } = entry;
+  return {
+    id: draftStepId(),
+    bucket: 'glossing',
+    activityType: SYNTHETIC_ACTIVITY_TYPES.sentenceLearning,
+    targetKind: 'sentence_learning',
+    bookId: candidate.bookId,
+    sentenceId: sentence.sentenceId,
+    label: `Grammar check: ${sentence.preview}`,
+    estimatedMinutes: EXPLORE_STEP_MINUTES.grammarCheck,
+    reason: `Recall what the grammar here does (${sentence.weakGrammar!.join('、')} hasn't stuck) — you judge how it went`,
+    status: 'pending',
+    grammarCheck: true,
+  };
+}
+
+function isGrammarCheckCandidate(entry: ExploreSentenceEntry): boolean {
+  return entry.kind === 'lesson' && !!entry.sentence.revisit && !!entry.sentence.weakGrammar?.length;
 }
 
 function wordCheckStepFor(entry: ExploreSentenceEntry): PlannerStepDraft {
@@ -945,7 +980,8 @@ function exploreCeilingMinutes(candidates: ExploreCandidate[], sentenceFirst = f
   const lessons = entries.reduce((total, entry) => total + exploreEntryCost(entry), 0);
   // Word checks ride on weak-word revisits (see buildExploreSteps); count the ones that can be drafted.
   const checks = Math.min(WORD_CHECK_STEPS_PER_PLAN, entries.filter(isWordCheckCandidate).length);
-  return lessons + checks * EXPLORE_STEP_MINUTES.wordCheck;
+  const grammarChecks = Math.min(GRAMMAR_CHECK_STEPS_PER_PLAN, entries.filter(isGrammarCheckCandidate).length);
+  return lessons + checks * EXPLORE_STEP_MINUTES.wordCheck + grammarChecks * EXPLORE_STEP_MINUTES.grammarCheck;
 }
 
 function isWordCheckCandidate(entry: ExploreSentenceEntry): boolean {
@@ -1240,6 +1276,7 @@ export function sessionStepTargetPath(step: PlannerSessionStep): string | null {
       // A Word check opens the reader with that sentence's word check ready; query-free like every step path.
       if (step.readCheck) return `/books/${step.bookId}/recall/${step.sentenceId}`;
       if (step.readerTool) return `/books/${step.bookId}/${step.readerTool}/${step.sentenceId}`;
+      if (step.grammarCheck) return `/books/${step.bookId}/grammar-check/${step.sentenceId}`;
       return step.wordCheck
         ? `/books/${step.bookId}/check/${step.sentenceId}`
         : `/books/${step.bookId}/learn/${step.sentenceId}`;

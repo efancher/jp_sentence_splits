@@ -152,7 +152,12 @@ and possible extensions. This snapshot does not certify a live deployment.
   (`getWeakGrammarSentenceSignal`, from the reader's grammar taps; a pattern is
   weak by its weakest tapped facet, untapped is unseen not weak). Weak words
   fill the revisit room first; the reason reads "Has grammar that hasn't
-  stuck: …". No Word-check equivalent yet.
+  stuck: …". Each such revisit also drafts a Grammar check step (max 1 per plan,
+  `grammarCheck`, `/books/:bookId/grammar-check/:sentenceId`) that opens the
+  reader's `GrammarCheckPanel`: it names the pattern's text, hides what it is
+  and does, then you judge your recall (evidence on the `use` facet only).
+  The pattern asked about is the weakest tapped one, else an unchecked one
+  (`pickGrammarCheckPatternId`). Counts as a grammar step in the session.
   Missing evidence is shown in the reader (2026-11-08): on the focused sentence
   each tappable word and grammar pattern has an evidence level
   (`getReaderEvidenceLevels`: `unchecked` = never tapped/reviewed/walked, `shaky`

@@ -11291,6 +11291,18 @@ export async function getReaderEvidenceLevels(
 }
 
 /**
+ * The pattern a Grammar check should ask about: the weakest one with evidence, else the first with none yet
+ * (an unchecked pattern is unseen, not weak, but still worth a look when nothing is known to be weak).
+ */
+export async function pickGrammarCheckPatternId(patternIds: string[]): Promise<string | undefined> {
+  if (patternIds.length === 0) return undefined;
+  const strengthByPattern = await loadGrammarPatternStrengths();
+  const withEvidence = patternIds.filter((id) => strengthByPattern.has(id));
+  if (withEvidence.length === 0) return patternIds[0];
+  return withEvidence.reduce((weakest, id) => (strengthByPattern.get(id)! < strengthByPattern.get(weakest)! ? id : weakest));
+}
+
+/**
  * The grammar twin of `getWeakWordSentenceSignal`: which of `sentenceIds` carry grammar patterns the learner
  * hasn't retained, from their reader taps (`buildGrammarEvidence`). A pattern's strength is its weakest facet
  * that has any evidence (spotting it, understanding it); a pattern with no taps is unseen, not weak. `labels`

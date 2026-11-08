@@ -1749,6 +1749,8 @@ export interface PlannerSessionStep {
   revisit?: boolean;
   /** `sentence_learning` only: a Word check (`/books/:bookId/check/:sentenceId`) — recall a word's meaning in the reader — not a walkthrough. */
   wordCheck?: boolean;
+  /** `sentence_learning` only: a Grammar check (`/books/:bookId/grammar-check/:sentenceId`) — recall what a weak grammar pattern does in the reader — not a walkthrough. */
+  grammarCheck?: boolean;
   /** `sentence_learning` only: a Read check (`/books/:bookId/recall/:sentenceId`) — read the sentence unaided in the reader, then judge it — not a walkthrough. Sits in the `review` bucket. */
   readCheck?: boolean;
   /** `sentence_learning` only: an Ear tiles or Dictation round in the reader (`/books/:bookId/tiles|dictate/:sentenceId`), not a walkthrough. Sits in the `review` bucket. */

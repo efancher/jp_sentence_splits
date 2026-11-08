@@ -12,6 +12,7 @@ import {
   ReadCheckPanel,
   ShadowSelfRating,
   WordFeedbackPanel,
+  GrammarCheckPanel,
   WordMeaningPanel,
   type ReaderPattern,
   type ReaderToolOutcome,
@@ -97,6 +98,7 @@ export function ReaderPage() {
   // sentence's tool, not its walkthrough.
   const pathname = useLocation().pathname;
   const isWordCheckRoute = pathname.includes('/check/');
+  const isGrammarCheckRoute = pathname.includes('/grammar-check/');
   const isReadCheckRoute = pathname.includes('/recall/');
   const isShadowRoute = pathname.includes('/speak/');
   // /tiles/:sentenceId and /dictate/:sentenceId (planner Ear tiles / Dictation steps) open that tool on the sentence.
@@ -144,6 +146,7 @@ export function ReaderPage() {
   const [readerTool, setReaderTool] = useState<
     { sentenceId: string; kind: 'dictate'; tile: number; visitId: string } |
     { sentenceId: string; kind: 'meaning'; visitId: string } |
+    { sentenceId: string; kind: 'grammar'; visitId: string } |
     { sentenceId: string; kind: 'recall'; visitId: string; revealed: boolean; offer?: FollowUpChoice } |
     { sentenceId: string; kind: 'shadow'; visitId: string; focusSurface?: string } |
     { sentenceId: string; kind: 'tiles'; visitId: string; puzzle: EarTilesPuzzle; progress: EarTilesProgress } |
@@ -347,6 +350,7 @@ export function ReaderPage() {
     openedLessonRef.current = lessonSentenceId;
     if (isShadowRoute) setReaderTool({ sentenceId: lessonSentenceId, kind: 'shadow', visitId: createId('visit') });
     else if (isReadCheckRoute) setReaderTool({ sentenceId: lessonSentenceId, kind: 'recall', visitId: createId('visit'), revealed: false });
+    else if (isGrammarCheckRoute) setReaderTool({ sentenceId: lessonSentenceId, kind: 'grammar', visitId: createId('visit') });
     else if (isWordCheckRoute) setReaderTool({ sentenceId: lessonSentenceId, kind: 'meaning', visitId: createId('visit') });
     else if (isTilesRoute || isDictateRoute) toggleReaderTool(data.rows[index]!.sentence, isTilesRoute ? 'tiles' : 'dictate');
     else setWalkthroughId(lessonSentenceId);
@@ -354,7 +358,7 @@ export function ReaderPage() {
     setTimeout(() => rowRefs.current[index]?.scrollIntoView({ block: 'center' }), 0);
     // The opener runs once per sentence (openedLessonRef), so the toggleReaderTool closure it captures is current enough.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lessonSentenceId, lessonChapterId, data, isWordCheckRoute, isReadCheckRoute, isShadowRoute, isTilesRoute, isDictateRoute]);
+  }, [lessonSentenceId, lessonChapterId, data, isWordCheckRoute, isGrammarCheckRoute, isReadCheckRoute, isShadowRoute, isTilesRoute, isDictateRoute]);
 
   const focus = useLiveQuery(
     () => getEpisodeFocus(bookId, chapterId).catch(() => null),
@@ -690,7 +694,7 @@ export function ReaderPage() {
   /** Whether a tool that would give a word away is open on the sentence (taps are then ignored). */
   function wordTapsBlocked(sentenceId: string): boolean {
     const tool = readerTool?.sentenceId === sentenceId ? readerTool : undefined;
-    return tool?.kind === 'meaning' || tool?.kind === 'tiles' || tool?.kind === 'dictate' || (tool?.kind === 'recall' && !tool.revealed);
+    return tool?.kind === 'meaning' || tool?.kind === 'grammar' || tool?.kind === 'tiles' || tool?.kind === 'dictate' || (tool?.kind === 'recall' && !tool.revealed);
   }
 
   /** The tap-a-word feedback panel for a sentence, or null. */
@@ -1377,6 +1381,19 @@ export function ReaderPage() {
                         />
                       );
                     }
+                    if (readerTool.kind === 'grammar') {
+                      const tool = readerTool;
+                      return (
+                        <GrammarCheckPanel
+                          key={tool.visitId}
+                          patterns={data.patternsBySentence.get(row.sentence.id) ?? []}
+                          onRecord={(outcome, pattern) => {
+                            recordPatternFeedback(row.sentence.id, tool.visitId, pattern, 'use', outcome);
+                          }}
+                          onClose={() => setReaderTool(undefined)}
+                        />
+                      );
+                    }
                     const tool = readerTool;
                     return (
                       <WordMeaningPanel
@@ -1412,7 +1429,7 @@ export function ReaderPage() {
                   })()}
                   {(() => {
                     // A word check asks for a meaning the word help and translation would otherwise print right under it; Ear Tiles' word help would list the tiles.
-                    if ((readerTool?.kind === 'meaning' || readerTool?.kind === 'tiles' || (readerTool?.kind === 'recall' && !readerTool.revealed)) && readerTool.sentenceId === row.sentence.id) return null;
+                    if ((readerTool?.kind === 'meaning' || readerTool?.kind === 'grammar' || readerTool?.kind === 'tiles' || (readerTool?.kind === 'recall' && !readerTool.revealed)) && readerTool.sentenceId === row.sentence.id) return null;
                     const help = sentenceWordHelp(row.sentence.vocabularySuggestions, data.knownExpressions, data.savedMeanings);
                     const override = wordHelpOverride.get(row.sentence.id);
                     const shown = override === 'all' ? help.allWords : override === 'none' ? [] : help.newWords;
@@ -1453,7 +1470,7 @@ export function ReaderPage() {
                       const help = sentenceWordHelp(row.sentence.vocabularySuggestions, data.knownExpressions, data.savedMeanings);
                       // Mostly-unknown sentences show their translation by default; the toggle flips the default either way.
                       const mostlyUnknown = help.total > 0 && help.unknownCount * 2 > help.total;
-                      const wordChecking = (readerTool?.kind === 'meaning' || (readerTool?.kind === 'recall' && !readerTool.revealed)) && readerTool.sentenceId === row.sentence.id;
+                      const wordChecking = (readerTool?.kind === 'meaning' || readerTool?.kind === 'grammar' || (readerTool?.kind === 'recall' && !readerTool.revealed)) && readerTool.sentenceId === row.sentence.id;
                       // A revealed Read check always shows the meaning, even for sentences made only of known words.
                       const readCheckRevealed = readerTool?.kind === 'recall' && readerTool.revealed && readerTool.sentenceId === row.sentence.id;
                       const shown = readCheckRevealed || (!wordChecking && mostlyUnknown !== revealedTranslations.has(row.sentence.id));

@@ -7,13 +7,15 @@ import {
   getDb,
   getSessionPlannerInput,
   getWeakGrammarSentenceSignal,
+  pickGrammarCheckPatternId,
   resetWordStrengthCache,
   updateSettings,
 } from '../src/db/repository';
 import type { Sentence } from '../src/domain/types';
 import { grammarFeedbackTargetKey } from '../src/lib/grammarEvidence';
 import { createId } from '../src/lib/ids';
-import { buildRecommendedSession } from '../src/lib/sessionPlanner';
+import { buildRecommendedSession, sessionStepTargetPath } from '../src/lib/sessionPlanner';
+import { sessionStepCategory } from '../src/lib/sessionStepCategory';
 
 const DAY = 24 * 60 * 60 * 1000;
 const T = '2026-11-08T00:00:00.000Z';
@@ -110,5 +112,23 @@ describe('weak grammar brings walked-through sentences back for a walkthrough', 
     const session = buildRecommendedSession(await getSessionPlannerInput(60));
     const step = session.steps.find((s) => s.targetKind === 'sentence_learning' && s.reason.includes('〜てみる'));
     expect(step?.reason).toContain("Has grammar that hasn't stuck");
+  });
+
+  it('drafts one Grammar check for the weak-grammar revisit, routed to the grammar check page', async () => {
+    const { weak } = await setup();
+    const session = buildRecommendedSession(await getSessionPlannerInput(60));
+    const checks = session.steps.filter((s) => s.grammarCheck);
+    expect(checks).toHaveLength(1);
+    expect(checks[0]).toMatchObject({ sentenceId: weak.id, label: expect.stringContaining('Grammar check') });
+    expect(checks[0]!.reason).toContain('〜てみる');
+    expect(sessionStepTargetPath(checks[0]!)).toBe(`/books/${checks[0]!.bookId}/grammar-check/${weak.id}`);
+    expect(sessionStepCategory(checks[0]!)).toBe('grammar');
+  });
+
+  it('picks the weakest tapped pattern for the check, falling back to an unchecked one', async () => {
+    await setup();
+    expect(await pickGrammarCheckPatternId(['p-solid', 'p-weak'])).toBe('p-weak');
+    expect(await pickGrammarCheckPatternId(['p-untapped'])).toBe('p-untapped');
+    expect(await pickGrammarCheckPatternId([])).toBeUndefined();
   });
 });

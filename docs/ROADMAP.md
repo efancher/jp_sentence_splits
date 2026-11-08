@@ -849,8 +849,11 @@ reader grammar taps) now bring walked sentences back like weak words
 patterns on the focused sentence (amber/muted underline plus a "Not checked yet"
 line; `getReaderEvidenceLevels`). Manual test: open a chapter with an
 untouched sentence, see amber underlines and the hint, tap one and give a call,
-see it turn muted and drop from the hint. Still missing vs vocabulary: a grammar Word-check
-equivalent, a typed/recall target before reveal, known-pattern highlighting in
+see it turn muted and drop from the hint. Grammar check shipped (2026-11-08): weak-grammar revisits draft a recall step
+(`/grammar-check/:sentenceId`, `GrammarCheckPanel`). Manual test: tap a weak
+sentence's Grammar check step, see the pattern text without its meaning, show it,
+and give a call. Still missing vs vocabulary: a typed
+target before reveal, known-pattern highlighting in
 the reader, and a /progress panel for grammar strength. Left over: resolve ambiguous `（note）` matches (e.g.
 ながら（while）/（も）, currently skipped), other short-form over-matches that
 begin on a token boundary, and any grammar study surface.
