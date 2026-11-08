@@ -1,0 +1,45 @@
+/**
+ * Per-entry guards for text-based grammar detection (`buildGrammarDetector`). A short fixed text can sit inside
+ * something that is not the pattern (ないで in ないです, らしい in 素晴らしい, に+して from する). Each guard sees the
+ * text around a candidate match and returns true to reject it; the detector then tries the next occurrence.
+ * Found by auditing real sentences with `npm run diagnose:grammar-detection`, so add an entry only for a measured
+ * over-match, and prefer rejecting (a missed pattern stays "unseen") over loose accepting.
+ */
+export interface MatchContext {
+  /** Sentence text before the match. */
+  before: string;
+  /** The matched span, first segment start through last segment end. */
+  matched: string;
+  /** Sentence text after the match. */
+  after: string;
+}
+
+export type DetectionGuard = (context: MatchContext) => boolean;
+
+export const DETECTION_GUARDS: Readonly<Record<string, DetectionGuard>> = {
+  // ないです / ないでしょう, which are the polite 〜ない, not 〜ないで.
+  naide: ({ after }) => /^(す|しょう)/.test(after),
+  // 素晴らしい, 誇らしい and friends are い-adjectives that merely end in らしい.
+  'rashii-typical-of': ({ before }) => /(素晴|すば|誇|愛|憎|珍|初々|若々|腹立た|晴)$/.test(before),
+  // に + する (大切にしています), not the N1 〜にして.
+  'ni-shite': ({ after }) => /^(い|て|くだ|お[きくけ]|み|ま|る|た|ほし)/.test(after),
+  // Only the "too much" sense: 〜のあまり(に) / あまりに / あまりの, not あまり + a negative.
+  'amari-ni': ({ before, after }) => !/^[にの]/.test(after) && !/[のるたい]$/.test(before),
+  // Only the emotion-adjective sense (驚いたことに), not the noun こと + に.
+  'koto-ni-wa': ({ before }) =>
+    !/(驚いた|嬉しい|うれしい|残念な|不思議な|面白い|困った|悲しい|幸いな|意外な|ありがたい|驚くべき|おかしな|悔しい)$/.test(before),
+  // Contrastive 〜ものを closes the clause; noun もの + を does not.
+  'mono-o': ({ after }) => !/^([、。！？…]|$)/.test(after),
+  // もので after a noun-modifying な, or inside ものでは/ものでも, is the noun もの.
+  'mono-dakara-mono-de': ({ before, matched, after }) =>
+    matched.endsWith('もので') && (/な$/.test(before) || /^[はもす]/.test(after)),
+  // 〜なかった after a verb is the plain negative, not the い-adjective 〜かった.
+  'ku-nai-katta-ku-nakatta': ({ before, matched }) => matched === 'かった' && /な$/.test(before),
+  // ましたって / でしたって quote what was said.
+  'tatte-datte': ({ before, matched }) => matched === 'たって' && /(まし|でし)$/.test(before),
+  // もう + a past-tense verb close together, in one clause; みたい / たい also contain た.
+  'mou-ta': ({ matched, after }) => matched.length > 12 || matched.includes('みたい') || /[、。」「]|一度/.test(matched) || (matched.endsWith('た') && after.startsWith('い')),
+  // お + a short verbal noun + する; お金 / お腹 and long gaps are other words.
+  'o-suru': ({ matched }) => matched.length > 8 || /^お[金腹]/.test(matched),
+  'o-ni-naru': ({ matched }) => matched.length > 8 || /^お[金腹]/.test(matched),
+};

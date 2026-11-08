@@ -860,8 +860,11 @@ reader (solid words stay plain); /progress has a "Grammar strength" panel
 patterns). Manual test: type a guess in a Grammar check and see it after the reveal;
 give a pattern a few "I knew it" taps and see it turn green; open /progress and
 check the counts move. Left over: resolve ambiguous `（note）` matches (e.g.
-ながら（while）/（も）, currently skipped), other short-form over-matches that
-begin on a token boundary, and any grammar study surface.
+ながら（while）/（も）, currently skipped) and any grammar study surface.
+Short-form over-matches (2026-11-08): `src/lib/grammarDetectionGuards.ts` holds
+per-entry guards (ないです is not ないで, すばらしい is not らしい, 大切にしています
+is not にして, …) found with the read-only `npm run diagnose:grammar-detection`;
+add a guard only for a measured over-match.
 
 ## Possibilities (reader as the single study surface)
 

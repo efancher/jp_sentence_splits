@@ -86,6 +86,7 @@
     "retire:extra-dictation-tiles": "tsx scripts/retire-extra-dictation-tiles.ts",
     "diagnose:conjugation-cards": "tsx scripts/diagnose-conjugation-cards.ts",
     "diagnose:grammar-links": "tsx scripts/diagnose-grammar-links.ts",
+    "diagnose:grammar-detection": "tsx scripts/diagnose-grammar-detection.ts",
     "diagnose:i-plus-one": "tsx scripts/diagnose-i-plus-one.ts",
     "diagnose:grammar-reference": "tsx scripts/diagnose-grammar-reference.ts",
     "vendor:openjlpt-grammar": "tsx scripts/vendor-openjlpt-grammar.ts",

@@ -114,4 +114,22 @@ describe('buildGrammarDetector', () => {
     expect(detect('これは本です。この猫は走りながら食べる')).toEqual([]);
     expect(detectableSegments({ pattern: '〜は' })).toEqual([]);
   });
+
+  it('applies per-entry guards to over-matches and tries the next occurrence', () => {
+    const guarded = buildGrammarDetector([
+      { id: 'naide', pattern: '〜ないで' },
+      { id: 'rashii-typical-of', pattern: '〜らしい' },
+      { id: 'ni-shite', pattern: '〜にして' },
+      { id: 'koto-ni-wa', pattern: '〜ことには' },
+    ]);
+    expect(guarded('それは知らないです')).toEqual([]);
+    expect(guarded('何も言わないで行った')).toEqual(['naide']);
+    expect(guarded('それは素晴らしい')).toEqual([]);
+    expect(guarded('彼は男らしい')).toEqual(['rashii-typical-of']);
+    expect(guarded('家族を大切にしています')).toEqual([]);
+    expect(guarded('驚いたことには誰もいなかった')).toEqual(['koto-ni-wa']);
+    expect(guarded('見たことには気づかなかった')).toEqual([]);
+    // A rejected first occurrence falls through to a later valid one.
+    expect(guarded('知らないです、行かないで')).toEqual(['naide']);
+  });
 });

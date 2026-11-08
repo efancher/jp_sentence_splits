@@ -9,6 +9,8 @@
  * `（note）` disambiguators and punctuation, so `～なくてもいい` and
  * `〜なくてもいい` and `〜なくてもいい（permission）` all share one key.
  */
+import { DETECTION_GUARDS } from './grammarDetectionGuards';
+
 export interface ReferencePattern {
   id?: string;
   pattern: string;
@@ -161,35 +163,42 @@ export function buildGrammarDetector(
 
   /** Span of the segments found in order and close together, or null. */
   const locate = (
+    id: string,
     japanese: string,
     segments: readonly string[],
     words: readonly TextSpan[],
   ): { start: number; end: number } | null => {
-    // A match may not begin partway through a word (かった inside 分かった).
-    let start = japanese.indexOf(segments[0]!);
-    while (start >= 0 && words.some((word) => start > word.start && start < word.end)) {
-      start = japanese.indexOf(segments[0]!, start + 1);
+    const guard = DETECTION_GUARDS[id];
+    // A match may not begin partway through a word (かった inside 分かった), nor be one the entry's guard rejects.
+    for (let start = japanese.indexOf(segments[0]!); start >= 0; start = japanese.indexOf(segments[0]!, start + 1)) {
+      if (words.some((word) => start > word.start && start < word.end)) continue;
+      let end = start + segments[0]!.length;
+      let complete = true;
+      for (const segment of segments.slice(1)) {
+        const at = japanese.indexOf(segment, end);
+        if (at < 0 || at - end > SEGMENT_WINDOW) {
+          complete = false;
+          break;
+        }
+        end = at + segment.length;
+      }
+      if (!complete) return null;
+      if (guard?.({ before: japanese.slice(0, start), matched: japanese.slice(start, end), after: japanese.slice(end) })) continue;
+      return { start, end };
     }
-    if (start < 0) return null;
-    let end = start + segments[0]!.length;
-    for (const segment of segments.slice(1)) {
-      const at = japanese.indexOf(segment, end);
-      if (at < 0 || at - end > SEGMENT_WINDOW) return null;
-      end = at + segment.length;
-    }
-    return { start, end };
+    return null;
   };
 
   return (japanese, words = []) => {
     const spans: Array<{ id: string; start: number; end: number }> = [];
     for (const { id, alternatives } of usable) {
       for (const segments of alternatives) {
-        let found = locate(japanese, segments, words);
+        let found = locate(id, japanese, segments, words);
         // A pattern ending in a る-verb (〜ことがある) still shows up conjugated (あります, あった).
         const last = segments[segments.length - 1]!;
         const stem = [...segments.slice(0, -1), last.slice(0, -1)];
         if (!found && last.endsWith('る') && stem.join('').length >= MIN_LITERAL_LENGTH) {
-          found = locate(japanese, stem, words);
+          found = locate(id, japanese, stem, words);
         }
         if (found) {
           spans.push({ id, ...found });
