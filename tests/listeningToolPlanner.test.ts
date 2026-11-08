@@ -64,14 +64,14 @@ describe('Ear tiles and Dictation steps in the plan', () => {
     return { book, withAudio, noAudio, unintroduced };
   }
 
-  it('lists only introduced sentences with native audio that split into phrases, starting with Ear tiles', async () => {
+  it('lists only introduced sentences with native audio that split into phrases, starting with Dictation', async () => {
     const { withAudio } = await setup();
     const input = await getSessionPlannerInput(60);
-    expect(input.listeningToolCandidates?.map((c) => [c.sentenceId, c.tool])).toEqual([[withAudio.id, 'tiles']]);
+    expect(input.listeningToolCandidates?.map((c) => [c.sentenceId, c.tool])).toEqual([[withAudio.id, 'dictate']]);
     expect(input.listeningToolCandidates![0]!.reason).toContain('not tried by ear yet');
   });
 
-  it('leaves a sentence out for a week after a clean Ear tiles round, then moves it to Dictation', async () => {
+  it('leaves a sentence out for a week after a clean Ear tiles round, then offers Dictation', async () => {
     const { withAudio, book } = await setup();
     const day = 24 * 60 * 60 * 1000;
     const log = (daysAgo: number) =>
@@ -87,14 +87,24 @@ describe('Ear tiles and Dictation steps in the plan', () => {
     expect((await getSessionPlannerInput(60)).listeningToolCandidates?.map((c) => c.tool)).toEqual(['dictate']);
   });
 
+  it('falls back to Ear tiles the day after a Dictation slip', async () => {
+    const { withAudio, book } = await setup();
+    await getDb().sentenceLearningEvents.put({
+      id: createId('sle'), visitId: createId('v'), sentenceId: withAudio.id, bookId: book.id, action: 'target_practice',
+      target: { kind: 'expression', key: `dictation:${withAudio.id}:0`, label: 'Dictation' }, outcome: 'needed_help',
+      timestamp: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+    } as never);
+    expect((await getSessionPlannerInput(60)).listeningToolCandidates?.map((c) => c.tool)).toEqual(['tiles']);
+  });
+
   it('drafts review-bucket steps that open the reader tool and count as review, not lessons', async () => {
     const { withAudio } = await setup();
     const session = await addMinutesToTodaySession(60);
     const steps = session.steps.filter((step) => step.readerTool);
     expect(steps).toHaveLength(1);
-    expect(steps[0]).toMatchObject({ bucket: 'review', targetKind: 'sentence_learning', sentenceId: withAudio.id, estimatedMinutes: 2, readerTool: 'tiles' });
-    expect(steps[0]!.label).toMatch(/^Ear tiles:/);
-    expect(sessionStepTargetPath(steps[0]!)).toBe(`/books/${steps[0]!.bookId}/tiles/${withAudio.id}`);
+    expect(steps[0]).toMatchObject({ bucket: 'review', targetKind: 'sentence_learning', sentenceId: withAudio.id, estimatedMinutes: 2, readerTool: 'dictate' });
+    expect(steps[0]!.label).toMatch(/^Dictation:/);
+    expect(sessionStepTargetPath(steps[0]!)).toBe(`/books/${steps[0]!.bookId}/dictate/${withAudio.id}`);
     expect(sessionStepCategory(steps[0]!)).toBe('review');
     expect((await getDb().plannerSessions.get(session.id))!.steps.filter((step) => step.readerTool)).toHaveLength(1);
   });

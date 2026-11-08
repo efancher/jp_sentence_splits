@@ -119,8 +119,8 @@ and possible extensions. This snapshot does not certify a live deployment.
   steps in the `review` bucket after the Read checks (`findListeningToolCandidates`,
   `src/lib/listeningTools.ts`; routes `/books/:bookId/tiles|dictate/:sentenceId`, step field
   `readerTool`). A sentence qualifies when it is introduced, in an active book, has native audio and
-  splits into enough phrases; it starts with Ear tiles and moves to Dictation after a clean Ear tiles
-  round, waits 7 days after a clean pass and 1 day after a slip, and comes first when its last Read
+  splits into enough phrases; it starts with Dictation (2026-11-08; Ear tiles used to come first),
+  falls back to Ear tiles after a Dictation slip or when the sentence is too long for Dictation, waits 7 days after a clean pass and 1 day after a slip, and comes first when its last Read
   check needed help. Sentences already drafted a Fresh try that day are skipped. With
   `sentenceShadowingPaused` on, the planner's shadow candidates are drafted as `Shadow a phrase:`
   steps (`phrase: true`, same `/speak/` route) instead of being dropped. The old audio cards still

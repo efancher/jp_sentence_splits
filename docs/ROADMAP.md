@@ -939,7 +939,9 @@ control).
      and when a tagged miss is Meaning/Kanji/Reading. Loosen the "only beside
      weak-word revisits" gate to "any introduced sentence with a weak word",
      keeping the 2-per-plan cap until usage shows it is wanted.
-  3. **Dictation = the listening step, not gated on Ear tiles.** Let it start
+  3. **Dictation = the listening step, not gated on Ear tiles.** *(Tool choice shipped
+     2026-11-08: Dictation first, Ear tiles after a slip or for long sentences; blanking
+     the weakest word's phrase is not done.)* Let it start
      for a sentence that has native audio and a clean Fresh try, with Ear tiles
      as the easier alternative after a slip, rather than always Ear tiles first.
      It should blank the phrase that contains the sentence's weakest word, so
@@ -954,6 +956,12 @@ control).
      see whether a sentence's next Read check goes better after a standalone
      Word check or Dictation than after a Fresh try alone. Keep outcomes
      self-judged and evidence-only; ratings stay explicit.
+  *Progress (2026-11-08):* only the Dictation-first tool choice shipped. The planner
+  already drafts Word check as its own step; it was not made independent of the
+  same-plan Fresh try because that needs its own candidate list (walked-through
+  sentences with weak words, spaced from the last Word check). Where a Fresh try
+  itself bundles these checks was not located in code; ask the learner which
+  screen showed them before building.
   *Open:* how many separate steps a day is tolerable (the plan's time budget
   bounds it today), and whether the typed dictation match should count toward
   `/progress` (see the writing-ladder note above).

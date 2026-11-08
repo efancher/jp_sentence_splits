@@ -10,14 +10,16 @@ const attempt = (sentenceId: string, daysAgo: number, success: boolean, source: 
 });
 
 describe('dueListeningTools', () => {
-  it('starts an untried sentence with Ear tiles, and moves to Dictation after a clean round once it is due again', () => {
+  it('starts an untried sentence with Dictation, falls back to Ear tiles after a Dictation slip, and keeps Ear tiles for sentences Dictation cannot open on', () => {
     const due = dueListeningTools({
-      sentences: [both('new'), both('laddered')],
-      attempts: [attempt('laddered', 8, true)],
+      sentences: [both('new'), both('slipped'), both('after-tiles'), { sentenceId: 'long', tilesEligible: true, dictateEligible: false }],
+      attempts: [attempt('slipped', 2, false, 'dictation'), attempt('after-tiles', 8, true)],
       lastReadCheck: new Map(),
       now: NOW,
     });
-    expect(Object.fromEntries(due.map((d) => [d.sentenceId, d.tool]))).toEqual({ new: 'tiles', laddered: 'dictate' });
+    expect(Object.fromEntries(due.map((d) => [d.sentenceId, d.tool]))).toEqual({
+      new: 'dictate', slipped: 'tiles', 'after-tiles': 'dictate', long: 'tiles',
+    });
   });
 
   it('waits a week after a clean pass and a day after a slip', () => {

@@ -6,8 +6,9 @@ import type { ListeningAttempt } from './listeningEvidence';
  * review cards, so the planner drafts them the way it drafts Read checks: from the
  * sentence's own evidence, no scheduler of its own and no FSRS.
  *
- * Ladder (mirrors the cards): Ear tiles first; Dictation once a sentence has a clean Ear
- * tiles round. Spacing from the sentence's last listening attempt: a clean pass waits
+ * Tool choice: Dictation is the default listening step for a sentence it can open on; Ear
+ * tiles (the easier rebuild) take over after a Dictation slip, and cover sentences too long
+ * for Dictation. Spacing from the sentence's last listening attempt: a clean pass waits
  * `CLEAN_WAIT_DAYS`, anything else is due again after `RETRY_WAIT_DAYS`. A sentence that
  * ended its last Read check in "needed help" comes first. Pure: callers fetch rows.
  */
@@ -53,9 +54,13 @@ export function dueListeningTools(input: {
   for (const sentence of input.sentences) {
     const attempts = (attemptsBySentence.get(sentence.sentenceId) ?? []).sort((a, b) => a.at - b.at);
     const last = attempts[attempts.length - 1];
-    const cleanTiles = attempts.some((attempt) => attempt.source === 'ear_tiles' && attempt.success);
+    const lastDictationSlipped = last?.source === 'dictation' && !last.success;
     const tool: ListeningTool | null =
-      cleanTiles && sentence.dictateEligible ? 'dictate' : sentence.tilesEligible ? 'tiles' : sentence.dictateEligible ? 'dictate' : null;
+      sentence.dictateEligible && !(lastDictationSlipped && sentence.tilesEligible)
+        ? 'dictate'
+        : sentence.tilesEligible
+          ? 'tiles'
+          : null;
     if (!tool) continue;
 
     const readCheck = input.lastReadCheck.get(sentence.sentenceId);
