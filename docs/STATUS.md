@@ -153,6 +153,13 @@ and possible extensions. This snapshot does not certify a live deployment.
   weak by its weakest tapped facet, untapped is unseen not weak). Weak words
   fill the revisit room first; the reason reads "Has grammar that hasn't
   stuck: …". No Word-check equivalent yet.
+  Missing evidence is shown in the reader (2026-11-08): on the focused sentence
+  each tappable word and grammar pattern has an evidence level
+  (`getReaderEvidenceLevels`: `unchecked` = never tapped/reviewed/walked, `shaky`
+  = strength below 0.6, `solid`). Unchecked ones get a thicker amber underline,
+  shaky a muted one, solid keep the plain underline, and a line under the
+  sentence names the unchecked ones. A tap makes an unchecked item shaky at
+  once; the next load decides the real level. Display only, grades nothing.
   Words start from a JMdict frequency-band prior (fetched on demand from
   `public/wordFrequency.json`; none offline). Meaning has no recall evidence
   yet; see AI_OVERVIEW for the model.

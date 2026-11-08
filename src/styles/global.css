@@ -636,6 +636,21 @@ strong.jp {
   text-underline-offset: 0.3em;
 }
 
+/* Evidence on a tappable item: no signal yet (amber) or some but not solid (muted). Solid items keep the plain underline. */
+.karaoke-evidence-unchecked {
+  text-decoration-color: var(--warning, #d98e04);
+  text-decoration-thickness: 3px;
+}
+
+.karaoke-evidence-shaky {
+  text-decoration-color: var(--muted, #8a8a8a);
+}
+
+.reader-evidence-hint {
+  font-size: 0.85rem;
+  color: var(--muted, #6b6b6b);
+}
+
 /* Words in the walkthrough list that take a "did you know it" tap. */
 .word-check-button {
   min-height: 0;

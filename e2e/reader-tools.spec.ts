@@ -346,3 +346,31 @@ test('tapping a grammar pattern in the sentence logs spot and use calls, evidenc
   expect(stored.reviews).toBe(0);
   expect(stored.studyItems).toBe(0);
 });
+
+test('the focused sentence names its unchecked grammar, and a tap clears it from the hint', async ({ page }) => {
+  await seed(page);
+  await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('satori-glossbook');
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const now = new Date().toISOString();
+    const tx = db.transaction(['grammarPatterns', 'sentenceGrammar'], 'readwrite');
+    tx.objectStore('grammarPatterns').put({ id: 'g-mashita', canonicalName: '〜ました', normalizedKey: 'mashita', aliases: [],
+      shortMeaning: 'polite past', provenance: 'manual', createdAt: now, updatedAt: now });
+    tx.objectStore('sentenceGrammar').put({ id: 'sg-1', sentenceId: 's-0', grammarPatternId: 'g-mashita', surfaceForm: '食べました',
+      start: 6, end: 11, confirmedByLearner: true, source: 'manual', createdAt: now, updatedAt: now });
+    await new Promise<void>((resolve, reject) => { tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error); });
+    db.close();
+  });
+  await page.goto('/#/books/book/read?chapter=ch');
+  const hint = page.getByTestId('reader-evidence-hint');
+  await expect(hint).toContainText('〜ました');
+  await expect(page.locator('.karaoke-pattern-checkable.karaoke-evidence-unchecked').first()).toBeVisible();
+
+  await page.getByRole('button', { name: '食べ', exact: true }).click();
+  await page.getByRole('group', { name: 'Grammar feedback' }).getByRole('button', { name: 'I knew it' }).first().click();
+  await expect(page.locator('.karaoke-pattern-checkable.karaoke-evidence-shaky').first()).toBeVisible();
+  await expect(hint).not.toContainText('〜ました');
+});

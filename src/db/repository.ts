@@ -7,7 +7,14 @@ import { buildWordEvidence } from '../lib/wordEvidence';
 import { stepTimer } from '../lib/pageTiming';
 import { FREQUENCY_WAIT_MS, loadWordFrequency, lookupWordBand } from '../lib/wordFrequency';
 import { buildGrammarEvidence, grammarStrength } from '../lib/grammarEvidence';
-import { frequencyBandPrior, planWeakWordSentences, READER_KNOWN_STRENGTH, wordStrength } from '../lib/wordStrength';
+import {
+  evidenceLevel,
+  type EvidenceLevel,
+  frequencyBandPrior,
+  planWeakWordSentences,
+  READER_KNOWN_STRENGTH,
+  wordStrength,
+} from '../lib/wordStrength';
 import { readCheckReason, sentencesDueForReadCheck } from '../lib/readCheck';
 import { withoutResetWalkthroughs } from '../lib/sentenceLearning';
 import {
@@ -11247,6 +11254,42 @@ async function floatGrowthEligibleFirst<T extends { sentenceId: string }>(items:
   ];
 }
 
+/** Strength per grammar pattern that has any reader tap: its weakest tapped facet. Untapped patterns are absent. */
+async function loadGrammarPatternStrengths(): Promise<Map<string, number>> {
+  const evidence = buildGrammarEvidence(await readAllLearningEventsForPass());
+  const now = Date.now();
+  const strengthByPattern = new Map<string, number>();
+  for (const [patternId, items] of evidence) {
+    const facets = (['spot', 'use'] as const).filter((facet) =>
+      items.some((item) => item.facet === (facet === 'spot' ? 'reading' : 'meaning')),
+    );
+    strengthByPattern.set(patternId, Math.min(...facets.map((facet) => grammarStrength(items, facet, now))));
+  }
+  return strengthByPattern;
+}
+
+/**
+ * How much evidence the learner has on each of a sentence's words and grammar patterns, for the Reader to show
+ * on the selected sentence: `unchecked` (never tapped, reviewed or walked: no signal yet), `shaky` (some, below
+ * `READER_KNOWN_STRENGTH`) or `solid`. Keys are `word:<vocabularyItemId>` and `pattern:<patternId>`. Display
+ * only: it changes no scheduling and grades nothing.
+ */
+export async function getReaderEvidenceLevels(
+  wordIds: string[],
+  patternIds: string[],
+): Promise<Map<string, EvidenceLevel>> {
+  const levels = new Map<string, EvidenceLevel>();
+  if (wordIds.length > 0) {
+    const { strengthByWord } = await loadWordReadingStrengths(READER_STRENGTH_CACHE_MS);
+    for (const id of wordIds) levels.set(`word:${id}`, evidenceLevel(strengthByWord.get(id)));
+  }
+  if (patternIds.length > 0) {
+    const strengthByPattern = await loadGrammarPatternStrengths();
+    for (const id of patternIds) levels.set(`pattern:${id}`, evidenceLevel(strengthByPattern.get(id)));
+  }
+  return levels;
+}
+
 /**
  * The grammar twin of `getWeakWordSentenceSignal`: which of `sentenceIds` carry grammar patterns the learner
  * hasn't retained, from their reader taps (`buildGrammarEvidence`). A pattern's strength is its weakest facet
@@ -11258,16 +11301,8 @@ export async function getWeakGrammarSentenceSignal(
 ): Promise<{ order: string[]; labels: Map<string, string[]> }> {
   if (sentenceIds.length === 0) return { order: [], labels: new Map() };
   const db = getDb();
-  const evidence = buildGrammarEvidence(await readAllLearningEventsForPass());
-  if (evidence.size === 0) return { order: [], labels: new Map() };
-  const now = Date.now();
-  const strengthByPattern = new Map<string, number>();
-  for (const [patternId, items] of evidence) {
-    const facets = (['spot', 'use'] as const).filter((facet) =>
-      items.some((item) => item.facet === (facet === 'spot' ? 'reading' : 'meaning')),
-    );
-    strengthByPattern.set(patternId, Math.min(...facets.map((facet) => grammarStrength(items, facet, now))));
-  }
+  const strengthByPattern = await loadGrammarPatternStrengths();
+  if (strengthByPattern.size === 0) return { order: [], labels: new Map() };
   const links = await db.sentenceGrammar.where('sentenceId').anyOf(sentenceIds).toArray();
   const patternsBySentence = new Map<string, string[]>();
   for (const link of links) {

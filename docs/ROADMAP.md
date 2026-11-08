@@ -845,7 +845,11 @@ episodes with many started sentences get up to +50% on unlock value
 only at sentence level (Read checks 1-64 days, Fresh try revisits, weak-word
 revisits). Grammar parity, first slice (2026-11-08): weak grammar patterns (from
 reader grammar taps) now bring walked sentences back like weak words
-(`getWeakGrammarSentenceSignal`). Still missing vs vocabulary: a grammar Word-check
+(`getWeakGrammarSentenceSignal`). The reader now flags unchecked/shaky words and
+patterns on the focused sentence (amber/muted underline plus a "Not checked yet"
+line; `getReaderEvidenceLevels`). Manual test: open a chapter with an
+untouched sentence, see amber underlines and the hint, tap one and give a call,
+see it turn muted and drop from the hint. Still missing vs vocabulary: a grammar Word-check
 equivalent, a typed/recall target before reveal, known-pattern highlighting in
 the reader, and a /progress panel for grammar strength. Left over: resolve ambiguous `（note）` matches (e.g.
 ながら（while）/（も）, currently skipped), other short-form over-matches that

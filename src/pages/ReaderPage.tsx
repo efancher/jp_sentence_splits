@@ -41,13 +41,14 @@ import { SentenceWalkthrough, walkthroughChunks } from '../components/SentenceWa
 import { glossesFromWords } from '../lib/chunkGlosses';
 import { mergeChapterConstructionDrafts, mergeChapterWalkthroughs } from '../lib/contextWalkthrough';
 import { WordGlossList, type CompareAids } from '../components/TargetLessonCard';
-import { ensureDefaultBookChapter, getDb, getEpisodeFocus, getSavedWordStatus, getStrengthKnownExpressions, listGlossDecisions, readRowsByKeys, readSentenceAudioForSentences, listSentenceLearningEvents, logGlossDecision, logSentenceLearningEvent, resetSentenceWalkthrough, ensureVocabularyItem, readSettings, updateSettings, withoutUnseenAiLinks } from '../db/repository';
+import { ensureDefaultBookChapter, getDb, getEpisodeFocus, getSavedWordStatus, getReaderEvidenceLevels, getStrengthKnownExpressions, listGlossDecisions, readRowsByKeys, readSentenceAudioForSentences, listSentenceLearningEvents, logGlossDecision, logSentenceLearningEvent, resetSentenceWalkthrough, ensureVocabularyItem, readSettings, updateSettings, withoutUnseenAiLinks } from '../db/repository';
 import { registerReportContext } from '../lib/reportContext';
 import type { BookSentence, Sentence, SentenceAudio, StructureDraftChunk, TextDisplayMode } from '../domain/types';
 import { useNativeAudio } from '../hooks/useNativeAudio';
 import { FuriganaText } from '../lib/furigana';
 import { newWordSegments } from '../lib/newWordFurigana';
 import type { EpisodeFocusTarget } from '../lib/episodeFocus';
+import type { EvidenceLevel } from '../lib/wordStrength';
 import { isPreparationStale } from '../lib/episodePreparation';
 import { SentenceJourneyDetails } from '../components/SentenceJourneyDetails';
 import { buildSentenceJourney, sentencesReadyToRevisit } from '../lib/sentenceJourney';
@@ -149,6 +150,8 @@ export function ReaderPage() {
     undefined
   >();
   /** The word the learner tapped for "did you know it" feedback; independent of the study tools so it works during a walkthrough or shadowing. */
+  /** Evidence level per tappable word/pattern of the focused sentence (`word:<id>` / `pattern:<id>`); display only. */
+  const [evidence, setEvidence] = useState<{ sentenceId: string; levels: Map<string, EvidenceLevel> } | undefined>();
   const [tappedWord, setTappedWord] = useState<{ sentenceId: string; expression: string; visitId: string } | undefined>();
   /** The grammar pattern the learner tapped for feedback; like `tappedWord`, independent of the study tools. */
   const [tappedPattern, setTappedPattern] = useState<{ sentenceId: string; patternId: string; visitId: string } | undefined>();
@@ -445,6 +448,26 @@ export function ReaderPage() {
         : null,
     })));
 
+  // Which of the focused sentence's words/patterns have no evidence yet, or only shaky evidence (keys by expression / pattern id).
+  useEffect(() => {
+    if (!chapterMode || !data) return;
+    const focusedId = data.rows.some((row) => row.sentence.id === selectedId) ? selectedId : data.rows[0]?.sentence.id;
+    if (!focusedId) return;
+    const words = data.wordsBySentence.get(focusedId) ?? [];
+    const patterns = data.patternsBySentence.get(focusedId) ?? [];
+    let cancelled = false;
+    void getReaderEvidenceLevels(words.map((word) => word.vocabularyItemId).filter(Boolean), patterns.map((pattern) => pattern.patternId)).then((byId) => {
+      if (cancelled) return;
+      const levels = new Map<string, EvidenceLevel>();
+      for (const word of words) levels.set(`word:${word.expression}`, byId.get(`word:${word.vocabularyItemId}`) ?? 'unchecked');
+      for (const pattern of patterns) levels.set(`pattern:${pattern.patternId}`, byId.get(`pattern:${pattern.patternId}`) ?? 'unchecked');
+      setEvidence({ sentenceId: focusedId, levels });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [chapterMode, selectedId, data]);
+
   if (data === undefined) return <p>Loading…</p>;
   if (data === null) return <p>Book not found.</p>;
 
@@ -553,6 +576,14 @@ export function ReaderPage() {
     return { readingHidden, meaningHidden };
   }
 
+  /** A tap is now some evidence: an unchecked item becomes shaky at once (never solid; the next load decides). */
+  function noteEvidence(sentenceId: string, key: string) {
+    setEvidence((current) => {
+      if (current?.sentenceId !== sentenceId || current.levels.get(key) !== 'unchecked') return current;
+      return { sentenceId, levels: new Map(current.levels).set(key, 'shaky') };
+    });
+  }
+
   /** The learner's own "I knew it / I didn't" on one facet of a word they tapped: evidence only, never a rating. */
   async function recordWordFeedback(
     sentenceId: string,
@@ -564,6 +595,7 @@ export function ReaderPage() {
   ) {
     // Evidence is keyed by vocabulary item; make just that item (no link, no card) when the word has none yet.
     const vocabularyItemId = word.vocabularyItemId || (await ensureVocabularyItem(word.expression, word.reading, { meaning: word.meaning })).id;
+    noteEvidence(sentenceId, `word:${word.expression}`);
     void logSentenceLearningEvent({
       id: createId('sl_event'),
       visitId,
@@ -606,6 +638,7 @@ export function ReaderPage() {
 
   /** The learner's own call on a grammar pattern: evidence only. The pattern is not explained on screen when they judge. */
   function recordPatternFeedback(sentenceId: string, visitId: string, pattern: ReaderPattern, facet: 'spot' | 'use', outcome: ReaderToolOutcome) {
+    noteEvidence(sentenceId, `pattern:${pattern.patternId}`);
     void logSentenceLearningEvent({
       id: createId('sl_event'),
       visitId,
@@ -620,6 +653,23 @@ export function ReaderPage() {
       quietMode: settings?.quietMode ?? false,
       inventoryRevision: preparation?.sentenceFingerprint,
     });
+  }
+
+  /** One line under the focused sentence naming its words/patterns with no evidence yet, or null. */
+  function evidenceHint(sentence: Sentence) {
+    if (!chapterMode || sentence.id !== focusedId || evidence?.sentenceId !== sentence.id || wordTapsBlocked(sentence.id)) return null;
+    const words = data?.wordsBySentence.get(sentence.id) ?? [];
+    const patterns = data?.patternsBySentence.get(sentence.id) ?? [];
+    const unchecked = [
+      ...words.filter((word) => evidence.levels.get(`word:${word.expression}`) === 'unchecked').map((word) => word.surface),
+      ...patterns.filter((pattern) => evidence.levels.get(`pattern:${pattern.patternId}`) === 'unchecked').map((pattern) => pattern.name),
+    ];
+    if (unchecked.length === 0) return null;
+    return (
+      <p className="reader-evidence-hint" data-testid="reader-evidence-hint">
+        Not checked yet: {unchecked.join('、')} — tap the amber underlines to tell me if you know them.
+      </p>
+    );
   }
 
   /** The tap-a-pattern feedback panel for a sentence, or null. */
@@ -880,6 +930,11 @@ export function ReaderPage() {
             patternSpans={tappable ? patterns.map((item) => ({ id: item.patternId, start: item.start, end: item.end })) : undefined}
             onPatternTap={tappable ? (id) => { const pattern = patterns.find((item) => item.patternId === id); if (pattern) togglePatternFeedback(sentence, pattern); } : undefined}
             selectedPatternId={tappedPattern?.sentenceId === sentence.id ? tappedPattern.patternId : undefined}
+            evidenceOf={
+              tappable && evidence?.sentenceId === sentence.id
+                ? (token, patternId) => evidence.levels.get(patternId ? `pattern:${patternId}` : `word:${wordAt(token)?.expression}`)
+                : undefined
+            }
           />
         );
       }
@@ -1209,6 +1264,7 @@ export function ReaderPage() {
                     const tile = dictating ? buildTileDictation(row.sentence, readerTool.tile) : null;
                     return tile ? <DictationBlankLine tile={tile} /> : sentenceLine(row.sentence, isActive, audio);
                   })()}
+                  {evidenceHint(row.sentence)}
                   {walkthroughId === row.sentence.id ? null : wordFeedbackPanel(row.sentence)}
                   {walkthroughId === row.sentence.id ? null : patternFeedbackPanel(row.sentence)}
                   {(() => {

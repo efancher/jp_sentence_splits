@@ -73,6 +73,14 @@ export const WORD_STRENGTH_CONFIG = {
  */
 export const READER_KNOWN_STRENGTH = 0.6;
 
+/** How much evidence there is on an item: none yet, some but below the known line, or at/above it. */
+export type EvidenceLevel = 'unchecked' | 'shaky' | 'solid';
+
+export function evidenceLevel(strength: number | undefined): EvidenceLevel {
+  if (strength === undefined) return 'unchecked';
+  return strength >= READER_KNOWN_STRENGTH ? 'solid' : 'shaky';
+}
+
 const DAY_MS = 86_400_000;
 
 function decay(ageMs: number, halfLifeDays: number): number {

@@ -1,3 +1,4 @@
+import type { EvidenceLevel } from '../lib/wordStrength';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 
 import type { TargetVocabulary, VocabularySuggestion } from '../domain/types';
@@ -84,6 +85,10 @@ export function buildSentenceTokens(
  * kana line underneath (`sentence.readingOnly`) is the actual pronunciation
  * guide, kept separate so the kanji sentence line isn't mistaken for it.
  */
+function evidenceClass(level: EvidenceLevel | undefined): string {
+  return level === 'unchecked' || level === 'shaky' ? ` karaoke-evidence-${level}` : '';
+}
+
 export function KaraokeSentenceText({
   japanese,
   readingOnly,
@@ -96,6 +101,7 @@ export function KaraokeSentenceText({
   patternSpans,
   onPatternTap,
   selectedPatternId,
+  evidenceOf,
 }: {
   japanese: string;
   readingOnly?: string;
@@ -112,6 +118,8 @@ export function KaraokeSentenceText({
   patternSpans?: ReadonlyArray<{ id: string; start: number; end: number }>;
   onPatternTap?: (patternId: string) => void;
   selectedPatternId?: string;
+  /** Evidence level of a tappable word / pattern token, so unchecked and shaky ones stand out from solid ones. */
+  evidenceOf?: (token: SentenceToken, patternId: string | undefined) => EvidenceLevel | undefined;
 }) {
   const patternOf = (token: SentenceToken) =>
     onPatternTap && !isWordTappable?.(token)
@@ -154,7 +162,7 @@ export function KaraokeSentenceText({
             ref={(el) => {
               wordRefs.current[index] = el;
             }}
-            className={`karaoke-word${index === displayedTokenIndex || (selectedWordStart !== undefined && token.start === selectedWordStart && isWordTappable?.(token)) ? ' karaoke-word-active' : ''}${token.gloss ? ' karaoke-word-tappable' : ''}${isWordTappable?.(token) && onWordTap ? ' karaoke-word-checkable' : ''}${patternOf(token) !== undefined ? ' karaoke-pattern-checkable' : ''}${selectedPatternId !== undefined && patternOf(token) === selectedPatternId ? ' karaoke-word-active' : ''}`}
+            className={`karaoke-word${index === displayedTokenIndex || (selectedWordStart !== undefined && token.start === selectedWordStart && isWordTappable?.(token)) ? ' karaoke-word-active' : ''}${token.gloss ? ' karaoke-word-tappable' : ''}${isWordTappable?.(token) && onWordTap ? ' karaoke-word-checkable' : ''}${patternOf(token) !== undefined ? ' karaoke-pattern-checkable' : ''}${selectedPatternId !== undefined && patternOf(token) === selectedPatternId ? ' karaoke-word-active' : ''}${evidenceClass(evidenceOf?.(token, patternOf(token)))}`}
             {...(patternOf(token) !== undefined
               ? {
                   role: 'button',
