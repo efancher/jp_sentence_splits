@@ -2,9 +2,11 @@
  * How the forced aligner sees a sentence, so token offsets can be mapped back
  * to the text we hold.
  *
- * The aligner (`shadowing-analysis-api`) (1) rewrites `<n>日`/`<n>月` dates to
- * their hiragana reading before aligning (`app/numerals.py`: 16日 →
- * じゅうろくにち — its dictionary has no entry for a bare digit string) and
+ * The aligner (`shadowing-analysis-api`) (1) rewrites `<n>日`/`<n>月` dates
+ * (`app/numerals.py`: 16日 → じゅうろくにち) and every other arabic number and
+ * counter (`app/number_expansion.py`, mirrored in `numeralExpansion.ts`:
+ * 2024年 → にせんにじゅうよねん) to hiragana before aligning — its dictionary
+ * has no entry for a bare digit string — and
  * (2) its tokenizer drops punctuation and whitespace. Its word texts therefore
  * concatenate to *that* text, not to `japanese`. `alignerView` reproduces it
  * and remembers, per aligner character, the raw range it came from.
@@ -12,6 +14,8 @@
  * KEEP THE TABLES IN SYNC with `app/numerals.py` — `tests/alignerText.test.ts`
  * compares them against the sibling repo's file when it is checked out.
  */
+
+import { COUNTER_ALTERNATION, numeralReading } from './numeralExpansion';
 
 /** Day-of-month readings (1–31), verbatim from the aligner's `_DAY_READINGS`. */
 export const DAY_READINGS: Readonly<Record<number, string>> = {
@@ -67,8 +71,12 @@ export const MONTH_READINGS: Readonly<Record<number, string>> = {
 /** Punctuation/symbols/whitespace/control characters the aligner's tokenizer drops. */
 const ALIGNER_DROPPED = /[\p{P}\p{S}\p{Z}\p{Cc}]/u;
 
-/** Python's `\d` matches any Unicode decimal digit (fullwidth included), so `\p{Nd}`. */
-const DATE_PATTERN = /(\p{Nd}+)(日|月)/gu;
+/**
+ * A digit run (not part of a decimal/comma-grouped number) with an optional
+ * counter. Python's `\d` matches any Unicode decimal digit (fullwidth
+ * included), so `\p{Nd}`.
+ */
+const NUMBER_PATTERN = new RegExp(`(?<![\\p{Nd}.,])(\\p{Nd}+)(?![.,]\\p{Nd})(${COUNTER_ALTERNATION})?`, 'gu');
 
 export interface AlignerView {
   /** The characters the aligner keeps, in order (dates expanded, punctuation dropped). */
@@ -99,9 +107,11 @@ export function alignerView(japanese: string): AlignerView {
   };
 
   let cursor = 0;
-  for (const match of japanese.matchAll(DATE_PATTERN)) {
-    const reading = dateReading(match[1]!, match[2]!);
-    if (reading === undefined) continue; // out-of-range number: left as-is, like the aligner
+  for (const match of japanese.matchAll(NUMBER_PATTERN)) {
+    const counter = match[2];
+    const date = counter === '日' || counter === '月' ? dateReading(match[1]!, counter) : undefined;
+    const reading = date ?? numeralReading(match[1]!, counter);
+    if (reading === undefined) continue; // decimal-ish/leading-zero/huge number: left as-is, like the aligner
     const start = match.index!;
     const end = start + match[0].length;
     pushPlain(cursor, start);

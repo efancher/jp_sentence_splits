@@ -23,11 +23,34 @@ describe('alignerView', () => {
     expect(view.rawStart[7]).toBe(3); // は
   });
 
-  it('handles fullwidth digits and months, and leaves out-of-range numbers and other counters alone', () => {
+  it('handles fullwidth digits and months, and out-of-range dates read as plain numbers', () => {
     expect(alignerView('１０月に').chars.join('')).toBe('じゅうがつに');
-    expect(alignerView('40日').chars.join('')).toBe('40日');
-    expect(alignerView('100匹').chars.join('')).toBe('100匹');
+    expect(alignerView('40日').chars.join('')).toBe('よんじゅう日');
     expect(alignerView('今日は月曜日').chars.join('')).toBe('今日は月曜日');
+  });
+
+  it('expands bare numbers and counters, every character mapping to the whole raw number', () => {
+    const view = alignerView('エピソード1で、');
+    expect(view.chars.join('')).toBe('エピソードいちで');
+    expect(view.rawStart[5]).toBe(5); // い
+    expect(view.rawEnd[5]).toBe(6);
+    expect(view.rawStart[7]).toBe(6); // で
+    const year = alignerView('2024年に');
+    expect(year.chars.join('')).toBe('にせんにじゅうよねんに');
+    expect(year.rawStart.slice(0, 10)).toEqual(Array(10).fill(0));
+    expect(year.rawEnd.slice(0, 10)).toEqual(Array(10).fill(5));
+  });
+
+  it('matches the shared fixture the aligner service is tested against', () => {
+    const cases = JSON.parse(readFileSync(join(__dirname, 'fixtures/numeral_expansion_cases.json'), 'utf8')) as {
+      input: string;
+      expected: string;
+    }[];
+    for (const { input, expected } of cases) {
+      // Fixture output is the aligner's text; ours drops punctuation too, so compare without it.
+      const stripped = expected.replace(/[\p{P}\p{S}\p{Z}\p{Cc}]/gu, '');
+      expect([input, alignerView(input).chars.join('')]).toEqual([input, stripped]);
+    }
   });
 });
 

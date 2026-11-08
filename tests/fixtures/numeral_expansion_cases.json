@@ -1,0 +1,130 @@
+[
+ {
+  "input": "エピソード1で",
+  "expected": "エピソードいちで"
+ },
+ {
+  "input": "2024年",
+  "expected": "にせんにじゅうよねん"
+ },
+ {
+  "input": "3回",
+  "expected": "さんかい"
+ },
+ {
+  "input": "5人",
+  "expected": "ごにん"
+ },
+ {
+  "input": "1人",
+  "expected": "ひとり"
+ },
+ {
+  "input": "2人",
+  "expected": "ふたり"
+ },
+ {
+  "input": "4人",
+  "expected": "よにん"
+ },
+ {
+  "input": "7人",
+  "expected": "しちにん"
+ },
+ {
+  "input": "20歳",
+  "expected": "はたち"
+ },
+ {
+  "input": "4時",
+  "expected": "よじ"
+ },
+ {
+  "input": "9時",
+  "expected": "くじ"
+ },
+ {
+  "input": "7時",
+  "expected": "しちじ"
+ },
+ {
+  "input": "16日と3回",
+  "expected": "じゅうろくにちとさんかい"
+ },
+ {
+  "input": "8番",
+  "expected": "はち番"
+ },
+ {
+  "input": "10分",
+  "expected": "じゅっぷん"
+ },
+ {
+  "input": "3分",
+  "expected": "さんぷん"
+ },
+ {
+  "input": "6分",
+  "expected": "ろっぷん"
+ },
+ {
+  "input": "300円",
+  "expected": "さんびゃく円"
+ },
+ {
+  "input": "3.5倍",
+  "expected": "3.5倍"
+ },
+ {
+  "input": "1,000人",
+  "expected": "1,000人"
+ },
+ {
+  "input": "007",
+  "expected": "007"
+ },
+ {
+  "input": "100000000",
+  "expected": "100000000"
+ },
+ {
+  "input": "三階",
+  "expected": "三階"
+ },
+ {
+  "input": "1階",
+  "expected": "いっかい"
+ },
+ {
+  "input": "3階",
+  "expected": "さんがい"
+ },
+ {
+  "input": "2つ",
+  "expected": "ふたつ"
+ },
+ {
+  "input": "4本",
+  "expected": "よんほん"
+ },
+ {
+  "input": "3匹",
+  "expected": "さんびき"
+ },
+ {
+  "input": "600年",
+  "expected": "ろっぴゃくねん"
+ },
+ {
+  "input": "1ヶ月",
+  "expected": "いっかげつ"
+ },
+ {
+  "input": "６回",
+  "expected": "ろっかい"
+ },
+ {
+  "input": "0点",
+  "expected": "ぜろてん"
+ }
+]
