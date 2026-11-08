@@ -960,8 +960,12 @@ control).
   already drafts Word check as its own step; it was not made independent of the
   same-plan Fresh try because that needs its own candidate list (walked-through
   sentences with weak words, spaced from the last Word check). Where a Fresh try
-  itself bundles these checks was not located in code; ask the learner which
-  screen showed them before building.
+  itself bundles these checks was not located in code. The learner's screenshot
+  (2026-11-08) shows it is the Read check's follow-up offer ("Try Ear tiles on
+  it?" after "needed help", `chooseFollowUp` in `followUpOffer.ts`), not the
+  Fresh try. Its rule order is still Word check (weak word), Ear tiles, Dictation,
+  Shadowing, so Dictation is only offered after those; it was left unchanged
+  because the random-baseline rows still need data.
   *Open:* how many separate steps a day is tolerable (the plan's time budget
   bounds it today), and whether the typed dictation match should count toward
   `/progress` (see the writing-ladder note above).
