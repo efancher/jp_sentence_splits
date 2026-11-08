@@ -141,7 +141,7 @@ function tokenMoraCount(word: WordAlignment): number {
 }
 
 /** True when a squashed token lies within `SQUASH_NEIGHBOURHOOD` tokens of usable[first..last] (or is one of them). */
-function hasSquashedNeighbour(usable: WordAlignment[], first: number, last: number): boolean {
+export function hasSquashedNeighbour(usable: WordAlignment[], first: number, last: number): boolean {
   const from = Math.max(0, first - SQUASH_NEIGHBOURHOOD);
   const to = Math.min(usable.length - 1, last + SQUASH_NEIGHBOURHOOD);
   for (let k = from; k <= to; k += 1) {

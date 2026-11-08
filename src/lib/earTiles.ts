@@ -102,7 +102,7 @@ export function tokenSurfaceReading(token: Pick<TileToken, 'surface' | 'expressi
 /** Placed in a tile's joined reading by a token whose sound can't be derived; the whole tile reading is then dropped. */
 const UNKNOWN_READING = '\u0000';
 
-interface TileDetail {
+export interface TileDetail {
   text: string;
   /** POS and surface of the tile's final token, which decides what can be swapped for a distractor. */
   lastPos: string;
@@ -114,7 +114,7 @@ interface TileDetail {
   end: number;
 }
 
-function chunkSentenceIntoTileDetails(
+export function chunkSentenceIntoTileDetails(
   sentence: Pick<Sentence, 'japanese' | 'vocabularySuggestions'>,
 ): TileDetail[] | null {
   const tokens: TileToken[] = (sentence.vocabularySuggestions ?? [])

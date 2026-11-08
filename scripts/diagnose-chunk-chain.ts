@@ -6,10 +6,12 @@
  * Usage: npm run diagnose:chunk-chain [-- --since 2026-11-01] [--book <bookId>]
  *   --since  only sentences created on/after this date (the "recently imported" check)
  *   --book   only sentences linked to this book through reference_audio
- * Sentences whose stored tokens don't tile the text (or that have none) are reported as "unchunkable",
+ * It then plans the duration-sized rungs (`planChunkChain`) against each stored alignment and reports the
+ * rung-count histogram and rejection reasons. Sentences whose stored tokens don't tile the text (or that have none) are reported as "unchunkable",
  * never counted as zero chunks; they would fall back to whole-sentence shadowing.
  */
-import type { Sentence } from '../src/domain/types';
+import type { Sentence, WordAlignment } from '../src/domain/types';
+import { planChunkChain } from '../src/lib/chunkChain';
 import { chunkSentenceIntoTiles } from '../src/lib/earTiles';
 import { fetchAll, requireAuthedUser } from './lib/scriptHelpers';
 import { createScriptSupabaseClient } from './lib/scriptSupabaseClient';
@@ -27,6 +29,27 @@ function histogram(counts: number[], top: number): string {
   return buckets.map((n, i) => `${i === top ? `${top}+` : i}:${n}`).join('  ');
 }
 
+const ALIGNMENT_PAGE_SIZE = 200;
+
+/** `reference_alignment` has no `deleted_at` and its id is the clip's `reference_audio.id`, so it can't use `fetchAll`. */
+async function fetchAlignments(
+  client: Awaited<ReturnType<typeof createScriptSupabaseClient>>,
+  ownerId: string,
+): Promise<Map<string, WordAlignment[]>> {
+  const out = new Map<string, WordAlignment[]>();
+  for (let from = 0; ; from += ALIGNMENT_PAGE_SIZE) {
+    const { data, error } = await client
+      .from('reference_alignment')
+      .select('id,alignment')
+      .eq('owner_id', ownerId)
+      .order('id', { ascending: true })
+      .range(from, from + ALIGNMENT_PAGE_SIZE - 1);
+    if (error) throw new Error(`Failed to fetch reference_alignment: ${error.message}`);
+    for (const row of data ?? []) out.set(row.id as string, ((row.alignment as { words?: WordAlignment[] })?.words ?? []));
+    if (!data || data.length < ALIGNMENT_PAGE_SIZE) return out;
+  }
+}
+
 async function main(): Promise<void> {
   const since = flag('since');
   const book = flag('book');
@@ -37,6 +60,7 @@ async function main(): Promise<void> {
     fetchAll<Row>(client, 'reference_audio', 'id,sentence_id,book_id,duration_ms', ownerId, (r) => r),
   ]);
 
+  const alignments = await fetchAlignments(client, ownerId);
   const clipBySentence = new Map<string, Row>();
   for (const row of audio) {
     if (book && row.book_id !== book) continue;
@@ -49,6 +73,8 @@ async function main(): Promise<void> {
   const counts: number[] = [];
   const byLength = new Map<string, number[]>();
   let unchunkable = 0;
+  const rungCounts: number[] = [];
+  const rejections = new Map<string, number>();
   for (const row of scoped) {
     const tiles = chunkSentenceIntoTiles({
       japanese: row.japanese,
@@ -59,6 +85,17 @@ async function main(): Promise<void> {
       continue;
     }
     counts.push(tiles.length);
+    const words = alignments.get(clipBySentence.get(row.id)!.id as string);
+    if (!words) {
+      rejections.set('no-alignment', (rejections.get('no-alignment') ?? 0) + 1);
+    } else {
+      const plan = planChunkChain(
+        { japanese: row.japanese, vocabularySuggestions: row.vocabulary_suggestions ?? [] } as Pick<Sentence, 'japanese' | 'vocabularySuggestions'>,
+        words,
+      );
+      if (plan.rejection) rejections.set(plan.rejection, (rejections.get(plan.rejection) ?? 0) + 1);
+      else rungCounts.push(plan.rungs.length);
+    }
     const band = row.japanese.length < 10 ? '<10' : row.japanese.length < 20 ? '10-19' : row.japanese.length < 35 ? '20-34' : '35+';
     byLength.set(band, [...(byLength.get(band) ?? []), tiles.length]);
   }
@@ -78,6 +115,9 @@ async function main(): Promise<void> {
     const eligible = rows.filter((c) => c >= 3).length;
     console.log(`  length ${band}: ${rows.length} chunkable, ${eligible} with 3+ chunks (${Math.round((100 * eligible) / rows.length)}%)`);
   }
+  console.log(`Planned chains (duration-sized rungs, whole sentence included): ${rungCounts.length} (${pct(rungCounts.length)})`);
+  console.log(`  rung count histogram: ${histogram(rungCounts, 6)}`);
+  for (const [reason, n] of [...rejections].sort((a, b) => b[1] - a[1])) console.log(`  not planned, ${reason}: ${n} (${pct(n)})`);
 }
 
 main().catch((error) => {

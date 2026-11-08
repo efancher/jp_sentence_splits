@@ -130,6 +130,22 @@ The items below retain unfinished work, optional refinements and future ideas.
     neighbouring chunks into ~3-5 rungs (target a rung length in seconds, not chunks),
     or cap the chain to the last N rungs. The Ear Tiles `MAX_SENTENCE_LENGTH` (45) and
     `MAX_CLIP_MS` (10 s) are a precedent for limiting this.
+  - *Rung planner, 2026-11-08:* decided to merge by duration. `planChunkChain`
+    (`src/lib/chunkChain.ts`, tests in `tests/chunkChain.test.ts`) cuts the Ear Tiles
+    chunks at their aligned start times and keeps a cut only if it adds at least
+    1.2 s (or total/5 s for long clips) of new audio, so a chain is 3-5 rungs ending in
+    the whole sentence. It rejects with a reason: `no-chunks`, `too-short`,
+    `unreliable-alignment` (any `<unk>`/unverified token or squashed token anywhere in
+    the clip). Not built yet: the Shadow-pane UI, the chain logging, the divider
+    adjustment. **First real run (`npm run diagnose:chunk-chain`, 5,369 clips):** only
+    11% (582) get a chain today, and the main limit is stored alignments, not chunks:
+    3,610 clips (67%) have no `reference_alignment` row, including all 649 from the
+    2026-11-07/08 imports (so none of the newest sentences can chain until the
+    alignment backfill runs). Of the ~1,760 clips with an alignment, 582 plan (376 with
+    3 rungs, 206 with 4), 622 are too short once rungs are sized by duration, 408 have
+    an alignment the planner will not trust. **Open:** whether that last strict rule
+    is too strict (it rejects on a squashed token anywhere, not just near a cut), and
+    whether the alignment backfill should cover the clips a chain would use first.
 
 - [~] **Progressive glossing.** Slices 1-2 shipped 2026-10-01 (STATUS), including feasibility script, try-unaided, partial translation, self-report, park-and-prepare, readiness tiers, progress panel, heuristic の attachment skill, planner revisit. Left: AI-verified dependency reference and clause skills. Diagnostic refreshed 2026-10-15: 50/64 analysed sentences have a settled heuristic decision; attachment coverage is 25 の decisions. Pilot drafted 2026-10-16: 12 real sentences, 8 promising, 2 needing chunk repairs, 2 deferred for context/ambiguity; see `research/GLOSS_CLAUSE_PILOT.md`. References are self-reviewed drafts, not independently validated. Opt-in span-based preview shipped and expanded to all active unique sentences (365 questions, 64 reviewed notes as of 2026-10-17, after replacing 46 no-choice questions with connective-link questions and noting 29 too-short ones), including the repaired examples and missing-question notices; independent reference review still required before auto-grading. Helpful/disputed reactions sync as of 2026-10-17 (`clause_question_feedback`; `npm run diagnose:clause-feedback`) so the dispute rate can guide that review.
 
