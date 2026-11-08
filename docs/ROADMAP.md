@@ -859,8 +859,13 @@ reader (solid words stay plain); /progress has a "Grammar strength" panel
 (`getGrammarStrengthReport`: solid/shaky/unchecked counts plus the weakest tapped
 patterns). Manual test: type a guess in a Grammar check and see it after the reveal;
 give a pattern a few "I knew it" taps and see it turn green; open /progress and
-check the counts move. Left over: resolve ambiguous `（note）` matches (e.g.
-ながら（while）/（も）, currently skipped) and any grammar study surface.
+check the counts move. Left over: any grammar study surface.
+Ambiguous `（note）` senses (2026-11-08): only 7 curated forms share their text
+(`npm run diagnose:grammar-ambiguous`). A shared form is now detected when every
+owner has a guard: ながら（while）/（も） and くらい/ぐらい（approximately）/（extent）
+are resolved by context; ように, そうだ, られる and にする stay skipped (the senses
+need grammar, not nearby text). The bigger coverage gap is short patterns (under
+3 characters: も, は, に, で roles), which text detection never sees.
 Short-form over-matches (2026-11-08): `src/lib/grammarDetectionGuards.ts` holds
 per-entry guards (ないです is not ないで, すばらしい is not らしい, 大切にしています
 is not にして, …) found with the read-only `npm run diagnose:grammar-detection`;

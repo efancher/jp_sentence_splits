@@ -16,6 +16,8 @@ export interface MatchContext {
 
 export type DetectionGuard = (context: MatchContext) => boolean;
 
+const APPROX_BEFORE = /([0-9０-９一二三四五六七八九十百千万半]|分|時|円|度|年|個|人|歳|回|前|後|間|日|月|週|キロ|倍)$/;
+
 export const DETECTION_GUARDS: Readonly<Record<string, DetectionGuard>> = {
   // ないです / ないでしょう, which are the polite 〜ない, not 〜ないで.
   naide: ({ after }) => /^(す|しょう)/.test(after),
@@ -42,4 +44,11 @@ export const DETECTION_GUARDS: Readonly<Record<string, DetectionGuard>> = {
   // お + a short verbal noun + する; お金 / お腹 and long gaps are other words.
   'o-suru': ({ matched }) => matched.length > 8 || /^お[金腹]/.test(matched),
   'o-ni-naru': ({ matched }) => matched.length > 8 || /^お[金腹]/.test(matched),
+  // Shared forms: every owner needs a guard that rejects the other senses, or the form is skipped.
+  // ながら + も is the concessive sense; 残念ながら and friends are fixed adverbs, neither sense.
+  nagara: ({ before, after }) => after.startsWith('も') || /(残念|しかし|当然|及ばず)$/.test(before),
+  'nagara-mo': ({ after }) => !/^も/.test(after),
+  // くらい / ぐらい after a number or time word is "about"; after a verb or adjective it is the extent sense.
+  'kurai-gurai': ({ before }) => !APPROX_BEFORE.test(before),
+  'kurai-gurai-extent': ({ before }) => !/[るたいう]$/.test(before),
 };

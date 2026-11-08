@@ -40,7 +40,7 @@ and possible extensions. This snapshot does not certify a live deployment.
   CC BY-SA 4.0, id/pattern/level/formation only; regenerate with
   `npm run vendor:openjlpt-grammar`); a pattern is known once an introduced
   sentence carries it. Curated patterns are also found from the sentence text
-  itself (`buildGrammarDetector`, with per-entry over-match guards in `src/lib/grammarDetectionGuards.ts`, audited by `npm run diagnose:grammar-detection`: each entry's fixed text, split patterns in
+  itself (`buildGrammarDetector`, with per-entry over-match guards in `src/lib/grammarDetectionGuards.ts`, audited by `npm run diagnose:grammar-detection`; shared-text senses resolve by context when each owner has a guard, listed by `npm run diagnose:grammar-ambiguous`: each entry's fixed text, split patterns in
   order, conjugated る-verb endings, longest match wins, entries sharing text
   skipped, fixed text under 3 characters ignored), so ~65% of candidates carry
   grammar instead of ~19% via AI links. A match may not start partway through

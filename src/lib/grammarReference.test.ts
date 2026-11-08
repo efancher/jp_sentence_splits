@@ -132,4 +132,19 @@ describe('buildGrammarDetector', () => {
     // A rejected first occurrence falls through to a later valid one.
     expect(guarded('知らないです、行かないで')).toEqual(['naide']);
   });
+
+  it('resolves shared forms by context when every sense has a guard', () => {
+    const senses = buildGrammarDetector([
+      { id: 'nagara', pattern: '〜ながら（while）' },
+      { id: 'nagara-mo', pattern: '〜ながら（も）' },
+      { id: 'kurai-gurai', pattern: '〜くらい / 〜ぐらい（approximately）' },
+      { id: 'kurai-gurai-extent', pattern: '〜くらい / 〜ぐらい（extent）' },
+    ]);
+    expect(senses('映像を見ながら聞く')).toEqual(['nagara']);
+    expect(senses('羨ましいなと思いながらも')).toEqual(['nagara-mo']);
+    expect(senses('残念ながら行けません')).toEqual([]);
+    expect(senses('電車で30分ぐらいです')).toEqual(['kurai-gurai']);
+    expect(senses('聞こえるぐらいで')).toEqual(['kurai-gurai-extent']);
+    expect(senses('それくらいです')).toEqual([]);
+  });
 });

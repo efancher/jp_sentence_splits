@@ -148,16 +148,22 @@ export function buildGrammarDetector(
     .filter((entry) => entry.id)
     .map((entry) => ({ id: entry.id!, alternatives: detectableSegments(entry) }))
     .filter((entry) => entry.alternatives.length > 0);
-  const owners = new Map<string, number>();
-  for (const { alternatives } of detectable) {
+  const owners = new Map<string, string[]>();
+  for (const { id, alternatives } of detectable) {
     for (const key of new Set(alternatives.map((segments) => segments.join('〜')))) {
-      owners.set(key, (owners.get(key) ?? 0) + 1);
+      owners.set(key, [...(owners.get(key) ?? []), id]);
     }
   }
+  // Shared text (different senses of one form) is only usable when every owner has a guard that rejects the other
+  // senses' contexts; otherwise the form stays ambiguous and is skipped.
+  const resolvable = (key: string) => {
+    const ids = owners.get(key) ?? [];
+    return ids.length === 1 || ids.every((id) => DETECTION_GUARDS[id]);
+  };
   const usable = detectable
     .map((entry) => ({
       id: entry.id,
-      alternatives: entry.alternatives.filter((segments) => owners.get(segments.join('〜')) === 1),
+      alternatives: entry.alternatives.filter((segments) => resolvable(segments.join('〜'))),
     }))
     .filter((entry) => entry.alternatives.length > 0);
 
