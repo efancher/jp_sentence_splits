@@ -29,7 +29,7 @@ import {
   wordIdsInPhrase,
   type PhraseShadowOutcome,
 } from '../lib/phraseShadow';
-import { chainRungTargetKey } from '../lib/chunkChainSession';
+import { CHAIN_COLD_KEY, chainRungTargetKey } from '../lib/chunkChainSession';
 import { explainWeakWordSentences, type WeakWordExplanation } from '../lib/weakWordExplain';
 import { buildSentenceLessonReport, type SentenceLessonReport } from '../lib/sentenceLessonReport';
 import { parkedSentenceIds } from '../lib/glossSkill';
@@ -10219,7 +10219,8 @@ export async function logChunkChainRung(input: {
   bookId: string;
   chapterId?: string;
   sentenceId: string;
-  rungIndex: number;
+  /** A rung index, or 'cold' for the optional whole-sentence try before the chain (never credits or grades anything). */
+  rungIndex: number | 'cold';
   range: { startMs: number; endMs: number };
   text: string;
   outcome: PhraseShadowOutcome;
@@ -10232,7 +10233,7 @@ export async function logChunkChainRung(input: {
     bookId: input.bookId,
     chapterId: input.chapterId,
     sentenceId: input.sentenceId,
-    target: { kind: 'expression', key: chainRungTargetKey(input.rungIndex), label: input.text },
+    target: { kind: 'expression', key: input.rungIndex === 'cold' ? CHAIN_COLD_KEY : chainRungTargetKey(input.rungIndex), label: input.text },
     rangeStartMs: Math.round(input.range.startMs),
     rangeEndMs: Math.round(input.range.endMs),
     outcome: input.outcome,

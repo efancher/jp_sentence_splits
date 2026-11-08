@@ -45,7 +45,7 @@ describe('ChunkChainPanel', () => {
     await seed();
     const user = userEvent.setup();
     const onRange = vi.fn();
-    render(<ChunkChainPanel bookId="b1" sentenceId="s1" sentenceAudioId="a1" onRange={onRange} />);
+    render(<ChunkChainPanel bookId="b1" sentenceId="s1" sentenceAudioId="a1" onRange={onRange} random={() => 1} />);
 
     await user.click(await screen.findByRole('button', { name: 'Chunk chain' }));
     expect(screen.getByText('映画を見ました')).toBeTruthy();
@@ -77,7 +77,7 @@ describe('ChunkChainPanel', () => {
   it('drops a rung on Not yet and logs no summary when nothing was Got it', async () => {
     await seed();
     const user = userEvent.setup();
-    render(<ChunkChainPanel bookId="b1" sentenceId="s1" sentenceAudioId="a1" onRange={() => undefined} />);
+    render(<ChunkChainPanel bookId="b1" sentenceId="s1" sentenceAudioId="a1" onRange={() => undefined} random={() => 1} />);
     await user.click(await screen.findByRole('button', { name: 'Chunk chain' }));
     await user.click(screen.getByRole('button', { name: 'Next' }));
     await user.click(screen.getByRole('button', { name: 'Not yet' }));
@@ -92,7 +92,7 @@ describe('ChunkChainPanel', () => {
     await seed();
     const user = userEvent.setup();
     const onRange = vi.fn();
-    render(<ChunkChainPanel bookId="b1" sentenceId="s1" sentenceAudioId="a1" onRange={onRange} />);
+    render(<ChunkChainPanel bookId="b1" sentenceId="s1" sentenceAudioId="a1" onRange={onRange} random={() => 1} />);
     await user.click(await screen.findByRole('button', { name: 'Adjust steps' }));
     // Suggested cuts are pre-marked; swap the 友達 cut for one at 駅.
     expect((screen.getByRole('button', { name: 'Step starts at 友達' }) as HTMLButtonElement).getAttribute('aria-pressed')).toBe('true');
@@ -107,8 +107,36 @@ describe('ChunkChainPanel', () => {
     expect(onRange).toHaveBeenCalledWith({ startMs: 2800, endMs: 5400 });
   });
 
+  it('opens some runs with a cold whole-sentence try that is logged apart and can be skipped', async () => {
+    await seed();
+    const user = userEvent.setup();
+    const onRange = vi.fn();
+    render(<ChunkChainPanel bookId="b1" sentenceId="s1" sentenceAudioId="a1" onRange={onRange} random={() => 0} />);
+    await user.click(await screen.findByRole('button', { name: 'Chunk chain' }));
+    expect(screen.getByRole('group', { name: 'Cold try' })).toBeTruthy();
+    expect(onRange).toHaveBeenLastCalledWith({ startMs: 0, endMs: 5400 });
+    await user.click(screen.getByRole('button', { name: 'Not yet' }));
+    expect(await screen.findByText('映画を見ました')).toBeTruthy(); // the chain proper begins
+    const events = await getDb().sentenceLearningEvents.toArray();
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ action: 'phrase_shadow', outcome: 'needed_help', rangeStartMs: 0, rangeEndMs: 5400, target: { key: 'chain-cold:0' } });
+    expect(await getDb().reviews.count()).toBe(0);
+
+    await user.click(screen.getByRole('button', { name: 'Stop chain' }));
+  });
+
+  it('skips the cold try without logging anything', async () => {
+    await seed();
+    const user = userEvent.setup();
+    render(<ChunkChainPanel bookId="b1" sentenceId="s1" sentenceAudioId="a1" onRange={() => undefined} random={() => 0} />);
+    await user.click(await screen.findByRole('button', { name: 'Chunk chain' }));
+    await user.click(screen.getByRole('button', { name: 'Skip' }));
+    expect(screen.getByText('映画を見ました')).toBeTruthy();
+    expect(await getDb().sentenceLearningEvents.count()).toBe(0);
+  });
+
   it('renders nothing when the sentence has no usable chain', async () => {
-    const { container } = render(<ChunkChainPanel bookId="b1" sentenceId="missing" sentenceAudioId="none" onRange={() => undefined} />);
+    const { container } = render(<ChunkChainPanel bookId="b1" sentenceId="missing" sentenceAudioId="none" onRange={() => undefined} random={() => 1} />);
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(container.textContent).toBe('');
   });

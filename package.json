@@ -81,6 +81,7 @@
     "questions:coverage": "tsx scripts/clause-question-coverage.ts",
     "diagnose:gloss-reference": "tsx scripts/diagnose-gloss-reference.ts",
     "diagnose:routing-evidence": "tsx scripts/diagnose-routing-evidence.ts",
+    "diagnose:chunk-chain-outcomes": "tsx scripts/diagnose-chunk-chain-outcomes.ts",
     "diagnose:word-strength": "tsx scripts/diagnose-word-strength.ts",
     "build:word-frequency": "tsx scripts/build-word-frequency.ts",
     "retire:extra-dictation-tiles": "tsx scripts/retire-extra-dictation-tiles.ts",

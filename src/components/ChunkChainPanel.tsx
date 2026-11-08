@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { getDb, logChunkChainRung, logChunkChainSummary } from '../db/repository';
 import { cuttableWords, planChunkChain, rungsFromCutTimes, type ChainRung } from '../lib/chunkChain';
 import {
+  COLD_PASS_SHARE,
   advanceFromFirstRung,
   highestGotItRung,
   rateChainRung,
@@ -28,6 +29,7 @@ export function ChunkChainPanel({
   visitId,
   onRange,
   onActiveChange,
+  random = Math.random,
 }: {
   bookId: string;
   sentenceId: string;
@@ -37,6 +39,8 @@ export function ChunkChainPanel({
   onRange: (range: { startMs: number; endMs: number } | null) => void;
   /** Lets the pane hide its single-phrase rating while a chain is running. */
   onActiveChange?: (active: boolean) => void;
+  /** Decides which runs open with a cold whole-sentence try; injectable for tests. */
+  random?: () => number;
 }) {
   const plan = useLiveQuery(async () => {
     const db = getDb();
@@ -55,6 +59,7 @@ export function ChunkChainPanel({
   const suggested = plan && !plan.plan.rejection ? plan.plan.rungs : null;
   const rungs = custom ?? suggested;
   const [session, setSession] = useState<ChainSession | null>(null);
+  const [cold, setCold] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const chainVisit = useRef<string>('');
@@ -66,11 +71,11 @@ export function ChunkChainPanel({
   }, [session, onActiveChange]);
 
   // The loop follows the rung being shadowed.
-  const rung = rungs && session ? rungs[session.rungIndex] : null;
+  const rung = rungs && session ? (cold ? rungs[rungs.length - 1] : rungs[session.rungIndex]) : null;
   useEffect(() => {
     if (rung && active) onRange({ startMs: rung.startMs, endMs: rung.endMs });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rung?.startMs, rung?.endMs, active]);
+  }, [rung?.startMs, rung?.endMs, active, cold]);
 
   // A different sentence starts over.
   useEffect(() => {
@@ -91,12 +96,36 @@ export function ChunkChainPanel({
     chainVisit.current = visitId ?? createId('chain_visit');
     summaryLogged.current = false;
     setError(null);
+    setCold(random() < COLD_PASS_SHARE);
     setSession(startChainSession(rungs!.length));
   }
 
   function leave() {
     setSession(null);
     onRange(null);
+  }
+
+  async function rateCold(outcome: PhraseShadowOutcome) {
+    if (!rungs || busy) return;
+    const whole = rungs[rungs.length - 1]!;
+    setBusy(true);
+    setError(null);
+    try {
+      await logChunkChainRung({
+        bookId,
+        sentenceId,
+        rungIndex: 'cold',
+        range: { startMs: whole.startMs, endMs: whole.endMs },
+        text: whole.text,
+        outcome,
+        visitId: chainVisit.current,
+      });
+      setCold(false);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Unable to save that rating.');
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function rate(outcome: PhraseShadowOutcome) {
@@ -224,6 +253,29 @@ export function ChunkChainPanel({
           <button type="button" onClick={start}>Run it again</button>
           <button type="button" onClick={leave}>Close</button>
         </div>
+      </div>
+    );
+  }
+
+  if (cold) {
+    return (
+      <div className="stack" role="group" aria-label="Cold try" style={{ gap: '0.25rem' }}>
+        <p style={{ margin: 0 }}>
+          <span className="muted">Before the chain, try the whole sentence cold: </span>
+          <strong lang="ja">{rungs[rungs.length - 1]!.text}</strong>
+        </p>
+        <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+          Shadow it once with no build-up, then say how it went. This only lets you compare against the end of the chain.
+        </p>
+        <div className="row" style={{ alignItems: 'center', flexWrap: 'wrap' }}>
+          {PHRASE_SHADOW_OUTCOMES.map((entry) => (
+            <button key={entry.outcome} type="button" disabled={busy} onClick={() => void rateCold(entry.outcome)}>
+              {entry.label}
+            </button>
+          ))}
+          <button type="button" onClick={() => setCold(false)}>Skip</button>
+        </div>
+        {error ? <p className="muted" style={{ margin: 0 }}>{error}</p> : null}
       </div>
     );
   }

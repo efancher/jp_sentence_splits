@@ -75,3 +75,7 @@ export const CHAIN_RUNG_KEY_PREFIX = 'chain-rung:';
 export function chainRungTargetKey(rungIndex: number): string {
   return `${CHAIN_RUNG_KEY_PREFIX}${rungIndex}`;
 }
+
+/** Share of chain runs that open with an unrated-by-the-chain cold whole-sentence try, to compare against the chain's end. */
+export const COLD_PASS_SHARE = 0.25;
+export const CHAIN_COLD_KEY = 'chain-cold:0';
