@@ -763,7 +763,11 @@ Constraints and decisions:
   need two introduced sentences too (`WORD_MIN_EXPOSURES`; reviewed-card words stay known; done 2026-11-08).
   Measured by `diagnose:i-plus-one` (which also applies the shaky cut): the 1-2-unknown pool went 2,564 -> 2,287
   (words only) and 2,069 -> 1,895 (words + grammar); known lemmas 556 -> 313. Open: a struggle signal for words
-  (a tapped-and-shaky word is still known if seen twice). Never derive FSRS ratings from this.
+  (a tapped-and-shaky word is still known if seen twice). Measured 2026-11-08 (diagnostic only, not shipped): 63 words
+  have reader/Word-check evidence, 41 with a failure as the latest tap, 20 of those currently known; making them
+  unknown shrinks the pool 2,286 -> 2,138 (words) and 1,894 -> 1,792 (with grammar). One word, 思う, accounts for
+  ~530 candidate sentences, so a per-word cut is lumpy; consider only demoting after repeated failures.
+  Never derive FSRS ratings from this.
 - **Rank by unlock value** among 1-2-unknown sentences: how many other
   candidates become closer to ready if the unknown word is learned.
 - **Stretch cadence** is a setting (start ~1 in 5 sentences with more unknowns);

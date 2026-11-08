@@ -25,7 +25,8 @@ import {
   unlockValueByLemma,
   WORD_MIN_EXPOSURES,
 } from '../src/lib/unknownLemmas';
-import { READER_KNOWN_STRENGTH } from '../src/lib/wordStrength';
+import { buildWordEvidence } from '../src/lib/wordEvidence';
+import { READER_KNOWN_STRENGTH, wordStrength } from '../src/lib/wordStrength';
 import { fetchAll, requireAuthedUser } from './lib/scriptHelpers';
 import { createScriptSupabaseClient } from './lib/scriptSupabaseClient';
 
@@ -173,6 +174,55 @@ async function main(): Promise<void> {
   console.log(`\nword exposure bar (1-2 unknown pool: words only / words + grammar):`);
   console.log(`  seen once counts as known: ${once.words} / ${once.withGrammarPool}   (known lemmas ${knownOnce.size})`);
   console.log(`  planner (>= ${WORD_MIN_EXPOSURES} sightings): ${twice.words} / ${twice.withGrammarPool}   (known lemmas ${known.size})`);
+
+  // Struggle signal (candidate, not shipped): words the learner has tapped in the reader / Word check, judged on that
+  // direct evidence alone (no exposure credit, no frequency prior). A tapped word below the known line would drop
+  // back to unknown even when it passes the exposure bar.
+  const wordEvents = buildWordEvidence({
+    reviews: [],
+    studyItems: [],
+    wordsBySentence: new Map(),
+    learningEvents: events.map((e) => ({
+      sentenceId: e.sentence_id,
+      timestamp: e.timestamp,
+      action: e.action,
+      support: e.support ?? undefined,
+      outcome: e.outcome ?? undefined,
+      target: e.target_key ? { kind: 'vocabulary' as never, key: e.target_key, label: '' } : undefined,
+    })),
+  });
+  const keyOfItem = new Map(vocabularyItems.map((item) => [item.id as string, lemmaKey(item.expression, item.reading)]));
+  const now = Date.now();
+  const struggling = new Map<string, number>();
+  let tapped = 0;
+  for (const [wordId, items] of wordEvents) {
+    const key = keyOfItem.get(wordId);
+    if (!key) continue;
+    tapped += 1;
+    const facets = (['reading', 'meaning'] as const).filter((facet) => items.some((item) => item.facet === facet));
+    const strength = Math.min(...facets.map((facet) => wordStrength(items, facet, now)));
+    // A word only counts as struggling if its latest tap was a failure: an old miss followed by "got it" is recovered,
+    // and success-only words cannot reach the line on direct evidence alone (recognition success is worth 0.1).
+    const latest = [...items].sort((a, b) => b.at - a.at)[0]!;
+    if (strength < READER_KNOWN_STRENGTH && latest.success === false) struggling.set(key, strength);
+  }
+  const failedEver = [...wordEvents.entries()].filter(([, items]) => items.some((item) => item.success === false)).length;
+  console.log(`  of ${tapped} tapped: ${failedEver} have any failure; ${struggling.size} have a failure as the latest tap`);
+  const knownStruggling = [...struggling.keys()].filter((key) => known.has(key));
+  const knownWithout = new Set([...known].filter((key) => !struggling.has(key)));
+  const withStruggle = pool(knownWithout);
+  console.log(`\nword struggle signal (tapped words judged on direct evidence only):`);
+  console.log(`  words with reader/Word-check evidence ${tapped}; below ${READER_KNOWN_STRENGTH} ${struggling.size}; of those known by the planner ${knownStruggling.length}`);
+  console.log(`  1-2 unknown pool with struggling words unknown: ${withStruggle.words} / ${withStruggle.withGrammarPool}   (planner now ${twice.words} / ${twice.withGrammarPool})`);
+  const introducedKeys = new Set([...introduced].flatMap((id) => (suggestionsBySentence.get(id) ?? []).filter((x) => x.selectedByDefault).map((x) => lemmaKey(x.expression, x.reading))));
+  const candidateHits = new Map<string, number>();
+  for (const id of candidates) for (const key of new Set((suggestionsBySentence.get(id) ?? []).filter((x) => x.selectedByDefault).map((x) => lemmaKey(x.expression, x.reading)))) {
+    if (knownStruggling.includes(key)) candidateHits.set(key, (candidateHits.get(key) ?? 0) + 1);
+  }
+  console.log(`  struggling-but-known words (strength, candidate sentences using it; ${knownStruggling.filter((key) => introducedKeys.has(key)).length} appear in introduced sentences):`);
+  for (const key of knownStruggling.sort((a, b) => (candidateHits.get(b) ?? 0) - (candidateHits.get(a) ?? 0)).slice(0, top)) {
+    console.log(`    ${struggling.get(key)!.toFixed(2)}\t${key}\tx${candidateHits.get(key) ?? 0}`);
+  }
 
   const perBook = new Map<string, { total: number; ready: number }>();
   for (const { id, unknown } of scored) {
