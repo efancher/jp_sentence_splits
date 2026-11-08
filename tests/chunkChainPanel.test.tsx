@@ -88,6 +88,25 @@ describe('ChunkChainPanel', () => {
     expect(events[0]!.target?.key?.startsWith(CHAIN_RUNG_KEY_PREFIX)).toBe(true);
   });
 
+  it('lets the learner move the dividers, snapped to word starts, and chains over the new steps', async () => {
+    await seed();
+    const user = userEvent.setup();
+    const onRange = vi.fn();
+    render(<ChunkChainPanel bookId="b1" sentenceId="s1" sentenceAudioId="a1" onRange={onRange} />);
+    await user.click(await screen.findByRole('button', { name: 'Adjust steps' }));
+    // Suggested cuts are pre-marked; swap the 友達 cut for one at 駅.
+    expect((screen.getByRole('button', { name: 'Step starts at 友達' }) as HTMLButtonElement).getAttribute('aria-pressed')).toBe('true');
+    await user.click(screen.getByRole('button', { name: 'Step starts at 友達' }));
+    await user.click(screen.getByRole('button', { name: 'Step starts at 駅' }));
+    await user.click(screen.getByRole('button', { name: 'Use these steps' }));
+
+    await user.click(screen.getByRole('button', { name: 'Chunk chain' }));
+    expect(screen.getByText('映画を見ました')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Next' }));
+    expect(screen.getByText('駅で映画を見ました')).toBeTruthy();
+    expect(onRange).toHaveBeenCalledWith({ startMs: 2800, endMs: 5400 });
+  });
+
   it('renders nothing when the sentence has no usable chain', async () => {
     const { container } = render(<ChunkChainPanel bookId="b1" sentenceId="missing" sentenceAudioId="none" onRange={() => undefined} />);
     await new Promise((resolve) => setTimeout(resolve, 50));

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Sentence, VocabularySuggestion, WordAlignment } from '../src/domain/types';
-import { MAX_RUNGS, MIN_RUNGS, planChunkChain } from '../src/lib/chunkChain';
+import { MAX_RUNGS, MIN_RUNGS, planChunkChain, rungsFromCutTimes } from '../src/lib/chunkChain';
 
 type Piece = [surface: string, pos: string];
 
@@ -156,5 +156,20 @@ describe('planChunkChain', () => {
     const plan = planChunkChain(SPOKEN, unkAtEnd);
     expect(plan.rejection).toBeNull();
     expect(plan.rungs.map((rung) => rung.startMs)).toEqual([3600, 1800, 0]);
+  });
+});
+
+describe('rungsFromCutTimes', () => {
+  it('snaps cuts to aligned word starts and builds shortest-first rungs ending in the whole sentence', () => {
+    const rungs = rungsFromCutTimes(SPOKEN.japanese, SPOKEN_ALIGNMENT, [3650, 2700]);
+    expect(rungs?.map((rung) => rung.startMs)).toEqual([3600, 2800, 0]);
+    expect(rungs?.map((rung) => rung.text)).toEqual(['映画を見ました', '駅で映画を見ました', '私は昨日友達と駅で映画を見ました']);
+    expect(rungs?.map((rung) => rung.whole)).toEqual([false, false, true]);
+  });
+
+  it('drops cuts that coincide after snapping or leave a sliver, and needs at least one cut', () => {
+    expect(rungsFromCutTimes(SPOKEN.japanese, SPOKEN_ALIGNMENT, [3600, 3610, 5300])?.map((rung) => rung.startMs)).toEqual([3600, 0]);
+    expect(rungsFromCutTimes(SPOKEN.japanese, SPOKEN_ALIGNMENT, [])).toBeNull();
+    expect(rungsFromCutTimes(SPOKEN.japanese, SPOKEN_ALIGNMENT, [100])).toBeNull();
   });
 });

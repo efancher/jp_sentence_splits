@@ -1,5 +1,6 @@
 import type { Sentence, WordAlignment } from '../domain/types';
 import { chunkSentenceIntoTileDetails } from './earTiles';
+import { phraseTextFromAlignment } from './phraseShadow';
 import {
   alignerRangeToRawIndices,
   hasSquashedNeighbour,
@@ -133,4 +134,52 @@ export function planChunkChain(
     return { rungs: [], rejection: unplaced ? 'unreliable-alignment' : 'too-short' };
   }
   return { rungs, rejection: null };
+}
+
+/** The closest a hand-placed cut may sit to its neighbour (or the sentence's edges): a step shorter than this is not a phrase. */
+export const MIN_CUSTOM_STEP_MS = 500;
+
+/** Aligned words a learner can place a cut before: spoken, real tokens, in time order. */
+export function cuttableWords(alignment: readonly WordAlignment[]): WordAlignment[] {
+  return alignment.filter((word) => word.text && !word.text.startsWith('<') && word.end > word.start);
+}
+
+/**
+ * Rungs from hand-placed cuts (clip ms). Each cut snaps to the nearest aligned word start, so a cut can
+ * never fall inside a word; cuts that coincide, sit at the sentence's start, or leave a step shorter than
+ * MIN_CUSTOM_STEP_MS are dropped. Returns null when fewer than two rungs (one cut plus the whole
+ * sentence) remain. Unlike the planner this trusts the learner's choice, so it applies no duration rule.
+ */
+export function rungsFromCutTimes(
+  japanese: string,
+  alignment: readonly WordAlignment[],
+  cutsMs: readonly number[],
+): ChainRung[] | null {
+  const words = cuttableWords(alignment);
+  if (words.length < 2) return null;
+  const speechStartMs = words[0]!.start * 1000;
+  const endMs = words[words.length - 1]!.end * 1000;
+  const snapped = new Set<number>();
+  for (const cut of cutsMs) {
+    let best = words[1]!;
+    for (const word of words.slice(1)) {
+      if (Math.abs(word.start * 1000 - cut) < Math.abs(best.start * 1000 - cut)) best = word;
+    }
+    snapped.add(best.start * 1000);
+  }
+  const kept: number[] = [];
+  let previous = speechStartMs;
+  for (const time of [...snapped].sort((a, b) => a - b)) {
+    if (time - previous < MIN_CUSTOM_STEP_MS || endMs - time < MIN_CUSTOM_STEP_MS) continue;
+    kept.push(time);
+    previous = time;
+  }
+  if (kept.length === 0) return null;
+  const textFor = (startMs: number) => phraseTextFromAlignment(words, { startMs, endMs }, japanese);
+  const rungs: ChainRung[] = kept
+    .slice()
+    .reverse()
+    .map((startMs, index) => ({ startMs, endMs, text: textFor(startMs), chunkIndex: kept.length - index, whole: false }));
+  rungs.push({ startMs: speechStartMs, endMs, text: textFor(speechStartMs), chunkIndex: 0, whole: true });
+  return rungs;
 }

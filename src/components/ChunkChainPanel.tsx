@@ -2,7 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { getDb, logChunkChainRung, logChunkChainSummary } from '../db/repository';
-import { planChunkChain } from '../lib/chunkChain';
+import { cuttableWords, planChunkChain, rungsFromCutTimes, type ChainRung } from '../lib/chunkChain';
 import {
   advanceFromFirstRung,
   highestGotItRung,
@@ -42,10 +42,18 @@ export function ChunkChainPanel({
     const db = getDb();
     const [alignment, sentence] = await Promise.all([db.referenceAlignments.get(sentenceAudioId), db.sentences.get(sentenceId)]);
     if (!alignment || !sentence) return null;
-    return planChunkChain(sentence, alignment.result.words);
+    return {
+      plan: planChunkChain(sentence, alignment.result.words),
+      words: alignment.result.words,
+      japanese: sentence.japanese,
+    };
   }, [sentenceAudioId, sentenceId]);
 
-  const rungs = plan && !plan.rejection ? plan.rungs : null;
+  // Hand-placed steps replace the suggested ones until reset; they are per visit, not stored.
+  const [custom, setCustom] = useState<ChainRung[] | null>(null);
+  const [adjusting, setAdjusting] = useState<number[] | null>(null);
+  const suggested = plan && !plan.plan.rejection ? plan.plan.rungs : null;
+  const rungs = custom ?? suggested;
   const [session, setSession] = useState<ChainSession | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -68,6 +76,8 @@ export function ChunkChainPanel({
   useEffect(() => {
     setSession(null);
     setError(null);
+    setCustom(null);
+    setAdjusting(null);
   }, [sentenceAudioId, sentenceId]);
 
   const rungSummary = useMemo(
@@ -128,10 +138,67 @@ export function ChunkChainPanel({
     }
   }
 
+  if (!session && adjusting && plan) {
+    const words = cuttableWords(plan.words);
+    const toggle = (startMs: number) =>
+      setAdjusting((cuts) => (cuts ? (cuts.includes(startMs) ? cuts.filter((cut) => cut !== startMs) : [...cuts, startMs]) : cuts));
+    return (
+      <div className="stack" role="group" aria-label="Adjust chain steps" style={{ gap: '0.25rem' }}>
+        <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+          Tap a word to start (or stop) a step there. Each step runs from its marked word to the end of the sentence.
+        </p>
+        <p lang="ja" style={{ margin: 0, lineHeight: 2 }}>
+          {words.map((word, index) => {
+            const startMs = word.start * 1000;
+            const marked = adjusting.includes(startMs);
+            return (
+              <button
+                key={`${index}-${word.start}`}
+                type="button"
+                disabled={index === 0}
+                aria-pressed={marked}
+                aria-label={index === 0 ? `${word.text} (sentence start)` : `Step starts at ${word.text}`}
+                onClick={() => toggle(startMs)}
+                style={{ padding: '0 0.2rem', marginRight: '0.1rem', fontWeight: marked ? 700 : 400, borderLeft: marked ? '3px solid currentColor' : '3px solid transparent' }}
+              >
+                {word.text}
+              </button>
+            );
+          })}
+        </p>
+        <div className="row">
+          <button
+            type="button"
+            onClick={() => {
+              const built = rungsFromCutTimes(plan.japanese, plan.words, adjusting);
+              if (!built) {
+                setError('Pick at least one word, not too near the start or end, to begin a step.');
+                return;
+              }
+              setError(null);
+              setCustom(built);
+              setAdjusting(null);
+            }}
+          >
+            Use these steps
+          </button>
+          <button type="button" onClick={() => { setError(null); setAdjusting(null); }}>Cancel</button>
+          {custom ? <button type="button" onClick={() => { setCustom(null); setAdjusting(null); }}>Back to suggested</button> : null}
+        </div>
+        {error ? <p className="muted" style={{ margin: 0 }}>{error}</p> : null}
+      </div>
+    );
+  }
+
   if (!session) {
     return (
       <div className="row" style={{ alignItems: 'center', flexWrap: 'wrap' }}>
         <button type="button" onClick={start}>Chunk chain</button>
+        {plan ? (
+          <button type="button" onClick={() => setAdjusting(rungs.filter((entry) => !entry.whole).map((entry) => entry.startMs))}>
+            Adjust steps
+          </button>
+        ) : null}
         <span className="muted" style={{ fontSize: '0.85rem' }}>
           Build the sentence from its end, one phrase at a time ({rungSummary}).
         </span>
