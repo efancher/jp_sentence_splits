@@ -197,7 +197,8 @@ and possible extensions. This snapshot does not certify a live deployment.
   (2026-11-08): it logs a synced `walkthrough_reset` event (migration `20261108000000`), and
   `withoutResetWalkthroughs` then ignores that sentence's earlier `walkthrough_completed` events
   wherever walked status is read (progress line, Read check pool, `requestFreshTry`). History is
-  kept; a seeded reading card and the "introduced" status via that card are left as they are.
+  kept; the sentence's card is removed too (so it is no longer "introduced" via the card) only while
+  it is untouched: new, no reps, no reviews.
   Each offer logs a synced `follow_up_offer` event (`followup:<tool>:<rule|random>`,
   migration `20261104000000`) under the Read check's visit; the follow-up tool shares that
   `visitId`, so "taken" is inferred from its own events. Nothing reads these yet: the after-effect

@@ -331,4 +331,20 @@ describe('walkthrough reset', () => {
     expect(summariseSentenceProgress(listed, 's1').walkedThrough).toBe(false);
     expect(listed.some((event) => event.action === 'walkthrough_reset')).toBe(true);
   });
+
+  it('removes the sentence card the walkthrough seeded while it is untouched, and keeps a studied one', async () => {
+    resetDbForTests(`sl-reset-card-${Math.random()}`);
+    const cardFor = (sentenceId: string) =>
+      getDb().studyItems.where('[subjectType+subjectId+activityType]').equals(['sentence', sentenceId, 'reading_in_context']).first();
+    await logSentenceLearningEvent({ visitId: 'v1', action: 'walkthrough_completed', sentenceId: 'fresh', bookId: 'b' });
+    await logSentenceLearningEvent({ visitId: 'v2', action: 'walkthrough_completed', sentenceId: 'studied', bookId: 'b' });
+    expect(await cardFor('fresh')).toBeDefined();
+    const studied = (await cardFor('studied'))!;
+    await getDb().studyItems.update(studied.id, { fsrsState: { ...studied.fsrsState, state: 'review', reps: 2 } });
+
+    await resetSentenceWalkthrough({ sentenceId: 'fresh', bookId: 'b' });
+    await resetSentenceWalkthrough({ sentenceId: 'studied', bookId: 'b' });
+    expect(await cardFor('fresh')).toBeUndefined();
+    expect(await cardFor('studied')).toBeDefined();
+  });
 });

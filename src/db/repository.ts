@@ -10128,8 +10128,9 @@ export async function logSentenceLearningEvent(
 
 /**
  * "I haven't actually walked this one": appends a `walkthrough_reset` event so earlier walkthroughs stop
- * counting as walked (progress line, Read check pool). The history is kept; no Review, no FSRS, and any
- * reading card already seeded for the sentence is left as it is.
+ * counting as walked (progress line, Read check pool). The history is kept and no Review is written. The
+ * sentence's card (seeded by the walkthrough) is removed too, but only while it is untouched (new, no reps,
+ * no reviews); a card that has been studied stays, since that is real evidence of contact.
  */
 export async function resetSentenceWalkthrough(input: {
   sentenceId: string;
@@ -10137,13 +10138,23 @@ export async function resetSentenceWalkthrough(input: {
   chapterId?: string;
   visitId?: string;
 }): Promise<SentenceLearningEvent> {
-  return logSentenceLearningEvent({
+  const event = await logSentenceLearningEvent({
     visitId: input.visitId ?? createId('visit'),
     action: 'walkthrough_reset',
     sentenceId: input.sentenceId,
     bookId: input.bookId,
     chapterId: input.chapterId,
   });
+  const db = getDb();
+  const item = await db.studyItems
+    .where('[subjectType+subjectId+activityType]')
+    .equals(['sentence', input.sentenceId, 'reading_in_context'])
+    .first();
+  if (item && item.fsrsState.state === 'new' && item.fsrsState.reps === 0 && (await db.reviews.where('studyItemId').equals(item.id).count()) === 0) {
+    await db.studyItems.delete(item.id);
+    notifySyncMany([{ entity: 'study_items', recordId: item.id, payload: { id: item.id }, operation: 'delete' }]);
+  }
+  return event;
 }
 
 /**
