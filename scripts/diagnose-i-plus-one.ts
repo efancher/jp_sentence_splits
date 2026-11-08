@@ -14,15 +14,18 @@
 import openJlptGrammar from '../src/data/openJlptGrammar.json';
 import type { VocabularySuggestion } from '../src/domain/types';
 import { buildGrammarDetector, buildReferenceIndex, curatedGrammarByPattern, wordSpansForDetection } from '../src/lib/grammarReference';
+import { grammarPatternStrengths } from '../src/lib/grammarEvidence';
 import { grammarLevelCosts, knownGrammarEntries } from '../src/lib/iPlusOne';
 import {
   buildKnownLemmaSet,
+  sentenceContentLemmas,
   lemmaKey,
   lemmaWeight,
   scoreSentence,
   unknownCountHistogram,
   unlockValueByLemma,
 } from '../src/lib/unknownLemmas';
+import { READER_KNOWN_STRENGTH } from '../src/lib/wordStrength';
 import { fetchAll, requireAuthedUser } from './lib/scriptHelpers';
 import { createScriptSupabaseClient } from './lib/scriptSupabaseClient';
 
@@ -44,7 +47,7 @@ async function main(): Promise<void> {
   const { id: ownerId } = await requireAuthedUser(client);
   const [bookSentences, events, studyItems, sentences, vocabularyItems] = await Promise.all([
     fetchAll<Row>(client, 'book_sentences', 'id,book_id,sentence_id,status', ownerId, (r) => r),
-    fetchAll<Row>(client, 'sentence_learning_events', 'id,sentence_id,action', ownerId, (r) => r),
+    fetchAll<Row>(client, 'sentence_learning_events', 'id,sentence_id,action,timestamp,target_key,support,outcome', ownerId, (r) => r),
     fetchAll<Row>(client, 'study_items', 'id,subject_id,subject_type,activity_type,fsrs_state', ownerId, (r) => r),
     fetchAll<Row>(client, 'sentences', 'id,japanese,vocabulary_suggestions', ownerId, (r) => r),
     fetchAll<Row>(client, 'vocabulary_items', 'id,expression,reading', ownerId, (r) => r),
@@ -104,12 +107,19 @@ async function main(): Promise<void> {
     patterns.map((p) => ({ id: p.id, canonicalName: p.canonical_name, aliases: p.aliases ?? [] })),
     buildReferenceIndex(openJlptGrammar.patterns),
   );
+  const strengthByPattern = grammarPatternStrengths(
+    events.map((e) => ({ timestamp: e.timestamp, action: e.action, support: e.support ?? undefined, outcome: e.outcome ?? undefined, target: e.target_key ? { kind: 'grammar' as never, key: e.target_key, label: '' } : undefined })),
+    Date.now(),
+  );
+  const shaky = new Set<string>();
   const entriesBySentence = new Map<string, Set<string>>();
   const sightings = new Map<string, Set<string>>();
   const sight = (entryId: string, sentenceId: string) => sightings.set(entryId, (sightings.get(entryId) ?? new Set()).add(sentenceId));
   for (const link of links) {
     const entryId = byPattern.get(link.grammar_pattern_id);
     if (!entryId) continue;
+    const strength = strengthByPattern.get(link.grammar_pattern_id);
+    if (strength !== undefined && strength < READER_KNOWN_STRENGTH) shaky.add(entryId);
     if (!entriesBySentence.has(link.sentence_id)) entriesBySentence.set(link.sentence_id, new Set());
     entriesBySentence.get(link.sentence_id)!.add(entryId);
     if (introduced.has(link.sentence_id)) sight(entryId, link.sentence_id);
@@ -124,8 +134,8 @@ async function main(): Promise<void> {
       if (introduced.has(sentence.id)) sight(entryId, sentence.id);
     }
   }
-  // Same bar as the planner (knownGrammarEntries), minus the shaky-evidence cut (learning events aren't read here).
-  const knownGrammar = knownGrammarEntries(new Map([...sightings].map(([id, set]) => [id, set.size])));
+  // Same bar as the planner (knownGrammarEntries): two introduced sentences and no shaky reader evidence.
+  const knownGrammar = knownGrammarEntries(new Map([...sightings].map(([id, set]) => [id, set.size])), shaky);
   const levelOf = new Map(openJlptGrammar.patterns.map((entry) => [entry.id, entry.level as string | undefined]));
   const present = new Map<string, string | undefined>();
   for (const entries of entriesBySentence.values()) for (const id of entries) present.set(id, levelOf.get(id));
@@ -139,10 +149,33 @@ async function main(): Promise<void> {
     (s) => s.unknown.length + [...(entriesBySentence.get(s.id) ?? [])].reduce((sum, id) => sum + unmet(id), 0),
   );
   console.log(
-    `\nsentences with curated grammar: ${entriesBySentence.size} (${linked.size} via AI links); curated patterns seen once+ ${sightings.size}, met (>= 2 introduced sentences) ${knownGrammar.size}; level-costed ${cost.size} of ${present.size} in use`,
+    `\nsentences with curated grammar: ${entriesBySentence.size} (${linked.size} via AI links); curated patterns seen once+ ${sightings.size}, met (>= 2 introduced sentences, ${shaky.size} shaky) ${knownGrammar.size}; level-costed ${cost.size} of ${present.size} in use`,
   );
   console.log('unknown lemmas + unmet curated grammar (level-weighted) per candidate:');
   console.log(formatHistogram(unknownCountHistogram(withGrammar, 10)));
+
+  // What a two-sighting bar for words would do: a lemma seen in one introduced sentence stays unknown (reviewed-card words stay known).
+  const wordSightings = new Map<string, number>();
+  for (const id of introduced) for (const key of sentenceContentLemmas(suggestionsBySentence.get(id))) wordSightings.set(key, (wordSightings.get(key) ?? 0) + 1);
+  const knownTwice = new Set<string>(reviewedKeys);
+  for (const [key, n] of wordSightings) if (n >= 2) knownTwice.add(key);
+  const pool = (knownSet: ReadonlySet<string>) => {
+    let words = 0;
+    let withGrammarPool = 0;
+    for (const id of candidates) {
+      const score = scoreSentence(suggestionsBySentence.get(id), knownSet);
+      if (!score.scorable) continue;
+      if (score.unknown.length >= 1 && score.unknown.length <= 2) words += 1;
+      const total = score.unknown.length + [...(entriesBySentence.get(id) ?? [])].reduce((sum, entry) => sum + unmet(entry), 0);
+      if (total >= 1 && total <= 2) withGrammarPool += 1;
+    }
+    return { words, withGrammarPool };
+  };
+  const once = pool(known);
+  const twice = pool(knownTwice);
+  console.log(`\nword exposure bar (1-2 unknown pool: words only / words + grammar):`);
+  console.log(`  seen once counts as known: ${once.words} / ${once.withGrammarPool}   (known lemmas ${known.size})`);
+  console.log(`  needs two sightings:       ${twice.words} / ${twice.withGrammarPool}   (known lemmas ${knownTwice.size})`);
 
   const perBook = new Map<string, { total: number; ready: number }>();
   for (const { id, unknown } of scored) {

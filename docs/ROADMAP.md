@@ -760,7 +760,10 @@ Constraints and decisions:
 - **"Known" is conservative**: lemmas from introduced sentences plus words with a
   reviewed reading/meaning card (done 2026-11-07). Grammar patterns now need two
   introduced sentences and no shaky reader evidence (done 2026-11-08). Open: the
-  same bar for words. Never derive FSRS ratings from this.
+  same bar for words. Measured 2026-11-08 (`diagnose:i-plus-one`, which now also applies the shaky cut): needing two
+  sightings for words would shrink the 1-2-unknown pool 2,564 -> 2,287 (words only) and 2,069 -> 1,895 (words +
+  grammar), dropping known lemmas 556 -> 313; not shipped, decide whether that is the right strictness.
+  Never derive FSRS ratings from this.
 - **Rank by unlock value** among 1-2-unknown sentences: how many other
   candidates become closer to ready if the unknown word is learned.
 - **Stretch cadence** is a setting (start ~1 in 5 sentences with more unknowns);

@@ -6,7 +6,7 @@ import { isReadingAnswerCorrect, surfaceReadingFromInline } from '../lib/reading
 import { buildWordEvidence } from '../lib/wordEvidence';
 import { stepTimer } from '../lib/pageTiming';
 import { FREQUENCY_WAIT_MS, loadWordFrequency, lookupWordBand } from '../lib/wordFrequency';
-import { buildGrammarEvidence, grammarStrength } from '../lib/grammarEvidence';
+import { grammarPatternStrengths } from '../lib/grammarEvidence';
 import {
   evidenceLevel,
   type EvidenceLevel,
@@ -11265,16 +11265,7 @@ async function floatGrowthEligibleFirst<T extends { sentenceId: string }>(items:
 
 /** Strength per grammar pattern that has any reader tap: its weakest tapped facet. Untapped patterns are absent. */
 async function loadGrammarPatternStrengths(): Promise<Map<string, number>> {
-  const evidence = buildGrammarEvidence(await readAllLearningEventsForPass());
-  const now = Date.now();
-  const strengthByPattern = new Map<string, number>();
-  for (const [patternId, items] of evidence) {
-    const facets = (['spot', 'use'] as const).filter((facet) =>
-      items.some((item) => item.facet === (facet === 'spot' ? 'reading' : 'meaning')),
-    );
-    strengthByPattern.set(patternId, Math.min(...facets.map((facet) => grammarStrength(items, facet, now))));
-  }
-  return strengthByPattern;
+  return grammarPatternStrengths(await readAllLearningEventsForPass(), Date.now());
 }
 
 /**

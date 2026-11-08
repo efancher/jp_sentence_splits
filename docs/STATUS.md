@@ -42,7 +42,8 @@ and possible extensions. This snapshot does not certify a live deployment.
   sentences carry it (`knownGrammarEntries`, `GRAMMAR_MIN_EXPOSURES`) and the
   learner has not tapped it and found it shaky (weakest facet below
   `READER_KNOWN_STRENGTH`); sequencing only, never a rating. On 2026-11-08 data
-  47 patterns were seen once, 25 met. Curated patterns are also found from the sentence text
+  47 patterns were seen once, 25 met (1 shaky). A word-level two-sighting bar is
+  measured by `diagnose:i-plus-one` but not applied (see ROADMAP). Curated patterns are also found from the sentence text
   itself (`buildGrammarDetector`, with per-entry over-match guards in `src/lib/grammarDetectionGuards.ts`, audited by `npm run diagnose:grammar-detection`; shared-text senses resolve by context when each owner has a guard, listed by `npm run diagnose:grammar-ambiguous`; eleven measured short (under 3 characters) entries are allowlisted via `diagnose:grammar-short`: each entry's fixed text, split patterns in
   order, conjugated る-verb endings, longest match wins, entries sharing text
   skipped, fixed text under 3 characters ignored), so ~65% of candidates carry

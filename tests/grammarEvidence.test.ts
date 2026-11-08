@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildGrammarEvidence, grammarFeedbackTargetKey, grammarStrength } from '../src/lib/grammarEvidence';
+import { buildGrammarEvidence, grammarFeedbackTargetKey, grammarPatternStrengths, grammarStrength } from '../src/lib/grammarEvidence';
 
 const at = '2026-10-30T00:00:00.000Z';
 const target = (key: string) => ({ kind: 'grammar' as const, key, label: '〜ことができる' });
@@ -34,5 +34,20 @@ describe('grammar evidence from reader taps', () => {
     expect(grammarStrength(miss, 'use', now)).toBe(0);
     expect(grammarStrength(hit, 'use', now)).toBeGreaterThan(0.6);
     expect(grammarStrength(hit, 'spot', now)).toBe(0);
+  });
+
+  it('takes the weakest tapped facet per pattern and omits untapped patterns', () => {
+    const now = Date.parse(at);
+    const strengths = grammarPatternStrengths(
+      [
+        { timestamp: at, action: 'target_practice', support: 'target_masked', outcome: 'got_it', target: target(grammarFeedbackTargetKey('g', 'use')) },
+        { timestamp: at, action: 'target_practice', support: 'target_masked', outcome: 'needed_help', target: target(grammarFeedbackTargetKey('g', 'spot')) },
+        { timestamp: at, action: 'target_practice', support: 'target_masked', outcome: 'got_it', target: target(grammarFeedbackTargetKey('h', 'use')) },
+      ],
+      now,
+    );
+    expect(strengths.get('g')).toBe(0);
+    expect(strengths.get('h')).toBeGreaterThan(0.6);
+    expect(strengths.has('nope')).toBe(false);
   });
 });

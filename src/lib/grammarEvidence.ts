@@ -53,3 +53,21 @@ export function buildGrammarEvidence(
 export function grammarStrength(evidence: readonly WordEvidence[], facet: GrammarFacet, now: number): number {
   return wordStrength(evidence, facet === 'spot' ? 'reading' : 'meaning', now);
 }
+
+/**
+ * Strength per grammar pattern that has any reader tap: its weakest tapped facet (spot = `reading` evidence, use =
+ * `meaning`). Untapped patterns are absent. Shared by the app and the read-only diagnostics.
+ */
+export function grammarPatternStrengths(
+  events: Parameters<typeof buildGrammarEvidence>[0],
+  now: number,
+): Map<string, number> {
+  const strengthByPattern = new Map<string, number>();
+  for (const [patternId, items] of buildGrammarEvidence(events)) {
+    const facets = (['spot', 'use'] as const).filter((facet) =>
+      items.some((item) => item.facet === (facet === 'spot' ? 'reading' : 'meaning')),
+    );
+    strengthByPattern.set(patternId, Math.min(...facets.map((facet) => grammarStrength(items, facet, now))));
+  }
+  return strengthByPattern;
+}
