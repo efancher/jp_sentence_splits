@@ -108,6 +108,17 @@ The items below retain unfinished work, optional refinements and future ideas.
     flow is tap-a-chip, not text-range selection. Also open: chunks over a squashed
     or `<unk>` alignment (the `wordTimingUnreliable` guard) should fall back to
     whole-sentence shadowing rather than a confidently wrong span.
+  - *First eligibility read, 2026-11-08 (read-only, proxies only; the real chunker
+    does not exist yet, so this is not the final check):* stored `AnalysisChunk`s
+    cover only 64 of 4,435 sentences (56 complete, 8 in progress; 3+ chunks on 46),
+    so they cannot be the main chunk source. The 1,000 newest sentences (all from the
+    2026-11-07/08 imports): median 16 characters, p10 6, p90 50; 64% are 12+
+    characters and 82% are 8+. Splitting at 、。！？ alone gives 3+ clauses for only
+    33%, so a chain needs a within-clause boundary rule (particles/morphology), not
+    punctuation. The space-separated segments in `inline_reading` are no use for
+    these imports (810 have inline readings, 809 are a single segment). Next: build
+    the boundary rule as a pure `lib/` function, then re-run this count against it
+    with a fixture set of short sentences, and decide the minimum chunk count.
 
 - [~] **Progressive glossing.** Slices 1-2 shipped 2026-10-01 (STATUS), including feasibility script, try-unaided, partial translation, self-report, park-and-prepare, readiness tiers, progress panel, heuristic の attachment skill, planner revisit. Left: AI-verified dependency reference and clause skills. Diagnostic refreshed 2026-10-15: 50/64 analysed sentences have a settled heuristic decision; attachment coverage is 25 の decisions. Pilot drafted 2026-10-16: 12 real sentences, 8 promising, 2 needing chunk repairs, 2 deferred for context/ambiguity; see `research/GLOSS_CLAUSE_PILOT.md`. References are self-reviewed drafts, not independently validated. Opt-in span-based preview shipped and expanded to all active unique sentences (365 questions, 64 reviewed notes as of 2026-10-17, after replacing 46 no-choice questions with connective-link questions and noting 29 too-short ones), including the repaired examples and missing-question notices; independent reference review still required before auto-grading. Helpful/disputed reactions sync as of 2026-10-17 (`clause_question_feedback`; `npm run diagnose:clause-feedback`) so the dispute rate can guide that review.
 
