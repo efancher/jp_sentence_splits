@@ -76,4 +76,21 @@ describe('buildReviewTroubleReport', () => {
     expect(report.followedUp).toEqual({ n: 1, nextGoodOrEasy: 1 });
     expect(report.notFollowedUp).toEqual({ n: 2, nextGoodOrEasy: 1 });
   });
+  it('counts a sentence tagged twice as one queued follow-up, judged from its latest tag', () => {
+    const report = buildReviewTroubleReport({
+      logs: [
+        log({ id: 'first', timestamp: '2026-10-21T10:00:00.000Z' }),
+        log({ id: 'second', timestamp: '2026-10-23T10:00:00.000Z' }),
+        log({ id: 'other', sentenceId: 'sent-2', studyItemId: 'item-2', timestamp: '2026-10-21T10:00:00.000Z' }),
+      ],
+      reviews: [],
+      // Done after the first tag only, so sent-1 is still waiting after its second tag.
+      expressionAttempts: [
+        { sentenceId: 'sent-1', timestamp: '2026-10-22T10:00:00.000Z' },
+        { sentenceId: 'sent-2', timestamp: '2026-10-22T10:00:00.000Z' },
+      ],
+      shadowAttempts: [],
+    });
+    expect(report.freshTry).toEqual({ queued: 2, done: 1 });
+  });
 });

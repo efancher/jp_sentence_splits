@@ -94,6 +94,16 @@ export function buildReviewTroubleReport(input: TroubleReportInput): ReviewTroub
     else reviewsByItem.set(review.studyItemId, [review]);
   }
 
+  // The follow-up counts are per sentence: tagging the same sentence twice queues one follow-up, judged from the latest tag.
+  const latestQueued = { freshTry: new Map<string, string>(), shadow: new Map<string, string>() };
+  for (const log of logs) {
+    for (const kind of ['freshTry', 'shadow'] as const) {
+      if (!log.queued[kind]) continue;
+      const seen = latestQueued[kind].get(log.sentenceId);
+      if (seen === undefined || log.timestamp > seen) latestQueued[kind].set(log.sentenceId, log.timestamp);
+    }
+  }
+
   for (const log of logs) {
     const freshTryDoneAt = log.queued.freshTry
       ? earliestAfter(input.expressionAttempts, log.sentenceId, log.timestamp)
@@ -101,11 +111,11 @@ export function buildReviewTroubleReport(input: TroubleReportInput): ReviewTroub
     const shadowDoneAt = log.queued.shadow
       ? earliestAfter(input.shadowAttempts, log.sentenceId, log.timestamp)
       : undefined;
-    if (log.queued.freshTry) {
+    if (log.queued.freshTry && latestQueued.freshTry.get(log.sentenceId) === log.timestamp) {
       freshTry.queued += 1;
       if (freshTryDoneAt) freshTry.done += 1;
     }
-    if (log.queued.shadow) {
+    if (log.queued.shadow && latestQueued.shadow.get(log.sentenceId) === log.timestamp) {
       shadow.queued += 1;
       if (shadowDoneAt) shadow.done += 1;
     }
