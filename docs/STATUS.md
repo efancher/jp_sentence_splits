@@ -23,7 +23,11 @@ and possible extensions. This snapshot does not certify a live deployment.
   book, so a good sentence in any book is offered ahead of a worse one in the
   most recently opened book (each book keeps its own order, Sentence Growth
   floating included; the planner merges books by next rank). The lesson's reason
-  line names the new words ("new here: 空"). Order only (a permutation: nothing
+  line names the new words ("new here: 空"). Episode momentum (2026-11-08):
+  sentences from an episode (book + chapter) with many already-started
+  sentences are favoured, up to +50% on the unlock value at 10 started
+  (`episodeMomentumBoost`) and as a tie-break in the ready and stretch tiers, so
+  a clearly more useful word still wins. Order only (a permutation: nothing
   gated or dropped); off in sequential study mode. The unlock-value ranking
   down-weights interjections/fillers and discourse markers (x0.2), grammar-bound
   verbs (しれる, x0.3) and proper nouns (x0.5) via `lemmaWeight`, for ranking

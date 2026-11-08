@@ -141,6 +141,27 @@ describe('walkthrough supply: i+1 ordering (settings.iPlusOneOrdering)', () => {
     expect(await lessonOrder()).toEqual(['i1', 'hard', 'easy']);
   });
 
+  it('leans toward the book whose episode has many started sentences when everything else is equal', async () => {
+    // Created last so it is also the most recently opened and would win on every other tie-break.
+    const warm = await createBook({ title: 'Warm' });
+    const quiet = await createBook({ title: 'Quiet' });
+    const rows = [
+      sentenceOf('d1', ['猫', '犬']),
+      sentenceOf('d2', ['猫', '犬']),
+      sentenceOf('d3', ['猫', '犬']),
+      sentenceOf('quiet-next', ['猫', '空']),
+      sentenceOf('warm-next', ['猫', '海']),
+    ];
+    await getDb().sentences.bulkPut(rows);
+    await addSentencesToBook(quiet.id, ['quiet-next']);
+    await addSentencesToBook(warm.id, ['d1', 'd2', 'd3', 'warm-next']);
+    await setBookSentenceStatus(warm.id, 'd1', 'complete');
+    await setBookSentenceStatus(warm.id, 'd2', 'complete');
+    await setBookSentenceStatus(warm.id, 'd3', 'complete');
+    await updateSettings({ iPlusOneOrdering: true });
+    expect(await lessonOrder()).toEqual(['warm-next', 'quiet-next']);
+  });
+
   it("lists a book's sentences within two new pieces, with what is new", async () => {
     const book = await createBook({ title: 'Ready Book' });
     const rows = [

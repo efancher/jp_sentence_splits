@@ -839,7 +839,12 @@ pattern above the easiest JLPT level under 60% met costs extra) and each
 sentence-led book page has a "Ready to pick up" panel. The duplicate learner
 patterns were merged and the junk "NEW" pattern soft-deleted (2026-11-07), and
 matches no longer start partway through a verb/noun token (`wordSpansForDetection`;
-removed ~16 false matches). Left over: resolve ambiguous `（note）` matches (e.g.
+removed ~16 false matches). Episode momentum (2026-11-08): sentences from
+episodes with many started sentences get up to +50% on unlock value
+(`episodeMomentumBoost`, capped at 10 started) and win ties. Retesting exists
+only at sentence level (Read checks 1-64 days, Fresh try revisits, weak-word
+revisits); nothing schedules grammar specifically and `grammarStrength` is not
+read by the planner. Left over: resolve ambiguous `（note）` matches (e.g.
 ながら（while）/（も）, currently skipped), other short-form over-matches that
 begin on a token boundary, and any grammar study surface.
 

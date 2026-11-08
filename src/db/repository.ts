@@ -11467,12 +11467,31 @@ async function loadIPlusOneContext(stretchEvery: number): Promise<IPlusOneContex
   const rows = await getDb().sentences.bulkGet(sentenceIds);
   const known = await loadKnownLemmaSet(rows.filter((row) => row && introduced.has(row.id)));
   const grammar = await loadCuratedGrammar(introduced, rows);
+  // Sentences already started per episode (book + chapter): new lessons lean toward episodes the learner is into.
+  const startedByEpisode = new Map<string, number>();
+  const episodesOf = new Map<string, string[]>();
+  const seen = new Set<string>();
+  for (const row of memberships) {
+    const episode = `${row.bookId}|${row.chapterId ?? ''}`;
+    episodesOf.set(row.sentenceId, [...(episodesOf.get(row.sentenceId) ?? []), episode]);
+    if (introduced.has(row.sentenceId) && !seen.has(`${episode}|${row.sentenceId}`)) {
+      seen.add(`${episode}|${row.sentenceId}`);
+      startedByEpisode.set(episode, (startedByEpisode.get(episode) ?? 0) + 1);
+    }
+  }
+  const momentumOf = (sentenceId: string) =>
+    Math.max(0, ...(episodesOf.get(sentenceId) ?? []).map((episode) => startedByEpisode.get(episode) ?? 0));
   const items: IPlusOneItem[] = [];
   const newWords = new Map<string, string[]>();
   rows.forEach((row, index) => {
     if (!row || introduced.has(sentenceIds[index]!)) return;
     const entryIds = grammar.entriesBySentence.get(row.id);
-    items.push({ sentenceId: row.id, suggestions: row.vocabularySuggestions, grammar: entryIds });
+    items.push({
+      sentenceId: row.id,
+      suggestions: row.vocabularySuggestions,
+      grammar: entryIds,
+      momentum: momentumOf(row.id),
+    });
     const words = unknownLemmasForSentence(row.vocabularySuggestions, known).map((key) => key.split('|')[0]!);
     const patterns = (entryIds ?? []).filter((id) => !grammar.known.has(id)).map((id) => grammar.names.get(id)!);
     if (words.length + patterns.length > 0) newWords.set(row.id, [...words, ...patterns]);

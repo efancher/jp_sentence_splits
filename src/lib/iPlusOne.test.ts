@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { grammarLevelCosts, orderByIPlusOne, type IPlusOneItem } from './iPlusOne';
+import { episodeMomentumBoost, grammarLevelCosts, orderByIPlusOne, type IPlusOneItem } from './iPlusOne';
 import { buildKnownLemmaSet, lemmaKey, type LemmaSource } from './unknownLemmas';
 
 const tok = (word: string, selectedByDefault = true, pos?: string): LemmaSource => ({
@@ -66,6 +66,29 @@ describe('orderByIPlusOne', () => {
     expect(order[4]).toBe('s1');
     expect(order[9]).toBe('s2');
     expect(order.filter((id) => id.startsWith('r'))).toHaveLength(8);
+  });
+
+  it('favours sentences from episodes with many started sentences, breaking ties and lifting close calls', () => {
+    // Same unknown count and unlock value, so only the episode momentum separates them.
+    const tied = [
+      { ...sentence('cold', '猫', '空'), momentum: 0 },
+      { ...sentence('warm', '猫', '海'), momentum: 6 },
+    ];
+    expect(orderByIPlusOne(tied, known)).toEqual(['warm', 'cold']);
+    // A word that unlocks two other sentences is worth 2; +50% on a 1-value word (1.5) still loses to it.
+    const items = [
+      { ...sentence('shared-a', '猫', '空'), momentum: 0 },
+      { ...sentence('shared-b', '犬', '空'), momentum: 0 },
+      { ...sentence('warm-lone', '猫', '海'), momentum: 10 },
+    ];
+    const order = orderByIPlusOne(items, known);
+    expect(order.indexOf('warm-lone')).toBeGreaterThan(order.indexOf('shared-a'));
+  });
+
+  it('caps the episode boost and is neutral when momentum is absent', () => {
+    expect(episodeMomentumBoost(undefined)).toBe(1);
+    expect(episodeMomentumBoost(10)).toBe(1.5);
+    expect(episodeMomentumBoost(500)).toBe(1.5);
   });
 
   it('is a permutation: nothing is dropped or duplicated', () => {

@@ -10,6 +10,18 @@ export interface IPlusOneItem {
   suggestions: readonly LemmaSource[] | undefined;
   /** Curated grammar entry ids the sentence carries (see `curatedGrammarByPattern`); counted only when `knownGrammar` is passed. */
   grammar?: readonly string[];
+  /** Sentences of the same episode the learner has already started (see `episodeMomentumBoost`). */
+  momentum?: number;
+}
+
+/** Started sentences in an episode beyond this add nothing more, so a huge episode cannot swamp everything else. */
+export const EPISODE_MOMENTUM_CAP = 10;
+/** The largest share (+50%) a fully warmed-up episode adds to a ready sentence's unlock value. */
+export const EPISODE_MOMENTUM_WEIGHT = 0.5;
+
+/** Multiplier on a ready sentence's unlock value: episodes with many started sentences are favoured (motivation, context). */
+export function episodeMomentumBoost(started: number | undefined): number {
+  return 1 + (EPISODE_MOMENTUM_WEIGHT * Math.min(Math.max(started ?? 0, 0), EPISODE_MOMENTUM_CAP)) / EPISODE_MOMENTUM_CAP;
 }
 
 /**
@@ -23,7 +35,9 @@ export interface IPlusOneItem {
  *    given, unmet curated grammar entries), those whose unknown words unlock the
  *    most other sentences first (`unlockValueByLemma`, with fillers, discourse
  *    markers and names down-weighted by `lemmaWeight`), then fewer unknowns,
- *    then reading order.
+ *    then episodes with more already-started sentences, then reading order. The
+ *    unlock value is lifted by up to +50% for such episodes (`episodeMomentumBoost`)
+ *    so they are favoured without overriding a much more useful word.
  * 2. all-known: no unknown lemma (little to learn, but never wasted).
  * 3. stretch: 3+ unknowns, fewest unknowns first. Every
  *    `I_PLUS_ONE_STRETCH_EVERY`th slot is drawn from here while i+1 sentences
@@ -63,6 +77,7 @@ export function orderByIPlusOne(
       scorable: score.scorable,
       unknown,
       count: unknown.length + grammarUnknown,
+      momentum: item.momentum ?? 0,
     };
   });
   const weights = new Map<string, number>();
@@ -91,8 +106,11 @@ export function orderByIPlusOne(
     else if (entry.count <= maxUnknown) ready.push(entry);
     else stretch.push(entry);
   }
-  ready.sort((a, b) => unlock(b) - unlock(a) || a.count - b.count || a.position - b.position);
-  stretch.sort((a, b) => a.count - b.count || a.position - b.position);
+  const lift = (entry: (typeof scored)[number]) => unlock(entry) * episodeMomentumBoost(entry.momentum);
+  ready.sort(
+    (a, b) => lift(b) - lift(a) || a.count - b.count || b.momentum - a.momentum || a.position - b.position,
+  );
+  stretch.sort((a, b) => a.count - b.count || b.momentum - a.momentum || a.position - b.position);
 
   const ordered: string[] = [];
   const take = (queue: typeof scored) => ordered.push(queue.shift()!.id);
