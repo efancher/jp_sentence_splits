@@ -917,6 +917,46 @@ control).
   explicit and these events evidence-only. Related: step usefulness
   (`stepUsefulness.ts`, completed vs skipped), skill coverage, and the
   remediation counts in STATUS.
+- **Separate Dictation and Word check from the Fresh try (asked 2026-11-08,
+  not built).** After a day of Fresh tries the learner found that the checks
+  folded into a Fresh try (word checks, Ear tiles, dictation) make it long and
+  blur what is being practised. Ear tiles are already pulled out (their own
+  planner step, `findListeningToolCandidates`); the wish is the same for
+  dictation and word checks, and for the plan to use them deliberately to
+  support understanding of the sentence rather than as extras tacked on.
+  *Starting point (confirm in code before building):* the planner already has
+  standalone `Dictation:` steps (only after a clean Ear tiles round, max 3 per
+  plan shared with Ear tiles) and standalone Word check steps (only beside
+  weak-word revisits, max 2 per plan, `WORD_CHECK_STEPS_PER_PLAN`). Those gates
+  are probably why they still mostly appear inside Fresh tries. Check where a
+  Fresh try itself still runs these checks and remove or make them optional.
+  *Direction:*
+  1. **Fresh try = understanding only.** Walkthrough, then optionally say it.
+     No bundled checks, so its done-rule (a later-day finished walkthrough) and
+     the `/progress` trouble-tag counts stay clean.
+  2. **Word check = the meaning step for a sentence.** Offer it a day or two
+     after a Fresh try on the sentence's weakest word (`getWordMeaningCheckTarget`),
+     and when a tagged miss is Meaning/Kanji/Reading. Loosen the "only beside
+     weak-word revisits" gate to "any introduced sentence with a weak word",
+     keeping the 2-per-plan cap until usage shows it is wanted.
+  3. **Dictation = the listening step, not gated on Ear tiles.** Let it start
+     for a sentence that has native audio and a clean Fresh try, with Ear tiles
+     as the easier alternative after a slip, rather than always Ear tiles first.
+     It should blank the phrase that contains the sentence's weakest word, so
+     it also reinforces meaning (`buildTileDictation` picks a tile today without
+     reference to word strength).
+  4. **Sequence per sentence, not per tool.** One sentence moves through
+     Fresh try → Word check → Ear tiles/Dictation → Read check → phrase shadow,
+     each at its own spacing, so a sentence is never asked for several tools
+     in one plan (extends today's "skip sentences drafted a Fresh try that day").
+  5. **Measure before tuning.** Reuse the follow-up offer table (`/progress` →
+     "After a follow-up offer") and `listeningEvidence.ts`/meaning evidence to
+     see whether a sentence's next Read check goes better after a standalone
+     Word check or Dictation than after a Fresh try alone. Keep outcomes
+     self-judged and evidence-only; ratings stay explicit.
+  *Open:* how many separate steps a day is tolerable (the plan's time budget
+  bounds it today), and whether the typed dictation match should count toward
+  `/progress` (see the writing-ladder note above).
 
 ## Possibilities (analytics & cross-activity coherence)
 
