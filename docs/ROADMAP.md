@@ -74,6 +74,41 @@ The items below retain unfinished work, optional refinements and future ideas.
   generous. Re-pull around 11-17 before steps 2-3; the join with measured timing/pitch of
   the same take is still not done.
 
+  **Chunk chain (proposed 2026-11-08, nothing built).** The jump from one phrase to a
+  whole sentence is too big, and slowing the whole sentence (tried by the learner)
+  did not help much. Instead build the sentence from the end: last chunk, last two,
+  and so on up to the whole sentence (backward build-up keeps the final intonation
+  intact at every rung). Design agreed so far:
+  - *Grading:* self-rating per rung (Not yet / Close / Got it); the measured take
+    score is shown beside the buttons as evidence and never picks the rating. Got it
+    moves up, Close repeats once, Not yet drops a rung (or to the weakest chunk).
+    About two attempts per rung, then the learner leaves via "Mark complete". The
+    first rung is a "Next" tap, not a rating; ratings start at rung 2.
+  - *Logging:* one `phrase_shadow` link event per rung with an empty credited-word
+    list (diagnostics only, zero planner weight) plus one chain summary event (highest
+    rung with Got it, attempts per rung). Credit each word once per chain, at the
+    highest Got-it rung containing it, so a chain does not double-count words.
+    Planner evidence comes only from the top rung and the summary.
+  - *Eligibility (check before any gate):* a sentence needs at least 3 chunks; shorter
+    ones go straight to whole-sentence shadowing. The chain is an optional route to
+    the whole-sentence step, never a gate on it. Run a read-only count of how many
+    recently imported sentences are chain-eligible with the auto-chunker first.
+  - *Measuring whether it helps:* a cold whole-sentence rating on a random subset of
+    chains (not every one, so the learner is not always warmed up), compared with the
+    final top-rung rating. Read-only diagnostic, not a gate.
+  - *Chunks:* auto-proposed, learner-adjustable. Candidate sources are the stored
+    `AnalysisChunk`s (Cure Dolly chunking) and particle/clause boundaries from the
+    morphology. Adjusting works like the Reader's chunk chips (`ReadingHelpPanel`: tap
+    a chunk, see it, loop it) but with add/remove at the edges: select kana to extend a
+    chunk or tap a divider to move it. The selection snaps to aligned word boundaries
+    (never mid-conjugation) so every chunk has a start and end time. Reuse
+    `isolatedWordSpans`/`isolatedWordRange` and `verifiedTokenCharRange`
+    (`src/lib/isolatedWordRange.ts`) for text to time, and `SegmentLoopPlayer` for
+    playback. Open: free kana selection is a new interaction; the Reader's existing
+    flow is tap-a-chip, not text-range selection. Also open: chunks over a squashed
+    or `<unk>` alignment (the `wordTimingUnreliable` guard) should fall back to
+    whole-sentence shadowing rather than a confidently wrong span.
+
 - [~] **Progressive glossing.** Slices 1-2 shipped 2026-10-01 (STATUS), including feasibility script, try-unaided, partial translation, self-report, park-and-prepare, readiness tiers, progress panel, heuristic の attachment skill, planner revisit. Left: AI-verified dependency reference and clause skills. Diagnostic refreshed 2026-10-15: 50/64 analysed sentences have a settled heuristic decision; attachment coverage is 25 の decisions. Pilot drafted 2026-10-16: 12 real sentences, 8 promising, 2 needing chunk repairs, 2 deferred for context/ambiguity; see `research/GLOSS_CLAUSE_PILOT.md`. References are self-reviewed drafts, not independently validated. Opt-in span-based preview shipped and expanded to all active unique sentences (365 questions, 64 reviewed notes as of 2026-10-17, after replacing 46 no-choice questions with connective-link questions and noting 29 too-short ones), including the repaired examples and missing-question notices; independent reference review still required before auto-grading. Helpful/disputed reactions sync as of 2026-10-17 (`clause_question_feedback`; `npm run diagnose:clause-feedback`) so the dispute rate can guide that review.
 
 ## Planned
