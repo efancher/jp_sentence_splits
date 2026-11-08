@@ -66,9 +66,13 @@ The items below retain unfinished work, optional refinements and future ideas.
   (all 2026-11-04); still open: a "Sound"-flag trigger for the same shortcut, and that
   hands-on checklist (`MANUAL_TEST_LOG.md` P1–P7); (5) a `/progress` panel, and revisit
   the evidence weights (Got it is a small recognition success today). `phraseShadowsBySentence` (`src/lib/phraseShadow.ts`) is the
-  unused-by-the-planner reader of the data. Apply `20261103000000_phrase_shadow_events.sql`
-  (pg-tested locally; confirm it is applied to Supabase, since pushes of these events
-  fail on the old constraint until then).
+  unused-by-the-planner reader of the data. `20261103000000_phrase_shadow_events.sql`
+  is applied to Supabase (confirmed 2026-11-08). **First read, 2026-11-08 (too thin to
+  act on):** 36 events over 20 sentences in one book, on 2 days (11-05, 11-07): 25 Got it,
+  7 Close, 4 Not yet; no empty phrase text; median span 1.75 s (1.1-4.1 s); 12 sentences
+  shadowed more than once, mostly improving. Self-rated, so the high Got it share may be
+  generous. Re-pull around 11-17 before steps 2-3; the join with measured timing/pitch of
+  the same take is still not done.
 
 - [~] **Progressive glossing.** Slices 1-2 shipped 2026-10-01 (STATUS), including feasibility script, try-unaided, partial translation, self-report, park-and-prepare, readiness tiers, progress panel, heuristic の attachment skill, planner revisit. Left: AI-verified dependency reference and clause skills. Diagnostic refreshed 2026-10-15: 50/64 analysed sentences have a settled heuristic decision; attachment coverage is 25 の decisions. Pilot drafted 2026-10-16: 12 real sentences, 8 promising, 2 needing chunk repairs, 2 deferred for context/ambiguity; see `research/GLOSS_CLAUSE_PILOT.md`. References are self-reviewed drafts, not independently validated. Opt-in span-based preview shipped and expanded to all active unique sentences (365 questions, 64 reviewed notes as of 2026-10-17, after replacing 46 no-choice questions with connective-link questions and noting 29 too-short ones), including the repaired examples and missing-question notices; independent reference review still required before auto-grading. Helpful/disputed reactions sync as of 2026-10-17 (`clause_question_feedback`; `npm run diagnose:clause-feedback`) so the dispute rate can guide that review.
 

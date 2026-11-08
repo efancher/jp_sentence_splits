@@ -76,7 +76,8 @@ and possible extensions. This snapshot does not certify a live deployment.
   empties the planner's shadow candidates; the Shadow page and reader tool are
   unchanged. The Supabase migration `20261103000000_phrase_shadow_events.sql` adds the
   action, the `close` outcome and the span columns; `npm run test:pg` covers it locally,
-  but it is not confirmed applied to production. Follow-up plan under ROADMAP
+  and it is applied to production (checked read-only 2026-11-08: the span columns exist and
+  36 `phrase_shadow` rows have synced). Follow-up plan under ROADMAP
   "Phrase shadowing". 2026-11-04: the span can come from the Loop window sliders as well
   as Mark start/end, the rating row sits under the sliders and prints the span's aligned
   words, and the pane offers "Suggested phrase … Use this phrase": the sentence's
