@@ -1450,7 +1450,7 @@ shortcut ("Play a round") and the `/play` hub. Currently ten activities:
   pitch cards and the boundary backfill writes the aligner's raw match, which
   includes a following particle (71 of 92 comparable prod overrides) — that would
   leak the heiban/odaka cue. (Dated sentences are fine: `alignerView` in
-  `src/lib/alignerText.ts` reproduces the aligner's digit+日/月 → hiragana expansion
+  `src/lib/alignerText.ts` reproduces the aligner's digit/counter → hiragana expansion (dates plus bare numbers and common counters, mirroring `app/number_expansion.py` via `src/lib/numeralExpansion.ts`)
   and punctuation dropping, so spans map by exact offset.) When a clip sounds
   wrong, the revealed tile has a "Clip sounds wrong? Fix it" toggle
   (`ZoomedRangeEditor`) that writes a hand-corrected strict span straight to

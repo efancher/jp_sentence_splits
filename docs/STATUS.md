@@ -319,6 +319,14 @@ repair tooling, research materials and future roadmap ideas remain available.
 
 ## Open limitations and follow-ups
 
+- **Aligner digit expansion (2026-11-08):** `shadowing-analysis-api` now reads every
+  arabic number and common counter (年 時 歳 回 人 分 本 etc., incl. irregular
+  readings) to hiragana before alignment (`app/number_expansion.py`), so
+  `エピソード1で` no longer yields `<unk>`; `alignerView` mirrors it
+  (`numeralExpansion.ts`, shared fixture). Still `<unk>`: じゅっ- forms, 100+
+  with a counter, 600, 12345. Alignments stored before this stay wrong until
+  re-aligned (not yet done); phrase shadowing's boundary snap
+  (`snapRangeToWordBoundaries`, `dropLeadingParticles`) covers the gap meanwhile.
 - **Duplicate book membership on push (2026-11-06):** two devices attaching the same
   sentence to the same chapter before syncing hit `book_sentences_book_chapter_sentence_uidx`
   (23505) forever and aborted the `book_sentences` push. The push now adopts the server's row
