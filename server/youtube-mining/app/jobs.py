@@ -462,10 +462,16 @@ def _fetch_transcript(job: Job, url: str) -> None:
         job.transcript_source = "lyrics" if job.is_music else "human-caption"
     else:
         job.set_message("Transcribing audio…")
+        # Keyed by video, not job: a failed job is not reused, so a retry is a
+        # new job that must still find the chunks the failed one finished.
+        asr_dir = Path(config.JOBS_ROOT) / "asr_chunks" / job.source.videoId
         raw_cues = asr_client.transcribe_source(
-            cached_source or job.source_audio_path
+            cached_source or job.source_audio_path,
+            checkpoint_dir=asr_dir,
+            on_progress=job.set_message,
         )
         if raw_cues is not None:
+            shutil.rmtree(asr_dir, ignore_errors=True)
             logger.info(
                 "Mining job %s: ASR transcript, %d segment(s)",
                 job.id,

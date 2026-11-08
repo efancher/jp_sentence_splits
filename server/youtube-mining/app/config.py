@@ -93,6 +93,14 @@ USE_ASR_TRANSCRIPT = os.environ.get("MINING_USE_ASR_TRANSCRIPT", "1") != "0"
 # music-heavy track triggers a second no-VAD pass — 30 min covers a long
 # source with headroom.
 ASR_TIMEOUT_SECONDS = float(os.environ.get("MINING_ASR_TIMEOUT_SECONDS", "1800"))
+# Sources longer than ASR_CHUNK_MIN_SECONDS are transcribed in pieces cut at
+# silences (target/max length below), each its own request with
+# ASR_CHUNK_TIMEOUT_SECONDS, so a slow or abandoned run wastes one chunk, not
+# the whole episode, and finished chunks are checkpointed. 0 disables chunking.
+ASR_CHUNK_MIN_SECONDS = float(os.environ.get("MINING_ASR_CHUNK_MIN_SECONDS", "900"))
+ASR_CHUNK_TARGET_SECONDS = float(os.environ.get("MINING_ASR_CHUNK_TARGET_SECONDS", "480"))
+ASR_CHUNK_MAX_SECONDS = float(os.environ.get("MINING_ASR_CHUNK_MAX_SECONDS", "720"))
+ASR_CHUNK_TIMEOUT_SECONDS = float(os.environ.get("MINING_ASR_CHUNK_TIMEOUT_SECONDS", "1800"))
 # A single sentence clip (a few seconds) on the "base" diagnostic model
 # (see app/asr_client.py's transcribe_clip, POST /transcribe rather than
 # /transcribe-source) — seconds, not the long-form timeout above.

@@ -80,7 +80,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(clip, "clip_audio", fake_clip_audio)
     monkeypatch.setattr(clip, "probe_max_volume_db", lambda _path: -18.0)
     # Default: ASR unavailable → caption path. Individual tests override.
-    monkeypatch.setattr(asr_client, "transcribe_source", lambda _path: None)
+    monkeypatch.setattr(asr_client, "transcribe_source", lambda _path, **_kw: None)
 
     return TestClient(app)
 
@@ -198,7 +198,7 @@ def test_uses_asr_transcript_over_captions_when_available(
     monkeypatch.setattr(
         jobs.asr_client,
         "transcribe_source",
-        lambda _path: [
+        lambda _path, **_kw: [
             Cue(index=0, startMs=0, endMs=1800, text="全然違う文だよ。", isAuto=True),
             Cue(
                 index=1,
@@ -246,7 +246,7 @@ def test_music_category_uses_lyrics_track_and_skips_asr(
     )
     asr_called = []
     monkeypatch.setattr(
-        jobs.asr_client, "transcribe_source", lambda p: asr_called.append(p) or None
+        jobs.asr_client, "transcribe_source", lambda p, **_kw: asr_called.append(p) or None
     )
 
     create = client.post("/jobs", json={"url": "https://www.youtube.com/watch?v=vid12345678"})
@@ -276,7 +276,7 @@ def test_human_caption_track_skips_asr(client: TestClient, monkeypatch) -> None:
     monkeypatch.setattr(
         jobs.asr_client,
         "transcribe_source",
-        lambda p: asr_called.append(p) or None,
+        lambda p, **_kw: asr_called.append(p) or None,
     )
 
     create = client.post("/jobs", json={"url": "https://www.youtube.com/watch?v=vid12345678"})

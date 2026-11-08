@@ -335,14 +335,17 @@ Unfinished work and optional extensions; completed behavior is in `AI_OVERVIEW.m
     1 h `MINING_ASR_TIMEOUT_SECONDS`: the client gave up, no captions existed to
     fall back on, and the job failed with "no segmented sentences". Interim fixes
     shipped: timeout raised to 2 h, and a caption-less ASR failure now says so.
-    Still open: the single `/transcribe-source` request is one long blocking call
-    and the analysis service keeps transcribing after the client times out (wasted
-    CPU, slows other work). Proposed design: split the source audio into
-    roughly 5–10 minute chunks at silences, transcribe sequentially with
-    progress in the job status, checkpoint finished chunks so a restart or
-    timeout resumes instead of starting over, offset cue timestamps back onto the
-    full source, and cancel the server side when the job is abandoned. Check
-    seams for sentences split across chunk boundaries.
+    **Built 2026-11-08 (source and offline tests only; not yet run on a real long
+    episode):** `app/asr_client.py` splits sources over 15 min (`MINING_ASR_CHUNK_*`)
+    into ~8 min chunks cut at silence midpoints (ffmpeg `silencedetect`), sends each
+    to `/transcribe-source` with its own timeout, offsets cues and words onto the full
+    source, shows "part N of M" in the job message, and checkpoints finished chunks
+    under `JOBS_ROOT/asr_chunks/<videoId>` so a retry (a new job) resumes; the
+    directory is removed on success. Any chunk failure still falls back to captions.
+    Still open: the analysis service cannot be told to cancel, so an abandoned job
+    wastes at most the chunk in flight; seams are cut at pauses but a sentence that
+    spans a hard cut (no silence in range) is untested on real audio; deploy and
+    restart `youtube-mining-api`, then try a 40+ minute episode.
   - Direct podcast URLs still lack the YouTube-id-based "already imported"
     warning. Feed episode badges/chapter dedup are separate; extending the raw
     URL warning remains a low-priority refinement.
