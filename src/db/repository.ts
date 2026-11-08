@@ -29,6 +29,7 @@ import {
   wordIdsInPhrase,
   type PhraseShadowOutcome,
 } from '../lib/phraseShadow';
+import { chainRungTargetKey } from '../lib/chunkChainSession';
 import { explainWeakWordSentences, type WeakWordExplanation } from '../lib/weakWordExplain';
 import { buildSentenceLessonReport, type SentenceLessonReport } from '../lib/sentenceLessonReport';
 import { parkedSentenceIds } from '../lib/glossSkill';
@@ -10203,6 +10204,71 @@ export async function logPhraseShadow(input: {
     rangeStartMs: Math.round(input.range.startMs),
     rangeEndMs: Math.round(input.range.endMs),
     outcome: input.outcome,
+    assessmentSource: 'self',
+    quietMode: settings.quietMode ?? false,
+  });
+}
+
+/**
+ * One rung of a chunk chain rated by the learner (docs/ROADMAP.md, "Chunk chain"). A `phrase_shadow`
+ * event whose key is a `chain-rung:` key: it credits no word and is not a pronunciation attempt of its
+ * own, so rungs the chain climbs through don't inflate the planner's evidence. The chain's one weighted
+ * event is `logChunkChainSummary`.
+ */
+export async function logChunkChainRung(input: {
+  bookId: string;
+  chapterId?: string;
+  sentenceId: string;
+  rungIndex: number;
+  range: { startMs: number; endMs: number };
+  text: string;
+  outcome: PhraseShadowOutcome;
+  visitId: string;
+}): Promise<SentenceLearningEvent> {
+  const settings = await ensureSettings(getDb());
+  return logSentenceLearningEvent({
+    visitId: input.visitId,
+    action: 'phrase_shadow',
+    bookId: input.bookId,
+    chapterId: input.chapterId,
+    sentenceId: input.sentenceId,
+    target: { kind: 'expression', key: chainRungTargetKey(input.rungIndex), label: input.text },
+    rangeStartMs: Math.round(input.range.startMs),
+    rangeEndMs: Math.round(input.range.endMs),
+    outcome: input.outcome,
+    assessmentSource: 'self',
+    quietMode: settings.quietMode ?? false,
+  });
+}
+
+/**
+ * The chain's one weighted event: an ordinary `phrase_shadow` Got it over the highest rung the learner
+ * got, crediting each word in that rung's text once. Not logged when no rung was Got it. Unlike
+ * `logPhraseShadow` it accepts a whole-sentence span (the chain's last rung).
+ */
+export async function logChunkChainSummary(input: {
+  bookId: string;
+  chapterId?: string;
+  sentenceId: string;
+  range: { startMs: number; endMs: number };
+  text: string;
+  visitId: string;
+}): Promise<SentenceLearningEvent> {
+  const db = getDb();
+  const [links, settings] = await Promise.all([
+    db.sentenceVocabulary.where('sentenceId').equals(input.sentenceId).toArray(),
+    ensureSettings(db),
+  ]);
+  return logSentenceLearningEvent({
+    visitId: input.visitId,
+    action: 'phrase_shadow',
+    bookId: input.bookId,
+    chapterId: input.chapterId,
+    sentenceId: input.sentenceId,
+    target: { kind: 'expression', key: phraseShadowTargetKey(wordIdsInPhrase(input.text, links)), label: input.text },
+    rangeStartMs: Math.round(input.range.startMs),
+    rangeEndMs: Math.round(input.range.endMs),
+    outcome: 'got_it',
     assessmentSource: 'self',
     quietMode: settings.quietMode ?? false,
   });

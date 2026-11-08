@@ -8,6 +8,7 @@ import { ShadowSentenceHighLow } from '../components/SentenceHighLow';
 import { ShadowSnoozeButtons } from '../components/ShadowSnoozeButtons';
 import { LoopWindowControls, MAX_LOOP_GAP_MS, MAX_LOOP_LEAD_IN_MS } from '../components/LoopWindowControls';
 import { NativePitchPractice } from '../components/NativePitchPractice';
+import { ChunkChainPanel } from '../components/ChunkChainPanel';
 import { PhraseShadowRating } from '../components/PhraseShadowRating';
 import { ZoomedRangeEditor } from '../components/ZoomedRangeEditor';
 import { isPhraseRange } from '../lib/phraseShadow';
@@ -405,6 +406,8 @@ export function ShadowWorkspace({
   /** undefined while loading: the preset waits for it so a phrase-mode pane isn't preset late or never. */
   const sentenceShadowingPaused = useLiveQuery(async () => (await readSettings()).sentenceShadowingPaused ?? false, []);
   const [editingPhrase, setEditingPhrase] = useState(false);
+  /** A chunk chain is running: it owns the loop range and rating, so the single-phrase rating and tuning step aside. */
+  const [chainActive, setChainActive] = useState(false);
   // A phrase worth shadowing (the weakest word's span, widened), offered as one tap; computed once per clip.
   const [suggestedPhrase, setSuggestedPhrase] = useState<
     { startMs: number; endMs: number; text: string; wordLabel: string } | null
@@ -758,6 +761,22 @@ export function ShadowWorkspace({
         />
       ) : null}
       {referenceAudio && referenceAudio.durationMs > 0 ? (
+        <ChunkChainPanel
+          bookId={bookId}
+          sentenceId={sentenceId}
+          sentenceAudioId={referenceAudio.id}
+          visitId={visitId}
+          onActiveChange={setChainActive}
+          onRange={(range) => {
+            // A rung is a loop target like any marked phrase: the pane's own controls shadow it.
+            targetLoopCoordinator.current.cancel();
+            setIsLoopingTarget(false);
+            setLoopWindow(range);
+            setTargetRange(range);
+          }}
+        />
+      ) : null}
+      {referenceAudio && referenceAudio.durationMs > 0 && !chainActive ? (
         editingPhrase ? (
           <ZoomedRangeEditor
             blob={referenceAudio.blob}
@@ -815,7 +834,7 @@ export function ShadowWorkspace({
           </button>
         </div>
       ) : null}
-      {referenceAudio && phraseRange && isPhraseRange(phraseRange, referenceAudio.durationMs) ? (
+      {referenceAudio && !chainActive && phraseRange && isPhraseRange(phraseRange, referenceAudio.durationMs) ? (
         <PhraseShadowRating
           key={`${referenceAudio.id}:${phraseRange.startMs}:${phraseRange.endMs}`}
           bookId={bookId}
