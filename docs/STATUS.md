@@ -225,8 +225,8 @@ and possible extensions. This snapshot does not certify a live deployment.
   episode date), on ready/failed, and on commit, and read it back when a job is
   resumed, so a reloaded page still commits a podcast episode into its series
   instead of a standalone book. Committed rows also feed the picker's
-  "Imported" mark. Source implementation and local/Postgres tests only; the
-  migration is not confirmed applied in production. Known gaps: the NHK Easy
+  "Imported" mark. The migration is applied in production (checked read-only
+  2026-11-08: the table exists and has 25 synced rows). Known gaps: the NHK Easy
   page and the box-side job store are not tracked, a committed row keeps the
   "Imported" mark after the book is deleted on purpose, and a re-import of an
   already committed episode is allowed, not blocked.
