@@ -23,6 +23,7 @@ import {
   isPhraseRange,
   orderLinksByWeakness,
   phraseShadowTargetKey,
+  dropLeadingParticles,
   snapRangeToWordBoundaries,
   phraseTextFromAlignment,
   wordIdsInPhrase,
@@ -10226,9 +10227,12 @@ export async function suggestPhraseShadow(input: {
     db.sentenceVocabulary.where('sentenceId').equals(input.sentenceId).toArray(),
   ]);
   if (!alignment || !sentence) return null;
-  // Never end or start a phrase inside a word the aligner split into several tokens (食べ|ログ).
+  // Never end or start a phrase inside a word the aligner split into several tokens (食べ|ログ), or open on a particle.
   const snapToWords = (range: { startMs: number; endMs: number }) =>
-    snapRangeToWordBoundaries(alignment.words, sentence.japanese, sentence.vocabularySuggestions ?? [], range);
+    dropLeadingParticles(
+      alignment.words,
+      snapRangeToWordBoundaries(alignment.words, sentence.japanese, sentence.vocabularySuggestions ?? [], range),
+    );
   // No word could be placed (or none is linked): still never leave the pane on the whole sentence.
   const chunkFallback = (weakestFirst: readonly string[]) => {
     if (input.surfaceForm) return null;

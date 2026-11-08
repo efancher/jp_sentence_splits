@@ -20,6 +20,7 @@ import {
   phraseShadowWordIds,
   phraseShadowsBySentence,
   phraseTextFromAlignment,
+  dropLeadingParticles,
   snapRangeToWordBoundaries,
   wordIdsInPhrase,
 } from '../src/lib/phraseShadow';
@@ -283,5 +284,30 @@ describe('snapRangeToWordBoundaries', () => {
 
   it('leaves a range on word edges alone', () => {
     expect(snapRangeToWordBoundaries(tokens, sentence, spans, { startMs: 0, endMs: 500 })).toEqual({ startMs: 0, endMs: 500 });
+  });
+});
+
+describe('dropLeadingParticles', () => {
+  // エピソード1で、私は…: the aligner gives the numeral an <unk> token, leaving で orphaned.
+  const tokens = [
+    { text: 'エピソード', start: 0.45, end: 1.8 },
+    { text: '<eps>', start: 1.8, end: 1.97 },
+    { text: '<unk>', start: 1.97, end: 2.48 },
+    { text: 'で', start: 2.48, end: 2.84 },
+    { text: '<eps>', start: 2.84, end: 3.58 },
+    { text: '私', start: 3.58, end: 4.33 },
+    { text: 'は', start: 4.33, end: 4.68 },
+  ];
+
+  it('starts after a particle whose host is outside the span', () => {
+    expect(dropLeadingParticles(tokens, { startMs: 2480, endMs: 4680 })).toEqual({ startMs: 3580, endMs: 4680 });
+  });
+
+  it('keeps a phrase that opens on a content word', () => {
+    expect(dropLeadingParticles(tokens, { startMs: 3580, endMs: 4680 })).toEqual({ startMs: 3580, endMs: 4680 });
+  });
+
+  it('keeps a particle when nothing usable would remain', () => {
+    expect(dropLeadingParticles(tokens, { startMs: 2480, endMs: 3700 })).toEqual({ startMs: 2480, endMs: 3700 });
   });
 });

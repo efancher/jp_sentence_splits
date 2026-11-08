@@ -363,3 +363,31 @@ export function snapRangeToWordBoundaries(
   }
   return { startMs: Math.round(startMs), endMs: Math.round(endMs) };
 }
+
+/** Aligner tokens that are a bare particle: attached to the word before them, never the start of a phrase. */
+const LEADING_PARTICLE_TOKENS = new Set([
+  'で', 'に', 'を', 'は', 'が', 'も', 'と', 'の', 'へ', 'や', 'か', 'ね', 'よ', 'って',
+  'から', 'まで', 'より', 'ので', 'のに', 'けど', 'し', 'て',
+]);
+
+/**
+ * A phrase must not open on a particle: its host word is outside the span, so the particle is split
+ * away from it (…1|で私は). Moves the start past such leading tokens while enough phrase remains.
+ * Works on token text alone, so it holds where the aligner couldn't place a neighbour (<unk>).
+ */
+export function dropLeadingParticles(
+  words: readonly Pick<WordAlignment, 'start' | 'end' | 'text'>[],
+  range: { startMs: number; endMs: number },
+): { startMs: number; endMs: number } {
+  const tokens = words.filter((word) => word.text && word.text !== '<eps>' && word.end > word.start);
+  let { startMs } = range;
+  for (let guard = 0; guard < 3; guard += 1) {
+    const index = tokens.findIndex((word) => word.end * 1000 > startMs + 1);
+    const first = tokens[index];
+    const next = tokens[index + 1];
+    if (!first || !next || !LEADING_PARTICLE_TOKENS.has(first.text)) break;
+    if (range.endMs - next.start * 1000 < MIN_PHRASE_MS) break;
+    startMs = next.start * 1000;
+  }
+  return { startMs: Math.round(startMs), endMs: range.endMs };
+}
