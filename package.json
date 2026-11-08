@@ -88,6 +88,7 @@
     "diagnose:grammar-links": "tsx scripts/diagnose-grammar-links.ts",
     "diagnose:grammar-detection": "tsx scripts/diagnose-grammar-detection.ts",
     "diagnose:grammar-ambiguous": "tsx scripts/diagnose-grammar-ambiguous.ts",
+    "diagnose:grammar-short": "tsx scripts/diagnose-grammar-short.ts",
     "diagnose:i-plus-one": "tsx scripts/diagnose-i-plus-one.ts",
     "diagnose:grammar-reference": "tsx scripts/diagnose-grammar-reference.ts",
     "vendor:openjlpt-grammar": "tsx scripts/vendor-openjlpt-grammar.ts",

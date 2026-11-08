@@ -147,4 +147,19 @@ describe('buildGrammarDetector', () => {
     expect(senses('聞こえるぐらいで')).toEqual(['kurai-gurai-extent']);
     expect(senses('それくらいです')).toEqual([]);
   });
+
+  it('detects measured short-literal entries, with their guards', () => {
+    const short = buildGrammarDetector([
+      { id: 'sae', pattern: '〜さえ' },
+      { id: 'koso', pattern: '〜こそ' },
+      { id: 'buri', pattern: '〜ぶり' },
+      { id: 'to-wa', pattern: '〜とは' },
+    ]);
+    expect(short('根拠さえあればいい')).toEqual(['sae']);
+    expect(short('本当に久しぶりです')).toEqual(['buri']);
+    expect(short('Japanese with Kへようこそ')).toEqual([]);
+    expect(short('こちらこそ光栄です')).toEqual(['koso']);
+    // Unmeasured particle-sized entries stay undetected.
+    expect(short('日本とは違う')).toEqual([]);
+  });
 });

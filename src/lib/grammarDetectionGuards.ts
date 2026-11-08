@@ -18,6 +18,25 @@ export type DetectionGuard = (context: MatchContext) => boolean;
 
 const APPROX_BEFORE = /([0-9０-９一二三四五六七八九十百千万半]|分|時|円|度|年|個|人|歳|回|前|後|間|日|月|週|キロ|倍)$/;
 
+/**
+ * Entries whose fixed text is under the 3-character minimum but precise enough to detect (measured with
+ * `npm run diagnose:grammar-short`): content-like endings that rarely sit inside other words. Particle-sized forms
+ * (こと, って, とか, とは, なり, まい) stay out: they match far too often.
+ */
+export const SHORT_LITERAL_FORMS: Readonly<Record<string, readonly string[]>> = {
+  sae: ['さえ'],
+  koso: ['こそ'],
+  hodo: ['ほど'],
+  buri: ['ぶり'],
+  mama: ['まま'],
+  gachi: ['がち'],
+  kke: ['っけ'],
+  'zu-ni': ['ずに'],
+  shidai: ['次第'],
+  'baai-wa': ['場合'],
+  'muki-muke': ['向き', '向け'],
+};
+
 export const DETECTION_GUARDS: Readonly<Record<string, DetectionGuard>> = {
   // ないです / ないでしょう, which are the polite 〜ない, not 〜ないで.
   naide: ({ after }) => /^(す|しょう)/.test(after),
@@ -51,4 +70,10 @@ export const DETECTION_GUARDS: Readonly<Record<string, DetectionGuard>> = {
   // くらい / ぐらい after a number or time word is "about"; after a verb or adjective it is the extent sense.
   'kurai-gurai': ({ before }) => !APPROX_BEFORE.test(before),
   'kurai-gurai-extent': ({ before }) => !/[るたいう]$/.test(before),
+  // ようこそ is the greeting, not 〜こそ.
+  koso: ({ before }) => /よう$/.test(before),
+  // 〜に向けて is "toward", not 〜向け.
+  'muki-muke': ({ after }) => /^[てるた]/.test(after),
+  // 〜がち follows a verb stem; が + ちょっと is the subject particle.
+  gachi: ({ after }) => /^ょ/.test(after),
 };

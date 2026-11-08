@@ -860,12 +860,21 @@ reader (solid words stay plain); /progress has a "Grammar strength" panel
 patterns). Manual test: type a guess in a Grammar check and see it after the reveal;
 give a pattern a few "I knew it" taps and see it turn green; open /progress and
 check the counts move. Left over: any grammar study surface.
+**Reminder, revisit on or after 2026-11-15:** decide whether grammar needs its own
+study surface. First look at a week of Grammar check use (the /progress "Grammar
+strength" panel: solid/shaky/unchecked counts, weakest tapped patterns, and whether
+the weak-grammar revisits are being finished). Only design a surface if patterns pile
+up shaky or unchecked despite the check; it is the user's design call.
 Ambiguous `（note）` senses (2026-11-08): only 7 curated forms share their text
 (`npm run diagnose:grammar-ambiguous`). A shared form is now detected when every
 owner has a guard: ながら（while）/（も） and くらい/ぐらい（approximately）/（extent）
 are resolved by context; ように, そうだ, られる and にする stay skipped (the senses
-need grammar, not nearby text). The bigger coverage gap is short patterns (under
-3 characters: も, は, に, で roles), which text detection never sees.
+need grammar, not nearby text). Short patterns (under 3 characters) were measured
+with `npm run diagnose:grammar-short`: eleven N3/N2 entries precise enough
+(さえ, こそ, ほど, ぶり, まま, がち, っけ, ずに, 次第, 場合, 向き/向け) are allowlisted in
+`SHORT_LITERAL_FORMS`; particle-sized ones (こと, って, とか, とは, なり, まい, and the
+N5 は/が/に/で roles) match far too often for text, and would need morphology or an
+AI link.
 Short-form over-matches (2026-11-08): `src/lib/grammarDetectionGuards.ts` holds
 per-entry guards (ないです is not ないで, すばらしい is not らしい, 大切にしています
 is not にして, …) found with the read-only `npm run diagnose:grammar-detection`;

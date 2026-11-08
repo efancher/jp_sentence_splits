@@ -9,7 +9,7 @@
  * `（note）` disambiguators and punctuation, so `～なくてもいい` and
  * `〜なくてもいい` and `〜なくてもいい（permission）` all share one key.
  */
-import { DETECTION_GUARDS } from './grammarDetectionGuards';
+import { DETECTION_GUARDS, SHORT_LITERAL_FORMS } from './grammarDetectionGuards';
 
 export interface ReferencePattern {
   id?: string;
@@ -118,6 +118,9 @@ export function detectableSegments(entry: ReferencePattern): string[][] {
       alternatives.push(segments);
     }
   }
+  // Short entries measured as precise enough (see SHORT_LITERAL_FORMS) are detected by their fixed text anyway.
+  const shortForms = alternatives.length === 0 && entry.id ? SHORT_LITERAL_FORMS[entry.id] : undefined;
+  if (shortForms) return shortForms.map((form) => [form]);
   return alternatives;
 }
 
