@@ -16,7 +16,7 @@
  *
  * Usage:
  *   ANALYSIS_ALIGN_API_BASE=http://127.0.0.1:8002 \
- *   npx tsx scripts/backfill-reference-alignment.ts [--apply] [--limit N] [--book ID] [--id-prefix audio_merge_]
+ *   npx tsx scripts/backfill-reference-alignment.ts [--apply] [--limit N] [--book ID] [--id-prefix audio_merge_] [--redo-digits]
  *
  * Dry-run by default (lists what it would do). Needs SCRIPT_SUPABASE_EMAIL
  * / SCRIPT_SUPABASE_PASSWORD / VITE_SUPABASE_* like the other scripts, and
@@ -111,16 +111,30 @@ async function main() {
       .map((r) => String(r.id)),
   );
 
-  // Sentence text, keyed by id — only for the sentences we still need.
-  const neededSentenceIds = new Set(
-    audio.filter((a) => a.storagePath && !current.has(a.id)).map((a) => a.sentenceId),
-  );
+  // --redo-digits: also re-align recordings whose sentence contains an arabic
+  // digit, even at the current version (and only those). The aligner used to leave digit strings
+  // as `<unk>` (before app/number_expansion.py), which skewed neighbouring words.
+  const redoDigits = argv.includes('--redo-digits');
   const sentences = await fetchAll<{ id: string; japanese: string }>(
     supabase,
     'sentences',
     'id, japanese',
     user.id,
     (row) => ({ id: String(row.id), japanese: String(row.japanese ?? '') }),
+  );
+  if (redoDigits) {
+    const digitSentenceIds = new Set(sentences.filter((s) => /\p{Nd}/u.test(s.japanese)).map((s) => s.id));
+    // Only the digit sentences: mark every other recording done so this mode
+    // doesn't also sweep up the never-aligned backlog.
+    for (const a of audio) {
+      if (digitSentenceIds.has(a.sentenceId)) current.delete(a.id);
+      else current.add(a.id);
+    }
+  }
+
+  // Sentence text, keyed by id — only for the sentences we still need.
+  const neededSentenceIds = new Set(
+    audio.filter((a) => a.storagePath && !current.has(a.id)).map((a) => a.sentenceId),
   );
   const japaneseById = new Map(
     sentences.filter((s) => neededSentenceIds.has(s.id)).map((s) => [s.id, s.japanese]),
