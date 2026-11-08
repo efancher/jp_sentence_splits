@@ -69,7 +69,13 @@ const DISCOURSE_MARKERS = new Set(['まあ', 'あの', 'えっと', 'えーと',
  * word, is what they stand for. Short on purpose: only lemmas with no life
  * outside the pattern.
  */
-const GRAMMAR_BOUND_LEMMAS = new Set(['しれる']);
+const GRAMMAR_BOUND_LEMMAS = new Set(['しれる', 'いける', 'ござる', 'なさる']);
+
+/**
+ * Lemmas that are only bound under one POS tag, because the same text is a real word under another
+ * (つく/動詞/一般 is the につい-て of について, 175 of 175 audited; 気がつく and 嘘をつく are 動詞/非自立可能).
+ */
+const GRAMMAR_BOUND_BY_POS = new Map([['つく', '動詞/一般']]);
 
 /** How much a lemma is worth introducing a whole sentence for, 0..1 (see `unlockValueByLemma`). */
 export const LEMMA_WEIGHT = { filler: 0.2, grammarBound: 0.3, properNoun: 0.5, normal: 1 } as const;
@@ -83,7 +89,7 @@ export const LEMMA_WEIGHT = { filler: 0.2, grammarBound: 0.3, properNoun: 0.5, n
  */
 export function lemmaWeight(expression: string, pos: string | undefined): number {
   if (pos?.startsWith('感動詞') || DISCOURSE_MARKERS.has(expression)) return LEMMA_WEIGHT.filler;
-  if (GRAMMAR_BOUND_LEMMAS.has(expression)) return LEMMA_WEIGHT.grammarBound;
+  if (GRAMMAR_BOUND_LEMMAS.has(expression) || (pos && GRAMMAR_BOUND_BY_POS.get(expression) === pos)) return LEMMA_WEIGHT.grammarBound;
   if (pos?.startsWith('名詞/固有名詞')) return LEMMA_WEIGHT.properNoun;
   return LEMMA_WEIGHT.normal;
 }

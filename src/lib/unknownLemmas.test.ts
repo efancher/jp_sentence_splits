@@ -97,6 +97,14 @@ describe('lemmaWeight', () => {
   it('down-weights a verb that only exists inside a grammar pattern (かもしれない)', () => {
     expect(lemmaWeight('しれる', '動詞/一般')).toBe(LEMMA_WEIGHT.grammarBound);
     expect(lemmaWeight('知る', '動詞/一般')).toBe(LEMMA_WEIGHT.normal);
+    expect(lemmaWeight('いける', '動詞/非自立可能')).toBe(LEMMA_WEIGHT.grammarBound);
+    expect(lemmaWeight('ござる', '動詞/非自立可能')).toBe(LEMMA_WEIGHT.grammarBound);
+  });
+
+  it('binds つく only as the について verb, not 気がつく / 嘘をつく', () => {
+    expect(lemmaWeight('つく', '動詞/一般')).toBe(LEMMA_WEIGHT.grammarBound);
+    expect(lemmaWeight('つく', '動詞/非自立可能')).toBe(LEMMA_WEIGHT.normal);
+    expect(lemmaWeight('つく', undefined)).toBe(LEMMA_WEIGHT.normal);
   });
 
   it('leaves frequent real words alone, whatever their tag', () => {
