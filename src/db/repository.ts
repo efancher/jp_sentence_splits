@@ -11184,7 +11184,8 @@ export async function getReviewTroubleReport(): Promise<ReviewTroubleReport> {
       rating: review.rating,
     })),
     expressionAttempts: events
-      .filter((event) => event.action === 'expression_attempt')
+      // Same done-rule as pendingFreshTryRequestIds: a finished walkthrough counts too.
+      .filter((event) => event.action === 'expression_attempt' || event.action === 'walkthrough_completed')
       .map((event) => ({ sentenceId: event.sentenceId, timestamp: event.timestamp })),
     shadowAttempts: attempts.map((attempt) => ({ sentenceId: attempt.sentenceId, timestamp: attempt.createdAt })),
   });

@@ -27,7 +27,7 @@ export interface TroubleReportInput {
   logs: ReviewTroubleLog[];
   /** Reviews since the first log (any item), for the "how often do I tag a miss" rate. */
   reviews: TroubleReportReview[];
-  /** `expression_attempt` learning events (a Fresh try being done). */
+  /** `expression_attempt` or `walkthrough_completed` learning events (a Fresh try being done). */
   expressionAttempts: TroubleReportEvent[];
   /** Saved shadowing attempts, with `createdAt` as `timestamp`. */
   shadowAttempts: TroubleReportEvent[];

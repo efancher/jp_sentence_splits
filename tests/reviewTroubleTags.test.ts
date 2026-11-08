@@ -183,4 +183,21 @@ describe('recordReviewTroubleTags', () => {
     expect(report.freshTry).toEqual({ queued: 1, done: 1 });
     expect(report.followedUp).toEqual({ n: 1, nextGoodOrEasy: 1 });
   });
+
+  it('counts a walkthrough finished after the tag as the Fresh try being done', async () => {
+    const book = await createBook({ title: 'Report walkthrough' });
+    const sentence = makeSentence('犬が走っています。');
+    await getDb().sentences.put(sentence);
+    await addSentencesToBook(book.id, [sentence.id]);
+    await logSentenceLearningEvent({ sentenceId: sentence.id, bookId: book.id, action: 'walkthrough_completed' });
+    const item = await ensureStudyItem('sentence', sentence.id, 'reading_in_context');
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await recordReviewTroubleTags({ studyItemId: item.id, sentenceId: sentence.id, rating: 'hard', tags: ['kanji'] });
+
+    expect((await getReviewTroubleReport()).freshTry).toEqual({ queued: 1, done: 0 });
+
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await logSentenceLearningEvent({ sentenceId: sentence.id, bookId: book.id, action: 'walkthrough_completed' });
+    expect((await getReviewTroubleReport()).freshTry).toEqual({ queued: 1, done: 1 });
+  });
 });
