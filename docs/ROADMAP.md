@@ -116,9 +116,20 @@ The items below retain unfinished work, optional refinements and future ideas.
     characters and 82% are 8+. Splitting at 、。！？ alone gives 3+ clauses for only
     33%, so a chain needs a within-clause boundary rule (particles/morphology), not
     punctuation. The space-separated segments in `inline_reading` are no use for
-    these imports (810 have inline readings, 809 are a single segment). Next: build
-    the boundary rule as a pure `lib/` function, then re-run this count against it
-    with a fixture set of short sentences, and decide the minimum chunk count.
+    these imports (810 have inline readings, 809 are a single segment).
+  - *Real chunker read, 2026-11-08 (`npm run diagnose:chunk-chain`):* the boundary rule
+    already exists: `chunkSentenceIntoTiles` (`src/lib/earTiles.ts`, bunsetsu from the
+    stored UniDic tokens), so no new chunker is needed to start. Over the 5,369
+    sentences with a native clip, 1% are unchunkable (fall back to whole-sentence
+    shadowing), 87% yield 3+ chunks and 77% yield 4+. Since 2026-11-07 (651 sentences):
+    70% yield 3+ and 57% yield 4+. Eligibility is driven by length: under 10
+    characters only 7-11% reach 3 chunks; 10-19 characters 69-85%; 20+ is 100%. So the
+    3-chunk minimum mostly excludes short sentences, which don't need a chain.
+    **New problem:** 38% of all sentences yield 8+ chunks (long caption-style lines), so
+    a one-chunk-per-rung chain would be 8+ rungs. Decide before building: merge
+    neighbouring chunks into ~3-5 rungs (target a rung length in seconds, not chunks),
+    or cap the chain to the last N rungs. The Ear Tiles `MAX_SENTENCE_LENGTH` (45) and
+    `MAX_CLIP_MS` (10 s) are a precedent for limiting this.
 
 - [~] **Progressive glossing.** Slices 1-2 shipped 2026-10-01 (STATUS), including feasibility script, try-unaided, partial translation, self-report, park-and-prepare, readiness tiers, progress panel, heuristic の attachment skill, planner revisit. Left: AI-verified dependency reference and clause skills. Diagnostic refreshed 2026-10-15: 50/64 analysed sentences have a settled heuristic decision; attachment coverage is 25 の decisions. Pilot drafted 2026-10-16: 12 real sentences, 8 promising, 2 needing chunk repairs, 2 deferred for context/ambiguity; see `research/GLOSS_CLAUSE_PILOT.md`. References are self-reviewed drafts, not independently validated. Opt-in span-based preview shipped and expanded to all active unique sentences (365 questions, 64 reviewed notes as of 2026-10-17, after replacing 46 no-choice questions with connective-link questions and noting 29 too-short ones), including the repaired examples and missing-question notices; independent reference review still required before auto-grading. Helpful/disputed reactions sync as of 2026-10-17 (`clause_question_feedback`; `npm run diagnose:clause-feedback`) so the dispute rate can guide that review.
 

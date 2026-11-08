@@ -91,6 +91,7 @@
     "diagnose:grammar-short": "tsx scripts/diagnose-grammar-short.ts",
     "diagnose:grammar-bound-lemmas": "tsx scripts/diagnose-grammar-bound-lemmas.ts",
     "diagnose:i-plus-one": "tsx scripts/diagnose-i-plus-one.ts",
+    "diagnose:chunk-chain": "tsx scripts/diagnose-chunk-chain.ts",
     "diagnose:grammar-reference": "tsx scripts/diagnose-grammar-reference.ts",
     "vendor:openjlpt-grammar": "tsx scripts/vendor-openjlpt-grammar.ts",
     "merge:grammar-patterns": "tsx scripts/merge-grammar-patterns.ts",
