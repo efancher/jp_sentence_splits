@@ -193,9 +193,25 @@ Unfinished work and optional extensions; completed behavior is in `AI_OVERVIEW.m
      ratings improved. Use about a week of real use to judge whether tags are
      accurate enough to build on. Judge the evidence honestly: a sentence's next
      rating is not proof the follow-up caused the gain.
-  2. **Soft gate.** Surface pending remediation shortly after the review (same
-     day or next); if undone when the card falls due, show the card anyway.
-     Check against real data that it cannot starve a gate before shipping.
+     **First reading (2026-11-08, one learner, one device):** Fresh tries done 23
+     of 24 and shadowing 30 of 34 (per sentence, from each sentence's latest
+     tag; the first panel showed 0 of 29 because it ignored
+     `walkthrough_completed`, fixed). Tags cover Kanji 22, Sound 64, Meaning 7,
+     Reading 0. Next review good/easy was 24 of 25 when the follow-up came first
+     and 7 of 10 when it did not; that is small and confounded. **Masked
+     signal:** on sentences seen many times, familiarity can carry the meaning
+     even when the kanji are shaky, so a missing Meaning tag does not show the
+     sentence was understood (Meaning is probably undercounted, and Kanji-only
+     sentences are not "understood"). Reading is harder to mask, but the learner
+     cannot always tell a reading problem from a kanji problem, which fits it
+     being unused. Reading and Kanji may merge or Reading may go. Dictation and
+     Word check, which test the words without the whole-sentence memory, are the
+     better check (see "Separate Dictation and Word check" below).
+  2. **Soft gate (dropped for now, 2026-11-08).** Follow-ups are already done
+     about 90% of the time, so a nudge would add little. If it comes back:
+     surface pending remediation shortly after the review (same day or next);
+     if undone when the card falls due, show the card anyway, and check against
+     real data that it cannot starve a gate.
   3. **Sync** `reviewTroubleLogs` (needs a Supabase migration, RLS and the sync
      mappers) once step 1 shows the tags are worth keeping. `shadowRequests`
      lives in settings and should follow the same path as `freshTryRequests`;
