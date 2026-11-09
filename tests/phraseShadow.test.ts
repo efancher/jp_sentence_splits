@@ -195,6 +195,32 @@ describe('logPhraseShadow and the shadowing pause', () => {
     expect(await db.reviews.count()).toBe(0);
   });
 
+  it('credits an unlinked content word with a bare vocabulary item: no link, no card', async () => {
+    const book = await createBook({ title: 'Phrases' });
+    const { sentence, audioId } = await shadowReadySentence(book, '猫が寝ています。');
+    const db = getDb();
+    await db.sentences.update(sentence.id, {
+      vocabularySuggestions: [
+        { id: 't1', surface: '寝て', start: 2, end: 4, expression: '寝る', reading: 'ねる', pos: '動詞/一般', english: 'to sleep', source: 'morphology', selectedByDefault: true },
+        { id: 't2', surface: 'います', start: 4, end: 7, expression: 'いる', reading: 'いる', pos: '動詞/非自立可能', source: 'morphology', selectedByDefault: false },
+      ],
+    });
+    await db.referenceAlignments.put({
+      id: audioId, alignmentVersion: 1, computedAt: new Date().toISOString(),
+      result: { durationSeconds: 2, words: words.map((w) => ({ ...w, phones: [] })) },
+    });
+
+    const logged = await logPhraseShadow({
+      bookId: book.id, sentenceId: sentence.id, sentenceAudioId: audioId, clipDurationMs: 2000,
+      range: { startMs: 450, endMs: 1650 }, outcome: 'got_it',
+    });
+    const credited = phraseShadowWordIds(logged?.target?.key);
+    expect(credited).toHaveLength(1);
+    expect(await db.vocabularyItems.get(credited[0])).toMatchObject({ expression: '寝る', reading: 'ねる' });
+    expect(await db.sentenceVocabulary.count()).toBe(0);
+    expect(await db.studyItems.count()).toBe(0);
+  });
+
   it('still logs without a cached alignment, and refuses a whole-clip span', async () => {
     const book = await createBook({ title: 'Phrases' });
     const { sentence, audioId } = await shadowReadySentence(book, '猫が寝ています。');

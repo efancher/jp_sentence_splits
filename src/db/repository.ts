@@ -10201,7 +10201,7 @@ export async function logPhraseShadow(input: {
     bookId: input.bookId,
     chapterId: input.chapterId,
     sentenceId: input.sentenceId,
-    target: { kind: 'expression', key: phraseShadowTargetKey(wordIdsInPhrase(text, links)), label: text },
+    target: { kind: 'expression', key: phraseShadowTargetKey(await phraseCreditedWordIds(sentence, text, links)), label: text },
     rangeStartMs: Math.round(input.range.startMs),
     rangeEndMs: Math.round(input.range.endMs),
     outcome: input.outcome,
@@ -10244,6 +10244,25 @@ export async function logChunkChainRung(input: {
 }
 
 /**
+ * Vocabulary item ids a phrase pass credits: linked words inside the phrase, plus the sentence's own
+ * content-word suggestions inside it that have no link. Those get a bare vocabulary item (no link, no
+ * card), the same as a reader word flag, so unflagged words earn evidence too.
+ */
+async function phraseCreditedWordIds(sentence: Sentence | undefined, text: string, links: readonly SentenceVocabulary[]): Promise<string[]> {
+  const ids = new Set(wordIdsInPhrase(text, links));
+  if (!text || !sentence) return [...ids];
+  const linkedSurfaces = new Set(links.map((link) => link.surfaceForm).filter(Boolean));
+  const seen = new Set<string>();
+  for (const suggestion of sentence.vocabularySuggestions) {
+    if (!suggestion.selectedByDefault || !suggestion.surface || seen.has(suggestion.surface)) continue;
+    seen.add(suggestion.surface);
+    if (linkedSurfaces.has(suggestion.surface) || !text.includes(suggestion.surface)) continue;
+    ids.add((await ensureVocabularyItem(suggestion.expression, suggestion.reading, { meaning: suggestion.english })).id);
+  }
+  return [...ids];
+}
+
+/**
  * The chain's one weighted event: an ordinary `phrase_shadow` Got it over the highest rung the learner
  * got, crediting each word in that rung's text once. Not logged when no rung was Got it. Unlike
  * `logPhraseShadow` it accepts a whole-sentence span (the chain's last rung).
@@ -10257,9 +10276,10 @@ export async function logChunkChainSummary(input: {
   visitId: string;
 }): Promise<SentenceLearningEvent> {
   const db = getDb();
-  const [links, settings] = await Promise.all([
+  const [links, settings, sentence] = await Promise.all([
     db.sentenceVocabulary.where('sentenceId').equals(input.sentenceId).toArray(),
     ensureSettings(db),
+    db.sentences.get(input.sentenceId),
   ]);
   return logSentenceLearningEvent({
     visitId: input.visitId,
@@ -10267,7 +10287,7 @@ export async function logChunkChainSummary(input: {
     bookId: input.bookId,
     chapterId: input.chapterId,
     sentenceId: input.sentenceId,
-    target: { kind: 'expression', key: phraseShadowTargetKey(wordIdsInPhrase(input.text, links)), label: input.text },
+    target: { kind: 'expression', key: phraseShadowTargetKey(await phraseCreditedWordIds(sentence, input.text, links)), label: input.text },
     rangeStartMs: Math.round(input.range.startMs),
     rangeEndMs: Math.round(input.range.endMs),
     outcome: 'got_it',
