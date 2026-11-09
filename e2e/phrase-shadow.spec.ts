@@ -107,7 +107,8 @@ test.describe('phrase shadowing on the Shadow page', () => {
     await page.getByRole('button', { name: 'Use this phrase' }).click();
     const rating = page.getByRole('group', { name: 'Rate this phrase' });
     await expect(rating).toContainText('寝ています');
-    await expect(rating).toContainText('0.5–1.6s');
+    // The trailing ね stays with います, but the aligner stretched it over the silence to 4 s, so it is capped at a particle's length.
+    await expect(rating).toContainText('0.5–2.1s');
 
     await rating.getByRole('button', { name: 'Got it' }).click();
     await expect(rating).toContainText('Logged “Got it”');
@@ -115,7 +116,7 @@ test.describe('phrase shadowing on the Shadow page', () => {
     const { events, attempts, reviews } = await stored(page);
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({ action: 'phrase_shadow', outcome: 'got_it', assessmentSource: 'self',
-      sentenceId: 's-0', rangeStartMs: 500, rangeEndMs: 1600, target: { label: '寝ています' } });
+      sentenceId: 's-0', rangeStartMs: 500, rangeEndMs: 2100, target: { label: '寝ていますね' } });
     expect(attempts).toBe(0);
     expect(reviews).toBe(0);
 
