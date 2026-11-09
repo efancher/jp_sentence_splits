@@ -22,6 +22,7 @@ import {
   weakestChunkRange,
   isPhraseRange,
   orderLinksByWeakness,
+  orderSuggestedSurfaces,
   phraseShadowTargetKey,
   dropLeadingParticles,
   snapRangeToWordBoundaries,
@@ -10310,7 +10311,23 @@ export async function suggestPhraseShadow(input: {
     return text ? { ...range, text, wordLabel: '' } : null;
   };
   const candidates = links.filter((link) => link.surfaceForm && (!input.surfaceForm || link.surfaceForm === input.surfaceForm));
-  if (candidates.length === 0) return chunkFallback([]);
+  if (candidates.length === 0) {
+    // No linked word (most sentences: nothing was confirmed). Not having flagged a word says nothing
+    // about whether it is said well, so target the sentence's own content words, those not yet drilled
+    // here first, before falling back to a chunk picked by position.
+    const past = (await db.sentenceLearningEvents.where('sentenceId').equals(input.sentenceId).toArray())
+      .filter((event) => event.action === 'phrase_shadow')
+      .map((event) => event.target?.label ?? '');
+    for (const surface of orderSuggestedSurfaces(sentence.vocabularySuggestions, sentence.japanese, past, input.surfaceForm)) {
+      const spans = isolatedWordSpans(alignment.words, sentence.japanese, surface);
+      const span = spans?.withParticle ?? spans?.wordOnly;
+      if (!span) continue;
+      const range = expandToPhrase(alignment.words, span, input.clipDurationMs);
+      if (!isPhraseRange(range, input.clipDurationMs)) continue;
+      return { ...range, text: phraseTextFromAlignment(alignment.words, range, sentence.japanese), wordLabel: surface };
+    }
+    return chunkFallback([]);
+  }
   const { strengthByWord, vocabById } = await loadWordReadingStrengths(READER_STRENGTH_CACHE_MS);
   const ordered = orderLinksByWeakness(candidates, strengthByWord);
   for (const link of ordered) {

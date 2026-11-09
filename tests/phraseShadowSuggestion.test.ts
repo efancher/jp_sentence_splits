@@ -4,7 +4,7 @@ import { resetDbForTests } from '../src/db/database';
 import { getDb, suggestPhraseShadow } from '../src/db/repository';
 import { ALIGNMENT_VERSION } from '../src/lib/analysisApi';
 import { createId } from '../src/lib/ids';
-import { chunkRanges, expandToPhrase, orderLinksByWeakness, weakestChunkRange } from '../src/lib/phraseShadow';
+import { chunkRanges, expandToPhrase, orderLinksByWeakness, orderSuggestedSurfaces, weakestChunkRange } from '../src/lib/phraseShadow';
 
 const words = [
   { text: '猫', start: 0, end: 0.4 },
@@ -77,6 +77,24 @@ describe('chunkRanges', () => {
       { startMs: 0, endMs: 2000 },
       { startMs: 2400, endMs: 3600 },
     ]);
+  });
+});
+
+describe('orderSuggestedSurfaces', () => {
+  const words = ['先週', '風邪', 'ポッドキャスト'].map((surface) => ({ surface, selectedByDefault: true }));
+  const all = [...words, { surface: 'は', selectedByDefault: false }];
+
+  it('offers only content words, stably, and a tapped word on its own', () => {
+    const order = orderSuggestedSurfaces(all, '私は先週風邪', []);
+    expect(order.sort()).toEqual(['ポッドキャスト', '先週', '風邪'].sort());
+    expect(orderSuggestedSurfaces(all, '私は先週風邪', [])).toEqual(orderSuggestedSurfaces(all, '私は先週風邪', []));
+    expect(orderSuggestedSurfaces(all, '私は先週風邪', [], '風邪')).toEqual(['風邪']);
+  });
+
+  it('puts words already inside an earlier phrase pass last', () => {
+    const order = orderSuggestedSurfaces(all, '私は先週風邪', ['先週の', 'ポッドキャストなど']);
+    expect(order[0]).toBe('風邪');
+    expect(order).toHaveLength(3);
   });
 });
 
