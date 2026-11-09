@@ -10259,18 +10259,18 @@ export function unlinkedPhraseSuggestions(sentence: Sentence | undefined, text: 
 
 /**
  * Vocabulary item ids a phrase pass credits: linked words inside the phrase, plus a bare vocabulary
- * item (no link, no card, like a reader word flag) for each unlinked content word in `track`
- * (every one when omitted), so tracked words earn evidence too.
+ * item (no link, no card, like a reader word flag) for each unlinked content word in `track`,
+ * so words the learner chose to track earn evidence too.
  */
 async function phraseCreditedWordIds(
   sentence: Sentence | undefined,
   text: string,
   links: readonly SentenceVocabulary[],
-  track?: readonly string[],
+  track: readonly string[],
 ): Promise<string[]> {
   const ids = new Set(wordIdsInPhrase(text, links));
   for (const suggestion of unlinkedPhraseSuggestions(sentence, text, links)) {
-    if (track && !track.includes(suggestion.surface)) continue;
+    if (!track.includes(suggestion.surface)) continue;
     ids.add((await ensureVocabularyItem(suggestion.expression, suggestion.reading, { meaning: suggestion.english })).id);
   }
   return [...ids];
@@ -10288,6 +10288,8 @@ export async function logChunkChainSummary(input: {
   range: { startMs: number; endMs: number };
   text: string;
   visitId: string;
+  /** Unlinked content words the learner chose to track; each gets a bare vocabulary item. Default none. */
+  trackSurfaces?: readonly string[];
 }): Promise<SentenceLearningEvent> {
   const db = getDb();
   const [links, settings, sentence] = await Promise.all([
@@ -10301,7 +10303,7 @@ export async function logChunkChainSummary(input: {
     bookId: input.bookId,
     chapterId: input.chapterId,
     sentenceId: input.sentenceId,
-    target: { kind: 'expression', key: phraseShadowTargetKey(await phraseCreditedWordIds(sentence, input.text, links)), label: input.text },
+    target: { kind: 'expression', key: phraseShadowTargetKey(await phraseCreditedWordIds(sentence, input.text, links, input.trackSurfaces ?? [])), label: input.text },
     rangeStartMs: Math.round(input.range.startMs),
     rangeEndMs: Math.round(input.range.endMs),
     outcome: 'got_it',

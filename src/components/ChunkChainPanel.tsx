@@ -1,7 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { getDb, logChunkChainRung, logChunkChainSummary } from '../db/repository';
+import { getDb, logChunkChainRung, logChunkChainSummary, unlinkedPhraseSuggestions } from '../db/repository';
 import { cuttableWords, planChunkChain, rungsFromCutTimes, type ChainRung } from '../lib/chunkChain';
 import {
   COLD_PASS_SHARE,
@@ -64,6 +64,22 @@ export function ChunkChainPanel({
   const [error, setError] = useState<string | null>(null);
   const chainVisit = useRef<string>('');
   const summaryLogged = useRef(false);
+  // Words the learner unticked in "Track with this rating"; kept for the whole run, applied when the summary is logged.
+  const [skipped, setSkipped] = useState<string[]>([]);
+
+  const currentText = rungs && session && !cold ? rungs[session.rungIndex]?.text : undefined;
+  const untracked = useLiveQuery(
+    async () => {
+      if (!currentText) return [];
+      const db = getDb();
+      const [sentence, links] = await Promise.all([
+        db.sentences.get(sentenceId),
+        db.sentenceVocabulary.where('sentenceId').equals(sentenceId).toArray(),
+      ]);
+      return unlinkedPhraseSuggestions(sentence, currentText, links).map((word) => ({ surface: word.surface, reading: word.reading, english: word.english }));
+    },
+    [sentenceId, currentText],
+  );
 
   const active = session !== null && !session.done;
   useEffect(() => {
@@ -95,6 +111,7 @@ export function ChunkChainPanel({
   function start() {
     chainVisit.current = visitId ?? createId('chain_visit');
     summaryLogged.current = false;
+    setSkipped([]);
     setError(null);
     setCold(random() < COLD_PASS_SHARE);
     setSession(startChainSession(rungs!.length));
@@ -149,7 +166,16 @@ export function ChunkChainPanel({
         const best = highestGotItRung(next);
         const top = best === null ? null : rungs[best]!;
         if (top) {
+          const db = getDb();
+          const [sentence, links] = await Promise.all([
+            db.sentences.get(sentenceId),
+            db.sentenceVocabulary.where('sentenceId').equals(sentenceId).toArray(),
+          ]);
+          const trackSurfaces = unlinkedPhraseSuggestions(sentence, top.text, links)
+            .map((word) => word.surface)
+            .filter((surface) => !skipped.includes(surface));
           await logChunkChainSummary({
+            trackSurfaces,
             bookId,
             sentenceId,
             range: { startMs: top.startMs, endMs: top.endMs },
@@ -302,6 +328,26 @@ export function ChunkChainPanel({
           <button type="button" onClick={leave}>Stop chain</button>
         </div>
       ) : (
+        <>
+        {untracked?.length ? (
+          <div className="row" style={{ alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+            <span className="muted">Track with this chain:</span>
+            {untracked.map((word) => (
+              <label key={word.surface} className="row" style={{ gap: '0.25rem', alignItems: 'center' }}>
+                <input
+                  type="checkbox"
+                  checked={!skipped.includes(word.surface)}
+                  onChange={(event) =>
+                    setSkipped((prev) => (event.target.checked ? prev.filter((surface) => surface !== word.surface) : [...prev, word.surface]))
+                  }
+                />
+                <span lang="ja">{word.surface}</span>
+                {word.reading && word.reading !== word.surface ? <span className="muted" lang="ja">（{word.reading}）</span> : null}
+                {word.english ? <span className="muted">{word.english}</span> : null}
+              </label>
+            ))}
+          </div>
+        ) : null}
         <div className="row" style={{ alignItems: 'center', flexWrap: 'wrap' }}>
           <span className="muted">How did this step go?</span>
           {PHRASE_SHADOW_OUTCOMES.map((entry) => (
@@ -311,6 +357,7 @@ export function ChunkChainPanel({
           ))}
           <button type="button" onClick={leave}>Stop chain</button>
         </div>
+        </>
       )}
       {error ? <p className="muted" style={{ margin: 0 }}>{error}</p> : null}
     </div>

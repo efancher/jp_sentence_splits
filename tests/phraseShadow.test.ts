@@ -7,6 +7,7 @@ import {
   createBook,
   getDb,
   getSessionPlannerInput,
+  logChunkChainSummary,
   logPhraseShadow,
   setBookSentenceStatus,
   updateSettings,
@@ -226,6 +227,23 @@ describe('logPhraseShadow and the shadowing pause', () => {
     expect(await db.vocabularyItems.get(credited[0])).toMatchObject({ expression: '寝る', reading: 'ねる' });
     expect(await db.sentenceVocabulary.count()).toBe(0);
     expect(await db.studyItems.count()).toBe(0);
+  });
+
+  it('the chain summary also credits an unlinked word only when tracking was confirmed', async () => {
+    const book = await createBook({ title: 'Phrases' });
+    const { sentence } = await shadowReadySentence(book, '猫が寝ています。');
+    const db = getDb();
+    await db.sentences.update(sentence.id, {
+      vocabularySuggestions: [
+        { id: 't1', surface: '寝て', start: 2, end: 4, expression: '寝る', reading: 'ねる', pos: '動詞/一般', english: 'to sleep', source: 'morphology', selectedByDefault: true },
+      ],
+    });
+    const base = { bookId: book.id, sentenceId: sentence.id, range: { startMs: 0, endMs: 2000 }, text: '猫が寝ています', visitId: 'chain1' };
+    expect(phraseShadowWordIds((await logChunkChainSummary(base)).target?.key)).toEqual([]);
+    expect(await db.vocabularyItems.count()).toBe(0);
+    const tracked = await logChunkChainSummary({ ...base, trackSurfaces: ['寝て'] });
+    expect(phraseShadowWordIds(tracked.target?.key)).toHaveLength(1);
+    expect(await db.sentenceVocabulary.count()).toBe(0);
   });
 
   it('still logs without a cached alignment, and refuses a whole-clip span', async () => {
