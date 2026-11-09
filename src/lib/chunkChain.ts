@@ -18,13 +18,11 @@ import {
 /** The shortest first rung: less than this is a mis-click-sized phrase, not something to shadow. */
 export const MIN_FIRST_RUNG_MS = 1000;
 /** Each rung must add at least this much new audio to the one before it. */
-export const MIN_RUNG_STEP_MS = 1200;
+export const MIN_RUNG_STEP_MS = 700;
 /** A chain is never longer than this many rungs, the whole sentence included. */
-export const MAX_RUNGS = 5;
-/** No rung adds more than this much new audio to the one before it (extra word-boundary cuts are inserted). */
-export const MAX_RUNG_STEP_MS = 4500;
-/** The longest chain once steps are capped; very long clips get bigger steps instead of more rungs. */
-export const MAX_CAPPED_RUNGS = 8;
+export const MAX_RUNGS = 12;
+/** No rung adds more than this much new audio to the one before it (a longer phrase is split at word boundaries). */
+export const MAX_RUNG_STEP_MS = 3000;
 /** A chain needs a rung below the whole sentence to build from; below this, shadow the sentence directly. */
 export const MIN_RUNGS = 3;
 
@@ -102,8 +100,8 @@ export function planChunkChain(
   );
   if (cutTimes.every((time) => time === null)) return { rungs: [], rejection: 'unreliable-alignment' };
 
-  // Sized by duration: each rung adds at least `step` of new audio, and `step` grows with the sentence
-  // so the chain never exceeds MAX_RUNGS.
+  // One phrase (chunk) per rung: a chunk shorter than `step` is merged into the next, and `step` grows with
+  // very long sentences so the chain never exceeds MAX_RUNGS.
   const step = Math.max(MIN_RUNG_STEP_MS, (endMs - speechStartMs) / MAX_RUNGS);
   const rungs: ChainRung[] = [];
   let previousSpan = 0;
@@ -154,7 +152,7 @@ function capRungSteps(
   const words = cuttableWords(alignment);
   const endMs = rungs[0]!.endMs;
   const speechStartMs = rungs[rungs.length - 1]!.startMs;
-  const maxStep = Math.max(MAX_RUNG_STEP_MS, (endMs - speechStartMs) / MAX_CAPPED_RUNGS);
+  const maxStep = Math.max(MAX_RUNG_STEP_MS, (endMs - speechStartMs) / MAX_RUNGS);
   const candidates = words.slice(1).filter((word) => !isParticleToken(word));
   const result: ChainRung[] = [];
   let previousSpan = 0;

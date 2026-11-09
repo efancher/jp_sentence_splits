@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Sentence, VocabularySuggestion, WordAlignment } from '../src/domain/types';
-import { MAX_CAPPED_RUNGS, MAX_RUNG_STEP_MS, MAX_RUNGS, MIN_RUNGS, planChunkChain, rungsFromCutTimes } from '../src/lib/chunkChain';
+import { MAX_RUNG_STEP_MS, MIN_RUNG_STEP_MS, MAX_RUNGS, MIN_RUNGS, planChunkChain, rungsFromCutTimes } from '../src/lib/chunkChain';
 
 type Piece = [surface: string, pos: string];
 
@@ -66,20 +66,20 @@ const SPOKEN_ALIGNMENT = alignment([
 ]);
 
 describe('planChunkChain', () => {
-  it('sizes rungs by duration and ends with the whole sentence', () => {
+  it('adds one phrase per rung and ends with the whole sentence', () => {
     const plan = planChunkChain(SPOKEN, SPOKEN_ALIGNMENT);
     expect(plan.rejection).toBeNull();
-    expect(plan.rungs.map((rung) => rung.text)).toEqual(['映画を見ました', '友達と駅で映画を見ました', '私は昨日友達と駅で映画を見ました']);
-    expect(plan.rungs.map((rung) => rung.whole)).toEqual([false, false, true]);
+    expect(plan.rungs.map((rung) => rung.text)).toEqual(['映画を見ました', '駅で映画を見ました', '友達と駅で映画を見ました', '昨日友達と駅で映画を見ました', '私は昨日友達と駅で映画を見ました']);
+    expect(plan.rungs.map((rung) => rung.whole)).toEqual([false, false, false, false, true]);
     // Every rung ends where the speech ends; each starts at its first chunk's first word.
-    expect(plan.rungs.map((rung) => rung.startMs)).toEqual([3600, 1800, 0]);
+    expect(plan.rungs.map((rung) => rung.startMs)).toEqual([3600, 2800, 1800, 800, 0]);
     expect(plan.rungs.every((rung) => rung.endMs === 5400)).toBe(true);
   });
 
   it('adds at least a step of new audio at every rung', () => {
     const { rungs } = planChunkChain(SPOKEN, SPOKEN_ALIGNMENT);
     const spans = rungs.map((rung) => rung.endMs - rung.startMs);
-    for (let i = 1; i < spans.length; i += 1) expect(spans[i]! - spans[i - 1]!).toBeGreaterThanOrEqual(1200);
+    for (let i = 1; i < spans.length; i += 1) expect(spans[i]! - spans[i - 1]!).toBeGreaterThanOrEqual(MIN_RUNG_STEP_MS);
   });
 
   it('never exceeds MAX_RUNGS however many chunks a long sentence has', () => {
@@ -97,7 +97,7 @@ describe('planChunkChain', () => {
   });
 
   it('splits a long unbroken final chunk so no step adds a long new stretch', () => {
-    // 私は|昨日、|then one long clause with no particle or pause: 見て/い/られ/まし/た spread over 9 s.
+    // 私は|昨日、|then one long clause with no particle or pause: 見て/い/られ/まし/た spread over 6 s.
     const long = sentence([
       ['私', NOUN],
       ['は', '助詞/係助詞'],
@@ -114,19 +114,19 @@ describe('planChunkChain', () => {
       ['私', 0, 0.4],
       ['は', 0.4, 0.6],
       ['昨日', 0.8, 1.6],
-      ['見', 2, 4],
-      ['て', 4, 6],
-      ['い', 6, 8],
-      ['られ', 8, 10],
-      ['まし', 10, 12],
-      ['た', 12, 14],
+      ['見', 2, 3],
+      ['て', 3, 4],
+      ['い', 4, 5],
+      ['られ', 5, 6],
+      ['まし', 6, 7],
+      ['た', 7, 8],
     ]);
     const { rungs, rejection } = planChunkChain(long, slowEnding);
     expect(rejection).toBeNull();
     const spans = rungs.map((rung) => rung.endMs - rung.startMs);
     expect(spans[0]).toBeLessThanOrEqual(MAX_RUNG_STEP_MS);
     for (let i = 1; i < spans.length; i += 1) expect(spans[i]! - spans[i - 1]!).toBeLessThanOrEqual(MAX_RUNG_STEP_MS + 1);
-    expect(rungs.length).toBeLessThanOrEqual(MAX_CAPPED_RUNGS);
+    expect(rungs.length).toBeLessThanOrEqual(MAX_RUNGS);
     expect(rungs[rungs.length - 1]!.whole).toBe(true);
   });
 
@@ -189,7 +189,7 @@ describe('planChunkChain', () => {
     ]);
     const plan = planChunkChain(SPOKEN, unkAtEnd);
     expect(plan.rejection).toBeNull();
-    expect(plan.rungs.map((rung) => rung.startMs)).toEqual([3600, 1800, 0]);
+    expect(plan.rungs.map((rung) => rung.startMs)).toEqual([3600, 2800, 1800, 800, 0]);
   });
 });
 
