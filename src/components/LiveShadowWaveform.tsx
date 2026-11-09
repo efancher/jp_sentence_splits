@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { afterIndex, leadInIndex, liveWindowBuckets, nativeIndex, padBuckets } from '../lib/liveWindow';
-import { estimateFramePitch, extractPitch, hzToRelativeSemitones, medianHz } from '../lib/pitch';
+import { createLivePitchGuard, estimateFramePitch, extractPitch, hzToRelativeSemitones, medianHz } from '../lib/pitch';
 import type { TimeRangeMs } from '../lib/recording';
 import {
   LIVE_PITCH_DISPLAY_MAX_SEMITONES,
@@ -36,12 +36,6 @@ const PITCH_ESTIMATE_EVERY_N_FRAMES = 2;
 const LIVE_PITCH_OPTIONS = { rmsThreshold: 0.003, fallbackThreshold: 0.35 };
 /** Voiced-frame count before the learner's running median is stable enough to normalize against. */
 const LIVE_PITCH_MIN_VOICED_FRAMES = 5;
-/**
- * Drop a live frame whose pitch sits more than this far from the running
- * median — an octave error (±12 st) or other single-frame YIN glitch, which
- * would otherwise draw as a spike. Legit speech stays inside the ±8 display.
- */
-const LIVE_PITCH_OUTLIER_SEMITONES = 10;
 
 /**
  * Ported from ~/projects/shadowing/web/src/components/LiveShadowWaveform.tsx.
@@ -117,6 +111,7 @@ export function LiveShadowWaveform({
   const liveHzCountRef = useRef<number[]>([]);
   /** Every voiced Hz reading across all reps this loop — a slow-moving normalization centre so the contour doesn't jump each rep. */
   const liveVoicedHzRef = useRef<number[]>([]);
+  const livePitchGuardRef = useRef(createLivePitchGuard());
   /** Last raw media time, to spot the reference `<audio loop>` wrapping back to the start of a new rep. */
   const lastMediaTimeRef = useRef(0);
   const referenceMagnitudeRef = useRef(0);
@@ -186,6 +181,7 @@ export function LiveShadowWaveform({
     liveHzSumRef.current = new Array<number>(buckets).fill(0);
     liveHzCountRef.current = new Array<number>(buckets).fill(0);
     liveVoicedHzRef.current = [];
+    livePitchGuardRef.current = createLivePitchGuard();
     lastMediaTimeRef.current = 0;
     setLivePeaks(emptyLivePeaks(buckets));
     setLivePitchBuckets(emptyLivePitchBuckets(buckets));
@@ -261,18 +257,11 @@ export function LiveShadowWaveform({
         const frame = samples.subarray(frameStart);
         const estimated = estimateFramePitch(frame, sampleRate, LIVE_PITCH_OPTIONS);
         if (estimated.voiced && estimated.hz !== null && index >= 0 && index < buckets) {
-          const runningMedian =
-            liveVoicedHzRef.current.length >= LIVE_PITCH_MIN_VOICED_FRAMES
-              ? medianHz(liveVoicedHzRef.current)
-              : null;
-          const isOutlier =
-            runningMedian !== null &&
-            Math.abs(hzToRelativeSemitones(estimated.hz, runningMedian)) >
-              LIVE_PITCH_OUTLIER_SEMITONES;
-          if (!isOutlier) {
-            liveHzSumRef.current[index] = (liveHzSumRef.current[index] ?? 0) + estimated.hz;
+          const guarded = livePitchGuardRef.current(estimated.hz);
+          if (guarded !== null) {
+            liveHzSumRef.current[index] = (liveHzSumRef.current[index] ?? 0) + guarded;
             liveHzCountRef.current[index] = (liveHzCountRef.current[index] ?? 0) + 1;
-            liveVoicedHzRef.current.push(estimated.hz);
+            liveVoicedHzRef.current.push(guarded);
           }
         }
       }

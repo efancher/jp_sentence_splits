@@ -231,7 +231,8 @@ export function pitchBucketsToRuns(
       continue;
     }
     const x = (index / Math.max(1, values.length - 1)) * width;
-    const y = height - ((value - min) / span) * (height - 12) - 6;
+    // Pin an out-of-range reading to the chart edge rather than drawing it off-screen, where it just vanishes.
+    const y = height - ((Math.min(max, Math.max(min, value)) - min) / span) * (height - 12) - 6;
     current.push(`${x},${y}`);
   }
   flush();

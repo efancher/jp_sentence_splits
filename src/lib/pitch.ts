@@ -152,6 +152,52 @@ export function medianHz(values: number[]): number | null {
   return sorted[Math.floor(sorted.length / 2)] ?? null;
 }
 
+/** Recent voiced readings the live guard judges a new one against. */
+const LIVE_GUARD_RECENT = 5;
+/** A live reading this far (semitones) from the recent median is suspect; ordinary accent movement stays under it. */
+const LIVE_GUARD_SUSPECT_ST = 6;
+/** Consecutive suspect readings agreeing within this many semitones are taken as a genuine jump, not a glitch. */
+const LIVE_GUARD_AGREE_ST = 3;
+const LIVE_GUARD_JUMP_READINGS = 3;
+
+/**
+ * Streaming octave-error guard for the live shadow contour. Replaces a fixed
+ * cutoff from the whole-session median, which discarded a deliberately
+ * exaggerated pitch swing and left a flat line. A suspect reading is folded
+ * by an octave back to the recent contour if that fits, dropped (null) if
+ * not, and accepted as a real jump once several suspects in a row agree.
+ */
+export function createLivePitchGuard(): (hz: number) => number | null {
+  const recent: number[] = [];
+  let suspects: number[] = [];
+  const accept = (hz: number): number => {
+    recent.push(hz);
+    if (recent.length > LIVE_GUARD_RECENT) recent.shift();
+    return hz;
+  };
+  return (hz) => {
+    if (recent.length < 3) return accept(hz);
+    const reference = medianHz(recent)!;
+    if (Math.abs(hzToRelativeSemitones(hz, reference)) <= LIVE_GUARD_SUSPECT_ST) {
+      suspects = [];
+      return accept(hz);
+    }
+    suspects.push(hz);
+    if (
+      suspects.length >= LIVE_GUARD_JUMP_READINGS &&
+      suspects.every((value) => Math.abs(hzToRelativeSemitones(value, hz)) <= LIVE_GUARD_AGREE_ST)
+    ) {
+      suspects = [];
+      recent.length = 0;
+      return accept(hz);
+    }
+    for (const folded of [hz * 2, hz / 2]) {
+      if (Math.abs(hzToRelativeSemitones(folded, reference)) <= LIVE_GUARD_AGREE_ST) return accept(folded);
+    }
+    return null;
+  };
+}
+
 /** Voiced neighbours (per side) whose median a frame is judged against when looking for an octave error. */
 const OCTAVE_NEIGHBOURS = 6;
 /** A frame this far (semitones) from its neighbourhood median is a candidate octave error. */

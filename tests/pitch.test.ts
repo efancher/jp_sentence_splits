@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   correctPitchOutliers,
+  createLivePitchGuard,
   estimateFramePitch,
   extractPitch,
   hzToRelativeSemitones,
@@ -287,5 +288,32 @@ describe('correctPitchOutliers', () => {
     const frames = track(hzs);
     correctPitchOutliers(frames);
     expect(frames[35]!.hz).toBeCloseTo(190, 5);
+  });
+});
+
+describe('createLivePitchGuard', () => {
+  const warmUp = (guard: (hz: number) => number | null, hz: number) => {
+    for (let i = 0; i < 5; i += 1) guard(hz);
+  };
+
+  it('folds an isolated octave error back to the recent contour', () => {
+    const guard = createLivePitchGuard();
+    warmUp(guard, 140);
+    expect(guard(280)).toBeCloseTo(140, 5);
+  });
+
+  it('drops an isolated non-octave glitch', () => {
+    const guard = createLivePitchGuard();
+    warmUp(guard, 140);
+    expect(guard(230)).toBeNull();
+  });
+
+  it('accepts a sustained exaggerated jump instead of flattening it', () => {
+    const guard = createLivePitchGuard();
+    warmUp(guard, 110);
+    guard(260);
+    guard(262);
+    expect(guard(258)).toBe(258);
+    expect(guard(260)).toBe(260);
   });
 });
