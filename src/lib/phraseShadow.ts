@@ -186,7 +186,7 @@ const PARTICLE_MAX_MS = 500;
 /** A particle this close after its word still belongs to it (the aligner often leaves a small gap). */
 const PARTICLE_ATTACH_GAP_MS = 400;
 
-const isParticleToken =(word: Pick<WordAlignment, 'text'>) => ATTACHED_PARTICLES.has(word.text);
+export const isParticleToken = (word: Pick<WordAlignment, 'text'>) => ATTACHED_PARTICLES.has(word.text);
 
 /** A suggested phrase is widened from one word's span to about this long, and never past the cap. */
 export const SUGGESTED_PHRASE_MIN_MS = 1000;

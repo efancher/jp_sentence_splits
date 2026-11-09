@@ -1,6 +1,6 @@
 import type { Sentence, WordAlignment } from '../domain/types';
 import { chunkSentenceIntoTileDetails } from './earTiles';
-import { phraseTextFromAlignment } from './phraseShadow';
+import { isParticleToken, phraseTextFromAlignment } from './phraseShadow';
 import {
   alignerRangeToRawIndices,
   hasSquashedNeighbour,
@@ -21,6 +21,10 @@ export const MIN_FIRST_RUNG_MS = 1000;
 export const MIN_RUNG_STEP_MS = 1200;
 /** A chain is never longer than this many rungs, the whole sentence included. */
 export const MAX_RUNGS = 5;
+/** No rung adds more than this much new audio to the one before it (extra word-boundary cuts are inserted). */
+export const MAX_RUNG_STEP_MS = 4500;
+/** The longest chain once steps are capped; very long clips get bigger steps instead of more rungs. */
+export const MAX_CAPPED_RUNGS = 8;
 /** A chain needs a rung below the whole sentence to build from; below this, shadow the sentence directly. */
 export const MIN_RUNGS = 3;
 
@@ -122,18 +126,68 @@ export function planChunkChain(
     });
     previousSpan = span;
   }
-  rungs.push({
+  const whole: ChainRung = {
     startMs: speechStartMs,
     endMs,
     text: chunks.map((chunk) => chunk.text).join(''),
     chunkIndex: 0,
     whole: true,
-  });
-  if (rungs.length < MIN_RUNGS) {
+  };
+  const capped = capRungSteps([...rungs, whole], sentence.japanese, alignment);
+  if (capped.length < MIN_RUNGS) {
     const unplaced = cutTimes.some((time) => time === null);
     return { rungs: [], rejection: unplaced ? 'unreliable-alignment' : 'too-short' };
   }
-  return { rungs, rejection: null };
+  return { rungs: capped, rejection: null };
+}
+
+/**
+ * Chunk boundaries can be sparse (one long clause with no pause), which would make a rung many seconds
+ * longer than the one before it. Where a step would add more than the cap, extra cuts go at aligned word
+ * starts (never a particle) so no step asks the learner to take on a long new stretch at once.
+ */
+function capRungSteps(
+  rungs: readonly ChainRung[],
+  japanese: string,
+  alignment: readonly WordAlignment[],
+): ChainRung[] {
+  const words = cuttableWords(alignment);
+  const endMs = rungs[0]!.endMs;
+  const speechStartMs = rungs[rungs.length - 1]!.startMs;
+  const maxStep = Math.max(MAX_RUNG_STEP_MS, (endMs - speechStartMs) / MAX_CAPPED_RUNGS);
+  const candidates = words.slice(1).filter((word) => !isParticleToken(word));
+  const result: ChainRung[] = [];
+  let previousSpan = 0;
+  for (const rung of rungs) {
+    const span = endMs - rung.startMs;
+    const gap = span - previousSpan;
+    if (gap > maxStep) {
+      const pieces = Math.ceil(gap / maxStep);
+      let lastStart = result.length > 0 ? result[result.length - 1]!.startMs : endMs;
+      for (let piece = 1; piece < pieces; piece += 1) {
+        const target = endMs - (previousSpan + (gap * piece) / pieces);
+        let best: WordAlignment | undefined;
+        for (const word of candidates) {
+          const start = word.start * 1000;
+          if (start <= rung.startMs + MIN_CUSTOM_STEP_MS || start >= lastStart - MIN_CUSTOM_STEP_MS) continue;
+          if (!best || Math.abs(start - target) < Math.abs(best.start * 1000 - target)) best = word;
+        }
+        if (!best) continue;
+        const startMs = best.start * 1000;
+        result.push({
+          startMs,
+          endMs,
+          text: phraseTextFromAlignment(words, { startMs, endMs }, japanese),
+          chunkIndex: rung.chunkIndex,
+          whole: false,
+        });
+        lastStart = startMs;
+      }
+    }
+    result.push(rung);
+    previousSpan = span;
+  }
+  return result;
 }
 
 /** The closest a hand-placed cut may sit to its neighbour (or the sentence's edges): a step shorter than this is not a phrase. */

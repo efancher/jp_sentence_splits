@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Sentence, VocabularySuggestion, WordAlignment } from '../src/domain/types';
-import { MAX_RUNGS, MIN_RUNGS, planChunkChain, rungsFromCutTimes } from '../src/lib/chunkChain';
+import { MAX_CAPPED_RUNGS, MAX_RUNG_STEP_MS, MAX_RUNGS, MIN_RUNGS, planChunkChain, rungsFromCutTimes } from '../src/lib/chunkChain';
 
 type Piece = [surface: string, pos: string];
 
@@ -94,6 +94,40 @@ describe('planChunkChain', () => {
     expect(plan.rungs.length).toBeLessThanOrEqual(MAX_RUNGS);
     expect(plan.rungs.length).toBeGreaterThanOrEqual(MIN_RUNGS);
     expect(plan.rungs[plan.rungs.length - 1]!.whole).toBe(true);
+  });
+
+  it('splits a long unbroken final chunk so no step adds a long new stretch', () => {
+    // 私は|昨日、|then one long clause with no particle or pause: 見て/い/られ/まし/た spread over 9 s.
+    const long = sentence([
+      ['私', NOUN],
+      ['は', '助詞/係助詞'],
+      ['昨日', NOUN],
+      ['、', '補助記号/読点'],
+      ['見', '動詞/一般'],
+      ['て', '助詞/接続助詞'],
+      ['い', '動詞/非自立可能'],
+      ['られ', '助動詞'],
+      ['まし', '助動詞'],
+      ['た', '助動詞'],
+    ]);
+    const slowEnding = alignment([
+      ['私', 0, 0.4],
+      ['は', 0.4, 0.6],
+      ['昨日', 0.8, 1.6],
+      ['見', 2, 4],
+      ['て', 4, 6],
+      ['い', 6, 8],
+      ['られ', 8, 10],
+      ['まし', 10, 12],
+      ['た', 12, 14],
+    ]);
+    const { rungs, rejection } = planChunkChain(long, slowEnding);
+    expect(rejection).toBeNull();
+    const spans = rungs.map((rung) => rung.endMs - rung.startMs);
+    expect(spans[0]).toBeLessThanOrEqual(MAX_RUNG_STEP_MS);
+    for (let i = 1; i < spans.length; i += 1) expect(spans[i]! - spans[i - 1]!).toBeLessThanOrEqual(MAX_RUNG_STEP_MS + 1);
+    expect(rungs.length).toBeLessThanOrEqual(MAX_CAPPED_RUNGS);
+    expect(rungs[rungs.length - 1]!.whole).toBe(true);
   });
 
   it('rejects a sentence too short to have two rungs below the whole sentence', () => {
