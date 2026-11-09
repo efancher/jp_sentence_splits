@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { afterIndex, leadInIndex, liveWindowBuckets, nativeIndex, padBuckets } from '../lib/liveWindow';
+import { LivePitchCapture, saveCaptureFile } from '../lib/livePitchCapture';
 import { createLivePitchGuard, estimateFramePitch, extractPitch, hzToRelativeSemitones, medianHz } from '../lib/pitch';
 import type { TimeRangeMs } from '../lib/recording';
 import {
@@ -112,6 +113,8 @@ export function LiveShadowWaveform({
   /** Every voiced Hz reading across all reps this loop — a slow-moving normalization centre so the contour doesn't jump each rep. */
   const liveVoicedHzRef = useRef<number[]>([]);
   const livePitchGuardRef = useRef(createLivePitchGuard());
+  /** Rolling record of the frames analysed, for the "Save pitch debug capture" button. */
+  const captureRef = useRef(new LivePitchCapture());
   /** Last raw media time, to spot the reference `<audio loop>` wrapping back to the start of a new rep. */
   const lastMediaTimeRef = useRef(0);
   const referenceMagnitudeRef = useRef(0);
@@ -181,6 +184,7 @@ export function LiveShadowWaveform({
     liveHzSumRef.current = new Array<number>(buckets).fill(0);
     liveHzCountRef.current = new Array<number>(buckets).fill(0);
     liveVoicedHzRef.current = [];
+    captureRef.current.clear();
     livePitchGuardRef.current = createLivePitchGuard();
     lastMediaTimeRef.current = 0;
     setLivePeaks(emptyLivePeaks(buckets));
@@ -256,14 +260,27 @@ export function LiveShadowWaveform({
         const frameStart = Math.max(0, samples.length - LIVE_PITCH_FRAME_SAMPLES);
         const frame = samples.subarray(frameStart);
         const estimated = estimateFramePitch(frame, sampleRate, LIVE_PITCH_OPTIONS);
+        let guarded: number | null = null;
         if (estimated.voiced && estimated.hz !== null && index >= 0 && index < buckets) {
-          const guarded = livePitchGuardRef.current(estimated.hz);
+          guarded = livePitchGuardRef.current(estimated.hz);
           if (guarded !== null) {
             liveHzSumRef.current[index] = (liveHzSumRef.current[index] ?? 0) + guarded;
             liveHzCountRef.current[index] = (liveHzCountRef.current[index] ?? 0) + 1;
             liveVoicedHzRef.current.push(guarded);
           }
         }
+        captureRef.current.push({
+          at: performance.now(),
+          rawMediaTime,
+          leadInRemainingMs,
+          held,
+          index,
+          frame: frame.slice(),
+          voiced: estimated.voiced,
+          hz: estimated.hz,
+          confidence: estimated.confidence,
+          guardedHz: guarded,
+        });
       }
 
       // Gain is derived from this rep's levels; the pitch centre (median) is
@@ -465,6 +482,30 @@ export function LiveShadowWaveform({
           {active ? '' : ' — start recording to draw'}.
           {hasWindow ? ' The dashed lines mark where the reference starts and ends; your line is drawn from the moment recording starts and keeps going through the pause.' : ''}
         </p>
+        <button
+          type="button"
+          className="secondary"
+          onClick={() =>
+            void saveCaptureFile(
+              captureRef.current.toJson({
+                sampleRate,
+                durationSeconds,
+                rangeStartMs,
+                rangeEndMs,
+                playbackRate: playbackRate ?? 1,
+                leadInMs,
+                tailMs,
+                buckets: win.total,
+                liveMedianHz,
+                referenceMedianHz,
+                userAgent: navigator.userAgent,
+              }),
+              `pitch-capture-${new Date().toISOString().replace(/[:.]/g, '-')}.json`,
+            )
+          }
+        >
+          Save pitch debug capture
+        </button>
       </div>
     </div>
   );
