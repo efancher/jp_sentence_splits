@@ -310,30 +310,29 @@ export function weakestChunkRange(
 
 /**
  * Candidate target words for a sentence with no linked vocabulary: its content-word suggestions
- * (`selectedByDefault`, deduplicated). Words never shadowed here, or whose latest shadow (a past
- * phrase pass whose text contains the word) wasn't "Got it", come first; once every word got it the
- * order is random. Each group is shuffled with `random`. `only` restricts to a word the learner tapped.
+ * (`selectedByDefault`, deduplicated, sentence order). Words never shadowed here come first, then words
+ * whose latest pass (a past phrase pass whose text contains the word) wasn't "Got it", then the rest;
+ * within each group the least recently shadowed leads. Rating a pass moves on to another word and
+ * everything cycles, while reopening without rating keeps the same pick. `only` restricts to a word
+ * the learner tapped.
  */
 export function orderSuggestedSurfaces(
   suggestions: readonly { surface: string; selectedByDefault: boolean }[],
   pastPasses: readonly { text: string; outcome?: string; timestamp: string }[],
   only?: string,
-  random: () => number = Math.random,
 ): string[] {
   if (only) return [only];
   const surfaces = [...new Set(suggestions.filter((item) => item.selectedByDefault && item.surface).map((item) => item.surface))];
-  const shuffled = [...surfaces];
-  for (let i = shuffled.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-  const solid = (surface: string) => {
-    const latest = pastPasses
+  const latest = (surface: string) =>
+    pastPasses
       .filter((pass) => pass.text.includes(surface))
       .reduce<{ outcome?: string; timestamp: string } | undefined>((best, pass) => (!best || pass.timestamp > best.timestamp ? pass : best), undefined);
-    return latest?.outcome === 'got_it';
-  };
-  return [...shuffled.filter((surface) => !solid(surface)), ...shuffled.filter(solid)];
+  const rows = surfaces.map((surface, index) => {
+    const last = latest(surface);
+    return { surface, index, group: !last ? 0 : last.outcome === 'got_it' ? 2 : 1, at: last?.timestamp ?? '' };
+  });
+  rows.sort((a, b) => a.group - b.group || (a.at < b.at ? -1 : a.at > b.at ? 1 : 0) || a.index - b.index);
+  return rows.map((row) => row.surface);
 }
 
 /** Links ordered weakest word first (no evidence yet counts as the average), keeping sentence order on ties. */

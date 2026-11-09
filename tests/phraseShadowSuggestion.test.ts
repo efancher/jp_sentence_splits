@@ -85,16 +85,14 @@ describe('orderSuggestedSurfaces', () => {
   const all = [...words, { surface: 'は', selectedByDefault: false }];
   const pass = (text: string, outcome: string, timestamp: string) => ({ text, outcome, timestamp });
 
-  it('offers only content words, and a tapped word on its own', () => {
-    expect(orderSuggestedSurfaces(all, []).sort()).toEqual(['ポッドキャスト', '先週', '風邪'].sort());
+  it('offers content words in sentence order, stably, and a tapped word on its own', () => {
+    expect(orderSuggestedSurfaces(all, [])).toEqual(['先週', '風邪', 'ポッドキャスト']);
     expect(orderSuggestedSurfaces(all, [], '風邪')).toEqual(['風邪']);
   });
 
-  it('puts words whose latest pass was Got it last', () => {
+  it('puts never-shadowed words first, then not-Got-it, then Got-it', () => {
     const past = [pass('先週の', 'got_it', '2026-11-08'), pass('ポッドキャストなど', 'close', '2026-11-08')];
-    const order = orderSuggestedSurfaces(all, past);
-    expect(order.at(-1)).toBe('先週');
-    expect(order).toHaveLength(3);
+    expect(orderSuggestedSurfaces(all, past)).toEqual(['風邪', 'ポッドキャスト', '先週']);
   });
 
   it('judges a word by its latest pass only', () => {
@@ -102,11 +100,9 @@ describe('orderSuggestedSurfaces', () => {
     expect(orderSuggestedSurfaces(all, past)[0]).toBe('先週');
   });
 
-  it('is random across all words once every one got it', () => {
-    const past = words.map((word) => pass(word.surface, 'got_it', '2026-11-08'));
-    const first = orderSuggestedSurfaces(all, past, undefined, () => 0)[0];
-    const second = orderSuggestedSurfaces(all, past, undefined, () => 0.99)[0];
-    expect(first).not.toBe(second);
+  it('cycles the least recently shadowed first once every word got it', () => {
+    const past = [pass('先週', 'got_it', '2026-11-09'), pass('風邪', 'got_it', '2026-11-07'), pass('ポッドキャスト', 'got_it', '2026-11-08')];
+    expect(orderSuggestedSurfaces(all, past)).toEqual(['風邪', 'ポッドキャスト', '先週']);
   });
 });
 
