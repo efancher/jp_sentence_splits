@@ -10185,6 +10185,8 @@ export async function logPhraseShadow(input: {
   range: { startMs: number; endMs: number };
   outcome: PhraseShadowOutcome;
   visitId?: string;
+  /** Unlinked content words the learner chose to track at rating time; each gets a bare vocabulary item. Default none. */
+  trackSurfaces?: readonly string[];
 }): Promise<SentenceLearningEvent | null> {
   if (!isPhraseRange(input.range, input.clipDurationMs)) return null;
   const db = getDb();
@@ -10201,7 +10203,7 @@ export async function logPhraseShadow(input: {
     bookId: input.bookId,
     chapterId: input.chapterId,
     sentenceId: input.sentenceId,
-    target: { kind: 'expression', key: phraseShadowTargetKey(await phraseCreditedWordIds(sentence, text, links)), label: text },
+    target: { kind: 'expression', key: phraseShadowTargetKey(await phraseCreditedWordIds(sentence, text, links, input.trackSurfaces ?? [])), label: text },
     rangeStartMs: Math.round(input.range.startMs),
     rangeEndMs: Math.round(input.range.endMs),
     outcome: input.outcome,
@@ -10243,20 +10245,32 @@ export async function logChunkChainRung(input: {
   });
 }
 
-/**
- * Vocabulary item ids a phrase pass credits: linked words inside the phrase, plus the sentence's own
- * content-word suggestions inside it that have no link. Those get a bare vocabulary item (no link, no
- * card), the same as a reader word flag, so unflagged words earn evidence too.
- */
-async function phraseCreditedWordIds(sentence: Sentence | undefined, text: string, links: readonly SentenceVocabulary[]): Promise<string[]> {
-  const ids = new Set(wordIdsInPhrase(text, links));
-  if (!text || !sentence) return [...ids];
+/** The sentence's content-word suggestions inside a phrase that no link covers (deduplicated by surface). */
+export function unlinkedPhraseSuggestions(sentence: Sentence | undefined, text: string, links: readonly SentenceVocabulary[]) {
+  if (!text || !sentence) return [];
   const linkedSurfaces = new Set(links.map((link) => link.surfaceForm).filter(Boolean));
   const seen = new Set<string>();
-  for (const suggestion of sentence.vocabularySuggestions) {
-    if (!suggestion.selectedByDefault || !suggestion.surface || seen.has(suggestion.surface)) continue;
+  return sentence.vocabularySuggestions.filter((suggestion) => {
+    if (!suggestion.selectedByDefault || !suggestion.surface || seen.has(suggestion.surface)) return false;
     seen.add(suggestion.surface);
-    if (linkedSurfaces.has(suggestion.surface) || !text.includes(suggestion.surface)) continue;
+    return !linkedSurfaces.has(suggestion.surface) && text.includes(suggestion.surface);
+  });
+}
+
+/**
+ * Vocabulary item ids a phrase pass credits: linked words inside the phrase, plus a bare vocabulary
+ * item (no link, no card, like a reader word flag) for each unlinked content word in `track`
+ * (every one when omitted), so tracked words earn evidence too.
+ */
+async function phraseCreditedWordIds(
+  sentence: Sentence | undefined,
+  text: string,
+  links: readonly SentenceVocabulary[],
+  track?: readonly string[],
+): Promise<string[]> {
+  const ids = new Set(wordIdsInPhrase(text, links));
+  for (const suggestion of unlinkedPhraseSuggestions(sentence, text, links)) {
+    if (track && !track.includes(suggestion.surface)) continue;
     ids.add((await ensureVocabularyItem(suggestion.expression, suggestion.reading, { meaning: suggestion.english })).id);
   }
   return [...ids];

@@ -1,7 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useState } from 'react';
 
-import { getDb, logPhraseShadow } from '../db/repository';
+import { getDb, logPhraseShadow, unlinkedPhraseSuggestions } from '../db/repository';
 import { readExtrasForSentences } from '../db/sentenceExtras';
 import { validWalkthroughFor } from '../lib/contextWalkthrough';
 import { PHRASE_SHADOW_OUTCOMES, phraseGloss, phraseTextFromAlignment, type PhraseShadowOutcome } from '../lib/phraseShadow';
@@ -31,13 +31,15 @@ export function PhraseShadowRating({
   const [logged, setLogged] = useState<PhraseShadowOutcome[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [skipped, setSkipped] = useState<string[]>([]);
 
-  async function rate(outcome: PhraseShadowOutcome) {
+  async function rate(outcome: PhraseShadowOutcome, untracked: readonly string[]) {
     if (busy) return;
     setBusy(true);
     setError(null);
     try {
-      const event = await logPhraseShadow({ bookId, sentenceId, sentenceAudioId, clipDurationMs, range, outcome, visitId });
+      const trackSurfaces = (untrackedCandidates ?? []).map((word) => word.surface).filter((surface) => !untracked.includes(surface));
+      const event = await logPhraseShadow({ bookId, sentenceId, sentenceAudioId, clipDurationMs, range, outcome, visitId, trackSurfaces });
       if (event) setLogged((prev) => [...prev, outcome]);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Unable to save that rating.');
@@ -52,6 +54,17 @@ export function PhraseShadowRating({
     const [alignment, sentence] = await Promise.all([db.referenceAlignments.get(sentenceAudioId), db.sentences.get(sentenceId)]);
     return alignment ? phraseTextFromAlignment(alignment.result.words, range, sentence?.japanese) : '';
   }, [sentenceAudioId, sentenceId, range.startMs, range.endMs]);
+
+  // Content words in the span with no vocabulary link yet: the learner decides at rating time whether to track them.
+  const untrackedCandidates = useLiveQuery(async () => {
+    if (!phraseText) return [];
+    const db = getDb();
+    const [sentence, links] = await Promise.all([
+      db.sentences.get(sentenceId),
+      db.sentenceVocabulary.where('sentenceId').equals(sentenceId).toArray(),
+    ]);
+    return unlinkedPhraseSuggestions(sentence, phraseText, links).map((word) => ({ surface: word.surface, reading: word.reading, english: word.english }));
+  }, [sentenceId, phraseText]);
 
   // What the words inside the span mean, so the learner knows what they are saying (null when nothing is glossed).
   const gloss = useLiveQuery(async () => {
@@ -89,10 +102,29 @@ export function PhraseShadowRating({
         <span className="muted"> · {(range.startMs / 1000).toFixed(1)}–{(range.endMs / 1000).toFixed(1)}s</span>
       </p>
       {gloss ? <p className="muted" style={{ margin: 0, fontSize: '0.9rem' }}>{gloss}</p> : null}
+      {untrackedCandidates?.length ? (
+        <div className="row" style={{ alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <span className="muted">Track with this rating:</span>
+          {untrackedCandidates.map((word) => (
+            <label key={word.surface} className="row" style={{ gap: '0.25rem', alignItems: 'center' }}>
+              <input
+                type="checkbox"
+                checked={!skipped.includes(word.surface)}
+                onChange={(event) =>
+                  setSkipped((prev) => (event.target.checked ? prev.filter((surface) => surface !== word.surface) : [...prev, word.surface]))
+                }
+              />
+              <span lang="ja">{word.surface}</span>
+              {word.reading && word.reading !== word.surface ? <span className="muted" lang="ja">（{word.reading}）</span> : null}
+              {word.english ? <span className="muted">{word.english}</span> : null}
+            </label>
+          ))}
+        </div>
+      ) : null}
       <div className="row" style={{ alignItems: 'center', flexWrap: 'wrap' }}>
         <span className="muted">How did this phrase go?</span>
         {PHRASE_SHADOW_OUTCOMES.map((entry) => (
-          <button key={entry.outcome} type="button" disabled={busy} onClick={() => void rate(entry.outcome)}>
+          <button key={entry.outcome} type="button" disabled={busy} onClick={() => void rate(entry.outcome, skipped)}>
             {entry.label}
           </button>
         ))}

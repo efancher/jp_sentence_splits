@@ -195,7 +195,7 @@ describe('logPhraseShadow and the shadowing pause', () => {
     expect(await db.reviews.count()).toBe(0);
   });
 
-  it('credits an unlinked content word with a bare vocabulary item: no link, no card', async () => {
+  it('credits an unlinked content word only when the learner confirms tracking it: bare item, no link, no card', async () => {
     const book = await createBook({ title: 'Phrases' });
     const { sentence, audioId } = await shadowReadySentence(book, '猫が寝ています。');
     const db = getDb();
@@ -210,9 +210,16 @@ describe('logPhraseShadow and the shadowing pause', () => {
       result: { durationSeconds: 2, words: words.map((w) => ({ ...w, phones: [] })) },
     });
 
-    const logged = await logPhraseShadow({
+    const declined = await logPhraseShadow({
       bookId: book.id, sentenceId: sentence.id, sentenceAudioId: audioId, clipDurationMs: 2000,
       range: { startMs: 450, endMs: 1650 }, outcome: 'got_it',
+    });
+    expect(phraseShadowWordIds(declined?.target?.key)).toEqual([]);
+    expect(await db.vocabularyItems.count()).toBe(0);
+
+    const logged = await logPhraseShadow({
+      bookId: book.id, sentenceId: sentence.id, sentenceAudioId: audioId, clipDurationMs: 2000,
+      range: { startMs: 450, endMs: 1650 }, outcome: 'got_it', trackSurfaces: ['寝て'],
     });
     const credited = phraseShadowWordIds(logged?.target?.key);
     expect(credited).toHaveLength(1);
