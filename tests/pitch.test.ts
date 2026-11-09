@@ -40,6 +40,21 @@ describe('estimateFramePitch', () => {
     expect(result.hz!).toBeLessThan(408);
   });
 
+  it('lets a caller lower the RMS gate to catch a quiet voice', () => {
+    const quiet = sineWave(140, 1024, 48_000, 0.01); // RMS ≈ 0.007
+    expect(estimateFramePitch(quiet, 48_000).voiced).toBe(false);
+    const result = estimateFramePitch(quiet, 48_000, { rmsThreshold: 0.003, fallbackThreshold: 0.35 });
+    expect(result.voiced).toBe(true);
+    expect(result.hz!).toBeGreaterThan(136);
+    expect(result.hz!).toBeLessThan(144);
+  });
+
+  it('keeps noise unvoiced even with the sensitive live options', () => {
+    const noise = new Float32Array(1024).map(() => 0.02 * (Math.random() - 0.5));
+    const result = estimateFramePitch(noise, 48_000, { rmsThreshold: 0.003, fallbackThreshold: 0.35 });
+    expect(result.voiced).toBe(false);
+  });
+
   it('reports silence as unvoiced with no pitch', () => {
     const result = estimateFramePitch(new Float32Array(1024), SAMPLE_RATE);
     expect(result.voiced).toBe(false);

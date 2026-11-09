@@ -28,6 +28,12 @@ const VIEW_WIDTH = 600;
 const WAVE_HEIGHT = 96;
 const PITCH_HEIGHT = 120;
 const PITCH_ESTIMATE_EVERY_N_FRAMES = 2;
+/**
+ * Live frames come from the raw (no AGC / noise suppression) shadow mic, so a quiet voice sits well under the
+ * offline 0.01 RMS gate, and the strict first-dip YIN rule drops soft or breathy vowels the offline reference
+ * track (fallback 0.35) keeps. Match the offline sensitivity; YIN's confidence gate still rejects noise.
+ */
+const LIVE_PITCH_OPTIONS = { rmsThreshold: 0.003, fallbackThreshold: 0.35 };
 /** Voiced-frame count before the learner's running median is stable enough to normalize against. */
 const LIVE_PITCH_MIN_VOICED_FRAMES = 5;
 /**
@@ -253,7 +259,7 @@ export function LiveShadowWaveform({
       if (frameCountRef.current % PITCH_ESTIMATE_EVERY_N_FRAMES === 0) {
         const frameStart = Math.max(0, samples.length - LIVE_PITCH_FRAME_SAMPLES);
         const frame = samples.subarray(frameStart);
-        const estimated = estimateFramePitch(frame, sampleRate);
+        const estimated = estimateFramePitch(frame, sampleRate, LIVE_PITCH_OPTIONS);
         if (estimated.voiced && estimated.hz !== null && index >= 0 && index < buckets) {
           const runningMedian =
             liveVoicedHzRef.current.length >= LIVE_PITCH_MIN_VOICED_FRAMES

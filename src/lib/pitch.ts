@@ -116,13 +116,21 @@ function frameRms(frame: Float32Array): number {
   return Math.sqrt(sum / frame.length);
 }
 
+export interface FramePitchOptions {
+  /** Frames quieter than this RMS are unvoiced (default 0.01). */
+  rmsThreshold?: number;
+  /** YIN fallback dip threshold for weakly voiced frames; 0 disables it (default). */
+  fallbackThreshold?: number;
+}
+
 export function estimateFramePitch(
   frame: Float32Array,
   sampleRate: number,
+  options: FramePitchOptions = {},
 ): { hz: number | null; voiced: boolean; confidence: number } {
   const rms = frameRms(frame);
-  if (rms < RMS_THRESHOLD) return { hz: null, voiced: false, confidence: 0 };
-  const { hz, confidence } = yinPitch(frame, sampleRate);
+  if (rms < (options.rmsThreshold ?? RMS_THRESHOLD)) return { hz: null, voiced: false, confidence: 0 };
+  const { hz, confidence } = yinPitch(frame, sampleRate, options.fallbackThreshold ?? 0);
   const voiced = hz !== null && confidence >= 0.4;
   return { hz: voiced ? hz : null, voiced, confidence };
 }
