@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Sentence, VocabularySuggestion, WordAlignment } from '../src/domain/types';
-import { MAX_RUNG_STEP_MS, MIN_RUNG_STEP_MS, MAX_RUNGS, MIN_RUNGS, planChunkChain, rungsFromCutTimes } from '../src/lib/chunkChain';
+import { MAX_RUNG_STEP_MS, MIN_RUNG_STEP_MS, MIN_RUNGS, planChunkChain, rungsFromCutTimes } from '../src/lib/chunkChain';
 
 type Piece = [surface: string, pos: string];
 
@@ -82,7 +82,7 @@ describe('planChunkChain', () => {
     for (let i = 1; i < spans.length; i += 1) expect(spans[i]! - spans[i - 1]!).toBeGreaterThanOrEqual(MIN_RUNG_STEP_MS);
   });
 
-  it('never exceeds MAX_RUNGS however many chunks a long sentence has', () => {
+  it('keeps one phrase per rung however many chunks a long sentence has', () => {
     const pieces: Piece[] = [];
     const words: [string, number, number][] = [];
     for (let i = 0; i < 16; i += 1) {
@@ -91,7 +91,7 @@ describe('planChunkChain', () => {
     }
     const plan = planChunkChain(sentence(pieces), alignment(words));
     expect(plan.rejection).toBeNull();
-    expect(plan.rungs.length).toBeLessThanOrEqual(MAX_RUNGS);
+    expect(plan.rungs.length).toBeGreaterThan(12);
     expect(plan.rungs.length).toBeGreaterThanOrEqual(MIN_RUNGS);
     expect(plan.rungs[plan.rungs.length - 1]!.whole).toBe(true);
   });
@@ -126,7 +126,6 @@ describe('planChunkChain', () => {
     const spans = rungs.map((rung) => rung.endMs - rung.startMs);
     expect(spans[0]).toBeLessThanOrEqual(MAX_RUNG_STEP_MS);
     for (let i = 1; i < spans.length; i += 1) expect(spans[i]! - spans[i - 1]!).toBeLessThanOrEqual(MAX_RUNG_STEP_MS + 1);
-    expect(rungs.length).toBeLessThanOrEqual(MAX_RUNGS);
     expect(rungs[rungs.length - 1]!.whole).toBe(true);
   });
 

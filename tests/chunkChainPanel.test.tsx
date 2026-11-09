@@ -52,23 +52,28 @@ describe('ChunkChainPanel', () => {
     expect(screen.queryByRole('button', { name: 'Got it' })).toBeNull(); // first step is never rated
     await user.click(screen.getByRole('button', { name: 'Next' }));
 
-    expect(screen.getByText('友達と駅で映画を見ました')).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: 'Got it' }));
+    // One phrase is added per step: 駅で, 友達と, 昨日, then the whole sentence.
+    for (const text of ['駅で映画を見ました', '友達と駅で映画を見ました', '昨日友達と駅で映画を見ました']) {
+      expect(await screen.findByText(text)).toBeTruthy();
+      await waitFor(() => expect((screen.getByRole('button', { name: 'Got it' }) as HTMLButtonElement).disabled).toBe(false));
+      await user.click(screen.getByRole('button', { name: 'Got it' }));
+    }
     expect(await screen.findByText('私は昨日友達と駅で映画を見ました')).toBeTruthy();
     await waitFor(() => expect((screen.getByRole('button', { name: 'Got it' }) as HTMLButtonElement).disabled).toBe(false));
     await user.click(screen.getByRole('button', { name: 'Got it' }));
     expect(await screen.findByText('You got the whole sentence.')).toBeTruthy();
 
     expect(onRange).toHaveBeenCalledWith({ startMs: 3600, endMs: 5400 });
+    expect(onRange).toHaveBeenCalledWith({ startMs: 2800, endMs: 5400 });
     expect(onRange).toHaveBeenCalledWith({ startMs: 1800, endMs: 5400 });
     expect(onRange).toHaveBeenCalledWith({ startMs: 0, endMs: 5400 });
     expect(onRange).toHaveBeenLastCalledWith(null);
 
-    await waitFor(async () => expect(await getDb().sentenceLearningEvents.count()).toBe(3));
+    await waitFor(async () => expect(await getDb().sentenceLearningEvents.count()).toBe(5));
     const events = await getDb().sentenceLearningEvents.toArray();
     const rungEvents = events.filter((e) => e.target?.key?.startsWith(CHAIN_RUNG_KEY_PREFIX));
     const summary = events.filter((e) => e.target?.key?.startsWith(PHRASE_SHADOW_KEY_PREFIX));
-    expect(rungEvents).toHaveLength(2);
+    expect(rungEvents).toHaveLength(4);
     expect(summary).toHaveLength(1);
     expect(summary[0]).toMatchObject({ action: 'phrase_shadow', outcome: 'got_it', rangeStartMs: 0, rangeEndMs: 5400, assessmentSource: 'self' });
     expect(await getDb().reviews.count()).toBe(0);
@@ -94,10 +99,9 @@ describe('ChunkChainPanel', () => {
     const onRange = vi.fn();
     render(<ChunkChainPanel bookId="b1" sentenceId="s1" sentenceAudioId="a1" onRange={onRange} random={() => 1} />);
     await user.click(await screen.findByRole('button', { name: 'Adjust steps' }));
-    // Suggested cuts are pre-marked; swap the 友達 cut for one at 駅.
+    // Suggested cuts (one per phrase) are pre-marked; drop the 友達 one.
     expect((screen.getByRole('button', { name: 'Step starts at 友達' }) as HTMLButtonElement).getAttribute('aria-pressed')).toBe('true');
     await user.click(screen.getByRole('button', { name: 'Step starts at 友達' }));
-    await user.click(screen.getByRole('button', { name: 'Step starts at 駅' }));
     await user.click(screen.getByRole('button', { name: 'Use these steps' }));
 
     await user.click(screen.getByRole('button', { name: 'Chunk chain' }));

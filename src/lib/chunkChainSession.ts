@@ -9,8 +9,13 @@ import type { PhraseShadowOutcome } from './phraseShadow';
 
 /** Close repeats a rung this many times before the chain climbs anyway. */
 export const MAX_CLOSE_REPEATS = 1;
-/** A hard stop so a run of Not yets can't loop forever; the chain just ends with what it has. */
+/** A hard stop so a run of Not yets can't loop forever; the chain just ends with what it has. Never below this, however short the chain. */
 export const MAX_CHAIN_RATINGS = 12;
+
+/** The stop scales with the chain (about two tries per rung) so a long chain can still reach the whole sentence. */
+export function maxChainRatings(rungCount: number): number {
+  return Math.max(MAX_CHAIN_RATINGS, rungCount * 2);
+}
 
 export interface ChainRating {
   rungIndex: number;
@@ -42,7 +47,7 @@ export function rateChainRung(session: ChainSession, outcome: PhraseShadowOutcom
   const ratings = [...session.ratings, { rungIndex: session.rungIndex, outcome }];
   const top = session.rungCount - 1;
   const finish = (rungIndex: number): ChainSession => ({ ...session, ratings, rungIndex, closeRepeats: 0, done: true });
-  const outOfRatings = ratings.length >= MAX_CHAIN_RATINGS;
+  const outOfRatings = ratings.length >= maxChainRatings(session.rungCount);
 
   if (outcome === 'needed_help') {
     if (outOfRatings) return finish(session.rungIndex);

@@ -17,7 +17,7 @@ const test = base.extend({
 
 const ALIGNMENT_VERSION = 3;
 // 私は昨日、友達と駅で映画を見ました。 spoken over 5.4 s: the planner's rungs are
-// 映画を見ました / 友達と駅で映画を見ました / the whole sentence.
+// 映画を見ました, then one more phrase per step, up to the whole sentence.
 const PIECES: [string, string][] = [
   ['私', '名詞/普通名詞'], ['は', '助詞/係助詞'], ['昨日', '名詞/普通名詞'], ['、', '補助記号/読点'],
   ['友達', '名詞/普通名詞'], ['と', '助詞/格助詞'], ['駅', '名詞/普通名詞'], ['で', '助詞/格助詞'],
@@ -105,17 +105,17 @@ test.describe('chunk chain on the Shadow page', () => {
     await expect(chain.getByRole('button', { name: 'Got it' })).toHaveCount(0); // the first step is never rated
     await chain.getByRole('button', { name: 'Next' }).click();
 
-    await expect(chain).toContainText('友達と駅で映画を見ました');
-    await chain.getByRole('button', { name: 'Got it' }).click();
-    await expect(chain).toContainText('私は昨日友達と駅で映画を見ました');
-    await expect(chain.getByRole('button', { name: 'Got it' })).toBeEnabled();
-    await chain.getByRole('button', { name: 'Got it' }).click();
+    for (const text of ['駅で映画を見ました', '友達と駅で映画を見ました', '昨日友達と駅で映画を見ました', '私は昨日友達と駅で映画を見ました']) {
+      await expect(chain).toContainText(text);
+      await expect(chain.getByRole('button', { name: 'Got it' })).toBeEnabled();
+      await chain.getByRole('button', { name: 'Got it' }).click();
+    }
     await expect(page.getByText('You got the whole sentence.')).toBeVisible();
 
     const { events, attempts, reviews } = await stored(page);
     const rungs = events.filter((event) => event.target?.key?.startsWith('chain-rung:'));
     const summary = events.filter((event) => event.target?.key?.startsWith('phrase-shadow:'));
-    expect(rungs).toHaveLength(2);
+    expect(rungs).toHaveLength(4);
     expect(summary).toHaveLength(1);
     expect(summary[0]).toMatchObject({ action: 'phrase_shadow', outcome: 'got_it', assessmentSource: 'self', rangeStartMs: 0, rangeEndMs: 5400 });
     expect(attempts).toBe(0);
@@ -130,7 +130,6 @@ test.describe('chunk chain on the Shadow page', () => {
     await page.goto('/#/books/book/shadow/s-0');
     await page.getByRole('button', { name: 'Adjust steps' }).click();
     await page.getByRole('button', { name: 'Step starts at 友達' }).click();
-    await page.getByRole('button', { name: 'Step starts at 駅' }).click();
     await page.getByRole('button', { name: 'Use these steps' }).click();
     await page.getByRole('button', { name: 'Chunk chain' }).click();
     await skipColdTry(page);

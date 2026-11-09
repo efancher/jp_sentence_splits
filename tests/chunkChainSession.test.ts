@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   MAX_CHAIN_RATINGS,
+  maxChainRatings,
   advanceFromFirstRung,
   highestGotItRung,
   rateChainRung,
@@ -47,6 +48,15 @@ describe('chunk chain session', () => {
     for (let i = 0; i < MAX_CHAIN_RATINGS; i += 1) session = rateChainRung(advanceFromFirstRung(session), 'needed_help');
     expect(session.done).toBe(true);
     expect(highestGotItRung(session)).toBeNull();
+  });
+
+  it('lets a long chain use about two ratings per rung before the stop', () => {
+    expect(maxChainRatings(3)).toBe(MAX_CHAIN_RATINGS);
+    expect(maxChainRatings(20)).toBe(40);
+    let session = advanceFromFirstRung(startChainSession(20));
+    for (let i = 0; i < 19; i += 1) session = rateChainRung(session, 'got_it');
+    expect(session.done).toBe(true);
+    expect(session.rungIndex).toBe(19);
   });
 
   it('credits the highest Got-it rung even if a later rung was not yet', () => {

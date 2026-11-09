@@ -19,8 +19,6 @@ import {
 export const MIN_FIRST_RUNG_MS = 1000;
 /** Each rung must add at least this much new audio to the one before it. */
 export const MIN_RUNG_STEP_MS = 700;
-/** A chain is never longer than this many rungs, the whole sentence included. */
-export const MAX_RUNGS = 12;
 /** No rung adds more than this much new audio to the one before it (a longer phrase is split at word boundaries). */
 export const MAX_RUNG_STEP_MS = 3000;
 /** A chain needs a rung below the whole sentence to build from; below this, shadow the sentence directly. */
@@ -100,9 +98,9 @@ export function planChunkChain(
   );
   if (cutTimes.every((time) => time === null)) return { rungs: [], rejection: 'unreliable-alignment' };
 
-  // One phrase (chunk) per rung: a chunk shorter than `step` is merged into the next, and `step` grows with
-  // very long sentences so the chain never exceeds MAX_RUNGS.
-  const step = Math.max(MIN_RUNG_STEP_MS, (endMs - speechStartMs) / MAX_RUNGS);
+  // One phrase (chunk) per rung, however many the sentence has: a chunk shorter than `step` is merged
+  // into the next.
+  const step = MIN_RUNG_STEP_MS;
   const rungs: ChainRung[] = [];
   let previousSpan = 0;
   for (let chunkIndex = chunks.length - 1; chunkIndex >= 1; chunkIndex -= 1) {
@@ -151,8 +149,7 @@ function capRungSteps(
 ): ChainRung[] {
   const words = cuttableWords(alignment);
   const endMs = rungs[0]!.endMs;
-  const speechStartMs = rungs[rungs.length - 1]!.startMs;
-  const maxStep = Math.max(MAX_RUNG_STEP_MS, (endMs - speechStartMs) / MAX_RUNGS);
+  const maxStep = MAX_RUNG_STEP_MS;
   const candidates = words.slice(1).filter((word) => !isParticleToken(word));
   const result: ChainRung[] = [];
   let previousSpan = 0;
