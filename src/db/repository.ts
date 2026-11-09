@@ -12462,7 +12462,8 @@ async function findShadowCandidates(
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
   const startOfTodayIso = startOfToday.toISOString();
-  const [attemptSentenceIds, requestAttempts, bookSentences, recentlyMissedClozeSentenceIds, todayAttempts, todayPhraseEvents] = await Promise.all([
+  const phraseCooldownIso = new Date(startOfToday.getTime() - (PHRASE_SHADOW_COOLDOWN_DAYS - 1) * 86_400_000).toISOString();
+  const [attemptSentenceIds, requestAttempts, bookSentences, recentlyMissedClozeSentenceIds, todayAttempts, recentPhraseEvents] = await Promise.all([
     sentenceIdsWithAudio.length <= ANY_OF_SCAN_THRESHOLD
       ? db.attempts.where('sentenceId').anyOf(sentenceIdsWithAudio).keys()
       : db.attempts.orderBy('sentenceId').keys(),
@@ -12472,10 +12473,13 @@ async function findShadowCandidates(
     db.attempts.where('createdAt').aboveOrEqual(startOfTodayIso).toArray(),
     db.sentenceLearningEvents
       .where('timestamp')
-      .aboveOrEqual(startOfTodayIso)
+      .aboveOrEqual(phraseCooldownIso)
       .filter((event) => event.action === 'phrase_shadow')
       .toArray(),
   ]);
+  const todayPhraseEvents = recentPhraseEvents.filter((event) => event.timestamp >= startOfTodayIso);
+  // Phrase-shadowed in the last few days: behind fresh sentences, so the same few don't return daily.
+  const phraseCooldownIds = new Set(recentPhraseEvents.map((event) => event.sentenceId));
   // Shadowed today (whole-sentence attempt or phrase pass): sent to the back so a cleared or topped-up
   // session doesn't offer the same sentences again — clearing deletes the plan's own step list, which
   // is what the planner's exclusions otherwise come from.
@@ -12506,12 +12510,14 @@ async function findShadowCandidates(
       recentlyMissedCloze: recentlyMissedClozeSentenceIds.has(sentenceId),
       requested: requestedSentenceIds.has(sentenceId),
       shadowedToday: shadowedTodayIds.has(sentenceId),
+      coolingDown: phraseCooldownIds.has(sentenceId),
       weakRank: weakRank.get(sentenceId),
     }))
     .filter((candidate) => !snoozedSentenceIds.has(candidate.sentenceId))
     .sort((a, b) => {
       if (a.requested !== b.requested) return a.requested ? -1 : 1;
       if (a.shadowedToday !== b.shadowedToday) return a.shadowedToday ? 1 : -1;
+      if (a.coolingDown !== b.coolingDown) return a.coolingDown ? 1 : -1;
       if (a.recentlyMissedCloze !== b.recentlyMissedCloze) return a.recentlyMissedCloze ? -1 : 1;
       // Sentences covering the weakest words come next, in coverage order, ahead of the plain fewest-attempts fallback.
       if (a.weakRank !== b.weakRank) {
@@ -12903,6 +12909,8 @@ function plannerShared<T>(key: string, deps: readonly PlannerCacheTable[], load:
  * ~38 s while a full scan of the same table takes 1-2 s).
  */
 const ANY_OF_SCAN_THRESHOLD = 40;
+/** Days (counting today) a phrase-shadowed sentence ranks behind sentences not shadowed recently. */
+const PHRASE_SHADOW_COOLDOWN_DAYS = 7;
 
 /**
  * For the small, blob-free tables the Reader joins (a few thousand rows): above this many keys one

@@ -276,7 +276,7 @@ const NON_SPOKEN = /[\s、。，．,.!?！？「」『』（）()…・]/g;
  * Fallback when a word's own aligned span can't be located: the clause-sized chunk where the weakest
  * word sits, found from its position in the sentence text (spoken characters before it, as a share of
  * the spoken span) instead of an aligner match. `surfaceForms` are weakest first; with none usable the
- * first chunk is returned. Null when the clip is already phrase-sized (nothing to narrow).
+ * last chunk is returned. Null when the clip is already phrase-sized (nothing to narrow).
  */
 export function weakestChunkRange(
   words: readonly Pick<WordAlignment, 'start' | 'end' | 'text'>[],
@@ -301,7 +301,9 @@ export function weakestChunkRange(
       if (hit) return hit;
     }
   }
-  return chunks[0];
+  // The sentence-final chunk (the predicate): the opener is usually a bare subject like 私は, which
+  // made every unplaced suggestion the same trivial phrase.
+  return chunks[chunks.length - 1];
 }
 
 /** Links ordered weakest word first (no evidence yet counts as the average), keeping sentence order on ties. */

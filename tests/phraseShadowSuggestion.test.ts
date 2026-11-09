@@ -107,8 +107,10 @@ describe('weakestChunkRange', () => {
     );
   });
 
-  it('falls back to the first chunk with no usable word', () => {
-    expect(weakestChunkRange(long, sentence, [], 9500)!.startMs).toBe(200);
+  it('falls back to the last chunk, not the opener, with no usable word', () => {
+    const range = weakestChunkRange(long, sentence, [], 9500)!;
+    expect(range.endMs).toBe(9000);
+    expect(range.startMs).toBeGreaterThan(200);
   });
 
   it('returns null when the clip is already phrase-sized', () => {
