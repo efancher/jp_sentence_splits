@@ -107,10 +107,11 @@ describe('weakestChunkRange', () => {
     );
   });
 
-  it('falls back to the last chunk, not the opener, with no usable word', () => {
-    const range = weakestChunkRange(long, sentence, [], 9500)!;
-    expect(range.endMs).toBe(9000);
-    expect(range.startMs).toBeGreaterThan(200);
+  it('falls back to a stable chunk that varies by sentence with no usable word', () => {
+    const pick = (text: string) => weakestChunkRange(long, text, [], 9500)!.startMs;
+    expect(pick(sentence)).toBe(pick(sentence));
+    const starts = new Set(['あ', 'いう', 'えおか', 'きくけこ', 'さしすせそ', 'たちつてと', 'なにぬ'].map(pick));
+    expect(starts.size).toBeGreaterThan(1);
   });
 
   it('returns null when the clip is already phrase-sized', () => {
