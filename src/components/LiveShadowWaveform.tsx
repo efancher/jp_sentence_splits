@@ -5,9 +5,8 @@ import { LivePitchCapture, saveCaptureFile } from '../lib/livePitchCapture';
 import { createLivePitchGuard, estimateFramePitch, extractPitch, hzToRelativeSemitones, medianHz } from '../lib/pitch';
 import type { TimeRangeMs } from '../lib/recording';
 import {
-  LIVE_PITCH_DISPLAY_MAX_SEMITONES,
-  LIVE_PITCH_DISPLAY_MIN_SEMITONES,
   LIVE_PITCH_FRAME_SAMPLES,
+  livePitchDisplayHalfSpan,
   LIVE_WAVEFORM_BUCKETS,
   SHADOW_OUTPUT_LATENCY_SECONDS,
   canonicalizeAudioBuffer,
@@ -139,6 +138,7 @@ export function LiveShadowWaveform({
     [referencePeaks.length, durationSeconds, leadInMs, tailMs, playbackRate],
   );
   const paddedPeaks = useMemo(() => padBuckets(referencePeaks, win, { min: 0, max: 0 }), [referencePeaks, win]);
+  const displayHalfSpan = useMemo(() => livePitchDisplayHalfSpan(referencePitchBuckets), [referencePitchBuckets]);
   const paddedPitch = useMemo(() => padBuckets(referencePitchBuckets, win, null as number | null), [referencePitchBuckets, win]);
 
   useEffect(() => {
@@ -352,8 +352,8 @@ export function LiveShadowWaveform({
         values.slice(from, to),
         rowWidth,
         pitchHeight,
-        LIVE_PITCH_DISPLAY_MIN_SEMITONES,
-        LIVE_PITCH_DISPLAY_MAX_SEMITONES,
+        -displayHalfSpan,
+        displayHalfSpan,
         upTo === undefined ? undefined : upTo - from,
       );
     const liveUpTo = active ? playheadIndex : livePitchBuckets.length - 1;

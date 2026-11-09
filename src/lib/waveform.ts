@@ -21,6 +21,23 @@ export const LIVE_AMP_MAX_GAIN = 8;
 export const LIVE_PITCH_FRAME_SAMPLES = 1024;
 export const LIVE_PITCH_DISPLAY_MIN_SEMITONES = -8;
 export const LIVE_PITCH_DISPLAY_MAX_SEMITONES = 8;
+/** Narrowest ± window the live chart will zoom to, so a near-flat reference isn't blown up into noise. */
+export const LIVE_PITCH_DISPLAY_MIN_HALF_SPAN_SEMITONES = 3.5;
+
+/**
+ * ± semitone window for the live pitch chart. A fixed ±8 drew a real 3–4 st
+ * accent step (measured from a captured shadow loop) as an almost-flat line;
+ * fit the window to the reference contour instead (shared by both lines, so
+ * the learner's smaller or larger swing still reads true against the native).
+ */
+export function livePitchDisplayHalfSpan(reference: ReadonlyArray<number | null>): number {
+  let peak = 0;
+  for (const value of reference) if (value !== null) peak = Math.max(peak, Math.abs(value));
+  return Math.min(
+    LIVE_PITCH_DISPLAY_MAX_SEMITONES,
+    Math.max(LIVE_PITCH_DISPLAY_MIN_HALF_SPAN_SEMITONES, peak * 1.25),
+  );
+}
 /**
  * Approximate headphone/AirPods output delay so the live pen tracks what
  * you hear, not the earlier media clock.

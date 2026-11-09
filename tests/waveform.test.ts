@@ -11,6 +11,7 @@ import {
   energyEnvelope,
   gentleLiveGain,
   livePeaksFromAmplitudes,
+  livePitchDisplayHalfSpan,
   peakMagnitude,
   peaksToPolyline,
   pitchBucketsToRuns,
@@ -307,5 +308,17 @@ describe('crossCorrelateOffset', () => {
 
     const offset = crossCorrelateOffset(reference, learner, windowSize);
     expect(Math.abs(Math.abs(offset) - expectedLagSamples)).toBeLessThanOrEqual(windowSize * 2);
+  });
+});
+
+describe('livePitchDisplayHalfSpan', () => {
+  it('fits the window to the reference contour', () => {
+    expect(livePitchDisplayHalfSpan([null, -4, 3.9, null])).toBeCloseTo(5, 5);
+  });
+
+  it('never zooms tighter than the minimum or wider than the old fixed window', () => {
+    expect(livePitchDisplayHalfSpan([0.2, -0.3])).toBe(3.5);
+    expect(livePitchDisplayHalfSpan([])).toBe(3.5);
+    expect(livePitchDisplayHalfSpan([-20, 20])).toBe(8);
   });
 });
