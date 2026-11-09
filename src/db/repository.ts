@@ -10317,8 +10317,8 @@ export async function suggestPhraseShadow(input: {
     // here first, before falling back to a chunk picked by position.
     const past = (await db.sentenceLearningEvents.where('sentenceId').equals(input.sentenceId).toArray())
       .filter((event) => event.action === 'phrase_shadow')
-      .map((event) => event.target?.label ?? '');
-    for (const surface of orderSuggestedSurfaces(sentence.vocabularySuggestions, sentence.japanese, past, input.surfaceForm)) {
+      .map((event) => ({ text: event.target?.label ?? '', outcome: event.outcome, timestamp: event.timestamp }));
+    for (const surface of orderSuggestedSurfaces(sentence.vocabularySuggestions, past, input.surfaceForm)) {
       const spans = isolatedWordSpans(alignment.words, sentence.japanese, surface);
       const span = spans?.withParticle ?? spans?.wordOnly;
       if (!span) continue;

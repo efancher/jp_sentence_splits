@@ -310,25 +310,30 @@ export function weakestChunkRange(
 
 /**
  * Candidate target words for a sentence with no linked vocabulary: its content-word suggestions
- * (`selectedByDefault`, deduplicated), those not already inside an earlier phrase pass's text first,
- * then rotated by a hash of the sentence so different sentences start on different words but one
- * sentence is stable. `only` restricts to a word the learner tapped.
+ * (`selectedByDefault`, deduplicated). Words never shadowed here, or whose latest shadow (a past
+ * phrase pass whose text contains the word) wasn't "Got it", come first; once every word got it the
+ * order is random. Each group is shuffled with `random`. `only` restricts to a word the learner tapped.
  */
 export function orderSuggestedSurfaces(
   suggestions: readonly { surface: string; selectedByDefault: boolean }[],
-  japanese: string,
-  pastPhraseTexts: readonly string[],
+  pastPasses: readonly { text: string; outcome?: string; timestamp: string }[],
   only?: string,
+  random: () => number = Math.random,
 ): string[] {
   if (only) return [only];
   const surfaces = [...new Set(suggestions.filter((item) => item.selectedByDefault && item.surface).map((item) => item.surface))];
-  if (surfaces.length === 0) return [];
-  let hash = 0;
-  for (const char of japanese) hash = (hash * 31 + char.codePointAt(0)!) >>> 0;
-  const start = hash % surfaces.length;
-  const rotated = [...surfaces.slice(start), ...surfaces.slice(0, start)];
-  const drilled = (surface: string) => pastPhraseTexts.some((text) => text.includes(surface));
-  return [...rotated.filter((surface) => !drilled(surface)), ...rotated.filter(drilled)];
+  const shuffled = [...surfaces];
+  for (let i = shuffled.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  const solid = (surface: string) => {
+    const latest = pastPasses
+      .filter((pass) => pass.text.includes(surface))
+      .reduce<{ outcome?: string; timestamp: string } | undefined>((best, pass) => (!best || pass.timestamp > best.timestamp ? pass : best), undefined);
+    return latest?.outcome === 'got_it';
+  };
+  return [...shuffled.filter((surface) => !solid(surface)), ...shuffled.filter(solid)];
 }
 
 /** Links ordered weakest word first (no evidence yet counts as the average), keeping sentence order on ties. */

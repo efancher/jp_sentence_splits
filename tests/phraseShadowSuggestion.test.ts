@@ -83,18 +83,30 @@ describe('chunkRanges', () => {
 describe('orderSuggestedSurfaces', () => {
   const words = ['先週', '風邪', 'ポッドキャスト'].map((surface) => ({ surface, selectedByDefault: true }));
   const all = [...words, { surface: 'は', selectedByDefault: false }];
+  const pass = (text: string, outcome: string, timestamp: string) => ({ text, outcome, timestamp });
 
-  it('offers only content words, stably, and a tapped word on its own', () => {
-    const order = orderSuggestedSurfaces(all, '私は先週風邪', []);
-    expect(order.sort()).toEqual(['ポッドキャスト', '先週', '風邪'].sort());
-    expect(orderSuggestedSurfaces(all, '私は先週風邪', [])).toEqual(orderSuggestedSurfaces(all, '私は先週風邪', []));
-    expect(orderSuggestedSurfaces(all, '私は先週風邪', [], '風邪')).toEqual(['風邪']);
+  it('offers only content words, and a tapped word on its own', () => {
+    expect(orderSuggestedSurfaces(all, []).sort()).toEqual(['ポッドキャスト', '先週', '風邪'].sort());
+    expect(orderSuggestedSurfaces(all, [], '風邪')).toEqual(['風邪']);
   });
 
-  it('puts words already inside an earlier phrase pass last', () => {
-    const order = orderSuggestedSurfaces(all, '私は先週風邪', ['先週の', 'ポッドキャストなど']);
-    expect(order[0]).toBe('風邪');
+  it('puts words whose latest pass was Got it last', () => {
+    const past = [pass('先週の', 'got_it', '2026-11-08'), pass('ポッドキャストなど', 'close', '2026-11-08')];
+    const order = orderSuggestedSurfaces(all, past);
+    expect(order.at(-1)).toBe('先週');
     expect(order).toHaveLength(3);
+  });
+
+  it('judges a word by its latest pass only', () => {
+    const past = [pass('先週の', 'got_it', '2026-11-07'), pass('先週の', 'needed_help', '2026-11-08'), pass('風邪を', 'got_it', '2026-11-08'), pass('ポッドキャスト', 'got_it', '2026-11-08')];
+    expect(orderSuggestedSurfaces(all, past)[0]).toBe('先週');
+  });
+
+  it('is random across all words once every one got it', () => {
+    const past = words.map((word) => pass(word.surface, 'got_it', '2026-11-08'));
+    const first = orderSuggestedSurfaces(all, past, undefined, () => 0)[0];
+    const second = orderSuggestedSurfaces(all, past, undefined, () => 0.99)[0];
+    expect(first).not.toBe(second);
   });
 });
 
