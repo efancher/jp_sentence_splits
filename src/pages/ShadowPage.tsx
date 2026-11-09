@@ -758,6 +758,8 @@ export function ShadowWorkspace({
           onGapChange={changeLoopGap}
           onLeadInChange={changeLoopLeadIn}
           onReset={() => setLoopWindow(null)}
+          speed={speed}
+          onSpeedChange={setSpeed}
         />
       ) : null}
       {referenceAudio && referenceAudio.durationMs > 0 ? (

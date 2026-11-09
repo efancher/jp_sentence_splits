@@ -48,6 +48,29 @@ describe('LoopWindowControls', () => {
     expect(onLeadInChange).toHaveBeenLastCalledWith(1500);
   });
 
+  it('offers a speed slider only when wired, reporting the chosen speed', () => {
+    setup();
+    expect(screen.queryByLabelText('Loop speed')).toBeNull();
+    const onSpeedChange = vi.fn();
+    render(
+      <LoopWindowControls
+        durationMs={4000}
+        range={{ startMs: 0, endMs: 4000 }}
+        gapMs={0}
+        leadInMs={0}
+        onRangeChange={vi.fn()}
+        onGapChange={vi.fn()}
+        onLeadInChange={vi.fn()}
+        onReset={vi.fn()}
+        speed={0.8}
+        onSpeedChange={onSpeedChange}
+      />,
+    );
+    expect(screen.getByText(/0\.8× speed/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Loop speed'), { target: { value: '0.55' } });
+    expect(onSpeedChange).toHaveBeenLastCalledWith(0.55);
+  });
+
   it('hides the reset when the window is the whole clip', () => {
     setup({ startMs: 0, endMs: 4000 });
     expect(screen.queryByRole('button', { name: 'Whole sentence' })).toBeNull();
