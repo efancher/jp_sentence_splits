@@ -126,11 +126,23 @@ Real Postgres/PostgREST tests apply production migrations and authenticated RLS:
 - Study-library restore: an empty device pulls 4 books, 400 sentences with
   membership, 400 sentence cards, 1,200 reviews and 400 walkthrough events
   (2,804 rows) in 63 requests and about 2.3 MB of decoded response bodies, then
-  idles in one request and pulls one new review in two requests (947 bytes). The
-  cost is roughly 2.2 requests per 100 rows (event pages plus record fetches), so
-  request count grows linearly with library size: extrapolating the same ratio, a
-  restore of the 20,000-review "large" browser fixture would need on the order of
-  450 requests. That is an extrapolation, not a measurement.
+  idles in one request and pulls one new review in two requests (947 bytes). A
+  twice-as-large library (800 sentences, 5,604 rows) takes 119 requests and about
+  4.7 MB. In a one-off probe the same restore took 231 requests and about 9.3 MB at
+  11,204 rows. That is about 2.1 to 2.3 requests per 100 rows (event pages plus
+  record fetches) and about 830 bytes per row: linear growth. Extrapolating the same
+  ratio, a restore at the 36,020 rows of the "large" fixture shape (4,000 sentences,
+  20,000 reviews) would need roughly 800 requests and 30 MB; that is an
+  extrapolation, not a measurement.
+  **Do not read this suite's wall-clock times as app latency.** Restore time in this
+  harness grows much faster than linearly (about 6 s at 2,804 rows, 17 s at 5,604,
+  90 s at 11,204 and over 10 minutes at 36,020), and a CPU profile put about 60% of
+  the run in one `fake-indexeddb` function that rescans its list of queued
+  transactions after each one finishes. Real browser IndexedDB does not do that, so
+  the 36,020-row scenario was dropped from the suite. HTTP time was only about 13%
+  of the run (2.2 s of 17 s at 5,604 rows), with late requests slower than early
+  ones (about 150 ms against 6 ms at 11,204 rows), which is a smaller effect worth
+  examining separately.
 - Bulk push: 120 complete book records, followed by a sync with no repeated
   payload. This isolates the batch protocol; it is not a full mining import.
 
@@ -162,8 +174,10 @@ Remaining roadmap work:
 - Add complete import/commit scenarios, restore of the remaining entities
   (analyses, vocabulary links for sentences, gloss decisions, planner sessions and
   audio metadata; words, kanji, sentences, cards, reviews and learning events are
-  covered), a restore at the large-library size, whether larger event pages would
-  cut the roughly 2 requests per 100 rows, conflict/token recovery, delayed downloads and cancellation. The existing
+  covered), a restore at the large-library size measured in a real browser
+  (Playwright with real IndexedDB, since fake-indexeddb distorts restore time), why
+  later pull requests are slower than early ones on the server, whether larger event
+  pages would cut the roughly 2 requests per 100 rows, conflict/token recovery, delayed downloads and cancellation. The existing
   timeout races do not cancel the underlying audio request; that behavior is
   not fixed or covered by these immediate-error retry checks.
 - Benchmark server query plans at realistic sizes under the authenticated role.

@@ -202,6 +202,10 @@ Unfinished work and optional extensions; completed behavior is in `AI_OVERVIEW.m
     reconnect. Track query/request counts, rows and bytes transferred alongside
     latency; inspect query plans for server hotspots. Catch repeated per-row
     queries, full-table reloads, unnecessary polling and redundant audio transfers.
+    Measured 2026-11-10: a fresh-device restore costs about 2.1 to 2.3 requests per
+    100 rows (linear), but the Postgres suite's wall-clock times are distorted by
+    `fake-indexeddb` (super-linear), so restore latency still needs a real-browser
+    measurement at the large fixture size (see PERFORMANCE.md).
   - **Supabase budget:** set configurable per-scenario budgets for requests,
     transferred bytes, storage growth and relevant function calls/retries. Model
     normal study, imports, background activity and multiple devices, then compare

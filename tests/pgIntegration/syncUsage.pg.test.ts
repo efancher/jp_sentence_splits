@@ -5,6 +5,7 @@ import { createId } from '../../src/lib/ids';
 import { createInitialFsrsState } from '../../src/lib/scheduling';
 import { pushMutations, runSyncCycle } from '../../src/sync/engine';
 import { enqueueMutation, readSyncMeta, updateSyncMeta } from '../../src/sync/queue';
+import type budgets from '../../fixtures/performance/usage-budgets.json';
 import { checkUsageBudget } from '../helpers/usageBudget';
 import { PG_TESTS_ENABLED, pgClientFor, resetDatabase, scalar, sql, USER_A } from './harness';
 
@@ -107,23 +108,29 @@ describe.skipIf(!PG_TESTS_ENABLED)('sync HTTP budgets against real Postgres and 
     checkUsageBudget('sync-mixed-one-remote-edit', laptop.usage());
   });
 
-  it('restores a study library onto an empty device, then idles and pulls one new review', async () => {
-    // 4 books, 400 sentences with membership, a sentence card each, 3 reviews per card, and one
-    // walkthrough event per sentence: 2,804 rows, the shape of a few weeks of sentence-led study.
+
+  /**
+   * Seeds a study library on the server and restores it onto an empty device.
+   * Per sentence: book membership, one sentence card, `reviewsPerCard` reviews and
+   * one walkthrough event, so rows = books + 3 x sentences + cards x reviews + events.
+   */
+  async function restoreLibrary(scenario: string, newReviewScenario: string, size: { books: number; sentences: number; reviewsPerCard: number }) {
+    const { books, sentences, reviewsPerCard } = size;
+    const reviews = sentences * reviewsPerCard;
     const fsrs = JSON.stringify(createInitialFsrsState(new Date('2026-11-10T00:00:00Z')));
-    sql(`insert into books (id, owner_id, title) select 'book_' || n, '${USER_A}', 'Book ' || n from generate_series(1,4) n`);
+    sql(`insert into books (id, owner_id, title) select 'book_' || n, '${USER_A}', 'Book ' || n from generate_series(1,${books}) n`);
     sql(`insert into sentences (id, owner_id, normalized_key, japanese, translation, first_occurrence_index)
-      select 's_' || n, '${USER_A}', 'key-' || n, '日本語の例文 ' || n, 'Example sentence ' || n, n from generate_series(1,400) n`);
+      select 's_' || n, '${USER_A}', 'key-' || n, '日本語の例文 ' || n, 'Example sentence ' || n, n from generate_series(1,${sentences}) n`);
     sql(`insert into book_sentences (id, book_id, sentence_id, owner_id, position)
-      select 'bs_' || n, 'book_' || ((n - 1) % 4 + 1), 's_' || n, '${USER_A}', n from generate_series(1,400) n`);
+      select 'bs_' || n, 'book_' || ((n - 1) % ${books} + 1), 's_' || n, '${USER_A}', n from generate_series(1,${sentences}) n`);
     sql(`insert into study_items (id, owner_id, subject_type, subject_id, activity_type, fsrs_state)
-      select 'si_' || n, '${USER_A}', 'sentence', 's_' || n, 'reading_in_context', '${fsrs}'::jsonb from generate_series(1,400) n`);
+      select 'si_' || n, '${USER_A}', 'sentence', 's_' || n, 'reading_in_context', '${fsrs}'::jsonb from generate_series(1,${sentences}) n`);
     sql(`insert into reviews (id, owner_id, study_item_id, rating, "timestamp")
       select 'r_' || n || '_' || k, '${USER_A}', 'si_' || n, (array['again','hard','good','easy'])[1 + (n + k) % 4],
-        timestamptz '2026-11-01' + (n * k) * interval '1 minute' from generate_series(1,400) n, generate_series(1,3) k`);
+        timestamptz '2026-11-01' + (n * k) * interval '1 second' from generate_series(1,${sentences}) n, generate_series(1,${reviewsPerCard}) k`);
     sql(`insert into sentence_learning_events (id, owner_id, visit_id, action, book_id, sentence_id)
-      select 'e_' || n, '${USER_A}', 'visit_' || n, 'walkthrough_completed', 'book_' || ((n - 1) % 4 + 1), 's_' || n from generate_series(1,400) n`);
-    expect(Number(scalar('select count(*) from reviews'))).toBe(1200);
+      select 'e_' || n, '${USER_A}', 'visit_' || n, 'walkthrough_completed', 'book_' || ((n - 1) % ${books} + 1), 's_' || n from generate_series(1,${sentences}) n`);
+    expect(Number(scalar('select count(*) from reviews'))).toBe(reviews);
 
     resetDbForTests(`pg-${createId('db')}`);
     await updateSyncMeta({ userId: USER_A, syncReferenceAudio: false });
@@ -135,8 +142,8 @@ describe.skipIf(!PG_TESTS_ENABLED)('sync HTTP budgets against real Postgres and 
     expect([
       await db.books.count(), await db.sentences.count(), await db.bookSentences.count(),
       await db.studyItems.count(), await db.reviews.count(), await db.sentenceLearningEvents.count(),
-    ]).toEqual([4, 400, 400, 400, 1200, 400]);
-    checkUsageBudget('sync-restore-library-2804-rows', device.usage());
+    ]).toEqual([books, sentences, sentences, sentences, reviews, sentences]);
+    checkUsageBudget(scenario as keyof typeof budgets, device.usage());
 
     device.resetUsage();
     await runSyncCycle();
@@ -145,7 +152,20 @@ describe.skipIf(!PG_TESTS_ENABLED)('sync HTTP budgets against real Postgres and 
     sql(`insert into reviews (id, owner_id, study_item_id, rating) values ('r_new', '${USER_A}', 'si_1', 'good')`);
     device.resetUsage();
     await runSyncCycle();
-    expect(await db.reviews.count()).toBe(1201);
-    checkUsageBudget('sync-library-one-new-review', device.usage());
+    expect(await db.reviews.count()).toBe(reviews + 1);
+    checkUsageBudget(newReviewScenario as keyof typeof budgets, device.usage());
+  }
+
+  // 2,804 rows: the shape of a few weeks of sentence-led study.
+  it('restores a study library onto an empty device, then idles and pulls one new review', async () => {
+    await restoreLibrary('sync-restore-library-2804-rows', 'sync-library-one-new-review', { books: 4, sentences: 400, reviewsPerCard: 3 });
+  }, 120_000);
+
+  // 5,604 rows: twice the size, to show requests and bytes grow linearly with the library. Do not
+  // scale this up for wall-clock reasons: with fake-indexeddb, restore time grows much faster than
+  // linearly (about 6 s at 2.8k rows, 17 s at 5.6k, 90 s at 11.2k, over 10 minutes at 36k) because it
+  // rescans its queued-transaction list; real browser IndexedDB does not behave that way.
+  it('restores a twice-as-large study library, then idles and pulls one new review', async () => {
+    await restoreLibrary('sync-restore-library-5604-rows', 'sync-medium-library-one-new-review', { books: 4, sentences: 800, reviewsPerCard: 3 });
   }, 120_000);
 });
