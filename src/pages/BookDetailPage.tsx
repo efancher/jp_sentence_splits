@@ -294,6 +294,9 @@ function SortableRow(props: BookRowProps) {
 
 const PlainRow = memo(RowView);
 
+/** Sentence rows rendered per step; large episodes grow it with "Show more". */
+const SENTENCE_ROW_PAGE = 200;
+
 /** Sentinel key for sentences that belong to no chapter/episode. */
 const UNASSIGNED_CHAPTER_KEY = '__unassigned__';
 
@@ -318,6 +321,7 @@ export function BookDetailPage() {
   const [confirmDeleteSelected, setConfirmDeleteSelected] = useState(false);
   const [destinationBookId, setDestinationBookId] = useState('');
   const [chapterTitle, setChapterTitle] = useState('');
+  const [renderLimit, setRenderLimit] = useState(SENTENCE_ROW_PAGE);
   const [showMergeIntoBook, setShowMergeIntoBook] = useState(false);
   const [mergeTargetBookId, setMergeTargetBookId] = useState('');
   const [mergeChapterTitle, setMergeChapterTitle] = useState('');
@@ -1774,11 +1778,14 @@ export function BookDetailPage() {
       {(() => {
         const hasChapters = (data.book.chapters?.length ?? 0) > 0;
         const chapterTitles = new Map((data.book.chapters ?? []).map((chapter) => [chapter.id, chapter.title]));
-        const visibleRows = data.rows.filter(
+        const matchingRows = data.rows.filter(
           (row) =>
             row.sentence &&
             !collapsedChapters.has(row.membership.chapterId ?? UNASSIGNED_CHAPTER_KEY),
         );
+        // Rendering thousands of rows at once froze the page; reorder mode needs them all for drag targets.
+        const visibleRows = editOrder ? matchingRows : matchingRows.slice(0, renderLimit);
+        const hiddenRowCount = matchingRows.length - visibleRows.length;
         const Row = editOrder ? SortableRow : PlainRow;
         const list = (
           <div className="stack">
@@ -1813,6 +1820,11 @@ export function BookDetailPage() {
                 </Fragment>
               );
             })}
+            {hiddenRowCount > 0 ? (
+              <button type="button" onClick={() => setRenderLimit((limit) => limit + SENTENCE_ROW_PAGE)}>
+                Show {Math.min(SENTENCE_ROW_PAGE, hiddenRowCount)} more ({hiddenRowCount} not shown)
+              </button>
+            ) : null}
           </div>
         );
         return editOrder ? (
