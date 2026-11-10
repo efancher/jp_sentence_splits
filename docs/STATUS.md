@@ -1,7 +1,8 @@
 # Status
 
-Current implementation snapshot, reviewed 2026-10-18 against main at `024a4e9`.
-Includes the incoming Ear Tiles refinement from `9be3657`.
+Current implementation snapshot. Sections were last reconciled in full on
+2026-10-18 (main at `024a4e9`); later features were added incrementally through
+2026-11-09, so re-verify older claims against code.
 Earlier chronological detail remains in `STATUS_ARCHIVE.md` (frozen) and git
 history. `AI_OVERVIEW.md` describes features; `ROADMAP.md` keeps unfinished work
 and possible extensions. This snapshot does not certify a live deployment.
@@ -75,7 +76,7 @@ and possible extensions. This snapshot does not certify a live deployment.
   `shadowRequests`), which `findShadowCandidates` skips, and skips the sentence's
   open session step. A later Sound flag clears the snooze. Shadowing is not an
   FSRS card (the review-card attempt of 2026-10-30 was reverted the same day).
-- Chunk chain shadowing (2026-11-08, branch `worktree-chunk-chain-shadowing-plan`, not merged):
+- Chunk chain shadowing (2026-11-08, merged to main):
   the Shadow pane offers "Chunk chain" when the cached alignment plans 3+ duration-sized
   rungs from the Ear Tiles chunks (`src/lib/chunkChain.ts`; per-cut alignment trust, so
   ~14% of clips today, limited by the 62% with no stored alignment). Shadow the last

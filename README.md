@@ -1,10 +1,24 @@
 # Satori Glossbook
 
-Offline-capable progressive web app for analyzing Japanese sentences imported
-from YouTube and podcast mining, NHK Easy News, and
-**japanese-shadowing-package** project ZIPs.
+Offline-capable progressive web app for learning Japanese from real audio:
+YouTube and podcast mining, NHK Easy News, and
+**japanese-shadowing-package** project ZIPs become books of sentences with
+native audio, which you study sentence by sentence.
 
-This repository is the home of **Satori Glossbook** (name configurable in [`src/appConfig.ts`](src/appConfig.ts)). It is an analysis workspace, not a spaced-repetition system. Study data lives in IndexedDB first; optional Supabase auth/sync keeps devices aligned when configured.
+This repository is the home of **Satori Glossbook** (name configurable in [`src/appConfig.ts`](src/appConfig.ts)). Study data lives in IndexedDB first; optional Supabase auth/sync keeps devices aligned when configured, and the app stays usable without Supabase or the mining/alignment services.
+
+## How learning works
+
+The default flow is **sentence-led** (`settings.sentenceLedFlow`). **Home**
+builds a daily plan from a time budget: new sentences and revisits (a guided
+walkthrough and the reader), grammar checks, shadowing, and review. Review is
+mainly one FSRS card per introduced sentence (`reading_in_context`: pick the
+English meaning); word and grammar drill cards are paused but their data is
+kept. Ratings are always your own choice; typed-match feedback, games and
+walkthroughs never grade cards for you. See
+[STATUS](docs/STATUS.md) for the current snapshot,
+[AI_OVERVIEW](docs/AI_OVERVIEW.md) for feature-by-feature behavior and
+[ARCHITECTURE](docs/ARCHITECTURE.md) for design and invariants.
 
 Python reference behavior from the earlier Anki tooling lives under [`reference/`](reference/) for algorithm ports and regression expectations.
 
@@ -104,7 +118,8 @@ redirect URLs for both localhost and your Pages URL (including `#/settings`).
 Useful commands:
 
 ```bash
-npm run check          # typecheck + unit tests
+npm run check:quick    # typecheck, lint, tests affected vs origin/main
+npm run check          # typecheck + full unit tests
 npm test               # unit / component tests
 npm run test:coverage  # whole-src coverage, including unimported modules
 npm run build          # production build (local base `/`)
@@ -330,7 +345,7 @@ After the first successful load, the application shell and already-imported stud
 - Cloud sync requires a Supabase project and is optional (app works local-only without env vars)
 - No automatic reconstruction of Satori article order
 - Heuristic chunking/roles are suggestions only
-- No AI translation or Anki sync in the MVP
+- No machine translation in the analysis core; the optional Supabase Edge Functions (Claude-backed) only produce editable suggestions, and Anki sync does not exist
 - Conflict resolution is per synced record (analysis includes all chunks as one unit)
 - Reference audio Storage sync is opt-in and does not include hypothetical user recordings
 

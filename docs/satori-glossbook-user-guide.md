@@ -25,14 +25,22 @@ Reimporting a package with the same source ID refreshes that book and its
 clips. It does not duplicate the book, and it preserves manual analysis and
 study statuses. New sentences are added. Because the extraction order is
 authoritative, reimporting also restores the book to video order — any manual
-reordering of shadowing sentences is replaced on the next refresh (Satori CSV
-imports still respect the Import "Initial order" dropdown). If the same
+reordering of shadowing sentences is replaced on the next refresh If the same
 normalized Japanese sentence occurs more than once in one video, Glossbook
 keeps all native clips but represents the text once in the book and shows a
 warning in the preview.
 
 On Analyze and Practice, **🎧 Native** plays the imported source clip. **🔊**
 remains available for device TTS, and chunk audio continues to use TTS.
+
+## Daily plan on Home
+
+**Home** is the default landing page. Pick a time budget and tap **Start** (or
+**+ more time** later in the day) to get one growing list of steps: new
+sentences, fresh tries of earlier ones, grammar checks, shadowing and review.
+Each step opens in the reader or its own tool; a step is settled only when you
+mark it complete. The split between activities is adjustable on Home.
+Settings has an opt-in to offer sentences you almost already know first.
 
 ## Import directly from a YouTube URL
 
@@ -53,20 +61,12 @@ reimport/refresh behavior, same native-audio playback), just without needing
 a separate CLI run first. It requires a mining service to be deployed and
 reachable — if it isn't, the page will show an error when you try to start.
 
-## Import a Satori Reader CSV
+## Import NHK Easy News or quick-import text
 
-1. Export vocabulary from Satori Reader and save the CSV in Files.
-2. Open **Import** and choose the CSV.
-3. Review totals, warnings, conflicts, and the unique sentence list.
-4. Select the sentences to import.
-5. Send them to Inbox, a new book, or an existing book.
-6. When importing into a book, optionally assign them to an existing chapter or
-   create a new chapter in the same step (handy for one Satori article export).
-
-Glossbook examines Context1, Context2, and Context3. JE/EJ duplicates and
-multiple target words for one sentence are merged. Reimporting is idempotent:
-manual analyses, study statuses, and book order are preserved. Importing into a
-chapter also assigns any selected sentences that were already in that book.
+**Import → NHK Easy** pulls an article into a book. **Import → Quick import**
+accepts pasted Japanese (optionally with translations from an assistant) and
+sends it through the same review-and-commit steps. The older Satori Reader CSV
+and Anki importers were removed on 2026-11-07.
 
 ## Organize sentences
 
@@ -217,6 +217,12 @@ have analysis chunks.
 
 ## Review
 
+> **Sentence-led flow (default):** the main card is one per introduced sentence
+> (**Reading in context** — choose the English meaning, then rate yourself).
+> Word and grammar drill cards below are paused, not deleted: they are neither
+> shown nor created unless you turn off `sentenceLedFlow`. Confirming
+> vocabulary no longer decides what appears in Review.
+
 **Review** is spaced repetition (FSRS): a self-paced queue you rate
 **Again** / **Hard** / **Good** / **Easy**, which schedules the next time
 each card comes back. Open it from the nav (all books) or **Review** inside
@@ -224,8 +230,8 @@ a book (that book only).
 
 ### Card types
 
-Every sentence automatically gets two baseline cards (**Comprehension**,
-**Reading in context**) — read it, reveal the translation, rate yourself.
+Every introduced sentence gets a **Reading in context** card (the older
+**Comprehension** card was retired into it): read it, pick the meaning, rate yourself.
 A sentence with reference audio also gets a **Listening** card (audio
 plays first, Japanese stays hidden until reveal).
 
@@ -324,8 +330,7 @@ clips. **Replace all local data** also removes locally imported audio.
 - **Missing data on another device:** sign in and sync on both, or restore a
   backup — without signing in, devices don't share data.
 - **No sentences in a Practice scope:** select All or a different status.
-- **Review only ever shows plain sentences, never vocabulary-based cards:**
-  confirm some vocabulary in Analyze first — see **Confirm vocabulary** and
-  **How to get more out of Review** above.
+- **Review shows only sentence cards:** expected under the sentence-led flow;
+  vocabulary and grammar drill cards are paused.
 - **Import warning:** open the batch or import preview; conflicts retain both
   preferred and alternative source values.

@@ -149,7 +149,7 @@ The items below retain unfinished work, optional refinements and future ideas.
     text, so an `<unk>` early in a clip loses every later cut (only trouble at the end
     is recoverable). **Open:** whether the alignment backfill should cover the clips a
     chain would use first.
-  - *First UI, 2026-11-08 (branch, not merged):* a "Chunk chain" button in the Shadow
+  - *First UI, 2026-11-08 (merged to main):* a "Chunk chain" button in the Shadow
     pane (`ChunkChainPanel`, only when the cached alignment plans 3+ rungs). It points
     the pane's own loop/target at the current rung; the first rung is Next-only, later
     rungs take Not yet / Close / Got it (`chunkChainSession.ts`: Got it climbs, Close
