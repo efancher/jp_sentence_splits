@@ -630,6 +630,12 @@ Unfinished work and optional extensions; completed behavior is in `AI_OVERVIEW.m
     the *mean over the word's clips* until reviews since 2026-09-19 accrue exact
     `contextSentenceId`s; the cue measure is itself noisy (equal-width buckets,
     YIN octave errors — some cues read −5…−11 st).
+  - [ ] **Estimate unknown words' accent from the recording** (*measured 2026-11-10, gate not met*): `npm run
+    diagnose:pitch-estimate-accuracy` hides the dictionary accent and fits the best valid shape to each native
+    clip (495 words). Agreement 51% overall, 60% on strong cues (margin ≥3, contrast ≥1.5 st; 61% of words),
+    41% on 4-mora words, similar across books (50–55%). Below the ≥70% gate, so no estimated marks. Needs a
+    better measurement first (phone-aligned intervals, declination detrend); a per-speaker profile would not fix
+    this since the error is per-word, not speaker offset.
   - [x] **d′ / criterion in the report** — `signalDetection` in
     `nativeClipPitchAudit.ts`, printed by `report-pitch-drill-effectiveness.ts`.
   - [x] **Calibrate the drill scorer against native clips** (**done 2026-09-21** — learner grader now uses `gradeLearnerMorae`: fit rescues false mismatches, flat takes flagged; see STATUS; remaining text below is history) (*new, from the

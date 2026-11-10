@@ -94,6 +94,7 @@
     "diagnose:grammar-short": "tsx scripts/diagnose-grammar-short.ts",
     "diagnose:grammar-bound-lemmas": "tsx scripts/diagnose-grammar-bound-lemmas.ts",
     "diagnose:pitch-mark-coverage": "tsx scripts/diagnose-pitch-mark-coverage.ts",
+    "diagnose:pitch-estimate-accuracy": "tsx scripts/diagnose-pitch-estimate-accuracy.ts",
     "build:kanjium-pitch-data": "tsx scripts/build-kanjium-pitch-data.ts",
     "diagnose:i-plus-one": "tsx scripts/diagnose-i-plus-one.ts",
     "diagnose:chunk-chain": "tsx scripts/diagnose-chunk-chain.ts",
