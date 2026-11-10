@@ -179,7 +179,8 @@ import {
   trailingBunsetsuParticles,
   type SentencePitchAccentTarget,
 } from '../lib/sentencePitchAccent';
-import { loadKanjiumPitchLookup, kanjiumTargetsForSuggestions } from '../lib/kanjiumPitchLookup';
+import { kanjiumTargetsForSuggestions } from '../lib/kanjiumPitchLookup';
+import { loadKanjiumPitchLookup } from '../lib/kanjiumPitchLoader';
 import { resolveInflectedPitchAccent } from '../lib/pitchAccentShift';
 import {
   conjugationTagFromWordClass,

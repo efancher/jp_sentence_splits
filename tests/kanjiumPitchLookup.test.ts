@@ -7,8 +7,8 @@ import { createId } from '../src/lib/ids';
 import {
   buildKanjiumPitchLookup,
   kanjiumTargetsForSuggestions,
-  resetKanjiumPitchCache,
 } from '../src/lib/kanjiumPitchLookup';
+import { resetKanjiumPitchCache } from '../src/lib/kanjiumPitchLoader';
 
 const TABLE: Record<string, string> = {
   '橋|はし': '2',
