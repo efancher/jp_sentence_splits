@@ -11,7 +11,7 @@
  * Gate for building estimated marks: strong-cue agreement of about 70% or more. Nothing is written.
  * Audio/pitch cache: /tmp/pitch-audit-cache (shared with audit-pitch-accent-clips). Needs `ffmpeg`.
  *
- * Usage: npm run diagnose:pitch-estimate-accuracy [-- --limit N]
+ * Usage: npm run diagnose:pitch-estimate-accuracy [-- --limit N] [--exclude <title regex>] [--only <title regex>]
  */
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -110,7 +110,13 @@ async function main() {
     const japanese = japaneseBySentence.get(String(link.sentence_id));
     if (audio && japanese) candidates.push({ link, audio, item, japanese });
   }
-  const used = candidates.slice(0, limit === Infinity ? undefined : limit);
+  // --exclude <regex> drops books whose title matches (e.g. multi-speaker podcasts); --only keeps just those.
+  const excludeRe = argv.includes('--exclude') ? new RegExp(argv[argv.indexOf('--exclude') + 1]!, 'i') : null;
+  const onlyRe = argv.includes('--only') ? new RegExp(argv[argv.indexOf('--only') + 1]!, 'i') : null;
+  const titleOf = (sentenceId: unknown) => bookTitle.get(bookBySentence.get(String(sentenceId)) ?? '') ?? '';
+  const used = candidates
+    .filter((c) => (!excludeRe || !excludeRe.test(titleOf(c.link.sentence_id))) && (!onlyRe || onlyRe.test(titleOf(c.link.sentence_id))))
+    .slice(0, limit === Infinity ? undefined : limit);
 
   const alignmentById = new Map<string, AlignmentResult>();
   const audioIds = [...new Set(used.map((c) => c.audio.id))];
@@ -179,11 +185,11 @@ async function main() {
   const strong = obs.filter(isStrong);
   console.log(`\nStrong cue (margin ≥3 and contrast ≥1.5 st): ${strong.length}/${obs.length} (${pct(strong.length, obs.length)}), agreement ${pct(strong.filter((o) => o.ok).length, strong.length)}   [gate: ≥70%]`);
 
-  console.log('\nPer book (speaker proxy), n≥20:');
+  console.log('\nPer book (speaker proxy), n≥10:');
   const byBook = new Map<string, Obs[]>();
   for (const o of obs) byBook.set(o.bookId, [...(byBook.get(o.bookId) ?? []), o]);
   for (const [id, list] of [...byBook.entries()].sort((a, b) => b[1].length - a[1].length)) {
-    if (list.length < 20) continue;
+    if (list.length < 10) continue;
     const s = list.filter(isStrong);
     console.log(
       `  ${(bookTitle.get(id) ?? id).slice(0, 34).padEnd(36)} n=${String(list.length).padEnd(4)} all ${pct(list.filter((o) => o.ok).length, list.length).padEnd(4)} strong ${pct(s.filter((o) => o.ok).length, s.length)} (n=${s.length})`,
