@@ -12,7 +12,8 @@
  *   unlinked_inflected_recovered  same, inflected, and the word-class inference + shift resolver places it (marked at render)
  *   unlinked_kanjium_inflected  inflected and the resolver cannot place it (te-form, unsupported form, ...)
  *   unlinked_reading_only_hit   citation-form, no expression match, but every Kanjium entry for the reading agrees
- *   unlinked_no_data        no link and Kanjium has nothing
+ *   unlinked_unidic_fallback  Kanjium has nothing, but the suggestion's UniDic accentType places a mark
+ *   unlinked_no_data        no link, and neither Kanjium nor UniDic gives an accent
  * Non-content tokens (particles, auxiliaries, the picker's default-unchecked set) are reported apart.
  * Figures are tokens and morae (a mora-weighted view matches "how much of the line is marked").
  *
@@ -42,6 +43,7 @@ const CAUSES = [
   'unlinked_inflected_recovered',
   'unlinked_kanjium_inflected',
   'unlinked_reading_only_hit',
+  'unlinked_unidic_fallback',
   'unlinked_no_data',
   'non_content',
 ] as const;
@@ -184,7 +186,9 @@ async function main(): Promise<void> {
                 : 'unlinked_kanjium_inflected'
             : readingOnly !== undefined && citation
               ? 'unlinked_reading_only_hit'
-              : 'unlinked_no_data';
+              : kanjiumTargetsForSuggestions([token], lookup, new Set(), sentence).length > 0
+                ? 'unlinked_unidic_fallback'
+                : 'unlinked_no_data';
         }
         contentMorae += morae;
         if (cause === 'marked') markedMorae += morae;
