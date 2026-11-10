@@ -1,0 +1,5 @@
+kanjiumPitch.json is derived from the Kanjium pitch-accent dictionary
+(https://github.com/mifunetoshiro/kanjium), as shipped in the Yomitan
+"kanjium_pitch_accents" bank. Only the accent-nucleus positions per
+expression+reading are kept. It is rebuilt with `npm run build:kanjium-pitch-data`.
+Check Kanjium's own licence terms before redistributing this file publicly.

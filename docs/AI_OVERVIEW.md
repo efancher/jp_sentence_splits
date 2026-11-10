@@ -2680,7 +2680,15 @@ a self-hosted pronunciation-analysis backend. Capabilities:
   (`src/lib/pitchAccentShift.ts` — the same resolver the `pitch_accent`
   card itself uses), and is simply omitted rather than shown with the
   wrong (citation-form) contour when that resolver's narrow coverage
-  doesn't reach the specific form. A compact "H"/"L"-per-mora
+  doesn't reach the specific form. Since 2026-11-10 words with **no
+  vocabulary link** also get marks from the Kanjium table
+  (`public/kanjiumPitch.json`, fetched on demand, rebuilt by
+  `npm run build:kanjium-pitch-data`; `src/lib/kanjiumPitchLookup.ts`):
+  citation-form default-checked morphology suggestions only, exact
+  expression+reading match, or a reading-only match for kana-written lemmas
+  when every Kanjium entry for that reading agrees. Inflected unlinked
+  tokens stay unmarked (no word class). `npm run
+  diagnose:pitch-mark-coverage` measures coverage and unmarked causes. A compact "H"/"L"-per-mora
   contour for each confirmed sentence word that carries Kanjium/UniDic
   accent data, plus a following-particle mark. When that sentence also has
   a reference recording, `SentenceNativePitchContour` mounts the measured

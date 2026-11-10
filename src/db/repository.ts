@@ -179,6 +179,7 @@ import {
   trailingBunsetsuParticles,
   type SentencePitchAccentTarget,
 } from '../lib/sentencePitchAccent';
+import { loadKanjiumPitchLookup, kanjiumTargetsForSuggestions } from '../lib/kanjiumPitchLookup';
 import { resolveInflectedPitchAccent } from '../lib/pitchAccentShift';
 import {
   conjugationTagFromWordClass,
@@ -8842,7 +8843,9 @@ export async function getVocabularyOccurrenceCandidates(
  * An occurrence resolveInflectedPitchAccent can't confidently place (no
  * accent data, or an inflected form outside its narrow coverage) is
  * dropped rather than shown with a wrong contour — same "skip, don't
- * guess" stance as everywhere else in this feature.
+ * guess" stance as everywhere else in this feature. Content words with no
+ * vocabulary link then fall back to the Kanjium table
+ * (src/lib/kanjiumPitchLookup.ts), citation forms only.
  */
 export async function getSentencePitchAccentTargets(
   sentenceId: string,
@@ -8859,6 +8862,13 @@ export async function getSentencePitchAccentTargets(
       reading: resolved.reading,
       pitchAccentPositions: [resolved.position],
     });
+  }
+  // Words with no vocabulary link: fall back to the Kanjium table (citation-form content words only).
+  const sentence = await getDb().sentences.get(sentenceId);
+  const lookup = sentence?.vocabularySuggestions?.length ? await loadKanjiumPitchLookup() : null;
+  if (sentence && lookup) {
+    const covered = new Set(targets.map((target) => target.surfaceForm));
+    targets.push(...kanjiumTargetsForSuggestions(sentence.vocabularySuggestions, lookup, covered));
   }
   return targets;
 }

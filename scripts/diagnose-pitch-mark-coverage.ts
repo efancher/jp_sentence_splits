@@ -8,7 +8,9 @@
  * returns a position. Unmarked content tokens are bucketed by cause:
  *   linked_no_accent_data   linked vocab item has no pitch_accent_positions
  *   linked_unresolved       linked, has data, but resolver declined (inflection outside its coverage)
- *   unlinked_kanjium_hit    no link, but Kanjium has expression+reading (a render-time lookup would mark it)
+ *   unlinked_kanjium_hit    no link, citation-form token, Kanjium has expression+reading (a lookup would mark it)
+ *   unlinked_kanjium_inflected  same, but the token is inflected (needs word class to place the accent)
+ *   unlinked_reading_only_hit   citation-form, no expression match, but every Kanjium entry for the reading agrees
  *   unlinked_no_data        no link and Kanjium has nothing
  * Non-content tokens (particles, auxiliaries, the picker's default-unchecked set) are reported apart.
  * Figures are tokens and morae (a mora-weighted view matches "how much of the line is marked").
@@ -19,7 +21,7 @@
 import type { Sentence, VocabularyItem, VocabularySuggestion } from '../src/domain/types';
 import { segmentIntoMorae } from '../src/lib/mora';
 import { resolveInflectedPitchAccent } from '../src/lib/pitchAccentShift';
-import { ensureKanjiumPitchIndex, lookupKanjiumPitch } from './lib/kanjiumPitch';
+import { ensureKanjiumPitchIndex, katakanaToHiragana, lookupKanjiumPitch } from './lib/kanjiumPitch';
 import { fetchAll, requireAuthedUser } from './lib/scriptHelpers';
 import { createScriptSupabaseClient } from './lib/scriptSupabaseClient';
 
@@ -35,6 +37,8 @@ const CAUSES = [
   'linked_no_accent_data',
   'linked_unresolved',
   'unlinked_kanjium_hit',
+  'unlinked_kanjium_inflected',
+  'unlinked_reading_only_hit',
   'unlinked_no_data',
   'non_content',
 ] as const;
@@ -84,6 +88,16 @@ async function main(): Promise<void> {
     fetchAll<Row>(client, 'study_items', 'id,subject_id,subject_type', ownerId, (r) => r),
   ]);
   const kanjium = await ensureKanjiumPitchIndex();
+  // reading -> position, only where every Kanjium entry with that reading agrees (safe for kana-written lemmas).
+  const byReading = new Map<string, Set<string>>();
+  for (const [key, positions] of kanjium) {
+    const reading = key.slice(key.indexOf('|') + 1);
+    const set = byReading.get(reading) ?? new Set<string>();
+    set.add(positions.join(','));
+    byReading.set(reading, set);
+  }
+  const unambiguousByReading = new Map<string, number>();
+  for (const [reading, set] of byReading) if (set.size === 1) unambiguousByReading.set(reading, Number([...set][0]!.split(',')[0]));
 
   const introduced = new Set<string>();
   for (const e of events) if (e.action === 'walkthrough_completed') introduced.add(e.sentence_id);
@@ -151,7 +165,16 @@ async function main(): Promise<void> {
             cause = resolved ? 'marked' : 'linked_unresolved';
           }
         } else {
-          cause = lookupKanjiumPitch(kanjium, token.expression, token.reading ?? '') ? 'unlinked_kanjium_hit' : 'unlinked_no_data';
+          const hit = lookupKanjiumPitch(kanjium, token.expression, token.reading ?? '');
+          const citation = token.surface === token.expression || token.surface === token.reading;
+          const readingOnly = unambiguousByReading.get(katakanaToHiragana(token.reading ?? ''));
+          cause = hit
+            ? citation
+              ? 'unlinked_kanjium_hit'
+              : 'unlinked_kanjium_inflected'
+            : readingOnly !== undefined && citation
+              ? 'unlinked_reading_only_hit'
+              : 'unlinked_no_data';
         }
         contentMorae += morae;
         if (cause === 'marked') markedMorae += morae;
