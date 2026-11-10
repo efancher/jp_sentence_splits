@@ -115,7 +115,9 @@ These are scoped follow-up checks, not a rerun of the full coverage suite above.
 3. **Games and secondary screens.** Most game rules have pure tests, while many
    playable components have almost no component coverage. Add outcome-focused
    browser checks for weak pools, replay, completion logging and unchanged FSRS
-   state. Difficulty screening, easiest-first sorting and Shadow mark/loop
+   state. `e2e/play-games.spec.ts` now covers only the empty-library hub, the
+   unknown-game route and horizontal overflow at phone/desktop widths (Chromium
+   and WebKit); seeded rounds are still open. Difficulty screening, easiest-first sorting and Shadow mark/loop
    controls also retain browser gaps in the roadmap.
 4. **Real audio and devices.** Synthetic native-pitch tests cover playback,
    highlighting, recording and stopping on close. They do not establish acoustic
