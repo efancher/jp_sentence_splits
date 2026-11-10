@@ -175,7 +175,24 @@ export function createLivePitchGuard(): (hz: number) => number | null {
     if (recent.length > LIVE_GUARD_RECENT) recent.shift();
     return hz;
   };
+  let opening: number | null = null;
   return (hz) => {
+    if (recent.length === 0 && opening !== null) {
+      // The first reading has no history to be judged against, so a stray
+      // octave error there would be trusted; hold it until the next one agrees.
+      const previous = opening;
+      opening = null;
+      if (Math.abs(hzToRelativeSemitones(hz, previous)) > LIVE_GUARD_AGREE_ST) {
+        opening = hz;
+        return null;
+      }
+      accept(previous);
+      return accept(hz);
+    }
+    if (recent.length === 0) {
+      opening = hz;
+      return null;
+    }
     if (recent.length < 3) return accept(hz);
     const reference = medianHz(recent)!;
     if (Math.abs(hzToRelativeSemitones(hz, reference)) <= LIVE_GUARD_SUSPECT_ST) {

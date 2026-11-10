@@ -308,6 +308,14 @@ describe('createLivePitchGuard', () => {
     expect(guard(230)).toBeNull();
   });
 
+  it('holds back a stray first reading until the next one agrees', () => {
+    const guard = createLivePitchGuard();
+    expect(guard(280)).toBeNull();
+    expect(guard(140)).toBeNull();
+    expect(guard(141)).toBe(141);
+    expect(guard(139)).toBe(139);
+  });
+
   it('accepts a sustained exaggerated jump instead of flattening it', () => {
     const guard = createLivePitchGuard();
     warmUp(guard, 110);
