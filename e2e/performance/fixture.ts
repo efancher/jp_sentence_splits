@@ -4,6 +4,9 @@ import type { Book, Review, Sentence, SentenceAnalysis, SentenceExtras, StudyIte
 export const libraries = {
   small: { books: 2, sentencesPerBook: 100, chapterSize: 50 },
   large: { books: 20, sentencesPerBook: 200, chapterSize: 200 },
+  // Single huge chapter (e.g. a long podcast episode) and a long multi-chapter book.
+  episode: { books: 1, sentencesPerBook: 2000, chapterSize: 2000 },
+  longBook: { books: 1, sentencesPerBook: 3000, chapterSize: 150 },
 } as const;
 
 /** Use the app-created schema, then commit all synthetic records before navigation.
