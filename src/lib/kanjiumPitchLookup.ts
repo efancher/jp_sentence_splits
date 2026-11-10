@@ -21,6 +21,8 @@ export interface KanjiumPitchLookup {
    * alone when unambiguous.
    */
   find(expression: string, reading: string): number[] | undefined;
+  /** The only Kanjium entry for an expression (any reading); undefined when it has none or several. */
+  findByExpression(expression: string): { reading: string; positions: number[] } | undefined;
 }
 
 export function katakanaToHiragana(text: string): string {
@@ -31,11 +33,17 @@ export function katakanaToHiragana(text: string): string {
 export function buildKanjiumPitchLookup(table: Record<string, string>): KanjiumPitchLookup {
   const exact = new Map<string, number[]>();
   const readingOnly = new Map<string, Set<number>>();
+  const byExpression = new Map<string, Array<{ reading: string; positions: number[] }>>();
   for (const [key, value] of Object.entries(table)) {
     const positions = value.split(',').map(Number).filter(Number.isFinite);
     const position = positions[0];
     if (position === undefined) continue;
     exact.set(key, positions);
+    const expression = key.slice(0, key.indexOf('|'));
+    byExpression.set(expression, [
+      ...(byExpression.get(expression) ?? []),
+      { reading: key.slice(key.indexOf('|') + 1), positions },
+    ]);
     const reading = key.slice(key.indexOf('|') + 1);
     // Agreement is judged on the first position only (the one the UI uses).
     const seen = readingOnly.get(reading) ?? new Set<number>();
@@ -52,7 +60,54 @@ export function buildKanjiumPitchLookup(table: Record<string, string>): KanjiumP
       const agreed = readingOnly.get(normalized);
       return agreed?.size === 1 ? [[...agreed][0]!] : undefined;
     },
+    findByExpression(expression) {
+      const entries = byExpression.get(expression);
+      return entries?.length === 1 ? entries[0] : undefined;
+    },
   };
+}
+
+/**
+ * Light and auxiliary verbs the tokenizer writes in kana (or with a stored inflected reading). Their kana
+ * spelling is a homophone of many Kanjium headwords, so the lookup would (rightly) refuse it; these map to
+ * the headword of the verb meant in running text.
+ */
+const LIGHT_VERB_HEADWORDS: Record<string, { headword: string; reading: string }> = {
+  する: { headword: '為る', reading: 'する' },
+  いる: { headword: '居る', reading: 'いる' },
+  ある: { headword: '有る', reading: 'ある' },
+  なる: { headword: '成る', reading: 'なる' },
+  できる: { headword: '出来る', reading: 'できる' },
+  いう: { headword: '言う', reading: 'いう' },
+  言う: { headword: '言う', reading: 'いう' },
+};
+
+const KANA_ONLY = /^[぀-ゟ゠-ヿー]+$/u;
+
+/**
+ * Accents and the dictionary reading for a suggestion. The stored `reading` of a verb or i-adjective is
+ * sometimes the inflected reading (する→し, 来る→き, 言う→いい), which Kanjium has no entry for. When the exact
+ * lookup misses on such a word, the lemma's own reading is tried: the expression itself when it is written in
+ * kana (する, いる), otherwise the expression's only Kanjium entry (来る). Expressions with several readings (言う) stay unmarked.
+ */
+export function findLemmaPitch(
+  lookup: KanjiumPitchLookup,
+  suggestion: Pick<VocabularySuggestion, 'expression' | 'reading' | 'pos'>,
+): { positions: number[]; reading: string } | undefined {
+  const exact = lookup.find(suggestion.expression, suggestion.reading);
+  if (exact) return { positions: exact, reading: suggestion.reading };
+  if (!suggestion.pos.startsWith('動詞') && !suggestion.pos.startsWith('形容詞')) return undefined;
+  const light = LIGHT_VERB_HEADWORDS[suggestion.expression];
+  if (light) {
+    const positions = lookup.find(light.headword, light.reading);
+    return positions ? { positions, reading: light.reading } : undefined;
+  }
+  if (KANA_ONLY.test(suggestion.expression)) {
+    const reading = katakanaToHiragana(suggestion.expression);
+    const positions = lookup.find(suggestion.expression, reading);
+    return positions ? { positions, reading } : undefined;
+  }
+  return lookup.findByExpression(suggestion.expression);
 }
 
 /**
@@ -106,18 +161,19 @@ export function kanjiumTargetsForSuggestions(
   for (const suggestion of suggestions) {
     if (!suggestion.selectedByDefault || !suggestion.reading) continue;
     if (covered.has(suggestion.surface) || covered.has(suggestion.expression)) continue;
-    const positions = lookup.find(suggestion.expression, suggestion.reading);
-    if (!positions?.length) continue;
-    const isCitationForm =
-      suggestion.surface === suggestion.expression || suggestion.surface === suggestion.reading;
+    const found = findLemmaPitch(lookup, suggestion);
+    if (!found?.positions.length) continue;
+    const { positions } = found;
+    const lemma = { ...suggestion, reading: found.reading };
+    const isCitationForm = suggestion.surface === suggestion.expression || suggestion.surface === lemma.reading;
     if (!isCitationForm) {
-      const inflected = inflectedTarget(suggestion, positions, sentence);
+      const inflected = inflectedTarget(lemma, positions, sentence);
       if (inflected) targets.push(inflected);
       continue;
     }
     targets.push({
       surfaceForm: suggestion.surface,
-      reading: suggestion.reading,
+      reading: lemma.reading,
       pitchAccentPositions: positions,
     });
   }

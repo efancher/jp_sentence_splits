@@ -20,7 +20,7 @@
  *   --introduced  restrict to sentences the learner has been introduced to
  */
 import type { Sentence, VocabularyItem, VocabularySuggestion } from '../src/domain/types';
-import { kanjiumTargetsForSuggestions } from '../src/lib/kanjiumPitchLookup';
+import { buildKanjiumPitchLookup, findLemmaPitch, kanjiumTargetsForSuggestions } from '../src/lib/kanjiumPitchLookup';
 import { segmentIntoMorae } from '../src/lib/mora';
 import { resolveInflectedPitchAccent } from '../src/lib/pitchAccentShift';
 import { ensureKanjiumPitchIndex, katakanaToHiragana, lookupKanjiumPitch } from './lib/kanjiumPitch';
@@ -99,6 +99,7 @@ async function main(): Promise<void> {
     set.add(positions.join(','));
     byReading.set(reading, set);
   }
+  const lookup = buildKanjiumPitchLookup(Object.fromEntries([...kanjium].map(([key, positions]) => [key, positions.join(',')])));
   const unambiguousByReading = new Map<string, number>();
   for (const [reading, set] of byReading) if (set.size === 1) unambiguousByReading.set(reading, Number([...set][0]!.split(',')[0]));
 
@@ -117,7 +118,7 @@ async function main(): Promise<void> {
 
   const overall = blank();
   const byPos = new Map<string, Record<Cause, Tally>>();
-  const missingWords = new Map<string, { count: number; cause: Cause; reading: string }>();
+  const missingWords = new Map<string, { count: number; cause: Cause; reading: string; surfaces: Set<string> }>();
   const sentenceCoverage: number[] = [];
   let scanned = 0;
   let untokenized = 0;
@@ -168,13 +169,17 @@ async function main(): Promise<void> {
             cause = resolved ? 'marked' : 'linked_unresolved';
           }
         } else {
-          const hit = lookupKanjiumPitch(kanjium, token.expression, token.reading ?? '');
-          const citation = token.surface === token.expression || token.surface === token.reading;
+          // A verb/adjective whose stored reading is the inflected one (する→し) is recovered through its lemma reading.
+          const lemma = findLemmaPitch(lookup, token);
+          const hit =
+            lookupKanjiumPitch(kanjium, token.expression, token.reading ?? '') ??
+            (lemma && lemma.reading !== token.reading ? lemma.positions : undefined);
+          const citation = token.surface === token.expression || token.surface === (lemma?.reading ?? token.reading);
           const readingOnly = unambiguousByReading.get(katakanaToHiragana(token.reading ?? ''));
           cause = hit
             ? citation
               ? 'unlinked_kanjium_hit'
-              : kanjiumTargetsForSuggestions([token], { find: (e, r) => lookupKanjiumPitch(kanjium, e, r) ?? undefined }, new Set(), sentence).length > 0
+              : kanjiumTargetsForSuggestions([token], lookup, new Set(), sentence).length > 0
                 ? 'unlinked_inflected_recovered'
                 : 'unlinked_kanjium_inflected'
             : readingOnly !== undefined && citation
@@ -186,8 +191,11 @@ async function main(): Promise<void> {
         if (cause !== 'marked') {
           const key = `${token.expression}\t${token.pos}`;
           const prev = missingWords.get(key);
-          if (prev) prev.count += 1;
-          else missingWords.set(key, { count: 1, cause, reading: token.reading ?? '' });
+          if (prev) {
+            prev.count += 1;
+            prev.surfaces.add(token.surface);
+          }
+          else missingWords.set(key, { count: 1, cause, reading: token.reading ?? '', surfaces: new Set([token.surface]) });
         }
       }
       overall[cause].tokens += 1;
@@ -231,7 +239,7 @@ async function main(): Promise<void> {
   console.log(`\nTop ${top} most frequent unmarked content words:`);
   for (const [key, v] of [...missingWords.entries()].sort((a, b) => b[1].count - a[1].count).slice(0, top)) {
     const [expression, pos] = key.split('\t');
-    console.log(`  ${String(v.count).padStart(5)}  ${expression} (${v.reading}) [${pos}]  ${v.cause}`);
+    console.log(`  ${String(v.count).padStart(5)}  ${expression} (${v.reading}) [${pos}]  ${v.cause}  surfaces: ${[...v.surfaces].slice(0, 6).join(' ')}`);
   }
 }
 

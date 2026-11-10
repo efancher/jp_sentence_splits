@@ -2689,7 +2689,12 @@ a self-hosted pronunciation-analysis backend. Capabilities:
   when every Kanjium entry for that reading agrees. Inflected unlinked
   verbs/i-adjectives are placed by inferring the word class from the surface
   (`inferConjugationWordClass`) and the same shift resolver linked words use;
-  forms it doesn't cover (te-form, i-adjective negatives) stay unmarked. A word whose dictionary lists more
+  forms it doesn't cover (te-form, i-adjective negatives) stay unmarked.
+  Suggestions whose stored reading is the inflected one (する→し, 来る→き)
+  recover the lemma reading via `findLemmaPitch`: a small light-verb
+  headword table (する→為る, いる→居る, ある, なる, できる, 言う), then the
+  expression's only Kanjium reading. する/いる then hit the table but stay
+  unplaced when inflected (the resolver skips irregular classes). A word whose dictionary lists more
   than one accent (e.g. 雨 listed as both [1] and [0]) shows a small "?"
   after the contour; its tooltip/aria-label lists the other accents. The
   contour shown is the first listed accent. `npm run

@@ -22,6 +22,10 @@ const TABLE: Record<string, string> = {
   '雨|あめ': '1,0',
   '走る|はしる': '2',
   '食べる|たべる': '2',
+  '為る|する': '0',
+  '来る|くる': '1',
+  '言う|いう': '0',
+  '言う|ゆう': '0',
 };
 
 const SENTENCE = { japanese: '橋を渡る。', inlineReading: undefined };
@@ -112,6 +116,26 @@ describe('kanjiumTargetsForSuggestions', () => {
     );
     // 食べる[2] ichidan negative keeps the citation downstep (citation morae 3 → 2 is not unaccented).
     expect(targets).toEqual([{ surfaceForm: '食べない', reading: 'たべない', pitchAccentPositions: [2] }]);
+  });
+
+  it('recovers a light verb whose stored reading is the inflected one, via its standard headword', () => {
+    const targets = kanjiumTargetsForSuggestions(
+      [suggestion({ surface: 'する', expression: 'する', reading: 'し', pos: '動詞/非自立可能' })],
+      lookup,
+      new Set(),
+      { japanese: '勉強する。', inlineReading: undefined },
+    );
+    expect(targets).toEqual([{ surfaceForm: 'する', reading: 'する', pitchAccentPositions: [0] }]);
+  });
+
+  it('uses the only Kanjium reading of a kanji verb stored with an inflected reading', () => {
+    const targets = kanjiumTargetsForSuggestions(
+      [suggestion({ surface: '来る', expression: '来る', reading: 'き', pos: '動詞/非自立可能' })],
+      lookup,
+      new Set(),
+      { japanese: '友達が来る。', inlineReading: undefined },
+    );
+    expect(targets).toEqual([{ surfaceForm: '来る', reading: 'くる', pitchAccentPositions: [1] }]);
   });
 
   it('leaves an inflected form unmarked when the resolver does not cover it', () => {
