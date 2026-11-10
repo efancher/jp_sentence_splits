@@ -827,6 +827,26 @@ export function SettingsPage() {
         ) : null}
         {message ? <div className="status-pill complete">{message}</div> : null}
       </section>
+
+      <section className="panel stack">
+        <h3 style={{ margin: 0 }}>About &amp; data credits</h3>
+        <p className="muted" style={{ margin: 0 }}>
+          Dictionary pitch-accent marks for words without a vocabulary link come from{' '}
+          <a href="https://github.com/mifunetoshiro/kanjium" target="_blank" rel="noreferrer">
+            Kanjium
+          </a>{' '}
+          (pitch accent data by Uros Ozvatic), licensed{' '}
+          <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noreferrer">
+            CC BY-SA 4.0
+          </a>
+          . Its word list derives from EDICT, KANJIDIC and KRADFILE by the{' '}
+          <a href="https://www.edrdg.org/edrdg/licence.html" target="_blank" rel="noreferrer">
+            Electronic Dictionary Research and Development Group
+          </a>
+          , used under the EDRDG licence. The extract bundled with this app is shared under the same
+          CC BY-SA 4.0 terms.
+        </p>
+      </section>
     </div>
   );
 }
