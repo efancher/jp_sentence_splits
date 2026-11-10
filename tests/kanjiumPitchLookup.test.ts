@@ -20,7 +20,11 @@ const TABLE: Record<string, string> = {
   '種|たね': '0',
   '胤|たね': '0',
   '雨|あめ': '1,0',
+  '走る|はしる': '2',
+  '食べる|たべる': '2',
 };
+
+const SENTENCE = { japanese: '橋を渡る。', inlineReading: undefined };
 
 function suggestion(over: Partial<VocabularySuggestion>): VocabularySuggestion {
   return {
@@ -74,6 +78,7 @@ describe('kanjiumTargetsForSuggestions', () => {
       ],
       lookup,
       new Set(),
+      SENTENCE,
     );
     expect(targets).toEqual([{ surfaceForm: '橋', reading: 'はし', pitchAccentPositions: [2] }]);
   });
@@ -83,8 +88,40 @@ describe('kanjiumTargetsForSuggestions', () => {
       [suggestion({ surface: '雨', expression: '雨', reading: 'あめ' })],
       lookup,
       new Set(),
+      SENTENCE,
     );
     expect(targets[0]?.pitchAccentPositions).toEqual([1, 0]);
+  });
+
+  it('places an inflected godan verb by inferring its word class from the surface', () => {
+    const targets = kanjiumTargetsForSuggestions(
+      [suggestion({ surface: '走らない', expression: '走る', reading: 'はしる', pos: '動詞/一般' })],
+      lookup,
+      new Set(),
+      { japanese: '公園を走らない。', inlineReading: undefined },
+    );
+    expect(targets).toEqual([{ surfaceForm: '走らない', reading: 'はしらない', pitchAccentPositions: [3] }]);
+  });
+
+  it('places an inflected ichidan verb differently from a godan one', () => {
+    const targets = kanjiumTargetsForSuggestions(
+      [suggestion({ surface: '食べない', expression: '食べる', reading: 'たべる', pos: '動詞/一般' })],
+      lookup,
+      new Set(),
+      { japanese: '魚を食べない。', inlineReading: undefined },
+    );
+    // 食べる[2] ichidan negative keeps the citation downstep (citation morae 3 → 2 is not unaccented).
+    expect(targets).toEqual([{ surfaceForm: '食べない', reading: 'たべない', pitchAccentPositions: [2] }]);
+  });
+
+  it('leaves an inflected form unmarked when the resolver does not cover it', () => {
+    const targets = kanjiumTargetsForSuggestions(
+      [suggestion({ surface: '走って', expression: '走る', reading: 'はしる', pos: '動詞/一般' })],
+      lookup,
+      new Set(),
+      { japanese: '公園を走って帰った。', inlineReading: undefined },
+    );
+    expect(targets).toEqual([]);
   });
 
   it('skips words a vocabulary link already marked', () => {
@@ -92,6 +129,7 @@ describe('kanjiumTargetsForSuggestions', () => {
       [suggestion({ surface: '橋', expression: '橋', reading: 'はし' })],
       lookup,
       new Set(['橋']),
+      SENTENCE,
     );
     expect(targets).toEqual([]);
   });

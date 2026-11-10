@@ -1,4 +1,6 @@
-import type { VocabularySuggestion } from '../domain/types';
+import type { Sentence, VocabularySuggestion } from '../domain/types';
+import { conjugationTagFromWordClass, inferConjugationWordClass } from './conjugation';
+import { resolveInflectedPitchAccent } from './pitchAccentShift';
 import type { SentencePitchAccentTarget } from './sentencePitchAccent';
 
 /**
@@ -8,8 +10,8 @@ import type { SentencePitchAccentTarget } from './sentencePitchAccent';
  *
  * Deliberately narrow, matching the "skip, don't guess" stance of the rest of the feature:
  *  - only content tokens the vocab picker would check by default;
- *  - only citation-form tokens (surface equals the lemma or its reading) — an inflected token needs a word
- *    class this data doesn't carry, so it stays unmarked;
+ *  - citation forms (surface equals the lemma or its reading) directly; inflected verbs and i-adjectives only
+ *    when the word class can be inferred from the surface and the shift resolver covers that form;
  *  - an exact expression+reading match first; otherwise, for a kana-written lemma, a reading-only match, but only when every Kanjium
  *    entry with that reading agrees (covers kana-written lemmas such as ある・その・いい).
  */
@@ -54,23 +56,65 @@ export function buildKanjiumPitchLookup(table: Record<string, string>): KanjiumP
 }
 
 /**
- * Targets for the citation-form content tokens of a sentence that no existing target already covers.
+ * An inflected verb / i-adjective token: the word class is inferred by conjugating the lemma each plausible way
+ * and keeping the one that reproduces the surface, then the shared resolver predicts the shifted accent. Forms
+ * the resolver does not cover (te-form without a stored position, i-adjective negatives, ...) stay unmarked.
+ */
+function inflectedTarget(
+  suggestion: VocabularySuggestion,
+  positions: number[],
+  sentence: Pick<Sentence, 'japanese' | 'inlineReading'>,
+): SentencePitchAccentTarget | null {
+  if (!suggestion.pos.startsWith('動詞') && !suggestion.pos.startsWith('形容詞')) return null;
+  const wordClass = inferConjugationWordClass(
+    suggestion.expression,
+    suggestion.reading,
+    suggestion.pos,
+    suggestion.surface,
+    sentence.japanese,
+  );
+  if (!wordClass) return null;
+  const resolved = resolveInflectedPitchAccent({
+    vocabularyItem: {
+      expression: suggestion.expression,
+      reading: suggestion.reading,
+      partOfSpeech: conjugationTagFromWordClass(wordClass, suggestion.expression),
+      pitchAccentPositions: positions,
+    },
+    sentence,
+    surfaceForm: suggestion.surface,
+  });
+  if (!resolved || resolved.isCitationForm) return null;
+  return {
+    surfaceForm: resolved.surfaceForm,
+    reading: resolved.reading,
+    pitchAccentPositions: [resolved.position],
+  };
+}
+
+/**
+ * Targets for the content tokens of a sentence that no existing target already covers.
  * `covered` holds the surface forms already marked via vocabulary links.
  */
 export function kanjiumTargetsForSuggestions(
   suggestions: readonly VocabularySuggestion[],
   lookup: KanjiumPitchLookup,
   covered: ReadonlySet<string>,
+  sentence: Pick<Sentence, 'japanese' | 'inlineReading'>,
 ): SentencePitchAccentTarget[] {
   const targets: SentencePitchAccentTarget[] = [];
   for (const suggestion of suggestions) {
     if (!suggestion.selectedByDefault || !suggestion.reading) continue;
-    const isCitationForm =
-      suggestion.surface === suggestion.expression || suggestion.surface === suggestion.reading;
-    if (!isCitationForm) continue;
     if (covered.has(suggestion.surface) || covered.has(suggestion.expression)) continue;
     const positions = lookup.find(suggestion.expression, suggestion.reading);
     if (!positions?.length) continue;
+    const isCitationForm =
+      suggestion.surface === suggestion.expression || suggestion.surface === suggestion.reading;
+    if (!isCitationForm) {
+      const inflected = inflectedTarget(suggestion, positions, sentence);
+      if (inflected) targets.push(inflected);
+      continue;
+    }
     targets.push({
       surfaceForm: suggestion.surface,
       reading: suggestion.reading,

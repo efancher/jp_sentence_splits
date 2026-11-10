@@ -2687,7 +2687,9 @@ a self-hosted pronunciation-analysis backend. Capabilities:
   citation-form default-checked morphology suggestions only, exact
   expression+reading match, or a reading-only match for kana-written lemmas
   when every Kanjium entry for that reading agrees. Inflected unlinked
-  tokens stay unmarked (no word class). A word whose dictionary lists more
+  verbs/i-adjectives are placed by inferring the word class from the surface
+  (`inferConjugationWordClass`) and the same shift resolver linked words use;
+  forms it doesn't cover (te-form, i-adjective negatives) stay unmarked. A word whose dictionary lists more
   than one accent (e.g. 雨 listed as both [1] and [0]) shows a small "?"
   after the contour; its tooltip/aria-label lists the other accents. The
   contour shown is the first listed accent. `npm run

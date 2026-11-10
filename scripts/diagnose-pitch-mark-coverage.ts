@@ -9,7 +9,8 @@
  *   linked_no_accent_data   linked vocab item has no pitch_accent_positions
  *   linked_unresolved       linked, has data, but resolver declined (inflection outside its coverage)
  *   unlinked_kanjium_hit    no link, citation-form token, Kanjium has expression+reading (a lookup would mark it)
- *   unlinked_kanjium_inflected  same, but the token is inflected (needs word class to place the accent)
+ *   unlinked_inflected_recovered  same, inflected, and the word-class inference + shift resolver places it (marked at render)
+ *   unlinked_kanjium_inflected  inflected and the resolver cannot place it (te-form, unsupported form, ...)
  *   unlinked_reading_only_hit   citation-form, no expression match, but every Kanjium entry for the reading agrees
  *   unlinked_no_data        no link and Kanjium has nothing
  * Non-content tokens (particles, auxiliaries, the picker's default-unchecked set) are reported apart.
@@ -19,6 +20,7 @@
  *   --introduced  restrict to sentences the learner has been introduced to
  */
 import type { Sentence, VocabularyItem, VocabularySuggestion } from '../src/domain/types';
+import { kanjiumTargetsForSuggestions } from '../src/lib/kanjiumPitchLookup';
 import { segmentIntoMorae } from '../src/lib/mora';
 import { resolveInflectedPitchAccent } from '../src/lib/pitchAccentShift';
 import { ensureKanjiumPitchIndex, katakanaToHiragana, lookupKanjiumPitch } from './lib/kanjiumPitch';
@@ -37,6 +39,7 @@ const CAUSES = [
   'linked_no_accent_data',
   'linked_unresolved',
   'unlinked_kanjium_hit',
+  'unlinked_inflected_recovered',
   'unlinked_kanjium_inflected',
   'unlinked_reading_only_hit',
   'unlinked_no_data',
@@ -171,7 +174,9 @@ async function main(): Promise<void> {
           cause = hit
             ? citation
               ? 'unlinked_kanjium_hit'
-              : 'unlinked_kanjium_inflected'
+              : kanjiumTargetsForSuggestions([token], { find: (e, r) => lookupKanjiumPitch(kanjium, e, r) ?? undefined }, new Set(), sentence).length > 0
+                ? 'unlinked_inflected_recovered'
+                : 'unlinked_kanjium_inflected'
             : readingOnly !== undefined && citation
               ? 'unlinked_reading_only_hit'
               : 'unlinked_no_data';

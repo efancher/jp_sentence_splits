@@ -8872,7 +8872,9 @@ export async function getSentencePitchAccentTargets(
   const lookup = sentence?.vocabularySuggestions?.length ? await loadKanjiumPitchLookup() : null;
   if (sentence && lookup) {
     const covered = new Set(targets.map((target) => target.surfaceForm));
-    targets.push(...kanjiumTargetsForSuggestions(sentence.vocabularySuggestions, lookup, covered));
+    targets.push(
+      ...kanjiumTargetsForSuggestions(sentence.vocabularySuggestions, lookup, covered, sentence),
+    );
   }
   return targets;
 }
