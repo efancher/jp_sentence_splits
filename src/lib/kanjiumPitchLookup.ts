@@ -14,8 +14,11 @@ import type { SentencePitchAccentTarget } from './sentencePitchAccent';
  *    entry with that reading agrees (covers kana-written lemmas such as ある・その・いい).
  */
 export interface KanjiumPitchLookup {
-  /** Accent nucleus for an expression+reading, or the reading alone when unambiguous. */
-  find(expression: string, reading: string): number | undefined;
+  /**
+   * Accent nuclei for an expression+reading (all that Kanjium lists, first = marked), or for the reading
+   * alone when unambiguous.
+   */
+  find(expression: string, reading: string): number[] | undefined;
 }
 
 export function katakanaToHiragana(text: string): string {
@@ -24,12 +27,13 @@ export function katakanaToHiragana(text: string): string {
 
 /** Pure: builds the lookup from the raw `{ "expression|reading": "0,2" }` table. */
 export function buildKanjiumPitchLookup(table: Record<string, string>): KanjiumPitchLookup {
-  const exact = new Map<string, number>();
+  const exact = new Map<string, number[]>();
   const readingOnly = new Map<string, Set<number>>();
   for (const [key, value] of Object.entries(table)) {
-    const position = Number(value.split(',')[0]);
-    if (!Number.isFinite(position)) continue;
-    exact.set(key, position);
+    const positions = value.split(',').map(Number).filter(Number.isFinite);
+    const position = positions[0];
+    if (position === undefined) continue;
+    exact.set(key, positions);
     const reading = key.slice(key.indexOf('|') + 1);
     // Agreement is judged on the first position only (the one the UI uses).
     const seen = readingOnly.get(reading) ?? new Set<number>();
@@ -44,7 +48,7 @@ export function buildKanjiumPitchLookup(table: Record<string, string>): KanjiumP
       // Only for kana-written lemmas: a kanji name or compound that merely shares a reading must not borrow it.
       if (katakanaToHiragana(expression) !== normalized) return undefined;
       const agreed = readingOnly.get(normalized);
-      return agreed?.size === 1 ? [...agreed][0] : undefined;
+      return agreed?.size === 1 ? [[...agreed][0]!] : undefined;
     },
   };
 }
@@ -65,12 +69,12 @@ export function kanjiumTargetsForSuggestions(
       suggestion.surface === suggestion.expression || suggestion.surface === suggestion.reading;
     if (!isCitationForm) continue;
     if (covered.has(suggestion.surface) || covered.has(suggestion.expression)) continue;
-    const position = lookup.find(suggestion.expression, suggestion.reading);
-    if (position === undefined) continue;
+    const positions = lookup.find(suggestion.expression, suggestion.reading);
+    if (!positions?.length) continue;
     targets.push({
       surfaceForm: suggestion.surface,
       reading: suggestion.reading,
-      pitchAccentPositions: [position],
+      pitchAccentPositions: positions,
     });
   }
   return targets;

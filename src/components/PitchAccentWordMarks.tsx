@@ -1,4 +1,5 @@
 import type { MoraPitchClass } from '../lib/pitchAccentShape';
+import { pitchPatternLabel } from '../lib/pitchAccentShape';
 import type { SentenceWordAccent } from '../lib/sentencePitchAccent';
 
 /**
@@ -31,8 +32,23 @@ export function PitchAccentWordMarks({
   showLearner?: boolean;
 }) {
   const dictParticleClass: MoraPitchClass = word.particleHigh ? 'h' : 'l';
+  const alternatives = word.alternativePositions.map(
+    (position) => `${pitchPatternLabel(position, word.morae.length)} [${position}]`,
+  );
   return (
     <>
+      {alternatives.length > 0 ? (
+        <span
+          className="pa-alt"
+          role="img"
+          aria-label={`The dictionary also lists: ${alternatives.join(', ')}`}
+          title={`Marked as ${word.pattern} [${word.position}]. The dictionary also lists ${alternatives.join(
+            ', ',
+          )} for this word, so this accent may not match this sentence.`}
+        >
+          ?
+        </span>
+      ) : null}
       {word.morae.map((mora, moraIndex) => {
         const learnerClass = learnerClasses?.[moraIndex];
         return (

@@ -8860,7 +8860,11 @@ export async function getSentencePitchAccentTargets(
       // comment on ResolvedPitchAccent.surfaceForm (truncated stems).
       surfaceForm: resolved.surfaceForm,
       reading: resolved.reading,
-      pitchAccentPositions: [resolved.position],
+      // A citation-form word keeps the dictionary's other listed accents so the row can flag the ambiguity;
+      // an inflected occurrence is a single predicted position.
+      pitchAccentPositions: resolved.isCitationForm
+        ? [resolved.position, ...(occurrence.vocabularyItem.pitchAccentPositions ?? []).slice(1)]
+        : [resolved.position],
     });
   }
   // Words with no vocabulary link: fall back to the Kanjium table (citation-form content words only).

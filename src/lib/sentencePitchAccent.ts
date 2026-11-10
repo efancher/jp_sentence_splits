@@ -46,6 +46,13 @@ export interface SentenceWordAccent {
   morae: string[];
   /** High/low per mora — same length as `morae`. */
   classes: MoraPitchClass[];
+  /**
+   * Other dictionary accent nuclei the source lists for this same word and
+   * reading (first one is the one marked). Non-empty means the marks are one
+   * of several attested readings — shown with a "?" so they aren't trusted
+   * blindly.
+   */
+  alternativePositions: number[];
   /** Whether a following particle stays high (heiban only). */
   particleHigh: boolean;
   /**
@@ -88,6 +95,13 @@ export function trailingBunsetsuParticles(text: string, from: number): string {
   return out;
 }
 
+/** Distinct accent nuclei after the first one (the first is what gets marked). */
+export function alternativeAccentPositions(positions: readonly number[] | undefined): number[] {
+  if (!positions || positions.length < 2) return [];
+  const first = positions[0];
+  return [...new Set(positions.slice(1).filter((p) => Number.isFinite(p) && p !== first))];
+}
+
 export interface SentencePitchAccentTarget {
   surfaceForm: string;
   reading: string;
@@ -123,6 +137,7 @@ export function buildSentencePitchAccents(
       start: found,
       morae,
       classes: expectedPitchShape(morae.length, position),
+      alternativePositions: alternativeAccentPositions(target.pitchAccentPositions),
       particleHigh: position <= 0,
       particleTail: [],
       pattern: pitchPatternLabel(position, morae.length),

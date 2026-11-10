@@ -80,4 +80,18 @@ describe('buildSentencePitchAccents', () => {
     expect(words.map((w) => w.surfaceForm)).toEqual(['見つける', '先生']);
     expect(words[1]!.start).toBe(-1);
   });
+
+  it('records the other listed accents for a word with more than one, ignoring duplicates of the first', () => {
+    const [word] = buildSentencePitchAccents('雨が降る', [
+      { surfaceForm: '雨', reading: 'あめ', pitchAccentPositions: [1, 0, 1, 0] },
+    ]);
+    expect(word).toMatchObject({ position: 1, alternativePositions: [0] });
+  });
+
+  it('has no alternatives for a word with a single accent', () => {
+    const [word] = buildSentencePitchAccents('橋を渡る', [
+      { surfaceForm: '橋', reading: 'はし', pitchAccentPositions: [2] },
+    ]);
+    expect(word!.alternativePositions).toEqual([]);
+  });
 });

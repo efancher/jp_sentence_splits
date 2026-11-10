@@ -430,6 +430,17 @@ strong.jp {
   background: color-mix(in srgb, var(--accent) 20%, transparent);
 }
 
+/* Dictionary lists more than one accent for this word; the first is marked. */
+.pa-alt {
+  align-self: flex-start;
+  margin-right: 0.1rem;
+  font-size: 0.6rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--warning, var(--text-muted));
+  cursor: help;
+}
+
 .pa-mora {
   display: inline-flex;
   flex-direction: column;

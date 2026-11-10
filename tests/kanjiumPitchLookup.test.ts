@@ -19,6 +19,7 @@ const TABLE: Record<string, string> = {
   '田中|たなか': '0',
   '種|たね': '0',
   '胤|たね': '0',
+  '雨|あめ': '1,0',
 };
 
 function suggestion(over: Partial<VocabularySuggestion>): VocabularySuggestion {
@@ -40,14 +41,18 @@ describe('buildKanjiumPitchLookup', () => {
   const lookup = buildKanjiumPitchLookup(TABLE);
 
   it('matches expression+reading exactly, with katakana readings folded', () => {
-    expect(lookup.find('橋', 'はし')).toBe(2);
-    expect(lookup.find('日本', 'ニホン')).toBe(2);
+    expect(lookup.find('橋', 'はし')).toEqual([2]);
+    expect(lookup.find('日本', 'ニホン')).toEqual([2]);
+  });
+
+  it('returns every listed accent, first one first', () => {
+    expect(lookup.find('雨', 'あめ')).toEqual([1, 0]);
   });
 
   it('uses a reading-only match for kana lemmas when every entry agrees', () => {
-    expect(lookup.find('その', 'その')).toBe(0);
-    expect(lookup.find('ある', 'ある')).toBe(1);
-    expect(lookup.find('たね', 'たね')).toBe(0);
+    expect(lookup.find('その', 'その')).toEqual([0]);
+    expect(lookup.find('ある', 'ある')).toEqual([1]);
+    expect(lookup.find('たね', 'たね')).toEqual([0]);
   });
 
   it('refuses a reading-only match that is ambiguous or for a kanji expression', () => {
@@ -71,6 +76,15 @@ describe('kanjiumTargetsForSuggestions', () => {
       new Set(),
     );
     expect(targets).toEqual([{ surfaceForm: '橋', reading: 'はし', pitchAccentPositions: [2] }]);
+  });
+
+  it('passes the alternative accents through for a word with more than one', () => {
+    const targets = kanjiumTargetsForSuggestions(
+      [suggestion({ surface: '雨', expression: '雨', reading: 'あめ' })],
+      lookup,
+      new Set(),
+    );
+    expect(targets[0]?.pitchAccentPositions).toEqual([1, 0]);
   });
 
   it('skips words a vocabulary link already marked', () => {
