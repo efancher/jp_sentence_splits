@@ -87,8 +87,12 @@ Chapter Reader stays at ~4k nodes (2,000-sentence chapter) and ~1.7 s cold. Book
 detail now renders sentence rows 200 at a time ("Show more"; reorder mode still
 renders all). Re-measured: the 2,000-sentence page fell to ~3.4k nodes, ~133 MB
 heap and ~2.9 s of long tasks (3.0 s cold, 2.2 s warm), and both libraries pass
-in both browsers. The remaining 3-5 s is not row rendering (the page still loads
-and derives data for every sentence); profile that next.
+in both browsers. The remaining 3-5 s is not row rendering. A CPU profile and
+per-query timing (Chromium, 2,000 sentences) showed mostly IndexedDB work
+(~1.2 s across the whole-book queries: sentence study items ~0.2 s, meaning-bank
+refresh count ~0.3 s, book load ~0.4 s, introduced-sentence filter ~0.8 s),
+with no single hot loop. Overlapping reads of the same study items are the
+likeliest saving if this needs attention later.
 
 ## What the browser baseline measures
 
