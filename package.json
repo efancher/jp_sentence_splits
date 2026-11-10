@@ -80,6 +80,7 @@
     "report:new-card-backlog": "tsx scripts/report-new-card-backlog.ts",
     "questions:coverage": "tsx scripts/clause-question-coverage.ts",
     "diagnose:gloss-reference": "tsx scripts/diagnose-gloss-reference.ts",
+    "diagnose:pitch-range": "tsx scripts/diagnose-pitch-range.ts",
     "diagnose:routing-evidence": "tsx scripts/diagnose-routing-evidence.ts",
     "diagnose:unlinked-audio-sentences": "tsx scripts/diagnose-unlinked-audio-sentences.ts",
     "diagnose:chunk-chain-outcomes": "tsx scripts/diagnose-chunk-chain-outcomes.ts",
