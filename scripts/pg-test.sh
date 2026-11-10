@@ -5,6 +5,8 @@
 # ones. Needs Docker. Extra args go to vitest, e.g.
 #   npm run test:pg -- -t "converge"
 # KEEP=1 leaves the containers up afterwards (faster reruns: SYNC_PG_TEST=1 npx vitest run --no-file-parallelism tests/pgIntegration).
+# PG_TEST_SETUP_ONLY=1 (with KEEP=1) starts and migrates the containers, runs no tests and exits;
+# scripts/perf-restore.sh uses it for the real-browser restore measurement.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -47,6 +49,8 @@ for _ in $(seq 1 30); do
   [ "$code" != 000 ] && break
   sleep 1
 done
+
+if [ "${PG_TEST_SETUP_ONLY:-}" = 1 ]; then echo "containers ready: $PG (postgres :$PG_PORT), $REST (PostgREST :$REST_PORT)"; exit 0; fi
 
 # Files share one database (resetDatabase truncates it), so they must not run in parallel.
 SYNC_PG_TEST=1 npx vitest run --no-file-parallelism tests/pgIntegration "$@"

@@ -326,7 +326,12 @@ backup yet). Open items (usage monitor, budget alert, scripts still writing to
 Supabase, second-account and limit checks) are in
 [CLOUDFLARE_R2_PLAN.md](CLOUDFLARE_R2_PLAN.md). A study-library restore scenario
 (2,804 rows: 63 requests, 2.3 MB) is now budgeted in the Postgres usage tests;
-see [PERFORMANCE.md](PERFORMANCE.md) for what restore coverage remains.
+see [PERFORMANCE.md](PERFORMANCE.md) for what restore coverage remains. A
+real-browser measurement (2026-11-10) found that restoring a library onto an empty
+device is slow while the landing page is open: 11,204 rows took 242 to 297 s in
+Chromium and 164 s in emulated WebKit, versus 36 s on a light page. The cause is
+the landing page's live queries and per-record writes; no fix has been made yet
+(roadmap: "Speed up fresh-device restore").
 
 Review now reads meaning-choice and missed-reading history for the active card
 only, through existing indexes. The question waits for a fixed history snapshot

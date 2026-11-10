@@ -203,9 +203,24 @@ Unfinished work and optional extensions; completed behavior is in `AI_OVERVIEW.m
     latency; inspect query plans for server hotspots. Catch repeated per-row
     queries, full-table reloads, unnecessary polling and redundant audio transfers.
     Measured 2026-11-10: a fresh-device restore costs about 2.1 to 2.3 requests per
-    100 rows (linear), but the Postgres suite's wall-clock times are distorted by
-    `fake-indexeddb` (super-linear), so restore latency still needs a real-browser
-    measurement at the large fixture size (see PERFORMANCE.md).
+    100 rows (linear). In a real browser the restore of an 11,204-row library takes
+    242 to 297 s in Chromium and 164 s in emulated WebKit while the landing page is
+    open, but 36 s on a light page, because of work the landing page's live queries
+    and the per-record write path do on every pulled record. See PERFORMANCE.md,
+    "Fresh-device restore in a real browser", and the restore-speed item below.
+  - **Speed up fresh-device restore (found 2026-11-10, not started).** Candidates, in
+    order of expected payoff and risk: (1) write each pulled page in one Dexie
+    transaction per entity (bulk put of records plus their record-meta) so live queries
+    fire once per page instead of once per record, and batch the per-event conflict,
+    record-meta and existence reads into one read per page; (2) make the landing page's
+    live queries cheap or paused while a pull is applying (for example count with an
+    index, or refresh once when the pull finishes); (3) show restore progress instead of
+    an apparently idle app. Preserve the sync rules in `src/sync/AGENTS.md` (pending
+    local writes and open conflicts must still defer an event, tombstones, record-meta
+    staleness handling). Success: the medium library restores on the landing page in
+    close to the light-page time (about 36 s), checked with
+    `scripts/perf-restore.sh medium`, with the existing sync tests and
+    `npm run test:pg` unchanged.
   - **Supabase budget:** set configurable per-scenario budgets for requests,
     transferred bytes, storage growth and relevant function calls/retries. Model
     normal study, imports, background activity and multiple devices, then compare

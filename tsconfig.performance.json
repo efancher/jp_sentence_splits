@@ -5,6 +5,10 @@
   },
   "include": [
     "playwright.performance.config.ts",
+    "playwright.restore.config.ts",
+    "e2e/restore",
+    "tests/helpers/librarySeed.ts",
+    "scripts/seed-restore-library.ts",
     "e2e/performance",
     "tests/helpers/usageMeter.ts",
     "tests/usageMeter.test.ts",

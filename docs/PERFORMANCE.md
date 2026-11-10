@@ -158,6 +158,56 @@ CDN cache classification. An upload is not treated as download egress. See
 [Supabase's egress definition](https://supabase.com/docs/guides/platform/manage-your-usage/egress)
 before comparing these engineering budgets with the dashboard.
 
+## Fresh-device restore in a real browser (2026-11-10)
+
+`scripts/perf-restore.sh [small|medium|large ...]` measures how long the app's own
+sync takes to rebuild a library on a device with an empty IndexedDB. It starts the
+disposable Postgres and PostgREST containers (the names `pg-test.sh` uses, so do not
+run both at once), builds the app against a local API proxy, seeds a study library
+(`tests/helpers/librarySeed.ts`; the same seed as the Postgres usage tests), and
+runs `playwright.restore.config.ts` in the Playwright container: desktop Chromium
+and iPhone-emulated WebKit, each with a signed-in session injected and no other
+state. Results go to `test-results/performance/restore/<size>[-route]-<project>.json`
+with request counts, bytes, per-request time and per-page apply time.
+Options: `RESTORE_PROJECT=chromium-desktop|webkit-phone`, `RESTORE_ROUTE='/#/help'`
+(the route the app sits on during the restore) and `RESTORE_PROFILE=1` (a Chromium
+CPU profile). The database it wipes is the throwaway container, never Supabase.
+
+| Library | Rows | Landing page, Chromium | Landing page, WebKit | Help page, Chromium |
+| --- | ---: | ---: | ---: | ---: |
+| small | 2,804 | 27 to 29 s (3 runs) | 21 to 24 s (2 runs) | 8.7 s |
+| medium | 11,204 | 242 and 297 s (2 runs) | 164 s | 36.4 s |
+| large | 36,020 | not run (see below) | not run | not run |
+
+- **Requests and bytes match the Postgres suite exactly** (63 requests and
+  2.33 MB, 231 and 9.3 MB), and each request takes 5 to 10 ms, so the server and
+  network are not the cost on localhost. These runs had no network latency and no CPU
+  throttling; a phone on a mobile connection will be slower. Emulated WebKit is not a
+  physical iPhone.
+- **On the landing page the restore is far slower and super-linear:** 4 times the
+  rows took about 10 times as long in Chromium. On a light page the same restores
+  scale linearly (8.7 s to 36.4 s, 4.2 times for 4 times the rows).
+- **The cause is on the landing page, not in the data or server.** Per 100-event page,
+  applying books, sentences, membership, cards and events took about 300 ms
+  (3 ms per event) at every point, but pages of reviews took 3 to 5 s (33 to 54 ms
+  per event) and got slower as reviews accumulated. A Chromium profile showed the
+  main thread about 55 percent idle, so it was waiting on IndexedDB rather than
+  computing. Moving the same restore to the Help page removed 85 to 88 percent of the
+  time. The landing page runs live queries (`useLiveQuery`: `computeLearningBalance`,
+  `getDailyPracticeCounts` and others) that Dexie re-runs after every committed write,
+  and the engine commits each pulled record, plus its metadata, in its own transaction
+  after several separate reads per event (open-conflict list, record metadata,
+  existence check). The live-query cause is the best fit for the evidence; the exact
+  queries that scan reviews were not isolated one by one.
+- **Not measured:** the 36,020-row library. The box was out of swap (4 GB full,
+  about 1.4 GB RAM free) and, extrapolating the medium result, the landing-page
+  restore would take on the order of 15 to 35 minutes. Run it on a quieter machine
+  with `scripts/perf-restore.sh large` after raising the spec's 800-second deadline.
+- **Reproduction pitfalls fixed in the harness:** the preview server is started
+  directly (not through `npx`) so the cleanup trap actually stops it; a stale preview
+  on port 4184 otherwise serves a deleted directory and the browser makes no
+  requests. The script refuses to start if that port is busy.
+
 ## CI and remaining work
 
 `performance-tests.yml` runs the usage checks, typechecks the harness and
@@ -174,10 +224,10 @@ Remaining roadmap work:
 - Add complete import/commit scenarios, restore of the remaining entities
   (analyses, vocabulary links for sentences, gloss decisions, planner sessions and
   audio metadata; words, kanji, sentences, cards, reviews and learning events are
-  covered), a restore at the large-library size measured in a real browser
-  (Playwright with real IndexedDB, since fake-indexeddb distorts restore time), why
-  later pull requests are slower than early ones on the server, whether larger event
-  pages would cut the roughly 2 requests per 100 rows, conflict/token recovery, delayed downloads and cancellation. The existing
+  covered), the large-library restore in a real browser (the medium size is
+  measured; see above), the fix for the slow landing-page restore (open in the
+  roadmap), whether larger event pages would cut the roughly 2 requests per 100 rows,
+  conflict/token recovery, delayed downloads and cancellation. The existing
   timeout races do not cancel the underlying audio request; that behavior is
   not fixed or covered by these immediate-error retry checks.
 - Benchmark server query plans at realistic sizes under the authenticated role.

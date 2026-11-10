@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb, resetDbForTests } from '../../src/db/database';
 import { ensureVocabularyItem } from '../../src/db/repository';
 import { createId } from '../../src/lib/ids';
-import { createInitialFsrsState } from '../../src/lib/scheduling';
+import { librarySeedStatements } from '../helpers/librarySeed';
 import { pushMutations, runSyncCycle } from '../../src/sync/engine';
 import { enqueueMutation, readSyncMeta, updateSyncMeta } from '../../src/sync/queue';
 import type budgets from '../../fixtures/performance/usage-budgets.json';
@@ -117,19 +117,7 @@ describe.skipIf(!PG_TESTS_ENABLED)('sync HTTP budgets against real Postgres and 
   async function restoreLibrary(scenario: string, newReviewScenario: string, size: { books: number; sentences: number; reviewsPerCard: number }) {
     const { books, sentences, reviewsPerCard } = size;
     const reviews = sentences * reviewsPerCard;
-    const fsrs = JSON.stringify(createInitialFsrsState(new Date('2026-11-10T00:00:00Z')));
-    sql(`insert into books (id, owner_id, title) select 'book_' || n, '${USER_A}', 'Book ' || n from generate_series(1,${books}) n`);
-    sql(`insert into sentences (id, owner_id, normalized_key, japanese, translation, first_occurrence_index)
-      select 's_' || n, '${USER_A}', 'key-' || n, '日本語の例文 ' || n, 'Example sentence ' || n, n from generate_series(1,${sentences}) n`);
-    sql(`insert into book_sentences (id, book_id, sentence_id, owner_id, position)
-      select 'bs_' || n, 'book_' || ((n - 1) % ${books} + 1), 's_' || n, '${USER_A}', n from generate_series(1,${sentences}) n`);
-    sql(`insert into study_items (id, owner_id, subject_type, subject_id, activity_type, fsrs_state)
-      select 'si_' || n, '${USER_A}', 'sentence', 's_' || n, 'reading_in_context', '${fsrs}'::jsonb from generate_series(1,${sentences}) n`);
-    sql(`insert into reviews (id, owner_id, study_item_id, rating, "timestamp")
-      select 'r_' || n || '_' || k, '${USER_A}', 'si_' || n, (array['again','hard','good','easy'])[1 + (n + k) % 4],
-        timestamptz '2026-11-01' + (n * k) * interval '1 second' from generate_series(1,${sentences}) n, generate_series(1,${reviewsPerCard}) k`);
-    sql(`insert into sentence_learning_events (id, owner_id, visit_id, action, book_id, sentence_id)
-      select 'e_' || n, '${USER_A}', 'visit_' || n, 'walkthrough_completed', 'book_' || ((n - 1) % ${books} + 1), 's_' || n from generate_series(1,${sentences}) n`);
+    for (const statement of librarySeedStatements(USER_A, size)) sql(statement);
     expect(Number(scalar('select count(*) from reviews'))).toBe(reviews);
 
     resetDbForTests(`pg-${createId('db')}`);
