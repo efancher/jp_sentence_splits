@@ -13683,6 +13683,7 @@ export async function updatePlannerSessionStep(
   sessionId: string,
   stepId: string,
   update: { status: PlannerStepStatus; feedback?: 'too_easy' | 'difficult' },
+  options: { deferProgress?: boolean } = {},
 ): Promise<PlannerSession | undefined> {
   const db = getDb();
   const session = await db.plannerSessions.get(sessionId);
@@ -13720,7 +13721,9 @@ export async function updatePlannerSessionStep(
     priorStep &&
     priorStep.status !== 'completed'
   ) {
-    await advanceCompletedStepProgress(priorStep);
+    // Deferred so auto-advance navigates immediately; the helper swallows its own errors.
+    if (options.deferProgress) void advanceCompletedStepProgress(priorStep);
+    else await advanceCompletedStepProgress(priorStep);
   }
 
   return updated;
@@ -13741,7 +13744,7 @@ export async function settleSessionStep(
 ): Promise<{ session: PlannerSession; nextStep: PlannerSessionStep | undefined } | undefined> {
   const before = await getDb().plannerSessions.get(sessionId);
   if (!before) return undefined;
-  await updatePlannerSessionStep(sessionId, stepId, { status });
+  await updatePlannerSessionStep(sessionId, stepId, { status }, { deferProgress: true });
 
   const currentIndex = before.steps.findIndex((step) => step.id === stepId);
   const nextStepBefore = before.steps

@@ -98,4 +98,25 @@ describe('SessionBar', () => {
     const updated = await getPlannerSession(session.id);
     expect(updated!.steps.every((s) => s.status === 'pending' || s.status === 'active')).toBe(true);
   });
+  it('matches a step whose target path carries a query string (notice-grammar)', async () => {
+    const session = await seedSessionWithTwoVocabSteps();
+    const now = new Date().toISOString();
+    const noticing = {
+      ...session.steps[0]!,
+      id: createId('step'),
+      targetKind: 'grammar_noticing' as const,
+      label: 'Notice grammar',
+      sentenceIds: ['a', 'b'],
+      status: 'active' as const,
+    };
+    await getDb().plannerSessions.put({
+      ...session,
+      steps: [noticing],
+      updatedAt: now,
+    });
+
+    renderBarAt(sessionStepTargetPath(noticing)!);
+
+    expect(await screen.findByRole('button', { name: 'Mark complete' })).toBeInTheDocument();
+  });
 });

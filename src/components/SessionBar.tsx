@@ -39,7 +39,10 @@ export function SessionBar() {
     try {
       const result = await settleSessionStep(session.id, routeStep.id, 'completed');
       const nextPath = result?.nextStep ? sessionStepTargetPath(result.nextStep) : null;
-      if (nextPath) navigate(nextPath);
+      navigate(nextPath ?? `/session/${session.id}`);
+    } catch (error) {
+      console.error('SessionBar markComplete failed', error);
+      navigate(`/session/${session.id}`);
     } finally {
       setUpdating(false);
     }

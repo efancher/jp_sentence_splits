@@ -22,13 +22,19 @@ export interface ActiveSession {
 /** Global "is a session running right now" query — powers SessionBar so any page can offer a way back without a session id in its own route. */
 export function useActiveSession(): ActiveSession | undefined {
   const session = useLiveQuery(() => getActiveInProgressPlannerSession(), []);
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   if (!session) return undefined;
   const isOpen = (step: PlannerSessionStep) =>
     step.status === 'pending' || step.status === 'active';
   const currentStep = session.steps.find(isOpen);
   const routeStep = session.steps.find(
-    (step) => isOpen(step) && sessionStepTargetPath(step) === pathname,
+    (step) => {
+      if (!isOpen(step)) return false;
+      const target = sessionStepTargetPath(step);
+      // Some targets carry a query (`/notice-grammar?ids=…`); matching on
+      // pathname alone left the bar on "Resume" → the page already on screen.
+      return target === pathname || (search !== '' && target === `${pathname}${search}`);
+    },
   );
   return { session, currentStep, routeStep };
 }
