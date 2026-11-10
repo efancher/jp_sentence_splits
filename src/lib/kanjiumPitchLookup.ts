@@ -161,7 +161,12 @@ export function kanjiumTargetsForSuggestions(
   for (const suggestion of suggestions) {
     if (!suggestion.selectedByDefault || !suggestion.reading) continue;
     if (covered.has(suggestion.surface) || covered.has(suggestion.expression)) continue;
-    const found = findLemmaPitch(lookup, suggestion);
+    // Kanjium first; UniDic's lemma accent only when it has nothing.
+    const found =
+      findLemmaPitch(lookup, suggestion) ??
+      (suggestion.accentType !== undefined
+        ? { positions: [suggestion.accentType], reading: suggestion.reading }
+        : undefined);
     if (!found?.positions.length) continue;
     const { positions } = found;
     const lemma = { ...suggestion, reading: found.reading };

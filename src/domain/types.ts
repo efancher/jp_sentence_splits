@@ -31,6 +31,12 @@ export interface VocabularySuggestion {
   reading: string;
   pos: string;
   english?: string;
+  /**
+   * UniDic accent nucleus (mora index, 0 = heiban) for the lemma, when the
+   * tokenizer gave a plain integer for a non-proper-noun. Absent on
+   * suggestions mined before this field existed.
+   */
+  accentType?: number;
   source: 'morphology' | 'satori' | 'manual';
   /** True when this suggestion should start checked in the picker. */
   selectedByDefault: boolean;

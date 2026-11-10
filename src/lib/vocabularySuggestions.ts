@@ -28,6 +28,8 @@ export interface MorphologyToken {
    */
   lemmaReading?: string;
   pos?: string;
+  /** UniDic aType: "" or a plain integer string; see `suggestionFromToken`. */
+  accentType?: string;
 }
 
 /**
@@ -432,6 +434,10 @@ export function suggestionFromToken(
     expression,
     reading,
     pos,
+    // UniDic gives proper nouns a bare 1/0 default rather than real accent data.
+    ...(/^\d+$/.test(token.accentType ?? '') && !pos.startsWith('名詞/固有名詞')
+      ? { accentType: Number(token.accentType) }
+      : {}),
     source: 'morphology',
     selectedByDefault: computeSelectedByDefault(token, prevToken, reading, prevPrevToken),
   };

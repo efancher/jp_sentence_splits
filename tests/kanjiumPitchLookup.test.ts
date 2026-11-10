@@ -9,6 +9,7 @@ import {
   kanjiumTargetsForSuggestions,
 } from '../src/lib/kanjiumPitchLookup';
 import { resetKanjiumPitchCache } from '../src/lib/kanjiumPitchLoader';
+import { suggestionFromToken } from '../src/lib/vocabularySuggestions';
 
 const TABLE: Record<string, string> = {
   '橋|はし': '2',
@@ -138,6 +139,22 @@ describe('kanjiumTargetsForSuggestions', () => {
     expect(targets).toEqual([{ surfaceForm: '来る', reading: 'くる', pitchAccentPositions: [1] }]);
   });
 
+  it('falls back to the UniDic accent when Kanjium has no entry, but prefers Kanjium', () => {
+    const targets = kanjiumTargetsForSuggestions(
+      [
+        suggestion({ surface: '駅前', expression: '駅前', reading: 'えきまえ', accentType: 0 }),
+        suggestion({ surface: '橋', expression: '橋', reading: 'はし', accentType: 1 }),
+      ],
+      lookup,
+      new Set(),
+      SENTENCE,
+    );
+    expect(targets).toEqual([
+      { surfaceForm: '駅前', reading: 'えきまえ', pitchAccentPositions: [0] },
+      { surfaceForm: '橋', reading: 'はし', pitchAccentPositions: [2] },
+    ]);
+  });
+
   it('leaves an inflected form unmarked when the resolver does not cover it', () => {
     const targets = kanjiumTargetsForSuggestions(
       [suggestion({ surface: '走って', expression: '走る', reading: 'はしる', pos: '動詞/一般' })],
@@ -156,6 +173,15 @@ describe('kanjiumTargetsForSuggestions', () => {
       SENTENCE,
     );
     expect(targets).toEqual([]);
+  });
+});
+
+describe('suggestionFromToken accent type', () => {
+  const base = { surface: '駅前', start: 0, end: 2, lemma: '駅前', reading: 'えきまえ' };
+  it('keeps a plain-integer UniDic accent and drops it for proper nouns', () => {
+    expect(suggestionFromToken({ ...base, pos: '名詞/普通名詞', accentType: '0' }, '駅前')?.accentType).toBe(0);
+    expect(suggestionFromToken({ ...base, pos: '名詞/固有名詞', accentType: '1' }, '駅前')?.accentType).toBeUndefined();
+    expect(suggestionFromToken({ ...base, pos: '名詞/普通名詞', accentType: '' }, '駅前')?.accentType).toBeUndefined();
   });
 });
 

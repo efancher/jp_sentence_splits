@@ -64,6 +64,7 @@ const packageTokenSchema = z.object({
   reading: z.string().optional(),
   lemmaReading: z.string().optional(),
   pos: z.string().optional(),
+  accentType: z.string().optional(),
 });
 
 const packageSentenceSchema = z.object({
