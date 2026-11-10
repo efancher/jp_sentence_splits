@@ -123,6 +123,14 @@ Real Postgres/PostgREST tests apply production migrations and authenticated RLS:
 - Mixed-entity restore: a second device with an empty database pulls 40 words,
   41 kanji and 80 links (161 rows) pushed from another device in six requests,
   then idles in one request and pulls one remote edit in two.
+- Study-library restore: an empty device pulls 4 books, 400 sentences with
+  membership, 400 sentence cards, 1,200 reviews and 400 walkthrough events
+  (2,804 rows) in 63 requests and about 2.3 MB of decoded response bodies, then
+  idles in one request and pulls one new review in two requests (947 bytes). The
+  cost is roughly 2.2 requests per 100 rows (event pages plus record fetches), so
+  request count grows linearly with library size: extrapolating the same ratio, a
+  restore of the 20,000-review "large" browser fixture would need on the order of
+  450 requests. That is an extrapolation, not a measurement.
 - Bulk push: 120 complete book records, followed by a sync with no repeated
   payload. This isolates the batch protocol; it is not a full mining import.
 
@@ -151,9 +159,11 @@ Remaining roadmap work:
 
 - Calibrate timing regression limits with repeated runs on a stable runner;
   add IndexedDB operation counts/profiling to explain slow screens.
-- Add complete import/commit scenarios, restore of sentences/study items/audio
-  metadata (only words, kanji and links are covered so far), conflict/token
-  recovery, delayed downloads and cancellation. The existing
+- Add complete import/commit scenarios, restore of the remaining entities
+  (analyses, vocabulary links for sentences, gloss decisions, planner sessions and
+  audio metadata; words, kanji, sentences, cards, reviews and learning events are
+  covered), a restore at the large-library size, whether larger event pages would
+  cut the roughly 2 requests per 100 rows, conflict/token recovery, delayed downloads and cancellation. The existing
   timeout races do not cancel the underlying audio request; that behavior is
   not fixed or covered by these immediate-error retry checks.
 - Benchmark server query plans at realistic sizes under the authenticated role.

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb, resetDbForTests } from '../../src/db/database';
 import { ensureVocabularyItem } from '../../src/db/repository';
 import { createId } from '../../src/lib/ids';
+import { createInitialFsrsState } from '../../src/lib/scheduling';
 import { pushMutations, runSyncCycle } from '../../src/sync/engine';
 import { enqueueMutation, readSyncMeta, updateSyncMeta } from '../../src/sync/queue';
 import { checkUsageBudget } from '../helpers/usageBudget';
@@ -105,4 +106,46 @@ describe.skipIf(!PG_TESTS_ENABLED)('sync HTTP budgets against real Postgres and 
     expect(await getDb().vocabularyItems.filter((v) => v.meaning === 'edited on phone').count()).toBe(1);
     checkUsageBudget('sync-mixed-one-remote-edit', laptop.usage());
   });
+
+  it('restores a study library onto an empty device, then idles and pulls one new review', async () => {
+    // 4 books, 400 sentences with membership, a sentence card each, 3 reviews per card, and one
+    // walkthrough event per sentence: 2,804 rows, the shape of a few weeks of sentence-led study.
+    const fsrs = JSON.stringify(createInitialFsrsState(new Date('2026-11-10T00:00:00Z')));
+    sql(`insert into books (id, owner_id, title) select 'book_' || n, '${USER_A}', 'Book ' || n from generate_series(1,4) n`);
+    sql(`insert into sentences (id, owner_id, normalized_key, japanese, translation, first_occurrence_index)
+      select 's_' || n, '${USER_A}', 'key-' || n, '日本語の例文 ' || n, 'Example sentence ' || n, n from generate_series(1,400) n`);
+    sql(`insert into book_sentences (id, book_id, sentence_id, owner_id, position)
+      select 'bs_' || n, 'book_' || ((n - 1) % 4 + 1), 's_' || n, '${USER_A}', n from generate_series(1,400) n`);
+    sql(`insert into study_items (id, owner_id, subject_type, subject_id, activity_type, fsrs_state)
+      select 'si_' || n, '${USER_A}', 'sentence', 's_' || n, 'reading_in_context', '${fsrs}'::jsonb from generate_series(1,400) n`);
+    sql(`insert into reviews (id, owner_id, study_item_id, rating, "timestamp")
+      select 'r_' || n || '_' || k, '${USER_A}', 'si_' || n, (array['again','hard','good','easy'])[1 + (n + k) % 4],
+        timestamptz '2026-11-01' + (n * k) * interval '1 minute' from generate_series(1,400) n, generate_series(1,3) k`);
+    sql(`insert into sentence_learning_events (id, owner_id, visit_id, action, book_id, sentence_id)
+      select 'e_' || n, '${USER_A}', 'visit_' || n, 'walkthrough_completed', 'book_' || ((n - 1) % 4 + 1), 's_' || n from generate_series(1,400) n`);
+    expect(Number(scalar('select count(*) from reviews'))).toBe(1200);
+
+    resetDbForTests(`pg-${createId('db')}`);
+    await updateSyncMeta({ userId: USER_A, syncReferenceAudio: false });
+    const device = pgClientFor(USER_A);
+    current.client = device.client;
+    await runSyncCycle();
+    expect((await readSyncMeta())?.lastError).toBeUndefined();
+    const db = getDb();
+    expect([
+      await db.books.count(), await db.sentences.count(), await db.bookSentences.count(),
+      await db.studyItems.count(), await db.reviews.count(), await db.sentenceLearningEvents.count(),
+    ]).toEqual([4, 400, 400, 400, 1200, 400]);
+    checkUsageBudget('sync-restore-library-2804-rows', device.usage());
+
+    device.resetUsage();
+    await runSyncCycle();
+    expect(device.usage()).toEqual({ requests: 1, requestBodyBytes: 0, responseBodyBytes: 2 });
+
+    sql(`insert into reviews (id, owner_id, study_item_id, rating) values ('r_new', '${USER_A}', 'si_1', 'good')`);
+    device.resetUsage();
+    await runSyncCycle();
+    expect(await db.reviews.count()).toBe(1201);
+    checkUsageBudget('sync-library-one-new-review', device.usage());
+  }, 120_000);
 });

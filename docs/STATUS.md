@@ -324,8 +324,9 @@ is deployed, all live clips (3,126, 0.73 GB) are in R2, new uploads go to R2, an
 the old Supabase copies were deleted, so R2 is the only copy of live clips (no
 backup yet). Open items (usage monitor, budget alert, scripts still writing to
 Supabase, second-account and limit checks) are in
-[CLOUDFLARE_R2_PLAN.md](CLOUDFLARE_R2_PLAN.md). After that: restore coverage for
-sentences/study items.
+[CLOUDFLARE_R2_PLAN.md](CLOUDFLARE_R2_PLAN.md). A study-library restore scenario
+(2,804 rows: 63 requests, 2.3 MB) is now budgeted in the Postgres usage tests;
+see [PERFORMANCE.md](PERFORMANCE.md) for what restore coverage remains.
 
 Review now reads meaning-choice and missed-reading history for the active card
 only, through existing indexes. The question waits for a fixed history snapshot
