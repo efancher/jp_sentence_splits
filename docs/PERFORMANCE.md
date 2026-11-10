@@ -73,6 +73,20 @@ and fail if any are attempted. The explicit reuse flag avoids accidentally
 benchmarking someone else's preview. `PERF_REVISION` supplies the source label
 when the container cannot see the worktree's external git metadata.
 
+## Large-episode libraries
+
+Two extra synthetic libraries stress a single book rather than many books:
+`episode` (one chapter of 2,000 sentences) and `longBook` (3,000 sentences in 20
+chapters). They add Book detail and whole-book Reader screens, a `scrollToEnd`
+mode, and a size table (DOM nodes, Chromium JS heap, long-task time; -1 where the
+browser cannot report it). First run (3 samples, Chromium/WebKit, 2026-11-10,
+exploratory): Book detail at 2,000 sentences rendered ~32k DOM nodes, ~500 MB
+heap and ~24 s of long tasks (5.7-7.8 s to ready in Chromium); at 3,000
+sentences it timed out in Chromium and both Book detail cases failed in WebKit.
+Chapter Reader stays at ~4k nodes (2,000-sentence chapter) and ~1.7 s cold. Book
+detail needs windowing/pagination of its sentence list; failing cases are
+real signal, not harness noise.
+
 ## What the browser baseline measures
 
 | Fixture | Books | Sentences | Review history | Target chapter |

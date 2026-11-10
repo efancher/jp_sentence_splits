@@ -11,6 +11,7 @@ interface Sample {
   latencyMs: number;
   fixture: unknown;
   timings: Record<string, number[]>;
+  metrics?: { domNodes: number[]; jsHeapMb: number[]; longTaskMs: number[] };
 }
 
 export function summarize(values: number[]) {
@@ -61,6 +62,9 @@ export default class PerformanceReporter implements Reporter {
       '| Browser/profile | Library | Screen | Mode | Added request latency | n | Median ms | p95 ms | Max ms |',
       '| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |',
       ...rows.map((row) => `| ${row.project} | ${row.library} | ${row.screen} | ${row.mode} | ${row.latencyMs} | ${row.n} | ${row.medianMs.toFixed(1)} | ${row.p95Ms?.toFixed(1) ?? '—'} | ${row.maxMs.toFixed(1)} |`),
+      '', '## Size metrics (final state of the document-mode screen; -1 = unsupported by the browser)', '',
+      '| Browser/profile | Library | Screen | DOM nodes | JS heap MB | Long-task ms |', '| --- | --- | --- | ---: | ---: | ---: |',
+      ...this.samples.filter((sample) => sample.metrics).map((sample) => `| ${sample.project} | ${sample.library} | ${sample.screen} | ${sample.metrics!.domNodes.at(-1)} | ${sample.metrics!.jsHeapMb.at(-1)!.toFixed(1)} | ${sample.metrics!.longTaskMs.at(-1)!.toFixed(0)} |`),
       '', ...this.failures.map((failure) => `Failed: ${failure}`), '',
     ];
     writeFileSync(resolve(directory, 'baseline.md'), lines.join('\n'));
