@@ -30,6 +30,7 @@ export const vocabularySuggestionSchema = z.object({
   reading: z.string(),
   pos: z.string(),
   english: z.string().optional(),
+  accentType: z.number().int().nonnegative().optional(),
   source: z.enum(['morphology', 'satori', 'manual']),
   selectedByDefault: z.boolean(),
 });

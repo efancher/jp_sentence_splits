@@ -38,6 +38,7 @@
     "backfill:verb-pair-confusions": "tsx scripts/backfill-verb-pair-confusions.ts",
     "backfill:vocabulary-surface-forms": "tsx scripts/backfill-vocabulary-surface-forms.ts",
     "backfill:pitch-accent": "tsx scripts/backfill-pitch-accent.ts",
+    "backfill:suggestion-accent-type": "tsx scripts/backfill-suggestion-accent-type.ts",
     "backfill:pitch-accent-unidic": "tsx scripts/backfill-vocabulary-pitch-accent-unidic.ts",
     "backfill:pitch-accent-wiktionary": "tsx scripts/backfill-pitch-accent-wiktionary.ts",
     "backfill:te-form-pitch-accent-wiktionary": "tsx scripts/backfill-te-form-pitch-accent-wiktionary.ts",
