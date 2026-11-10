@@ -84,8 +84,11 @@ exploratory): Book detail at 2,000 sentences rendered ~32k DOM nodes, ~500 MB
 heap and ~24 s of long tasks (5.7-7.8 s to ready in Chromium); at 3,000
 sentences it timed out in Chromium and both Book detail cases failed in WebKit.
 Chapter Reader stays at ~4k nodes (2,000-sentence chapter) and ~1.7 s cold. Book
-detail needs windowing/pagination of its sentence list; failing cases are
-real signal, not harness noise.
+detail now renders sentence rows 200 at a time ("Show more"; reorder mode still
+renders all). Re-measured: the 2,000-sentence page fell to ~3.4k nodes, ~133 MB
+heap and ~2.9 s of long tasks (3.0 s cold, 2.2 s warm), and both libraries pass
+in both browsers. The remaining 3-5 s is not row rendering (the page still loads
+and derives data for every sentence); profile that next.
 
 ## What the browser baseline measures
 
