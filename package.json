@@ -93,6 +93,7 @@
     "diagnose:grammar-ambiguous": "tsx scripts/diagnose-grammar-ambiguous.ts",
     "diagnose:grammar-short": "tsx scripts/diagnose-grammar-short.ts",
     "diagnose:grammar-bound-lemmas": "tsx scripts/diagnose-grammar-bound-lemmas.ts",
+    "diagnose:pitch-mark-coverage": "tsx scripts/diagnose-pitch-mark-coverage.ts",
     "diagnose:i-plus-one": "tsx scripts/diagnose-i-plus-one.ts",
     "diagnose:chunk-chain": "tsx scripts/diagnose-chunk-chain.ts",
     "diagnose:grammar-reference": "tsx scripts/diagnose-grammar-reference.ts",
