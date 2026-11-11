@@ -110,8 +110,12 @@ These are scoped follow-up checks, not a rerun of the full coverage suite above.
    Vitest line coverage. `e2e/nhk-easy-import.spec.ts` now drives the NHK page
    with mocked service routes (feed and article-import failure then retry,
    text-only article, cancel keeping typed translations, commit creating
-   sentences and no study items; phone/desktop, Chromium/WebKit); QuickMine and
-   partial assistant results remain uncovered. Helpers and backend routes are tested; browser checks
+   sentences and no study items; phone/desktop, Chromium/WebKit).
+   `e2e/quick-mine-resume.spec.ts` covers QuickMine resume (swept job, failed
+   job, transient 503 retry, picking an in-progress job, a partial pasted reply
+   flagged before commit); it found the idle "Add to book" select overflowing
+   390px WebKit (fixed in `global.css`). Fresh job start/polling, assistant
+   runs and QuickMine commit remain uncovered. Helpers and backend routes are tested; browser checks
    should exercise resumable imports, partial assistant results and failure
    recovery through the actual screens. Source-cache tests stub the backup
    boundary and cover disabled configuration; enabled Storage upload/restore
