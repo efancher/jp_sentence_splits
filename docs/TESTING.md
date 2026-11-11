@@ -105,7 +105,12 @@ These are scoped follow-up checks, not a rerun of the full coverage suite above.
    coverage and `audioSync.ts` 5.96%. Queue/conflict and real-RLS tests already
    provide useful protection, but do not establish browser behavior across token
    expiry, offline reconnects, interrupted uploads, partial restores and multiple
-   devices. `ConflictPanel` and auth/sync settings also have little UI coverage.
+   devices. `tests/conflictPanel.test.tsx` covers `ConflictPanel` in jsdom over
+   fake IndexedDB (Keep local/remote/both, bulk resolve with and without the
+   confirm, chapter-by-chapter book merge, issue reporting and its failure); it
+   is not a browser test because the panel only renders in a Supabase-configured
+   build, which the local-only e2e preview is not. The rest of auth/sync
+   settings still has little UI coverage.
 2. **Import UI orchestration.** `QuickMinePage` and `NhkEasyImportPage` have no
    Vitest line coverage. `e2e/nhk-easy-import.spec.ts` now drives the NHK page
    with mocked service routes (feed and article-import failure then retry,
