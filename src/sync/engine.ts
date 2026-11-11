@@ -1518,7 +1518,7 @@ export async function applyRemoteEvent(
  * checks and local-write order — see comment below on why grouping by
  * entity is safe for cross-entity (parent/child) dependencies.
  */
-async function applyRemoteEventsBatch(
+export async function applyRemoteEventsBatch(
   events: Array<{
     id: number | string;
     entity: string;
@@ -1532,15 +1532,26 @@ async function applyRemoteEventsBatch(
   type PendingFetch = { entity: SyncEntity; recordId: string; version: number };
   const toFetch: PendingFetch[] = [];
   const skipped: number[] = [];
+  const verdicts = { apply: 0, have: 0, defer: 0 };
+  const entityCounts: Record<string, number> = {};
   for (const event of events) {
     const entity = event.entity as SyncEntity;
     const recordId = String(event.record_id);
     const op = String(event.op);
     const version = Number(event.version);
     const verdict = await classifyRemoteEvent(entity, recordId, op, version, pending);
+    verdicts[verdict] += 1;
+    entityCounts[entity] = (entityCounts[entity] ?? 0) + 1;
     if (verdict === 'apply') toFetch.push({ entity, recordId, version });
     else if (verdict === 'defer') skipped.push(Number(event.id));
   }
+  // Whose events are these? 'have' = echo of our own push (no fetch needed).
+  syncLog(
+    'debug',
+    `Pull page verdicts: apply ${verdicts.apply}, have ${verdicts.have}, defer ${verdicts.defer}`,
+    'PULL_TIMING',
+    { entities: entityCounts },
+  );
   if (!toFetch.length) return { skipped };
 
   const supabase = getSupabase();
@@ -1561,6 +1572,14 @@ async function applyRemoteEventsBatch(
     else byEntity.set(item.entity, [item]);
   }
 
+  // Network first, writes after: an IndexedDB transaction auto-commits if it
+  // awaits anything that isn't IndexedDB, so the fetches stay outside it.
+  const fetched: Array<{
+    entity: SyncEntity;
+    recordId: string;
+    version: number;
+    remote: Record<string, unknown> | undefined;
+  }> = [];
   for (const [entity, items] of byEntity) {
     const idCol = idColumnForEntity(entity);
     const recordIds = [...new Set(items.map((item) => item.recordId))];
@@ -1582,19 +1601,21 @@ async function applyRemoteEventsBatch(
     for (const item of items) {
       latestVersion.set(item.recordId, Math.max(latestVersion.get(item.recordId) ?? 0, item.version));
     }
-    // One transaction for the whole group. Each record used to commit on its own, and every
-    // commit made Dexie re-run any live query watching these tables, so a page of 100 records
-    // re-ran the home page's queries about 100 times (restoring a large library took tens of
-    // minutes). Applying is database work and mapping only, so it is safe inside a transaction;
-    // the network fetch above stays outside it. A failure rolls the group back and the pull
-    // retries it, as it already did because the cursor only advances after a page is applied.
-    const db = getDb();
-    await db.transaction('rw', db.tables, async () => {
-      for (const [recordId, version] of latestVersion) {
-        await applyFetchedRemote(entity, recordId, version, byRecordId.get(recordId));
-      }
-    });
+    for (const [recordId, version] of latestVersion) {
+      fetched.push({ entity, recordId, version, remote: byRecordId.get(recordId) });
+    }
   }
+
+  // One transaction for the whole page. Each row used to be two auto-committed
+  // transactions (the row, then its record-meta); iOS WebKit's ~100ms commit
+  // made a 100-event page take ~20s, which held the single in-flight sync cycle
+  // (and every push queued behind it) for minutes after a big import.
+  const db = getDb();
+  await db.transaction('rw', db.tables, async () => {
+    for (const item of fetched) {
+      await applyFetchedRemote(item.entity, item.recordId, item.version, item.remote);
+    }
+  });
 
   return { skipped };
 }
@@ -1607,8 +1628,10 @@ async function applyRemoteDelete(
   const db = getDb();
   switch (entity) {
     case 'books':
-      await db.bookSentences.where('bookId').equals(recordId).delete();
-      await db.books.delete(recordId);
+      await db.transaction('rw', db.bookSentences, db.books, async () => {
+        await db.bookSentences.where('bookId').equals(recordId).delete();
+        await db.books.delete(recordId);
+      });
       break;
     case 'sentences':
       await db.sentences.delete(recordId);
