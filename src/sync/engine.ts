@@ -8,6 +8,7 @@ import {
   listPendingMutations,
   putRecordMeta,
   recordMetaKey,
+  syncedVersionOf,
   removeQueueItem,
   settlePushedItem,
   addConflict,
@@ -241,6 +242,11 @@ export async function pushMutations(): Promise<string | undefined> {
   if (!userId) return undefined;
 
   await requeueAuthoredChecksOnce();
+  await requeueUnsyncedParents().catch((error) => {
+    syncLog('warn', 'Unsynced-parent sweep failed', 'UNSYNCED_PARENTS_REQUEUED', {
+      message: error instanceof Error ? error.message : String(error),
+    });
+  });
   const collapsed = await dedupeQueueRows();
   if (collapsed > 0) {
     syncLog('warn', `Collapsed ${collapsed} duplicate queue row(s)`, 'QUEUE_DEDUPE', { collapsed });
@@ -536,6 +542,9 @@ async function pushOne(item: SyncQueueItem, userId: string): Promise<void> {
         if (await pruneOrphanedGrammarLink(item)) return;
         await requeueMissingPattern(item);
       }
+      if (error.code === '23503' && error.message.includes('sentence_id_fkey')) {
+        if (await healMissingSentenceParent(item)) return;
+      }
       throw new Error(error.message);
     }
     const writtenVersion = Number(
@@ -689,6 +698,133 @@ async function requeueMissingPattern(item: SyncQueueItem): Promise<void> {
     patternId,
     linkId: item.recordId,
   });
+}
+
+/** The sentence id a sentence-child queue row points at, if it has one. */
+function sentenceIdOfChild(item: SyncQueueItem): string | null {
+  const payload = (item.payload ?? {}) as { sentenceId?: unknown };
+  switch (item.entity) {
+    case 'book_sentences':
+    case 'reference_audio':
+    case 'sentence_vocabulary':
+    case 'sentence_grammar':
+      return typeof payload.sentenceId === 'string' && payload.sentenceId ? payload.sentenceId : null;
+    case 'analyses':
+    case 'inbox':
+      return item.recordId;
+    default:
+      return null;
+  }
+}
+
+/**
+ * A sentence child (book_sentences, reference_audio, …) failed its
+ * `sentence_id_fkey`: the sentence isn't on the server. Two causes, two fixes:
+ *
+ * - The sentence is still in Dexie but nothing is queued to push it — its enqueue
+ *   was lost (local writes commit first, queue rows follow in separate steps, so
+ *   an iOS suspend between them strands the rest). Re-queue it; the child goes
+ *   through on a later cycle. Nothing is lost.
+ * - The sentence is gone locally (deleted/merged before it ever synced, so the
+ *   delete was a no-op server-side). The child can never push: drop its *queue
+ *   rows only*. The local rows are left alone — a reference_audio row carries the
+ *   clip blob, and deleting that automatically isn't worth the risk.
+ *
+ * A sentence that is merely queued behind (tier 0 pushes before its children) is
+ * left to push normally. Returns true when the queue row was dropped.
+ */
+async function healMissingSentenceParent(item: SyncQueueItem): Promise<boolean> {
+  const sentenceId = sentenceIdOfChild(item);
+  if (!sentenceId) return false;
+  const db = getDb();
+  const queued = await db.syncQueue
+    .where('[entity+recordId]')
+    .equals(['sentences', sentenceId])
+    .count();
+  if (queued > 0) return false;
+
+  const local = await db.sentences.get(sentenceId);
+  if (local) {
+    const supabase = getSupabase();
+    if (!supabase) return false;
+    const { data: remote } = await supabase.from('sentences').select('id').eq('id', sentenceId).maybeSingle();
+    if (remote) return false; // it's on the server, so the failure is about something else
+    const { enqueueMutation } = await import('./queue');
+    await enqueueMutation({
+      entity: 'sentences',
+      recordId: sentenceId,
+      operation: 'upsert',
+      expectedVersion: null,
+      payload: local,
+    });
+    syncLog('warn', 'Re-queued a sentence that queued children need but nothing was pushing', 'SENTENCE_REQUEUED', {
+      sentenceId,
+      childEntity: item.entity,
+      childId: item.recordId,
+    });
+    return false;
+  }
+
+  await db.syncQueue.where('[entity+recordId]').equals([item.entity, item.recordId]).delete();
+  syncLog('warn', 'Dropped a queued row whose sentence no longer exists', 'ORPHAN_QUEUE_DROPPED', {
+    sentenceId,
+    entity: item.entity,
+    recordId: item.recordId,
+  });
+  return true;
+}
+
+let unsyncedParentsSwept = false;
+
+/** Test hook: the sweep runs once per module instance. */
+export function resetUnsyncedParentsSweepForTests(): void {
+  unsyncedParentsSwept = false;
+}
+
+/**
+ * Once per app session: local books/sentences that were never acknowledged by the
+ * cloud and have nothing queued lost their enqueue (see healMissingSentenceParent).
+ * Queue them so their children can push. Skipped when the user chose to keep this
+ * device's data local-only, and before the first-login migration choice is made.
+ */
+export async function requeueUnsyncedParents(): Promise<number> {
+  if (unsyncedParentsSwept) return 0;
+  const meta = await ensureSyncMeta();
+  if (meta.migrationChoice === 'keep_local' || meta.migrationChoice === 'skipped') return 0;
+  if (!meta.migrationChoice && !meta.lastSyncAt) return 0;
+  unsyncedParentsSwept = true;
+
+  const db = getDb();
+  const { enqueueMutation } = await import('./queue');
+  let requeued = 0;
+  const sweeps: Array<{ entity: 'books' | 'sentences'; table: typeof db.books | typeof db.sentences }> = [
+    { entity: 'books', table: db.books },
+    { entity: 'sentences', table: db.sentences },
+  ];
+  for (const { entity, table } of sweeps) {
+    const ids = (await table.toCollection().primaryKeys()) as string[];
+    const metas = await db.syncRecordMeta.bulkGet(ids.map((id) => recordMetaKey(entity, id)));
+    const queuedIds = new Set(
+      (await db.syncQueue.where('entity').equals(entity).toArray()).map((row) => row.recordId),
+    );
+    for (let i = 0; i < ids.length; i += 1) {
+      const id = ids[i]!;
+      const recordMeta = metas[i];
+      if (queuedIds.has(id)) continue;
+      // Acknowledged by the cloud at least once (or pulled from it): not lost.
+      if (recordMeta && (syncedVersionOf(recordMeta) ?? 0) > 0) continue;
+      const local = await table.get(id);
+      if (!local) continue;
+      await enqueueMutation({ entity, recordId: id, operation: 'upsert', expectedVersion: null, payload: local });
+      requeued += 1;
+    }
+  }
+  if (requeued > 0) {
+    syncLog('warn', `Re-queued ${requeued} local book/sentence row(s) that were never pushed`, 'UNSYNCED_PARENTS_REQUEUED', {
+      count: requeued,
+    });
+  }
+  return requeued;
 }
 
 type DedupEntity =
