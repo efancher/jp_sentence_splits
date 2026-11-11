@@ -114,8 +114,12 @@ These are scoped follow-up checks, not a rerun of the full coverage suite above.
    `e2e/quick-mine-resume.spec.ts` covers QuickMine resume (swept job, failed
    job, transient 503 retry, picking an in-progress job, a partial pasted reply
    flagged before commit); it found the idle "Add to book" select overflowing
-   390px WebKit (fixed in `global.css`). Fresh job start/polling, assistant
-   runs and QuickMine commit remain uncovered. Helpers and backend routes are tested; browser checks
+   390px WebKit (fixed in `global.css`). `e2e/quick-mine-start.spec.ts` covers
+   a rejected start, a download failure, and start → polling → pasted reply →
+   review (row removal, missing-extras warning) → commit preview and request
+   body on both browsers; the final commit (sentences stored, no study items,
+   job deleted, pointer cleared) is Chromium-only because Linux WebKit rejects
+   Blob writes to IndexedDB. Assistant runs remain uncovered. Helpers and backend routes are tested; browser checks
    should exercise resumable imports, partial assistant results and failure
    recovery through the actual screens. Source-cache tests stub the backup
    boundary and cover disabled configuration; enabled Storage upload/restore
