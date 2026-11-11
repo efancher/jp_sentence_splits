@@ -119,7 +119,10 @@ These are scoped follow-up checks, not a rerun of the full coverage suite above.
    review (row removal, missing-extras warning) → commit preview and request
    body on both browsers; the final commit (sentences stored, no study items,
    job deleted, pointer cleared) is Chromium-only because Linux WebKit rejects
-   Blob writes to IndexedDB. Assistant runs remain uncovered. Helpers and backend routes are tested; browser checks
+   Blob writes to IndexedDB. `e2e/quick-mine-assistant.spec.ts` covers the server-side assistant run
+   (running state locks the controls, finished run lands in review, failed run
+   with partial sentences reviewable and resumable, start error, Stop, and a run
+   finished while the page was closed); book-mode extras runs remain uncovered. Helpers and backend routes are tested; browser checks
    should exercise resumable imports, partial assistant results and failure
    recovery through the actual screens. Source-cache tests stub the backup
    boundary and cover disabled configuration; enabled Storage upload/restore
