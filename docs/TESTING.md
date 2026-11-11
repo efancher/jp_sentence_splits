@@ -132,8 +132,12 @@ These are scoped follow-up checks, not a rerun of the full coverage suite above.
    browser checks for weak pools, replay, completion logging and unchanged FSRS
    state. `e2e/play-games.spec.ts` now covers only the empty-library hub, the
    unknown-game route and horizontal overflow at phone/desktop widths (Chromium
-   and WebKit); seeded rounds are still open. Difficulty screening, easiest-first sorting and Shadow mark/loop
-   controls also retain browser gaps in the roadmap.
+   and WebKit); seeded rounds are deliberately left open. `e2e/shadow-controls.spec.ts`
+   covers Shadow mark start/end, the target range and Clear, and the Loop window
+   sliders (minimum-length clamp, remembered pause/lead-in, speed, Whole
+   sentence reset), asserting no attempts, reviews or study items are created.
+   The hands-free rep loop needs a microphone and stays uncovered. Difficulty
+   screening and easiest-first sorting also retain browser gaps in the roadmap.
 4. **Real audio and devices.** Synthetic native-pitch tests cover playback,
    highlighting, recording and stopping on close. They do not establish acoustic
    correctness, real microphone behavior or physical-iPhone reliability. The
