@@ -165,8 +165,19 @@ and possible extensions. This snapshot does not certify a live deployment.
   walked-through sentences (3+ days since last walked) for weak words, and
   `reading_in_context` asks for the typed reading of the sentence's weakest word
   from its second review (answers feed the model; the rating stays explicit).
-  Each weak-word revisit also drafts a Word check step (max 2 per plan) that opens
-  the reader's word check at `/books/:bookId/check/:sentenceId`.
+  Word check steps (max 2 per plan, 1 minute, `review` bucket, `/books/:bookId/check/:sentenceId`)
+  have their own candidate list since 2026-11-11 (`findWordCheckCandidates`,
+  `src/lib/wordCheckSteps.ts`) instead of riding beside a weak-word Fresh try: walked-through
+  sentences in active books, walked at least a day ago, whose weakest-meaning content word is
+  not yet solid; 7 days after a "got it" on the sentence, 2 after "needed help"; a sentence
+  whose last Read check needed help comes first. The word is picked from the sentence's
+  morphology, not only its vocabulary links (a read-only production check found links on 35 of
+  202 walked sentences, against a checkable word on at least 192 of 200 by morphology), and a
+  word with no vocabulary item gets one (no link, no card) when the learner answers. One tool
+  per sentence per plan: a sentence drafted a Fresh try gets no check, and one given a Word
+  check gets no Read check or Ear tiles/Dictation step that day. Reader Dictation now blanks
+  the phrase holding the sentence's weakest-meaning word first. Jsdom tests and the Chromium
+  `reader-tools` spec pass; not yet used on a phone. Grammar checks still ride on their revisit.
   Grammar (2026-11-08): the same revisits also cover weak grammar patterns
   (`getWeakGrammarSentenceSignal`, from the reader's grammar taps; a pattern is
   weak by its weakest tapped facet, untapped is unseen not weak). Weak words

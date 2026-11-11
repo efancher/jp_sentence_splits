@@ -3,7 +3,7 @@ import type { Table } from 'dexie';
 import { openContentReports, type OpenContentReport } from '../lib/contentReports';
 import { isSentenceLedFlow } from '../lib/sentenceLed';
 import { isReadingAnswerCorrect, surfaceReadingFromInline } from '../lib/readingAnswer';
-import { buildWordEvidence, strugglingWordIds } from '../lib/wordEvidence';
+import { buildWordEvidence, MEANING_CHECK_KEY_PREFIX, strugglingWordIds } from '../lib/wordEvidence';
 import { stepTimer } from '../lib/pageTiming';
 import { FREQUENCY_WAIT_MS, loadWordFrequency, lookupWordBand } from '../lib/wordFrequency';
 import { grammarPatternStrengths } from '../lib/grammarEvidence';
@@ -279,6 +279,7 @@ import {
 } from '../lib/homophoneHunt';
 import { earTilesRejection, tileToolUnavailableReason } from '../lib/earTiles';
 import { dueListeningTools } from '../lib/listeningTools';
+import { dueWordChecks } from '../lib/wordCheckSteps';
 import {
   buildRemixNounPool,
   buildRemixPuzzle,
@@ -349,6 +350,7 @@ import {
   shadowAttemptSummary,
   type ExploreCandidate,
   type ListeningToolCandidate,
+  type WordCheckCandidate,
   type ReadCheckCandidate,
   type GameBreakCandidate,
   type GrammarNoticingCandidate,
@@ -368,6 +370,7 @@ import {
   EXPLORE_CANDIDATE_LIMIT,
   EXPLORE_REVISITS_PER_BOOK,
   LISTENING_TOOL_CANDIDATE_LIMIT,
+  WORD_CHECK_CANDIDATE_LIMIT,
   READ_CHECK_CANDIDATE_LIMIT,
   WEAK_WORD_REVISIT_MIN_GAP_DAYS,
   isPausedLegacyDrillSubject,
@@ -5252,7 +5255,7 @@ export async function getProficientVocabularyItemIds(
 const PLANNER_STRENGTH_CACHE_MS = 60_000;
 
 /** How long the Reader may reuse word strengths; "known" shading doesn't need to track each review live. */
-const READER_STRENGTH_CACHE_MS = 60_000;
+export const READER_STRENGTH_CACHE_MS = 60_000;
 
 /**
  * Saved meanings and "known" status for surface expressions. An expression is
@@ -12255,9 +12258,14 @@ async function getRecentlyMissedClozeSentenceIds(): Promise<Set<string>> {
 type WordReadingStrengths = {
   strengthByWord: Map<string, number>;
   meaningStrengthOf: (wordId: string) => number;
+  /** Meaning strength of a word with no vocabulary item yet: its frequency prior alone. */
+  meaningStrengthOfLemma: (expression: string, reading: string) => number;
   wordsBySentence: Map<string, string[]>;
   links: SentenceVocabulary[];
+  linksBySentence: Map<string, SentenceVocabulary[]>;
   vocabById: Map<string, VocabularyItem>;
+  /** Vocabulary items by `lemmaKey(expression, reading)`. */
+  vocabByLemma: Map<string, VocabularyItem>;
 };
 
 /** Clears the Reader's short-lived word-strength reuse (tests). */
@@ -12375,7 +12383,10 @@ async function computeWordReadingStrengths(timer: ReturnType<typeof stepTimer>):
   // Meaning strength for any word, met or not: it only learns from meaning recall, so it starts at the prior.
   const meaningStrengthOf = (wordId: string) =>
     wordStrength(evidence.get(wordId) ?? [], 'meaning', now, { prior: priorOf(wordId) });
-  return { strengthByWord, meaningStrengthOf, wordsBySentence, links, vocabById };
+  const meaningStrengthOfLemma = (expression: string, reading: string) =>
+    wordStrength([], 'meaning', now, { prior: frequencyBandPrior(lookupWordBand(frequency, expression, reading)) });
+  const vocabByLemma = new Map(vocab.map((item) => [lemmaKey(item.expression, item.reading), item]));
+  return { strengthByWord, meaningStrengthOf, meaningStrengthOfLemma, wordsBySentence, links, linksBySentence, vocabById, vocabByLemma };
 }
 
 /**
@@ -12471,41 +12482,145 @@ export async function getWeakWordRecallTarget(
  */
 export async function getWordMeaningCheckTarget(
   sentence: Pick<Sentence, 'id' | 'japanese' | 'vocabularySuggestions'>,
-): Promise<
-  { vocabularyItemId: string; expression: string; surface: string; reading: string; meaning: string } | undefined
-> {
-  const { strengthByWord, meaningStrengthOf, links, vocabById } = await loadWordReadingStrengths();
-  const contentSurfaces = new Map(
-    sentence.vocabularySuggestions.filter((item) => item.selectedByDefault).map((item) => [item.surface, item]),
-  );
-  const candidates = links
-    .filter((link) => link.sentenceId === sentence.id && !!link.surfaceForm && sentence.japanese.includes(link.surfaceForm))
-    .map((link) => ({ link, suggestion: contentSurfaces.get(link.surfaceForm!), word: vocabById.get(link.vocabularyItemId) }))
-    .filter((entry) => entry.word && entry.suggestion)
-    .map((entry) => ({
-      ...entry,
-      meaningStrength: meaningStrengthOf(entry.link.vocabularyItemId),
-      readingStrength: strengthByWord.get(entry.link.vocabularyItemId) ?? 0,
-    }))
+  maxAgeMs = 0,
+): Promise<MeaningCheckWord | undefined> {
+  return meaningCheckWordsFor(sentence, await loadWordReadingStrengths(maxAgeMs))[0];
+}
+
+/** A content word of a sentence the Word check can ask about. `vocabularyItemId` is '' until the word has an item. */
+export interface MeaningCheckWord {
+  vocabularyItemId: string;
+  expression: string;
+  surface: string;
+  reading: string;
+  meaning: string;
+  /** Where the surface starts in the sentence text. */
+  start: number;
+  meaningStrength: number;
+}
+
+/**
+ * A sentence's checkable content words, weakest meaning first. Words come from the sentence's own
+ * morphology (default-checked `vocabularySuggestions`), not only from `sentence_vocabulary` links:
+ * in the sentence-led flow most walked-through sentences have no links (35 of 202 in the 2026-11-11
+ * production read), so a link-only pick left the Word check with nothing to ask. A word resolves to
+ * its linked item, else to the vocabulary item with the same expression and reading, else to none
+ * (the caller makes the item when the learner answers, as the reader's word taps do).
+ */
+function meaningCheckWordsFor(
+  sentence: Pick<Sentence, 'id' | 'japanese' | 'vocabularySuggestions'>,
+  strengths: WordReadingStrengths,
+): MeaningCheckWord[] {
+  const { strengthByWord, meaningStrengthOf, meaningStrengthOfLemma, linksBySentence, vocabById, vocabByLemma } = strengths;
+  const sentenceLinks = (linksBySentence.get(sentence.id) ?? []).filter((link) => vocabById.has(link.vocabularyItemId));
+  const seen = new Set<string>();
+  const words: Array<{ word: MeaningCheckWord; readingStrength: number }> = [];
+  for (const suggestion of [...sentence.vocabularySuggestions].sort((a, b) => a.start - b.start)) {
+    if (!suggestion.selectedByDefault || !suggestion.expression || seen.has(suggestion.expression)) continue;
+    if (!suggestion.surface || !sentence.japanese.includes(suggestion.surface)) continue;
+    seen.add(suggestion.expression);
+    const surfaceLinks = sentenceLinks.filter((link) => link.surfaceForm === suggestion.surface);
+    const linked =
+      surfaceLinks.find((link) => vocabById.get(link.vocabularyItemId)!.expression === suggestion.expression) ?? surfaceLinks[0];
+    const item = linked
+      ? vocabById.get(linked.vocabularyItemId)
+      : vocabByLemma.get(lemmaKey(suggestion.expression, suggestion.reading));
+    const meaning = item?.meaning.trim() || suggestion.english?.trim() || '';
+    if (!meaning) continue;
+    words.push({
+      word: {
+        vocabularyItemId: item?.id ?? '',
+        expression: item?.expression ?? suggestion.expression,
+        surface: suggestion.surface,
+        reading: item?.reading ?? suggestion.reading,
+        meaning,
+        start: suggestion.start,
+        meaningStrength: item ? meaningStrengthOf(item.id) : meaningStrengthOfLemma(suggestion.expression, suggestion.reading),
+      },
+      readingStrength: item ? strengthByWord.get(item.id) ?? 0 : 0,
+    });
+  }
+  return words
     .sort(
       (a, b) =>
-        a.meaningStrength - b.meaningStrength ||
-        a.readingStrength - b.readingStrength ||
-        a.link.id.localeCompare(b.link.id),
-    );
-  for (const { link, suggestion, word } of candidates) {
-    const meaning = word!.meaning.trim() || suggestion!.english?.trim() || '';
-    if (meaning) {
-      return {
-        vocabularyItemId: link.vocabularyItemId,
-        expression: word!.expression,
-        surface: link.surfaceForm!,
-        reading: word!.reading,
-        meaning,
-      };
+        a.word.meaningStrength - b.word.meaningStrength || a.readingStrength - b.readingStrength || a.word.start - b.word.start,
+    )
+    .map((entry) => entry.word);
+}
+
+/**
+ * Walked-through sentences due for a planner Word check (`wordCheckSteps.ts`): in an active book, walked at
+ * least a day ago, with a content word whose meaning is not yet solid, spaced from the sentence's last
+ * meaning check. Selection only: nothing is stored and no card is created.
+ */
+export async function findWordCheckCandidates(
+  limit: number,
+  excluded: ReadonlySet<string> = new Set(),
+  now: Date = new Date(),
+): Promise<WordCheckCandidate[]> {
+  const db = getDb();
+  const [events, books, suspendedIndex] = await Promise.all([
+    readAllLearningEventsForPass(),
+    db.books.toArray(),
+    loadSuspendedBookIndex(),
+  ]);
+  const lastWalk = new Map<string, number>();
+  const lastCheck = new Map<string, { at: number; gotIt: boolean }>();
+  const lastReadCheck = new Map<string, { at: number; gotIt: boolean }>();
+  const keepLatest = (map: Map<string, { at: number; gotIt: boolean }>, event: SentenceLearningEvent, at: number) => {
+    if (!event.outcome || at <= (map.get(event.sentenceId)?.at ?? 0)) return;
+    map.set(event.sentenceId, { at, gotIt: event.outcome === 'got_it' });
+  };
+  for (const event of events) {
+    const at = Date.parse(event.timestamp);
+    if (Number.isNaN(at)) continue;
+    if (event.action === 'walkthrough_completed') {
+      if (at > (lastWalk.get(event.sentenceId) ?? 0)) lastWalk.set(event.sentenceId, at);
+    } else if (event.action === 'gist_check') {
+      keepLatest(lastReadCheck, event, at);
+    } else if (event.action === 'target_practice' && event.target?.key.startsWith(MEANING_CHECK_KEY_PREFIX)) {
+      keepLatest(lastCheck, event, at);
     }
   }
-  return undefined;
+  const walked = [...lastWalk.keys()].filter((id) => !excluded.has(id));
+  if (walked.length === 0) return [];
+  const activeBooks = new Set(books.filter(isBookInStudyRotation).map((book) => book.id));
+  const membershipBySentence = new Map<string, BookSentence>();
+  for (const membership of await bookSentencesForSentences(walked)) {
+    if (!activeBooks.has(membership.bookId)) continue;
+    if (suspendedIndex && membershipIsShelved(membership, suspendedIndex)) continue;
+    if (!membershipBySentence.has(membership.sentenceId)) membershipBySentence.set(membership.sentenceId, membership);
+  }
+  const reachable = walked.filter((id) => membershipBySentence.has(id));
+  if (reachable.length === 0) return [];
+  const [rows, strengths] = await Promise.all([
+    db.sentences.bulkGet(reachable),
+    loadWordReadingStrengths(PLANNER_STRENGTH_CACHE_MS),
+  ]);
+  const sentenceById = new Map(rows.flatMap((row) => (row ? [[row.id, row] as const] : [])));
+  const due = dueWordChecks({
+    sentences: reachable.flatMap((sentenceId) => {
+      const sentence = sentenceById.get(sentenceId);
+      if (!sentence) return [];
+      const word = meaningCheckWordsFor(sentence, strengths)[0];
+      return [
+        {
+          sentenceId,
+          lastWalkedAt: lastWalk.get(sentenceId)!,
+          word: word ? { label: word.surface, meaningStrength: word.meaningStrength } : undefined,
+          lastCheck: lastCheck.get(sentenceId),
+          lastReadCheck: lastReadCheck.get(sentenceId),
+        },
+      ];
+    }),
+    now: now.getTime(),
+  }).slice(0, limit);
+  return due.map((entry) => ({
+    bookId: membershipBySentence.get(entry.sentenceId)!.bookId,
+    sentenceId: entry.sentenceId,
+    preview: sentenceById.get(entry.sentenceId)!.japanese.slice(0, 24),
+    reason: entry.reason,
+  }));
 }
 
 /**
@@ -13257,6 +13372,7 @@ async function gatherSessionPlannerInput(
     shadowCandidatesFound,
     readCheckCandidates,
     listeningToolCandidates,
+    wordCheckCandidates,
     recentlyMissedTransformationSentenceIds,
     dueItems,
     exploreCandidatesRaw,
@@ -13284,6 +13400,9 @@ async function gatherSessionPlannerInput(
     ),
     timer.time('findListeningToolCandidates', () =>
       findListeningToolCandidates(LISTENING_TOOL_CANDIDATE_LIMIT, exclude.sentenceIds, now),
+    ),
+    timer.time('findWordCheckCandidates', () =>
+      findWordCheckCandidates(WORD_CHECK_CANDIDATE_LIMIT, exclude.sentenceIds, now),
     ),
     timer.time('getRecentlyMissedSentenceTransformationSentenceIds', () =>
       getRecentlyMissedSentenceTransformationSentenceIds(),
@@ -13439,6 +13558,7 @@ async function gatherSessionPlannerInput(
     exploreCandidates,
     readCheckCandidates,
     listeningToolCandidates,
+    wordCheckCandidates,
     understandCandidates,
     grammarNoticingCandidates,
     shadowCandidates,

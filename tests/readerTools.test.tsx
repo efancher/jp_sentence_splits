@@ -106,12 +106,14 @@ describe('reader study tools', () => {
 
     const blank = await screen.findByLabelText('Sentence with a phrase blanked');
     expect(blank.textContent).toContain('＿＿＿');
-    expect(blank.textContent).not.toContain('私は');
+    // The blank is the phrase holding the sentence's weakest word (猫, the first of two unchecked words), not the first phrase.
+    expect(blank.textContent).toContain('私は');
+    expect(blank.textContent).not.toContain('猫が');
 
-    await user.type(screen.getByLabelText('Missing phrase'), '私は');
+    await user.type(screen.getByLabelText('Missing phrase'), '猫が');
     await user.click(screen.getByRole('button', { name: 'Check' }));
     expect(await screen.findByText('✓ Matches')).toBeInTheDocument();
-    expect(screen.getByText('私は', { selector: '.jp' })).toBeInTheDocument();
+    expect(screen.getByText('猫が', { selector: '.jp' })).toBeInTheDocument();
 
     // The typed match never records anything by itself.
     expect(await getDb().sentenceLearningEvents.count()).toBe(0);
@@ -126,7 +128,7 @@ describe('reader study tools', () => {
         support: 'target_masked',
         outcome: 'got_it',
         assessmentSource: 'self',
-        target: { kind: 'expression', label: '私は' },
+        target: { kind: 'expression', label: '猫が' },
       });
     });
     expect(await getDb().reviews.count()).toBe(0);
@@ -154,6 +156,30 @@ describe('reader study tools', () => {
       expect(events[0]!.target!.key).toMatch(/^vocab:v-(cat|fish)$/);
     });
     expect(await getDb().reviews.count()).toBe(0);
+  });
+
+  it('runs the word check on a sentence with no vocabulary links, making the word item only when answered', async () => {
+    const db = getDb();
+    await db.sentenceVocabulary.clear();
+    await db.vocabularyItems.clear();
+    const user = userEvent.setup();
+    renderReader();
+    await user.click(await screen.findByRole('button', { name: 'Word check' }));
+
+    expect(await screen.findByText(/What does/)).toBeInTheDocument();
+    expect(await db.vocabularyItems.count()).toBe(0);
+    await user.click(screen.getByRole('button', { name: 'Show meaning' }));
+    await user.click(screen.getByRole('button', { name: 'Got it' }));
+
+    await waitFor(async () => {
+      const [item] = await db.vocabularyItems.toArray();
+      expect(item).toMatchObject({ expression: '猫', meaning: 'cat' });
+      const events = await db.sentenceLearningEvents.toArray();
+      expect(events).toHaveLength(1);
+      expect(events[0]!.target!.key).toBe(`vocab:${item!.id}`);
+    });
+    expect(await db.sentenceVocabulary.count()).toBe(0);
+    expect(await db.studyItems.count()).toBe(0);
   });
 
   it('rebuilds the sentence from tiles in the text itself, and rates nothing', async () => {

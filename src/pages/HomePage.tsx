@@ -93,7 +93,7 @@ function WeakWordRevisitExplainer() {
         void explainWeakWordRevisits().then(setRows, () => setRows([]));
       }}
     >
-      <summary>Why no Word check?</summary>
+      <summary>Why no Fresh try for weak words?</summary>
       {rows === undefined ? null : rows === 'loading' ? (
         <p className="muted">Checking…</p>
       ) : rows.length === 0 ? (

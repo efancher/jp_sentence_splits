@@ -534,6 +534,26 @@ export function buildTileDictation(
   };
 }
 
+/**
+ * The dictation tile that covers character `at` of the sentence (the phrase holding a given word), or null when
+ * the sentence cannot be dictated or no tile covers it.
+ */
+export function dictationTileContaining(
+  sentence: Pick<Sentence, 'japanese' | 'vocabularySuggestions'>,
+  at: number,
+): number | null {
+  const details = chunkSentenceIntoTileDetails(sentence);
+  if (!details || details.length < CHECK_MIN_TILES || details.length > CHECK_MAX_TILES) return null;
+  let from = 0;
+  for (let index = 0; index < details.length; index += 1) {
+    const start = sentence.japanese.indexOf(details[index]!.text, from);
+    if (start < 0) return null;
+    from = start + details[index]!.text.length;
+    if (at >= start && at < from) return buildTileDictation(sentence, index) ? index : null;
+  }
+  return null;
+}
+
 /** First tile index at or after `from` that the sentence can be dictated from, wrapping; null when it has none. */
 export function nextDictationTile(
   sentence: Pick<Sentence, 'japanese' | 'vocabularySuggestions'>,

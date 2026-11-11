@@ -11,6 +11,7 @@ import {
   BASELINE_SESSION_ALLOCATION,
   EXPLORE_STEP_MINUTES,
   WORD_CHECK_STEPS_PER_PLAN,
+  WORD_CHECK_STEP_MINUTES,
   GRAMMAR_CHECK_STEPS_PER_PLAN,
   LISTENING_TOOL_STEPS_PER_PLAN,
   LISTENING_TOOL_STEP_MINUTES,
@@ -403,6 +404,14 @@ export interface ListeningToolCandidate {
   tool: 'tiles' | 'dictate';
 }
 
+/** A walked-through sentence due for a Word check in the reader (see src/lib/wordCheckSteps.ts). */
+export interface WordCheckCandidate {
+  bookId: string;
+  sentenceId: string;
+  preview: string;
+  reason: string;
+}
+
 export interface ExploreCandidate {
   bookId: string;
   label: string;
@@ -491,6 +500,8 @@ export interface SessionPlannerInput {
   readCheckCandidates?: ReadCheckCandidate[];
   /** Sentences due for an Ear tiles or Dictation round in the reader, most urgent first. Drafted into the `review` bucket after the Read checks. */
   listeningToolCandidates?: ListeningToolCandidate[];
+  /** Sentences due for a Word check in the reader, most urgent first. Drafted into the `review` bucket ahead of the Read checks. */
+  wordCheckCandidates?: WordCheckCandidate[];
   /** Sentence-first planning (settings.sentenceFirstPlanning): explore sentences become `sentence_learning` lessons with no vocabulary gate or reserve. */
   sentenceFirst?: boolean;
   understandCandidates: UnderstandCandidate[];
@@ -721,6 +732,30 @@ function buildListeningToolSteps(candidates: readonly ListeningToolCandidate[], 
   return steps;
 }
 
+/** Word check steps for the sentences due, within the review budget left after the card batches. */
+function buildWordCheckSteps(candidates: readonly WordCheckCandidate[], budgetMinutes: number): PlannerStepDraft[] {
+  const steps: PlannerStepDraft[] = [];
+  let remaining = budgetMinutes;
+  for (const candidate of candidates.slice(0, WORD_CHECK_STEPS_PER_PLAN)) {
+    if (WORD_CHECK_STEP_MINUTES > remaining) break;
+    steps.push({
+      id: draftStepId(),
+      bucket: 'review',
+      activityType: SYNTHETIC_ACTIVITY_TYPES.sentenceLearning,
+      targetKind: 'sentence_learning',
+      bookId: candidate.bookId,
+      sentenceId: candidate.sentenceId,
+      label: `Word check: ${candidate.preview}`,
+      estimatedMinutes: WORD_CHECK_STEP_MINUTES,
+      reason: candidate.reason,
+      status: 'pending',
+      wordCheck: true,
+    });
+    remaining -= WORD_CHECK_STEP_MINUTES;
+  }
+  return steps;
+}
+
 interface ExploreSentenceEntry {
   kind: 'vocabulary' | 'analyze' | 'lesson';
   candidate: ExploreCandidate;
@@ -913,18 +948,6 @@ function buildExploreSteps(
     remaining -= cost;
   }
 
-  // Word checks: a cheap, self-judged "what does this word mean?" for the sentences brought back because
-  // they hold words that haven't stuck. Meaning only learns from recall, so this is what feeds it.
-  let wordChecks = 0;
-  for (const entry of entries) {
-    if (wordChecks >= WORD_CHECK_STEPS_PER_PLAN) break;
-    if (!consumed.has(entry) || !isWordCheckCandidate(entry)) continue;
-    if (EXPLORE_STEP_MINUTES.wordCheck > remaining) break;
-    steps.push(wordCheckStepFor(entry));
-    remaining -= EXPLORE_STEP_MINUTES.wordCheck;
-    wordChecks += 1;
-  }
-
   // Grammar checks: the grammar twin, for sentences brought back for patterns that haven't stuck.
   let grammarChecks = 0;
   for (const entry of entries) {
@@ -960,23 +983,6 @@ function isGrammarCheckCandidate(entry: ExploreSentenceEntry): boolean {
   return entry.kind === 'lesson' && !!entry.sentence.revisit && !!entry.sentence.weakGrammar?.length;
 }
 
-function wordCheckStepFor(entry: ExploreSentenceEntry): PlannerStepDraft {
-  const { candidate, sentence } = entry;
-  return {
-    id: draftStepId(),
-    bucket: 'glossing',
-    activityType: SYNTHETIC_ACTIVITY_TYPES.sentenceLearning,
-    targetKind: 'sentence_learning',
-    bookId: candidate.bookId,
-    sentenceId: sentence.sentenceId,
-    label: `Word check: ${sentence.preview}`,
-    estimatedMinutes: EXPLORE_STEP_MINUTES.wordCheck,
-    reason: `Recall what a word here means (${sentence.weakWords!.join('、')} haven't stuck) — you judge how it went`,
-    status: 'pending',
-    wordCheck: true,
-  };
-}
-
 /**
  * How many minutes the glossing bucket could actually absorb given its
  * candidate sentences — the sum of every eligible sentence's single step
@@ -988,14 +994,9 @@ function wordCheckStepFor(entry: ExploreSentenceEntry): PlannerStepDraft {
 function exploreCeilingMinutes(candidates: ExploreCandidate[], sentenceFirst = false): number {
   const entries = classifyExploreSentences(candidates, sentenceFirst);
   const lessons = entries.reduce((total, entry) => total + exploreEntryCost(entry), 0);
-  // Word checks ride on weak-word revisits (see buildExploreSteps); count the ones that can be drafted.
-  const checks = Math.min(WORD_CHECK_STEPS_PER_PLAN, entries.filter(isWordCheckCandidate).length);
+  // Grammar checks ride on weak-grammar revisits (see buildExploreSteps); count the ones that can be drafted.
   const grammarChecks = Math.min(GRAMMAR_CHECK_STEPS_PER_PLAN, entries.filter(isGrammarCheckCandidate).length);
-  return lessons + checks * EXPLORE_STEP_MINUTES.wordCheck + grammarChecks * EXPLORE_STEP_MINUTES.grammarCheck;
-}
-
-function isWordCheckCandidate(entry: ExploreSentenceEntry): boolean {
-  return entry.kind === 'lesson' && !!entry.sentence.revisit && !!entry.sentence.weakWords?.length;
+  return lessons + grammarChecks * EXPLORE_STEP_MINUTES.grammarCheck;
 }
 
 /** Step 7 (grammar): one step per grammar pattern worth examining, in priority order, until the budget runs out. */
@@ -1323,7 +1324,10 @@ export function buildRecommendedSession(input: SessionPlannerInput): Recommended
     Math.min(READ_CHECK_STEPS_PER_PLAN, input.readCheckCandidates?.length ?? 0) * READ_CHECK_STEP_MINUTES;
   const listeningToolMinutes =
     Math.min(LISTENING_TOOL_STEPS_PER_PLAN, input.listeningToolCandidates?.length ?? 0) * LISTENING_TOOL_STEP_MINUTES;
-  const reviewCeiling = reviewBatchCostMinutes(rankedReview, reviewLimit) + newCardMinutes + readCheckMinutes + listeningToolMinutes;
+  const wordCheckMinutes =
+    Math.min(WORD_CHECK_STEPS_PER_PLAN, input.wordCheckCandidates?.length ?? 0) * WORD_CHECK_STEP_MINUTES;
+  const reviewCeiling =
+    reviewBatchCostMinutes(rankedReview, reviewLimit) + newCardMinutes + readCheckMinutes + wordCheckMinutes + listeningToolMinutes;
 
   // Every bucket — not just review — is clamped to what its candidate list
   // can actually spend. Without this, minutes freed by a capped bucket get
@@ -1355,19 +1359,22 @@ export function buildRecommendedSession(input: SessionPlannerInput): Recommended
   );
 
   const exploreSteps = buildExploreSteps(input.exploreCandidates, allocation.glossing, input.sentenceFirst);
-  // A sentence drafted for a Fresh try (a full walkthrough) doesn't also get a Read check in the same plan.
-  const walkedAgainIds = new Set(exploreSteps.filter((step) => step.targetKind === 'sentence_learning').map((step) => step.sentenceId));
-  const reviewBatchSpent = reviewBatchSteps.reduce((sum, step) => sum + step.estimatedMinutes, 0);
-  const readCheckSteps = buildReadCheckSteps(
-    (input.readCheckCandidates ?? []).filter((candidate) => !walkedAgainIds.has(candidate.sentenceId)),
-    allocation.review - reviewBatchSpent,
-  );
-  const readCheckSpent = readCheckSteps.reduce((sum, step) => sum + step.estimatedMinutes, 0);
-  const listeningToolSteps = buildListeningToolSteps(
-    (input.listeningToolCandidates ?? []).filter((candidate) => !walkedAgainIds.has(candidate.sentenceId)),
-    allocation.review - reviewBatchSpent - readCheckSpent,
-  );
-  const reviewSteps = [...reviewBatchSteps, ...readCheckSteps, ...listeningToolSteps];
+  // One tool per sentence per plan: a sentence drafted for a Fresh try (a full walkthrough) gets no check in
+  // the same plan. Word checks go first (the meaning step comes before the next unaided read), then Read
+  // checks, then listening steps, each skipping sentences an earlier one took; a skipped sentence stays due.
+  const taken = new Set(exploreSteps.filter((step) => step.targetKind === 'sentence_learning').map((step) => step.sentenceId));
+  const untaken = <T extends { sentenceId: string }>(candidates: readonly T[] | undefined): T[] =>
+    (candidates ?? []).filter((candidate) => !taken.has(candidate.sentenceId));
+  const spent = (steps: readonly PlannerStepDraft[]) => steps.reduce((sum, step) => sum + step.estimatedMinutes, 0);
+  let reviewLeft = allocation.review - spent(reviewBatchSteps);
+  const wordCheckSteps = buildWordCheckSteps(untaken(input.wordCheckCandidates), reviewLeft);
+  reviewLeft -= spent(wordCheckSteps);
+  for (const step of wordCheckSteps) taken.add(step.sentenceId);
+  const readCheckSteps = buildReadCheckSteps(untaken(input.readCheckCandidates), reviewLeft);
+  reviewLeft -= spent(readCheckSteps);
+  for (const step of readCheckSteps) taken.add(step.sentenceId);
+  const listeningToolSteps = buildListeningToolSteps(untaken(input.listeningToolCandidates), reviewLeft);
+  const reviewSteps = [...reviewBatchSteps, ...wordCheckSteps, ...readCheckSteps, ...listeningToolSteps];
   // The grammar bucket runs two passes over one shared budget: corpus-flagged
   // patterns "worth learning now" first (the corpus has already told the
   // learner they recur), then "notice the grammar in this worked-through

@@ -23,6 +23,7 @@ import {
   EMPTY_EAR_TILES_PROGRESS,
   buildCheckPuzzle,
   buildTileDictation,
+  dictationTileContaining,
   earTilesDone,
   nextDictationTile,
   tapEarTile,
@@ -42,7 +43,7 @@ import { SentenceWalkthrough, walkthroughChunks } from '../components/SentenceWa
 import { glossesFromWords } from '../lib/chunkGlosses';
 import { mergeChapterConstructionDrafts, mergeChapterWalkthroughs } from '../lib/contextWalkthrough';
 import { WordGlossList, type CompareAids } from '../components/TargetLessonCard';
-import { ensureDefaultBookChapter, getDb, getEpisodeFocus, getSavedWordStatus, getReaderEvidenceLevels, getStrengthKnownExpressions, listGlossDecisions, readRowsByKeys, readSentenceAudioForSentences, listSentenceLearningEvents, logGlossDecision, logSentenceLearningEvent, resetSentenceWalkthrough, ensureVocabularyItem, readSettings, updateSettings, withoutUnseenAiLinks } from '../db/repository';
+import { ensureDefaultBookChapter, getDb, getEpisodeFocus, getSavedWordStatus, getReaderEvidenceLevels, getStrengthKnownExpressions, listGlossDecisions, readRowsByKeys, readSentenceAudioForSentences, listSentenceLearningEvents, logGlossDecision, logSentenceLearningEvent, resetSentenceWalkthrough, ensureVocabularyItem, getWordMeaningCheckTarget, READER_STRENGTH_CACHE_MS, readSettings, updateSettings, withoutUnseenAiLinks } from '../db/repository';
 import { registerReportContext } from '../lib/reportContext';
 import type { BookSentence, Sentence, SentenceAudio, StructureDraftChunk, TextDisplayMode } from '../domain/types';
 import { useNativeAudio } from '../hooks/useNativeAudio';
@@ -539,8 +540,13 @@ export function ReaderPage() {
       if (puzzle) setReaderTool({ sentenceId: sentence.id, kind, visitId, puzzle, progress: EMPTY_EAR_TILES_PROGRESS });
       return;
     }
-    const tile = nextDictationTile(sentence, 0);
-    if (tile !== null) setReaderTool({ sentenceId: sentence.id, kind, tile, visitId });
+    // Blank the phrase holding the sentence's weakest word, so the listening step also works that word.
+    void getWordMeaningCheckTarget(sentence, READER_STRENGTH_CACHE_MS)
+      .catch(() => undefined)
+      .then((word) => {
+        const tile = (word ? dictationTileContaining(sentence, word.start) : null) ?? nextDictationTile(sentence, 0);
+        if (tile !== null) setReaderTool({ sentenceId: sentence.id, kind, tile, visitId });
+      });
   }
 
   /** One tile tap; a finished round feeds the particle skill's gloss log exactly like the pre-walkthrough check. */
@@ -1399,14 +1405,19 @@ export function ReaderPage() {
                       <WordMeaningPanel
                         key={tool.visitId}
                         sentence={row.sentence}
-                        onRecord={(outcome, word) =>
-                          recordReaderTool(
-                            row.sentence.id,
-                            tool.visitId,
-                            { kind: 'vocabulary', key: meaningCheckTargetKey(word.vocabularyItemId), label: word.expression },
-                            outcome,
-                          )
-                        }
+                        onRecord={(outcome, word) => {
+                          // Evidence is keyed by vocabulary item; make just that item (no link, no card) when the word has none yet.
+                          void (async () => {
+                            const vocabularyItemId =
+                              word.vocabularyItemId || (await ensureVocabularyItem(word.expression, word.reading, { meaning: word.meaning })).id;
+                            recordReaderTool(
+                              row.sentence.id,
+                              tool.visitId,
+                              { kind: 'vocabulary', key: meaningCheckTargetKey(vocabularyItemId), label: word.expression },
+                              outcome,
+                            );
+                          })();
+                        }}
                         onClose={() => setReaderTool(undefined)}
                       />
                     );

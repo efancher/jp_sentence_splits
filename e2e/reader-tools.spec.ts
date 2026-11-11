@@ -119,8 +119,9 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 
     await page.getByRole('button', { name: 'Dictation' }).click();
     const blank = page.getByLabel('Sentence with a phrase blanked');
     await expect(blank).toContainText('＿＿＿');
-    await expect(blank).not.toContainText('私は');
-    await page.getByLabel('Missing phrase').fill('私は');
+    // The blank is the phrase holding the weakest word (猫), not the first phrase.
+    await expect(blank).not.toContainText('猫が');
+    await page.getByLabel('Missing phrase').fill('猫が');
     await page.getByRole('button', { name: 'Check', exact: true }).click();
     await expect(page.getByText('✓ Matches')).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

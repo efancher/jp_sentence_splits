@@ -1143,6 +1143,16 @@ control).
   Shadowing; Dictation now comes before Ear tiles (2026-11-08, learner's call).
   Offer rows before and after that date are not directly comparable in the
   "After a follow-up offer" panel.
+  *Progress (2026-11-11):* directions 2-4 shipped (STATUS). Word check has its own
+  candidate list, picked from morphology because only 35 of 202 walked sentences had
+  vocabulary links; Dictation blanks the weakest-meaning word's phrase; the planner
+  drafts one tool per sentence per plan (Fresh try, else Word check, else Read check,
+  else Ear tiles/Dictation). Not done: a Word check triggered directly by a
+  Meaning/Kanji/Reading trouble tag (tags still queue a Fresh try), decoupling the
+  Grammar check from its revisit the same way, and direction 5 (compare the next Read
+  check after a standalone Word check or Dictation). Check after a week of use: how
+  often the 2-per-plan cap is reached, and whether "needed help" stays near the 67 of
+  76 seen in meaning events so far.
   *Open:* how many separate steps a day is tolerable (the plan's time budget
   bounds it today), and whether the typed dictation match should count toward
   `/progress` (see the writing-ladder note above).
