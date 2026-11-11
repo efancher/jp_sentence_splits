@@ -122,7 +122,10 @@ These are scoped follow-up checks, not a rerun of the full coverage suite above.
    Blob writes to IndexedDB. `e2e/quick-mine-assistant.spec.ts` covers the server-side assistant run
    (running state locks the controls, finished run lands in review, failed run
    with partial sentences reviewable and resumable, start error, Stop, and a run
-   finished while the page was closed); book-mode extras runs remain uncovered. Helpers and backend routes are tested; browser checks
+   finished while the page was closed). `e2e/quick-mine-extras.spec.ts` covers the
+   review-step "Generate extras" run (one assistant call per piece, a failing
+   piece stopping the run, Resume re-asking only for what is missing, Stop, and
+   nothing to generate with every extra unticked). Helpers and backend routes are tested; browser checks
    should exercise resumable imports, partial assistant results and failure
    recovery through the actual screens. Source-cache tests stub the backup
    boundary and cover disabled configuration; enabled Storage upload/restore
