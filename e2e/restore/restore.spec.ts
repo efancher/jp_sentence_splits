@@ -114,6 +114,33 @@ test('fresh device restores a study library through the real browser sync', asyn
     } finally { db.close(); }
   }, [...STORES]);
 
+  // Optional IndexedDB read trace (RESTORE_IDB_TRACE=1): which stores are read, how often, and how many rows come back.
+  if (process.env.RESTORE_IDB_TRACE === '1') {
+    await context.addInitScript(() => {
+      const w = window as unknown as { __idb: Record<string, { calls: number; rows: number; maxRows: number }> };
+      w.__idb = {};
+      const note = (store: string, method: string, rows: number) => {
+        const key = `${store}.${method}`;
+        const e = (w.__idb[key] ??= { calls: 0, rows: 0, maxRows: 0 });
+        e.calls += 1; e.rows += rows; e.maxRows = Math.max(e.maxRows, rows);
+      };
+      const wrap = (proto: object, method: string, storeOf: (self: never) => string, rowsOf: (result: unknown) => number) => {
+        const original = (proto as Record<string, (...a: unknown[]) => IDBRequest>)[method]!;
+        (proto as Record<string, unknown>)[method] = function (this: never, ...args: unknown[]) {
+          const request = original.apply(this, args);
+          const store = storeOf(this);
+          request.addEventListener('success', () => note(store, method, rowsOf(request.result)));
+          return request;
+        };
+      };
+      for (const m of ['getAll', 'count', 'getAllKeys']) {
+        wrap(IDBObjectStore.prototype, m, (s: IDBObjectStore) => s.name, (r) => (Array.isArray(r) ? r.length : typeof r === 'number' ? r : 1));
+        wrap(IDBIndex.prototype, m, (s: IDBIndex) => `${s.objectStore.name}#${s.name}`, (r) => (Array.isArray(r) ? r.length : typeof r === 'number' ? r : 1));
+      }
+      wrap(IDBObjectStore.prototype, 'openCursor', (s: IDBObjectStore) => s.name, () => 1);
+      wrap(IDBIndex.prototype, 'openCursor', (s: IDBIndex) => `${s.objectStore.name}#${s.name}`, () => 1);
+    });
+  }
   // Optional Chromium CPU profile of the whole restore (RESTORE_PROFILE=1), saved next to the results.
   const cdp = process.env.RESTORE_PROFILE === '1' && testInfo.project.name === 'chromium-desktop' ? await context.newCDPSession(page) : null;
   if (cdp) {
@@ -141,6 +168,9 @@ test('fresh device restores a study library through the real browser sync', asyn
     }
     await page.waitForTimeout(250);
   }
+  const idbTrace = process.env.RESTORE_IDB_TRACE === '1'
+    ? await page.evaluate(() => (window as unknown as { __idb: unknown }).__idb).catch(() => null)
+    : null;
   proxy.close();
   if (cdp) {
     const { profile } = await cdp.send('Profiler.stop');
@@ -164,7 +194,7 @@ test('fresh device restores a study library through the real browser sync', asyn
       max: sorted[sorted.length - 1], first10avg: Math.round(avg(stats.durations.slice(0, 10))), last10avg: Math.round(avg(stats.durations.slice(-10))) },
     // Time between consecutive 100-event pages = the app's apply time for the previous page (plus its record fetches).
     pageGapsMs: stats.pageStarts.slice(1).map((t, i) => t - stats.pageStarts[i]!),
-    pageErrors: errors, progress: thin,
+    idbTrace, pageErrors: errors, progress: thin,
     note: 'Observation, not a limit: localhost API with no network latency; no CPU throttling; desktop Chromium and emulated iPhone WebKit on this machine.',
   };
   mkdirSync('test-results/performance/restore', { recursive: true });

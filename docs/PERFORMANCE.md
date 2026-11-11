@@ -158,7 +158,7 @@ CDN cache classification. An upload is not treated as download egress. See
 [Supabase's egress definition](https://supabase.com/docs/guides/platform/manage-your-usage/egress)
 before comparing these engineering budgets with the dashboard.
 
-## Fresh-device restore in a real browser (2026-11-10)
+## Fresh-device restore in a real browser (2026-11-10 to 11)
 
 `scripts/perf-restore.sh [small|medium|large ...]` measures how long the app's own
 sync takes to rebuild a library on a device with an empty IndexedDB. It starts the
@@ -169,52 +169,56 @@ runs `playwright.restore.config.ts` in the Playwright container: desktop Chromiu
 and iPhone-emulated WebKit, each with a signed-in session injected and no other
 state. Results go to `test-results/performance/restore/<size>[-route]-<project>.json`
 with request counts, bytes, per-request time and per-page apply time.
-Options: `RESTORE_PROJECT=chromium-desktop|webkit-phone`, `RESTORE_DEADLINE_MS=3600000`
-(the default 800 s is too short for the large size), `RESTORE_ROUTE='/#/help'`
-(the route the app sits on during the restore) and `RESTORE_PROFILE=1` (a Chromium
-CPU profile). The database it wipes is the throwaway container, never Supabase.
+Options: `RESTORE_PROJECT=chromium-desktop|webkit-phone`, `RESTORE_DEADLINE_MS`
+(default 800 s; raise it for slow runs), `RESTORE_ROUTE='/#/help'` (the route the app
+sits on during the restore), `RESTORE_PROFILE=1` (a Chromium CPU profile) and
+`RESTORE_IDB_TRACE=1` (counts of IndexedDB reads per store, which is what found the
+cause below). The database it wipes is the throwaway container, never Supabase.
 
-| Library | Rows | Landing page, Chromium | Landing page, WebKit | Help page, Chromium |
-| --- | ---: | ---: | ---: | ---: |
-| small | 2,804 | 27 to 29 s (3 runs) | 21 to 24 s (2 runs) | 8.7 s |
-| medium | 11,204 | 242 and 297 s (2 runs) | 164 s | 36.4 s |
-| large | 36,020 | **3,338 s (55.6 min)** | **1,918 s (32 min)** | not run |
+Restore time with the landing page open (the page a new device opens on):
 
-- **Requests and bytes match the Postgres suite exactly** (63 requests and
-  2.33 MB, 231 and 9.3 MB), and each request takes 5 to 10 ms, so the server and
-  network are not the cost on localhost. These runs had no network latency and no CPU
-  throttling; a phone on a mobile connection will be slower. Emulated WebKit is not a
-  physical iPhone.
-- **On the landing page the restore is far slower and super-linear:** 4 times the
-  rows took about 10 times as long in Chromium. On a light page the same restores
-  scale linearly (8.7 s to 36.4 s, 4.2 times for 4 times the rows).
-- **The cause is on the landing page, not in the data or server.** Per 100-event page,
-  applying books, sentences, membership, cards and learning events takes about 300 to
-  450 ms (3 to 4 ms per event) with no growth, 12 to 18 s per phase even at 36,020
-  rows. The reviews phase is where the time goes: 98 percent of the large Chromium
-  restore (3,278 of 3,338 s) and 95 percent of WebKit's (1,832 of 1,918 s). Its cost per
-  page grows in a straight line with the reviews already stored (Chromium: 5.5 s per page
-  over the first 40 review pages, then 10.8, 16.2, 22.1 and 27.3 s; WebKit 3.5 to 15.2 s),
-  so the total grows with the square of the review count. A Chromium profile of the
-  small run showed the main thread about 55 percent idle, so it was waiting on
-  IndexedDB rather than computing. Moving the same restore to the Help page removed 85
-  to 88 percent of the time at 11,204 rows.
-- **Most likely mechanism (matches all of the above; the fix has not been tried):** the
-  landing page's `computeLearningBalance` calls `getRecentActivityEvents`
-  (`src/db/repository.ts`), which counts reviews in the last 14 days with an indexed
-  range `count()` (still proportional to the matching rows in IndexedDB) and then builds
-  one array entry per counted review. Dexie re-runs that live query after committed
-  writes, so while reviews arrive each re-run costs time proportional to the recent
-  reviews already stored. No other table is counted that way, which fits only the
-  reviews phase slowing. The engine also commits every pulled record, plus its
-  metadata, in its own transaction after several separate reads per event (open
-  conflicts, record metadata, existence check); that is the steady 3 to 4 ms per event.
-- **Caveat on the size of the effect:** the seed puts every review inside the 14-day
-  window (the worst case for that query). A real library has most reviews older than
-  that, so the real slowdown is smaller than these numbers, though it still grows with
-  the reviews of the last two weeks. The seed's timestamps are now relative to the
-  current time so the worst case stays reproducible; the runs above used fixed 1
-  November 2026 timestamps, which were inside the window when they ran.
+| Library | Rows | Before, Chromium | Before, WebKit | After, Chromium | After, WebKit |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| small | 2,804 | 27 to 29 s | 21 to 24 s | 5.7 s | 8.5 s |
+| medium | 11,204 | 242 to 297 s | 164 s | 27.4 s | 32.9 s |
+| large | 36,020 | 3,338 s (55.6 min) | 1,918 s (32 min) | 142 s | 125 s |
+
+"Before" is the code at `ac23d1e`; "after" is the fix described below. Requests and
+bytes are unchanged (63, 231 and 727 requests; 2.3, 9.4 and 31 MB) and match the
+Postgres suite, and each request takes 5 to 10 ms, so the server and network were
+never the cost on localhost. These runs had no network latency and no CPU
+throttling; a phone on a mobile connection will be slower. Emulated WebKit is not a
+physical iPhone. The seed puts all 20,000 reviews inside the 14-day window the
+landing page counts (the worst case for that query); real libraries have fewer.
+
+- **What was wrong.** Before, the reviews phase took 98 percent of the large Chromium
+  restore, and its cost per 100-event page grew in a straight line with the reviews
+  already stored (5.5 s per page rising to 27.3 s), so the total grew with the square
+  of the review count. Other record types applied at a steady 3 to 4 ms per event. On
+  the Help page the same 11,204-row restore took 36 s, which pointed at the landing
+  page. An IndexedDB read trace of a 2,804-row restore showed what the landing page
+  added: its learning-balance query ran `reviews#timestamp.count` 2,408 times and
+  scanned all book memberships 713 times, against none of that on the Help page. The
+  sync engine committed every pulled record in its own transaction, so Dexie re-ran the
+  page's live queries after nearly every record, and each re-run costs more as the
+  tables grow.
+- **A first guess that mostly did not help.** `getRecentActivityEvents` built one array
+  entry per recent review. Replacing that with one counted entry per table (kept, with
+  tests) only moved the medium restore from 242 to 297 s to 230 s: the cost was the
+  number of re-runs, not the size of each result.
+- **The fix.** `applyRemoteEventsBatch` (`src/sync/engine.ts`) now applies each
+  entity group of a pulled page in a single Dexie transaction (the network fetch stays
+  outside it), so a page of 100 records re-runs live queries about once instead of about
+  100 times. Everything inside is plain database work and data mapping. A failure rolls
+  the group back and the pull retries it, as before. `tests/pgIntegration/syncUsage.pg.test.ts`
+  now fails if a live query re-runs more than about 4 times per page during a restore:
+  with the old code it re-ran 1,201 times for 2,804 records.
+- **What is left.** Review pages still rise mildly (Chromium 346 to 629 ms per page over
+  the large run, WebKit 327 to 444), so the restore is not perfectly linear in Chromium (time
+  grew 4.8 times for 4 times the rows from small to medium, and 5.2 times for 3.2 times
+  the rows from medium to large; WebKit 3.9 and 3.8 times). The engine still does several separate reads per pulled event (the open-conflict
+  list is read about 2,800 times for 2,804 records) and the restore shows no progress on
+  screen. Both are in the roadmap as follow-ups.
 - **Reproduction pitfalls fixed in the harness:** the preview server is started
   directly (not through `npx`) so the cleanup trap actually stops it; a stale preview
   on port 4184 otherwise serves a deleted directory and the browser makes no
@@ -236,9 +240,8 @@ Remaining roadmap work:
 - Add complete import/commit scenarios, restore of the remaining entities
   (analyses, vocabulary links for sentences, gloss decisions, planner sessions and
   audio metadata; words, kanji, sentences, cards, reviews and learning events are
-  covered), the large-library restore in a real browser (the medium size is
-  measured; see above), the fix for the slow landing-page restore (open in the
-  roadmap), whether larger event pages would cut the roughly 2 requests per 100 rows,
+  covered), the remaining restore follow-ups (per-event reads, progress display; see
+  the roadmap), whether larger event pages would cut the roughly 2 requests per 100 rows,
   conflict/token recovery, delayed downloads and cancellation. The existing
   timeout races do not cancel the underlying audio request; that behavior is
   not fixed or covered by these immediate-error retry checks.

@@ -48,7 +48,7 @@ done
 for size in "${SIZES[@]}"; do
   npx tsx scripts/seed-restore-library.ts "$size"
   docker run --rm --network host --user "$(id -u):$(id -g)" \
-    -e RESTORE_SIZE="$size" -e RESTORE_PROFILE="${RESTORE_PROFILE:-}" -e RESTORE_ROUTE="${RESTORE_ROUTE:-}" ${RESTORE_DEADLINE_MS:+-e RESTORE_DEADLINE_MS=$RESTORE_DEADLINE_MS} -e RESTORE_APP_URL="http://127.0.0.1:$APP_PORT" -e RESTORE_PROXY_PORT="$PROXY_PORT" \
+    -e RESTORE_SIZE="$size" -e RESTORE_PROFILE="${RESTORE_PROFILE:-}" -e RESTORE_ROUTE="${RESTORE_ROUTE:-}" -e RESTORE_IDB_TRACE="${RESTORE_IDB_TRACE:-}" ${RESTORE_DEADLINE_MS:+-e RESTORE_DEADLINE_MS=$RESTORE_DEADLINE_MS} -e RESTORE_APP_URL="http://127.0.0.1:$APP_PORT" -e RESTORE_PROXY_PORT="$PROXY_PORT" \
     -v "$PWD:/work" -v "$(realpath node_modules):$(realpath node_modules):ro" \
     -w /work "$IMAGE" \
     node node_modules/@playwright/test/cli.js test --config=playwright.restore.config.ts ${RESTORE_PROJECT:+--project=$RESTORE_PROJECT}

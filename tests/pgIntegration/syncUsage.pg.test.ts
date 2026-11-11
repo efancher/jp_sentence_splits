@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { liveQuery } from 'dexie';
 import { getDb, resetDbForTests } from '../../src/db/database';
 import { ensureVocabularyItem } from '../../src/db/repository';
 import { createId } from '../../src/lib/ids';
@@ -124,9 +125,16 @@ describe.skipIf(!PG_TESTS_ENABLED)('sync HTTP budgets against real Postgres and 
     await updateSyncMeta({ userId: USER_A, syncReferenceAudio: false });
     const device = pgClientFor(USER_A);
     current.client = device.client;
-    await runSyncCycle();
-    expect((await readSyncMeta())?.lastError).toBeUndefined();
+    // A live query like the home page's learning balance re-runs after committed writes. It must
+    // re-run about once per applied page, not once per pulled record (the cause of very slow restores).
     const db = getDb();
+    let liveRuns = 0;
+    const watcher = liveQuery(() => db.reviews.where('timestamp').above('2000-01-01').count()).subscribe(() => { liveRuns += 1; });
+    await runSyncCycle();
+    watcher.unsubscribe();
+    expect((await readSyncMeta())?.lastError).toBeUndefined();
+    const rows = books + sentences * (4 + reviewsPerCard);
+    expect(liveRuns, `live query re-ran ${liveRuns} times for ${rows} records`).toBeLessThan(Math.ceil(rows / 100) * 4);
     expect([
       await db.books.count(), await db.sentences.count(), await db.bookSentences.count(),
       await db.studyItems.count(), await db.reviews.count(), await db.sentenceLearningEvents.count(),

@@ -202,32 +202,23 @@ Unfinished work and optional extensions; completed behavior is in `AI_OVERVIEW.m
     reconnect. Track query/request counts, rows and bytes transferred alongside
     latency; inspect query plans for server hotspots. Catch repeated per-row
     queries, full-table reloads, unnecessary polling and redundant audio transfers.
-    Measured 2026-11-10: a fresh-device restore costs about 2.1 to 2.3 requests per
-    100 rows (linear). In a real browser, with the landing page open, restoring an
-    11,204-row library takes 242 to 297 s in Chromium and 164 s in emulated WebKit, and
-    a 36,020-row library (20,000 reviews, all inside the 14-day window: the worst case)
-    takes 56 min in Chromium and 32 min in WebKit, 98 percent of it in the reviews
-    phase and growing with the square of the review count. On a light page the 11,204
-    rows take 36 s. See PERFORMANCE.md, "Fresh-device restore in a real browser", and
-    the restore-speed item below.
-  - **Speed up fresh-device restore (found 2026-11-10, not started).** Most likely root
-    cause of the quadratic part: `getRecentActivityEvents` (`src/db/repository.ts`),
-    behind the landing page's `computeLearningBalance`, counts recent reviews and builds
-    one array entry per review, and Dexie re-runs it after committed writes. Candidates, in
-    order of expected payoff and risk: (0) return counts and the latest timestamp from that
-    query instead of expanding one object per review, since the planner only uses the count
-    and newest time per mode; (1) write each pulled page in one Dexie
-    transaction per entity (bulk put of records plus their record-meta) so live queries
-    fire once per page instead of once per record, and batch the per-event conflict,
-    record-meta and existence reads into one read per page; (2) make the landing page's
-    live queries cheap or paused while a pull is applying (for example count with an
-    index, or refresh once when the pull finishes); (3) show restore progress instead of
-    an apparently idle app. Preserve the sync rules in `src/sync/AGENTS.md` (pending
-    local writes and open conflicts must still defer an event, tombstones, record-meta
-    staleness handling). Success: the medium library restores on the landing page in
-    close to the light-page time (about 36 s), checked with
-    `scripts/perf-restore.sh medium`, with the existing sync tests and
-    `npm run test:pg` unchanged.
+    Measured 2026-11-10 to 11: a fresh-device restore costs about 2.1 to 2.3 requests per
+    100 rows (linear). In a real browser it was very slow on the landing page (36,020 rows:
+    56 min in Chromium, 32 min in emulated WebKit) because every pulled record committed
+    separately and re-ran the landing page's live queries; applying each pulled page's
+    entity group in one transaction (done 2026-11-11, `src/sync/engine.ts`) brought that to
+    142 s and 125 s, with a regression test. See PERFORMANCE.md, "Fresh-device restore in a
+    real browser".
+  - **Fresh-device restore follow-ups (small, not started).** (1) The engine still does
+    several separate IndexedDB reads per pulled event (the open-conflict list is read about
+    once per record, plus record-meta and existence checks); read the conflicts once per page
+    and `bulkGet` the metadata. (2) Review pages still slow mildly as reviews accumulate
+    (Chromium 346 to 629 ms per page over 20,000 reviews), most likely the landing page's
+    remaining counts re-running once or twice per page. (3) Show restore progress instead of
+    an apparently idle app. (4) Re-measure on a real phone over a mobile connection; these
+    runs were localhost with no CPU throttling. Preserve the sync rules in
+    `src/sync/AGENTS.md`. Check with `scripts/perf-restore.sh medium|large` and
+    `npm run test:pg`.
   - **Supabase budget:** set configurable per-scenario budgets for requests,
     transferred bytes, storage growth and relevant function calls/retries. Model
     normal study, imports, background activity and multiple devices, then compare

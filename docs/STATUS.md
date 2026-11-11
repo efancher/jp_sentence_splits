@@ -328,11 +328,12 @@ Supabase, second-account and limit checks) are in
 (2,804 rows: 63 requests, 2.3 MB) is now budgeted in the Postgres usage tests;
 see [PERFORMANCE.md](PERFORMANCE.md) for what restore coverage remains. A
 real-browser measurement (2026-11-10) found that restoring a library onto an empty
-device is slow while the landing page is open: 11,204 rows took 242 to 297 s in
-Chromium and 164 s in emulated WebKit, versus 36 s on a light page; 36,020 rows
-(worst case: 20,000 recent reviews) took 56 and 32 minutes. The likely cause is the
-landing page's learning-balance live query re-scanning recent reviews after every
-write; no fix has been made yet (roadmap: "Speed up fresh-device restore").
+device was very slow while the landing page was open (36,020 rows: 56 min in Chromium, 32
+in emulated WebKit), because each pulled record committed separately and re-ran the
+landing page's live queries. Applying each pulled page's entity group in one transaction
+(2026-11-11) cut that to 142 s and 125 s (11,204 rows: 27 s and 33 s); a regression test
+guards the live-query re-run count. Follow-ups are in the roadmap ("Fresh-device restore
+follow-ups"). Localhost, no CPU throttling, emulated WebKit.
 
 Review now reads meaning-choice and missed-reading history for the active card
 only, through existing indexes. The question waits for a fixed history snapshot

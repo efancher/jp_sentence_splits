@@ -1582,9 +1582,18 @@ async function applyRemoteEventsBatch(
     for (const item of items) {
       latestVersion.set(item.recordId, Math.max(latestVersion.get(item.recordId) ?? 0, item.version));
     }
-    for (const [recordId, version] of latestVersion) {
-      await applyFetchedRemote(entity, recordId, version, byRecordId.get(recordId));
-    }
+    // One transaction for the whole group. Each record used to commit on its own, and every
+    // commit made Dexie re-run any live query watching these tables, so a page of 100 records
+    // re-ran the home page's queries about 100 times (restoring a large library took tens of
+    // minutes). Applying is database work and mapping only, so it is safe inside a transaction;
+    // the network fetch above stays outside it. A failure rolls the group back and the pull
+    // retries it, as it already did because the cursor only advances after a page is applied.
+    const db = getDb();
+    await db.transaction('rw', db.tables, async () => {
+      for (const [recordId, version] of latestVersion) {
+        await applyFetchedRemote(entity, recordId, version, byRecordId.get(recordId));
+      }
+    });
   }
 
   return { skipped };
