@@ -15,6 +15,9 @@ import { buildShadowingPreview, type ShadowingSentenceInput } from '../src/lib/s
 const tracked = vi.hoisted(() => ({ ids: [] as string[] }));
 
 vi.mock('../src/sync/track', () => ({
+  // Unknown sign-in state: repository falls back to the post-commit trackLocalMutation path.
+  trackLocalMutationsInTransaction: async () => false,
+  requestSyncAfterCommit: () => {},
   trackLocalMutation: async (item: { entity: string; recordId: string }) => {
     if (item.entity === 'book_sentences') tracked.ids.push(item.recordId);
   },

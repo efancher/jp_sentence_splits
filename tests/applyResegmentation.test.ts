@@ -16,6 +16,9 @@ import { buildResegmentPlan } from '../src/lib/resegmentPlan';
 import type { Sentence } from '../src/domain/types';
 
 vi.mock('../src/sync/track', () => ({
+  // Unknown sign-in state: repository falls back to the post-commit trackLocalMutation path.
+  trackLocalMutationsInTransaction: async () => false,
+  requestSyncAfterCommit: () => {},
   trackLocalMutation: vi.fn().mockResolvedValue(undefined),
 }));
 

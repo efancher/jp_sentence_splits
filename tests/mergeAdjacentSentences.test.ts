@@ -16,6 +16,9 @@ import {
 import { nowIso, normalizeSentenceKey } from '../src/lib/normalize';
 
 vi.mock('../src/sync/track', () => ({
+  // Unknown sign-in state: repository falls back to the post-commit trackLocalMutation path.
+  trackLocalMutationsInTransaction: async () => false,
+  requestSyncAfterCommit: () => {},
   trackLocalMutation: vi.fn().mockResolvedValue(undefined),
 }));
 

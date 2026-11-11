@@ -289,6 +289,15 @@ and possible extensions. This snapshot does not certify a live deployment.
   choices and repeat-edit sync race fixes are implemented. Extras save/recovery
   retains failed or unverified server results. Source audio has a best-effort
   private Storage backup/restore path when the backend is configured.
+- Sync lost-enqueue hardening (2026-11-11): the multi-row local writes
+  (`commitImport`, `applyResegmentation`, `mergeAdjacentSentences`,
+  `deleteSentencesCascade`, `deleteBookCascade`) now queue their sync rows inside the
+  same Dexie transaction (`trackLocalMutationsInTransaction`), so an iOS suspend
+  can't strand a committed write with no queue row. A push whose child row fails
+  `sentence_id_fkey` re-queues the missing local sentence or drops only that
+  child's queue row, and a once-per-session sweep queues never-acknowledged local
+  books/sentences. Still post-commit (`notifySync`): the ~90 single-row writes,
+  which have a much smaller window; the sweep covers parents but not children.
 
 ## Test and maintenance review
 

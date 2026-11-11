@@ -90,6 +90,63 @@ export async function trackLocalMutation(input: {
   requestSyncSoon();
 }
 
+/**
+ * Same bookkeeping as `trackLocalMutation`, but run INSIDE the caller's open
+ * Dexie transaction so the data write, its record-meta bump and its queue row
+ * commit (or don't) together. Doing these as separate post-commit steps let an
+ * iOS suspend strand a committed write with no queue row — the cause of orphan
+ * children whose sentence never reached the server.
+ *
+ * The caller's transaction must include `syncMeta`, `syncQueue` and
+ * `syncRecordMeta`, and nothing in here may await non-IndexedDB work (the
+ * transaction would auto-commit), so signed-in state comes from the stored
+ * `userId` only. Returns false when that can't settle the question (Supabase is
+ * configured but no stored user): the caller should then fall back to the
+ * post-commit `notifySyncMany`.
+ */
+export async function trackLocalMutationsInTransaction(
+  items: Array<{
+    entity: SyncEntity;
+    recordId: string;
+    payload: unknown;
+    operation?: SyncOperationType;
+  }>,
+): Promise<boolean> {
+  const meta = await ensureSyncMeta();
+  const configured = isSupabaseConfigured();
+  if (configured && !meta.userId) return false;
+
+  const now = new Date().toISOString();
+  for (const item of items) {
+    const operation = item.operation ?? 'upsert';
+    const existing = await getRecordMeta(item.entity, item.recordId);
+    const synced = syncedVersionOf(existing);
+    await putRecordMeta({
+      entity: item.entity,
+      recordId: item.recordId,
+      version: (existing?.version ?? 0) + 1,
+      syncedVersion: synced ?? 0,
+      updatedAt: now,
+      deletedAt: operation === 'delete' ? now : undefined,
+    });
+    if (!configured) continue;
+    if (item.entity === 'reference_audio' && !meta.syncReferenceAudio) continue;
+    await enqueueMutation({
+      entity: item.entity,
+      recordId: item.recordId,
+      operation,
+      expectedVersion: synced,
+      payload: item.payload,
+    });
+  }
+  return true;
+}
+
+/** Ask the sync engine for a cycle after a transactional enqueue committed. */
+export function requestSyncAfterCommit(): void {
+  requestSyncSoon();
+}
+
 /** Soft-delete helper used when sync is active; otherwise caller hard-deletes. */
 export async function softDeleteLocal(
   entity: SyncEntity,

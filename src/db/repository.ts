@@ -102,7 +102,6 @@ import type {
   GrammarRelationshipType,
   GrammarReviewStatus,
   ImportBatch,
-  InboxMembership,
   InitialOrderMode,
   Kanji,
   MiningImport,
@@ -398,7 +397,12 @@ import {
 } from '../lib/curatedVocabulary';
 import { ensureSettings, getDb, localDateKey, readSettings } from './database';
 import { loadSnapshot, onTableMutation } from './plannerSnapshots';
-import { notifySync, notifySyncMany } from './syncNotify';
+import {
+  finishSinkAfterCommit,
+  notifySync,
+  notifySyncMany,
+  trackSinkInTransaction,
+} from './syncNotify';
 import { getBookWithExtras, withChapterExtras } from './sentenceExtras';
 
 export { getBookWithExtras, withChapterExtras };
@@ -1069,6 +1073,7 @@ async function dropSentencesFromOpenSessionsLocal(
 export async function deleteSentencesCascade(sentenceIds: string[]): Promise<void> {
   const db = getDb();
   const sink: PendingSyncOp[] = [];
+  let sinkTracked = false;
   let changedSessions: PlannerSession[] = [];
   await db.transaction(
     'rw',
@@ -1082,15 +1087,19 @@ export async function deleteSentencesCascade(sentenceIds: string[]): Promise<voi
       db.inbox,
       db.sentenceAudio,
       db.plannerSessions,
+      db.syncMeta,
+      db.syncQueue,
+      db.syncRecordMeta,
     ],
     async () => {
       for (const sentenceId of sentenceIds) {
         await cascadeRetireSentenceLocal(db, sentenceId, sink);
       }
       changedSessions = await dropSentencesFromOpenSessionsLocal(db, new Set(sentenceIds));
+      sinkTracked = await trackSinkInTransaction(sink);
     },
   );
-  notifySyncMany(sink);
+  finishSinkAfterCommit(sink, sinkTracked);
   for (const session of changedSessions) notifySync('planner_sessions', session.id, session);
 }
 
@@ -1262,6 +1271,7 @@ export async function applyResegmentation(
   const timestamp = nowIso();
   const batchId = createId('batch');
   const sink: PendingSyncOp[] = [];
+  let sinkTracked = false;
 
   const oldSentences = (
     await db.sentences.bulkGet(plan.retiredSentenceIds)
@@ -1452,6 +1462,9 @@ export async function applyResegmentation(
       db.books,
       db.importBatches,
       db.sentenceAudio,
+      db.syncMeta,
+      db.syncQueue,
+      db.syncRecordMeta,
     ],
     async () => {
       // 1. New sentences (dedupe if two segments normalize equal).
@@ -1640,10 +1653,11 @@ export async function applyResegmentation(
       for (const record of newAudioRecords) {
         await db.sentenceAudio.put(record);
       }
+      sinkTracked = await trackSinkInTransaction(sink);
     },
   );
 
-  notifySyncMany(sink);
+  finishSinkAfterCommit(sink, sinkTracked);
 
   // Upload the re-cut clips to Supabase Storage + queue their metadata, the
   // same optional/never-block way the shadowing import does.
@@ -1825,6 +1839,7 @@ export async function mergeAdjacentSentences(
   };
 
   const sink: PendingSyncOp[] = [];
+  let sinkTracked = false;
   let changedSessions: PlannerSession[] = [];
   await db.transaction(
     'rw',
@@ -1840,6 +1855,9 @@ export async function mergeAdjacentSentences(
       db.books,
       db.sentenceAudio,
       db.plannerSessions,
+      db.syncMeta,
+      db.syncQueue,
+      db.syncRecordMeta,
     ],
     async () => {
       await db.sentences.put(merged);
@@ -1917,10 +1935,11 @@ export async function mergeAdjacentSentences(
       }
 
       if (newAudio) await db.sentenceAudio.put(newAudio);
+      sinkTracked = await trackSinkInTransaction(sink);
     },
   );
 
-  notifySyncMany(sink);
+  finishSinkAfterCommit(sink, sinkTracked);
   for (const session of changedSessions) notifySync('planner_sessions', session.id, session);
   if (newAudio) void uploadNewReferenceAudio(bookId, [newAudio]);
 
@@ -2101,6 +2120,7 @@ export async function deleteBookCascade(bookId: string): Promise<void> {
   }
 
   const sink: PendingSyncOp[] = [];
+  let sinkTracked = false;
   let changedSessions: PlannerSession[] = [];
   await db.transaction(
     'rw',
@@ -2115,6 +2135,9 @@ export async function deleteBookCascade(bookId: string): Promise<void> {
       db.inbox,
       db.sentenceAudio,
       db.plannerSessions,
+      db.syncMeta,
+      db.syncQueue,
+      db.syncRecordMeta,
     ],
     async () => {
       for (const sentenceId of orphanSentenceIds) {
@@ -2138,9 +2161,10 @@ export async function deleteBookCascade(bookId: string): Promise<void> {
         payload: { id: bookId },
         operation: 'delete',
       });
+      sinkTracked = await trackSinkInTransaction(sink);
     },
   );
-  notifySyncMany(sink);
+  finishSinkAfterCommit(sink, sinkTracked);
   for (const session of changedSessions) notifySync('planner_sessions', session.id, session);
 }
 
@@ -3230,13 +3254,20 @@ export async function commitImport(options: {
     options.selectedIds.includes(item.proposedId),
   );
 
+  const importSink: PendingSyncOp[] = [];
+  let importSinkTracked = false;
   await db.transaction(
     'rw',
-    db.sentences,
-    db.importBatches,
-    db.inbox,
-    db.books,
-    db.bookSentences,
+    [
+      db.sentences,
+      db.importBatches,
+      db.inbox,
+      db.books,
+      db.bookSentences,
+      db.syncMeta,
+      db.syncQueue,
+      db.syncRecordMeta,
+    ],
     async () => {
       const sentenceIds: string[] = [];
       for (const item of selected) {
@@ -3258,6 +3289,7 @@ export async function commitImport(options: {
             updatedAt: timestamp,
           };
           await db.sentences.put(sentence);
+          importSink.push({ entity: 'sentences', recordId: sentence.id, payload: sentence });
           sentenceIds.push(sentence.id);
         } else {
           const merged = mergeSentenceOnReimport(
@@ -3272,6 +3304,7 @@ export async function commitImport(options: {
             updatedAt: timestamp,
           };
           await db.sentences.put(sentence);
+          importSink.push({ entity: 'sentences', recordId: sentence.id, payload: sentence });
           sentenceIds.push(sentence.id);
         }
       }
@@ -3289,18 +3322,26 @@ export async function commitImport(options: {
         warnings: options.preview.warnings.map((item) => item.message),
       };
       await db.importBatches.put(batch);
+      importSink.push({ entity: 'import_batches', recordId: batch.id, payload: batch });
 
       if (options.destination === 'inbox') {
-        await db.inbox.bulkPut(
-          sentenceIds.map((sentenceId) => ({
-            sentenceId,
-            importBatchId: batchId,
-            addedAt: timestamp,
-          })),
-        );
+        const inboxRows = sentenceIds.map((sentenceId) => ({
+          sentenceId,
+          importBatchId: batchId,
+          addedAt: timestamp,
+        }));
+        await db.inbox.bulkPut(inboxRows);
+        for (const row of inboxRows) {
+          importSink.push({ entity: 'inbox', recordId: row.sentenceId, payload: row });
+        }
       }
+      // Queue the sync rows in this transaction: sentences committed here used to
+      // be enqueued many awaits later (after book/membership writes), and a
+      // suspend in between stranded them unqueued.
+      importSinkTracked = await trackSinkInTransaction(importSink);
     },
   );
+  finishSinkAfterCommit(importSink, importSinkTracked);
 
   let bookId = options.bookId;
   const sentenceIds = selected.map((item) => item.proposedId);
@@ -3330,32 +3371,6 @@ export async function commitImport(options: {
   }
   if (bookId && chapterId) {
     await attachSentencesToChapterForImport(bookId, sentenceIds, chapterId);
-  }
-
-  // Enqueue imported sentences + batch for sync (memberships handled by addSentencesToBook).
-  const storedSentences = await getDb().sentences.bulkGet(sentenceIds);
-  notifySyncMany(
-    storedSentences
-      .filter((s): s is Sentence => Boolean(s))
-      .map((sentence) => ({
-        entity: 'sentences' as const,
-        recordId: sentence.id,
-        payload: sentence,
-      })),
-  );
-  const batch = await getDb().importBatches.get(batchId);
-  if (batch) notifySync('import_batches', batch.id, batch);
-  if (options.destination === 'inbox') {
-    const inboxRows = await getDb().inbox.bulkGet(sentenceIds);
-    notifySyncMany(
-      inboxRows
-        .filter((row): row is InboxMembership => Boolean(row))
-        .map((row) => ({
-          entity: 'inbox' as const,
-          recordId: row.sentenceId,
-          payload: row,
-        })),
-    );
   }
 
   return { batchId, bookId, chapterId };
