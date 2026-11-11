@@ -93,6 +93,15 @@ select {
   font-size: 16px; /* prevent iOS zoom */
 }
 
+/* WebKit sizes a select to its longest option; keep long option text inside the column. */
+select {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  contain: paint;
+  text-overflow: ellipsis;
+}
+
 textarea {
   min-height: 96px;
   resize: vertical;
