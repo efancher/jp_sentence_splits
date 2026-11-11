@@ -207,26 +207,8 @@ export function SettingsPage() {
           />
         </label>
         <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
-          Caps how many never-before-seen words/sentences Review introduces
+          Caps how many never-before-seen sentences Review introduces
           in one sitting — already-due reviews are never capped by this.
-        </p>
-        <label>
-          New words topped up per day
-          <input
-            type="number"
-            min={0}
-            step={1}
-            value={settings.dailyNewWordQuota}
-            onChange={(event) => {
-              const parsed = Number.parseInt(event.target.value, 10);
-              if (Number.isNaN(parsed) || parsed < 0) return;
-              void updateSettings({ dailyNewWordQuota: parsed });
-            }}
-          />
-        </label>
-        <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
-          Confirmed words get their first cards when Review opens, up to this
-          many per day, even while reviews are still due. 0 turns it off.
         </p>
         <label>
           New sentence cards topped up per day
@@ -330,24 +312,6 @@ export function SettingsPage() {
         <label className="row">
           <input
             type="checkbox"
-            checked={settings.sentenceLedFlow ?? true}
-            onChange={(event) => {
-              void updateSettings({ sentenceLedFlow: event.target.checked });
-            }}
-          />
-          Sentence-led flow
-        </label>
-        <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
-          Learn each sentence through its guided gloss (vocabulary and
-          grammar included), then review it by picking its English meaning.
-          Separate word and grammar drills are withheld and the old
-          &ldquo;words must be proficient first&rdquo; waits are skipped.
-          Nothing is deleted or rescheduled &mdash; turning it off restores
-          the previous flow exactly.
-        </p>
-        <label className="row">
-          <input
-            type="checkbox"
             checked={settings.sequentialStudyMode ?? false}
             onChange={(event) => {
               void updateSettings({ sequentialStudyMode: event.target.checked });
@@ -422,38 +386,6 @@ export function SettingsPage() {
           meanings. Needs the <code>meaning-assist</code> function deployed;
           otherwise nothing happens. You can also generate them by copy/paste
           from a book page.
-        </p>
-        <label className="row">
-          <input
-            type="checkbox"
-            checked={settings.legacyDrillsPaused ?? false}
-            onChange={(event) => {
-              void updateSettings({ legacyDrillsPaused: event.target.checked });
-            }}
-          />
-          Pause word &amp; grammar drills
-        </label>
-        <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
-          Hides vocabulary and grammar review cards and their planner steps.
-          Nothing is deleted or rescheduled, so turning it off brings
-          everything back exactly as it was. Sentence cards, shadowing and
-          sentence lessons carry on.
-        </p>
-        <label className="row">
-          <input
-            type="checkbox"
-            checked={settings.sentenceFirstPlanning ?? false}
-            onChange={(event) => {
-              void updateSettings({ sentenceFirstPlanning: event.target.checked });
-            }}
-          />
-          Plan sentence lessons (walk through each new sentence before any word drills)
-        </label>
-        <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
-          When on, new daily plans suggest one lesson per upcoming sentence
-          (walkthrough, practise a target, say it yourself) instead of
-          vocabulary-confirmation steps. Today's plan, if already started, is
-          left as it is. Lessons never create review cards.
         </p>
         <label className="row">
           <input

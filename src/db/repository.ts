@@ -1,7 +1,6 @@
 import type { Table } from 'dexie';
 
 import { openContentReports, type OpenContentReport } from '../lib/contentReports';
-import { isSentenceLedFlow } from '../lib/sentenceLed';
 import { isReadingAnswerCorrect, surfaceReadingFromInline } from '../lib/readingAnswer';
 import { buildWordEvidence, MEANING_CHECK_KEY_PREFIX, strugglingWordIds } from '../lib/wordEvidence';
 import { stepTimer } from '../lib/pageTiming';
@@ -43,8 +42,6 @@ import {
 import { buildGrammarDetector, buildReferenceIndex, curatedGrammarByPattern, wordSpansForDetection } from '../lib/grammarReference';
 import { grammarLevelCosts, knownGrammarEntries, orderByIPlusOne, type IPlusOneItem } from '../lib/iPlusOne';
 import {
-  effectiveLegacyDrillsPaused,
-  effectiveSentenceFirstPlanning,
   isIPlusOneOrdering,
   iPlusOneStretchEvery,
   isSequentialStudyMode,
@@ -359,31 +356,26 @@ import {
   type ReviewPriorityInput,
   type SessionPlannerInput,
   type ShadowCandidate,
-  type UnderstandCandidate,
 } from '../lib/sessionPlanner';
 import { normalizeTroubleTags, routeTroubleTags } from '../lib/reviewTroubleTags';
 import { activeShadowSnoozeIds, shadowSnoozeUntil } from '../lib/shadowSnooze';
 import { applyReadingFlagFix, parseReadingFlagNote } from '../lib/readingFlagFix';
 import {
   CONTINUE_BOOK_MIN_INTRODUCED_RATIO,
-  SHADOWING_MIN_INTRODUCED_RATIO,
   EXPLORE_CANDIDATE_LIMIT,
   EXPLORE_REVISITS_PER_BOOK,
   LISTENING_TOOL_CANDIDATE_LIMIT,
   WORD_CHECK_CANDIDATE_LIMIT,
   READ_CHECK_CANDIDATE_LIMIT,
   WEAK_WORD_REVISIT_MIN_GAP_DAYS,
-  isPausedLegacyDrillSubject,
   isSentenceCardSubject,
   EXPLORE_SENTENCE_PREVIEW_LIMIT,
-  GRAMMAR_NOTICING_CANDIDATE_LIMIT,
   NEGLECT_WINDOW_DAYS,
   PRACTICE_ACTIVITY_TYPES,
-  PAUSED_LEGACY_DRILL_SUBJECT_TYPES,
+  RETIRED_DRILL_SUBJECT_TYPES,
   RETAIN_ACTIVITY_TYPES,
   SESSION_PLANNER_CANDIDATE_POOL_SIZE,
   SHADOW_CANDIDATE_LIMIT,
-  UNDERSTAND_CANDIDATE_LIMIT,
 } from '../lib/sessionPlannerConfig';
 import { buildBackupPayload, type BackupBundle } from '../lib/backup';
 import {
@@ -5487,90 +5479,27 @@ export async function getSentenceReadingIntroducedReadiness(
 }
 
 /**
- * The subset of `sentenceIds` the learner has actually met. The `/play` games
+ * The subset of `sentenceIds` the learner has actually met: walked through,
+ * started in a book, or already carrying a card (`getIntroducedSentenceIds`,
+ * the same rule as `ReviewPage` and the shadowing gate). The `/play` games
  * share it so a round never serves a sentence that was only triaged, never seen.
- *
- * **Sentence-led flow (default, since 2026-10-02):** vocabulary cards are
- * neither shown nor seeded, so "every word reviewed on a card" can never hold
- * for a newer sentence. A sentence counts once it was walked through, started
- * in a book, or already has a card (`getIntroducedSentenceIds`, the same rule
- * as `ReviewPage` and the shadowing gate).
- *
- * **Flow off:** every reviewable word has been reviewed at least once
- * (`getSentenceReadingIntroducedReadiness` at ratio 1 — Particle Puzzle's bar).
  */
 export async function filterToIntroducedSentenceIds(sentenceIds: string[]): Promise<Set<string>> {
-  const unique = [...new Set(sentenceIds)];
-  if (isSentenceLedFlow(await readSettings())) return getIntroducedSentenceIds(unique);
-  const readiness = await getSentenceReadingIntroducedReadiness(unique, 1);
-  return new Set([...readiness].filter(([, ready]) => ready).map(([id]) => id));
+  return getIntroducedSentenceIds([...new Set(sentenceIds)]);
 }
 
 /**
- * Shadowing readiness (user request, 2026-08-27). A sentence's vocabulary
- * must be confirmed and at least SHADOWING_MIN_INTRODUCED_RATIO (0.5, was
- * every word until 2026-10-14) of its linked words must have been seen once
- * in a reading/meaning rep (`getIntroducedReadingVocabularyItemIds` — left
- * FSRS's `new` state, not full proficiency) — shadowing a sentence full of
- * words the learner has never even looked at splits attention between
- * recalling the words and imitating the pronunciation. Checked against the
- * reading/meaning activity types specifically rather than blended into one
- * "any activity type" set (user report, 2026-09-16: a word with only
- * pitch_accent reps was passing as "known" for gates that meant reading
- * recall).
- *
- * **Sentence-led flow (default, 2026-10-14; confirmed-vocabulary requirement
- * dropped 2026-10-21):** vocabulary cards aren't shown or seeded, so words from
- * new sentences can never be introduced on a card. Under the flow the only
- * gate is the review queue's own rule (ReviewPage's `introducedSentenceIds`):
- * the sentence was walked through, started in a book, or already has a card.
- * The confirmed-vocabulary check and the ratio above apply only with the flow
- * off.
- *
- * **No pitch-accent requirement.** A pitch-proficiency requirement was added
- * 2026-09-16 and removed 2026-09-28 (user reflection: shadowing should be
- * the primary vehicle for learning pitch accent, not something gated behind
- * having already learned it elsewhere — requiring pitch mastery first had it
- * backwards).
- *
- * **Reading bar lowered 2026-09-28** from full FSRS proficiency (review/
- * relearning) to merely introduced (seen once) — same day as the pitch
- * removal, same reasoning: shadowing should be reachable once vocabulary has
- * been looked at, not gated behind having already mastered it through other
- * review types first.
+ * Shadowing readiness: a sentence can be shadowed once the learner has met it
+ * (walked through, started in a book, or already carrying a card), the same
+ * rule as the review queue. There is no vocabulary or pitch-accent requirement:
+ * shadowing is the main vehicle for pitch accent, not something gated behind it.
  */
 export async function getSentenceShadowingReadiness(
   sentenceIds: string[],
 ): Promise<Map<string, boolean>> {
-  const readiness = new Map<string, boolean>();
-  if (sentenceIds.length === 0) return readiness;
-  const db = getDb();
-  const ledFlow = isSentenceLedFlow(await readSettings(db));
-  const vocabularyItemIdsBySentence = await getReviewableVocabularyItemIdsBySentence(sentenceIds);
-  const allVocabularyItemIds = [...new Set([...vocabularyItemIdsBySentence.values()].flat())];
-  const [readingIntroducedIds, analyses, introducedSentenceIds] = await Promise.all([
-    ledFlow ? Promise.resolve(new Set<string>()) : getIntroducedReadingVocabularyItemIds(allVocabularyItemIds),
-    db.analyses.bulkGet(sentenceIds),
-    ledFlow ? getIntroducedSentenceIds(sentenceIds) : Promise.resolve(new Set<string>()),
-  ]);
-  const analysesBySentenceId = new Map(
-    analyses
-      .filter((item): item is SentenceAnalysis => Boolean(item))
-      .map((item) => [item.sentenceId, item]),
-  );
-  for (const sentenceId of sentenceIds) {
-    const vocabularyItemIds = vocabularyItemIdsBySentence.get(sentenceId) ?? [];
-    const vocabularyReviewStatus = analysesBySentenceId.get(sentenceId)?.vocabularyReviewStatus;
-    const wordsReady = ledFlow
-      ? introducedSentenceIds.has(sentenceId)
-      : vocabularyItemIds.length === 0 ||
-        vocabularyItemIds.filter((id) => readingIntroducedIds.has(id)).length / vocabularyItemIds.length >=
-          SHADOWING_MIN_INTRODUCED_RATIO;
-    // Led flow: only the sentence having been seen gates shadowing (2026-10-21);
-    // vocabulary confirmation is still required with the flow off.
-    readiness.set(sentenceId, ledFlow ? wordsReady : vocabularyReviewStatus === 'confirmed' && wordsReady);
-  }
-  return readiness;
+  if (sentenceIds.length === 0) return new Map();
+  const introduced = await getIntroducedSentenceIds(sentenceIds);
+  return new Map(sentenceIds.map((sentenceId) => [sentenceId, introduced.has(sentenceId)]));
 }
 
 async function getIntroducedSentenceIds(sentenceIds: string[]): Promise<Set<string>> {
@@ -10167,7 +10096,7 @@ export async function logSentenceLearningEvent(
   if (existing) return existing;
   await db.sentenceLearningEvents.put(full);
   notifySyncMany([{ entity: 'sentence_learning_events', recordId: full.id, payload: full }]);
-  if (full.action === 'walkthrough_completed' && isSentenceLedFlow(await readSettings(db))) {
+  if (full.action === 'walkthrough_completed') {
     await ensureStudyItem('sentence', full.sentenceId, 'reading_in_context');
   }
   return full;
@@ -11854,14 +11783,13 @@ export async function getBookReadyToPickUp(
 /** Explore candidates: books with sentences not yet started, most-recently-opened first ("continue where you left off" reusing Book.lastOpenedAt, the same signal BookDetailPage's touchBookOpened already maintains). */
 async function findExploreCandidates(
   limit: number,
-  sentenceFirst = false,
   sequential = false,
   iPlusOne?: { stretchEvery: number },
 ): Promise<ExploreCandidate[]> {
   const db = getDb();
   // i+1 order: ranked once across every book (see orderByIPlusOne); each book keeps its own order by that rank.
   const iPlusOneContext =
-    iPlusOne && sentenceFirst && !sequential
+    iPlusOne && !sequential
       ? await traceStep('explore: i+1 context', () => loadIPlusOneContext(iPlusOne.stretchEvery))
       : undefined;
   const [allBooks, coverageByBookId, suspendedIndex] = await Promise.all([
@@ -11876,7 +11804,7 @@ async function findExploreCandidates(
     .sort((a, b) => (b.lastOpenedAt ?? b.updatedAt).localeCompare(a.lastOpenedAt ?? a.updatedAt))
     .slice(0, 30);
 
-  const freshTryRequests = sentenceFirst ? (await ensureSettings(db)).freshTryRequests : undefined;
+  const freshTryRequests = (await ensureSettings(db)).freshTryRequests;
   const candidates: ExploreCandidate[] = [];
   /** Sequential mode: learnt sentences in the episode each book would offer first. */
   const leadEpisodeLearnt = new Map<string, number>();
@@ -11889,27 +11817,23 @@ async function findExploreCandidates(
           : db.bookSentences.where('bookId').equals(book.id).toArray(),
       rowCount,
     );
-    // Sentence-first: a lesson never changes BookSentence.status, so a
-    // sentence is "done" once its walkthrough was completed, not once it's marked complete.
-    const bookEvents = sentenceFirst ? await traceStep('explore: book events', () => listSentenceLearningEvents(book.id), rowCount) : [];
-    const walked = sentenceFirst
-      ? new Set(
-          bookEvents
-            .filter((event) => event.action === 'walkthrough_completed')
-            .map((event) => event.sentenceId),
-        )
-      : undefined;
-    const parkedGlossIds = sentenceFirst
-      ? parkedSentenceIds(
-          await traceStep(
-            'explore: glossDecisions',
-            async () => (await readAllGlossDecisionsForPass()).filter((decision) => decision.bookId === book.id),
-            rowCount,
-          ),
-        )
-      : [];
+    // A lesson never changes BookSentence.status, so a sentence is "done" once
+    // its walkthrough was completed, not once it's marked complete.
+    const bookEvents = await traceStep('explore: book events', () => listSentenceLearningEvents(book.id), rowCount);
+    const walked = new Set(
+      bookEvents
+        .filter((event) => event.action === 'walkthrough_completed')
+        .map((event) => event.sentenceId),
+    );
+    const parkedGlossIds = parkedSentenceIds(
+      await traceStep(
+        'explore: glossDecisions',
+        async () => (await readAllGlossDecisionsForPass()).filter((decision) => decision.bookId === book.id),
+        rowCount,
+      ),
+    );
     // Review-card requests jump the spacing queue (walked-through sentences only).
-    const requestedIds = walked ? pendingFreshTryRequestIds(freshTryRequests, bookEvents).filter((id) => walked.has(id)) : [];
+    const requestedIds = pendingFreshTryRequestIds(freshTryRequests, bookEvents).filter((id) => walked.has(id));
     const parkedGlossSet = new Set(parkedGlossIds);
     // Sequential study mode gates *introduction* only: a locked sentence is
     // simply not offered as new. Revisits (already-introduced) are unaffected.
@@ -11922,9 +11846,7 @@ async function findExploreCandidates(
       : undefined;
     const inReadingOrder = memberships
       .filter((item) =>
-        (walked
-          ? item.status !== 'complete' && !walked.has(item.sentenceId)
-          : item.status === 'unstarted') && (!unlocked || unlocked.has(item.sentenceId)) && notShelved(item),
+        item.status !== 'complete' && !walked.has(item.sentenceId) && (!unlocked || unlocked.has(item.sentenceId)) && notShelved(item),
       )
       .sort((a, b) => a.position - b.position)
       .filter((item, index, all) => all.findIndex((other) => other.sentenceId === item.sentenceId) === index);
@@ -11934,7 +11856,7 @@ async function findExploreCandidates(
     if (sequential) {
       const learntByEpisode = new Map<string, number>();
       for (const item of memberships) {
-        if (item.status !== 'unstarted' || walked?.has(item.sentenceId)) {
+        if (item.status !== 'unstarted' || walked.has(item.sentenceId)) {
           const key = item.chapterId ?? '';
           learntByEpisode.set(key, (learntByEpisode.get(key) ?? 0) + 1);
         }
@@ -11954,7 +11876,7 @@ async function findExploreCandidates(
         )
       : inReadingOrder;
     const unstarted =
-      sentenceFirst && !sequential ? await traceStep('explore: floatGrowthEligibleFirst', () => floatGrowthEligibleFirst(newInOrder)) : newInOrder;
+      !sequential ? await traceStep('explore: floatGrowthEligibleFirst', () => floatGrowthEligibleFirst(newInOrder)) : newInOrder;
     // Shelved (suspended-episode) sentences are dropped *before* the cap, or the
     // oldest due ones — often in shelved episodes — would eat the cap and then vanish.
     const shelvedIds = new Set(memberships.filter((item) => !notShelved(item)).map((item) => item.sentenceId));
@@ -11962,22 +11884,18 @@ async function findExploreCandidates(
     const automaticRevisitCap = unstarted.length > 0 ? EXPLORE_REVISITS_PER_BOOK : EXPLORE_SENTENCE_PREVIEW_LIMIT;
     // Walked-through sentences holding words that haven't stuck: the lowest-priority revisit source,
     // so they only fill whatever room the learner's requests, parked checks and spaced tries leave.
-    const weakWordRevisits = sentenceFirst
-      ? await traceStep('explore: findWeakWordRevisits', () =>
-          findWeakWordRevisits(bookEvents, new Set([...requestedIds, ...shelvedIds]), automaticRevisitCap),
-        )
-      : new Map<string, { words: string[]; grammar: string[] }>();
-    const revisitIds = sentenceFirst
-      ? [
-          ...new Set([
-            ...requestedIds,
-            // The per-book cap only throttles automatic revisits; ones the learner asked for are all kept.
-            ...[...new Set([...parkedGlossIds, ...sentencesDueForFreshTry(bookEvents), ...weakWordRevisits.keys()])]
-              .filter((id) => !requestedIds.includes(id) && !shelvedIds.has(id))
-              .slice(0, automaticRevisitCap),
-          ]),
-        ]
-      : [];
+    const weakWordRevisits = await traceStep('explore: findWeakWordRevisits', () =>
+      findWeakWordRevisits(bookEvents, new Set([...requestedIds, ...shelvedIds]), automaticRevisitCap),
+    );
+    const revisitIds = [
+      ...new Set([
+        ...requestedIds,
+        // The per-book cap only throttles automatic revisits; ones the learner asked for are all kept.
+        ...[...new Set([...parkedGlossIds, ...sentencesDueForFreshTry(bookEvents), ...weakWordRevisits.keys()])]
+          .filter((id) => !requestedIds.includes(id) && !shelvedIds.has(id))
+          .slice(0, automaticRevisitCap),
+      ]),
+    ];
     const seenRevisit = new Set<string>();
     const revisitMemberships = memberships.filter((item) => {
       if (!revisitIds.includes(item.sentenceId) || seenRevisit.has(item.sentenceId) || !notShelved(item)) return false;
@@ -11987,11 +11905,8 @@ async function findExploreCandidates(
     if (unstarted.length === 0 && revisitMemberships.length === 0) continue;
     const revisitSet = new Set(revisitMemberships.map((item) => item.sentenceId));
     const preview = [...revisitMemberships, ...unstarted].slice(0, EXPLORE_SENTENCE_PREVIEW_LIMIT);
-    const [sentenceRows, analysisRows] = await traceStep('explore: preview sentences+analyses', () =>
-      Promise.all([
-        db.sentences.bulkGet(preview.map((item) => item.sentenceId)),
-        db.analyses.bulkGet(preview.map((item) => item.sentenceId)),
-      ]),
+    const sentenceRows = await traceStep('explore: preview sentences', () =>
+      db.sentences.bulkGet(preview.map((item) => item.sentenceId)),
     );
     candidates.push({
       bookId: book.id,
@@ -12000,7 +11915,6 @@ async function findExploreCandidates(
       sentences: preview.map((item, index) => ({
         sentenceId: item.sentenceId,
         preview: sentenceRows[index]?.japanese.slice(0, 24) ?? '',
-        vocabularyConfirmed: analysisRows[index]?.vocabularyReviewStatus === 'confirmed',
         ...(revisitSet.has(item.sentenceId) ? { revisit: true } : {}),
         ...(parkedGlossSet.has(item.sentenceId) ? { parkedGloss: true } : {}),
         ...(revisitSet.has(item.sentenceId) && weakWordRevisits.get(item.sentenceId)?.words.length
@@ -12017,18 +11931,10 @@ async function findExploreCandidates(
                 : {}),
             }
           : {}),
-        // Patched below, once readiness is known for every candidate
-        // sentence at once (batched, not N+1) — see classifyExploreSentences
-        // in sessionPlanner.ts for why continue_book waits on this too.
-        vocabularyIntroduced: false,
       })),
     });
   }
-  // Books whose next sentences still need vocabulary confirmed float above
-  // fully-confirmed books (user request, 2026-08-29) — Array.sort is stable,
-  // so recency order is preserved within each group. Done before the slice
-  // so a slightly-less-recent book with a confirmation backlog isn't dropped
-  // in favour of a more-recent book that's already caught up.
+  // Array.sort is stable, so recency order is preserved within each group.
   const limited = candidates
     .map((candidate, index) => ({ candidate, index }))
     .sort((a, b) => {
@@ -12036,69 +11942,20 @@ async function findExploreCandidates(
       const leadA = leadEpisodeLearnt.get(a.candidate.bookId) ?? 0;
       const leadB = leadEpisodeLearnt.get(b.candidate.bookId) ?? 0;
       if (leadA !== leadB) return leadB - leadA;
-      const rank = (c: ExploreCandidate) =>
-        !sentenceFirst && c.sentences.some((sentence) => !sentence.vocabularyConfirmed) ? 0 : 1;
-      const rankA = rank(a.candidate);
-      const rankB = rank(b.candidate);
-      if (rankA !== rankB) return rankA - rankB;
-      if (rankA === 1) {
-        // Both caught up on vocabulary confirmation: an easier (higher
-        // known-vocabulary ratio) book edges out a harder one — "Ready to
-        // read" step 3, docs/ROADMAP.md. Unanalyzed books (null ratio) sort
-        // last, same convention as BooksPage's "Easiest first" toggle.
-        const ratioA = coverageByBookId.get(a.candidate.bookId)?.ratio ?? null;
-        const ratioB = coverageByBookId.get(b.candidate.bookId)?.ratio ?? null;
-        if (ratioA !== ratioB) {
-          if (ratioA === null) return 1;
-          if (ratioB === null) return -1;
-          return ratioB - ratioA;
-        }
+      // An easier (higher known-vocabulary ratio) book edges out a harder one
+      // ("Ready to read" step 3, docs/ROADMAP.md). Unanalyzed books (null ratio) sort last.
+      const ratioA = coverageByBookId.get(a.candidate.bookId)?.ratio ?? null;
+      const ratioB = coverageByBookId.get(b.candidate.bookId)?.ratio ?? null;
+      if (ratioA !== ratioB) {
+        if (ratioA === null) return 1;
+        if (ratioB === null) return -1;
+        return ratioB - ratioA;
       }
       return a.index - b.index;
     })
     .slice(0, limit)
     .map((entry) => entry.candidate);
-  const readiness = await traceStep('explore: getSentenceReadingIntroducedReadiness', () =>
-    getSentenceReadingIntroducedReadiness(
-      limited.flatMap((candidate) => candidate.sentences.map((sentence) => sentence.sentenceId)),
-    ),
-  );
-  for (const candidate of limited) {
-    for (const sentence of candidate.sentences) {
-      sentence.vocabularyIntroduced = readiness.get(sentence.sentenceId) ?? false;
-    }
-  }
   return limited;
-}
-
-/**
- * Understand candidates: grammar patterns the corpus has flagged as "worth
- * learning now" (encountered >= 3 times, never tracked — see
- * computeGrammarPriorityBucket) — reuses listGrammarPatternSummaries rather
- * than re-deriving the same bucket logic, so this stays consistent with
- * what /grammar itself shows in that section.
- */
-async function findUnderstandCandidates(limit: number): Promise<UnderstandCandidate[]> {
-  const db = getDb();
-  const summaries = (await listGrammarPatternSummaries())
-    .filter((summary) => summary.priorityBucket === 'worth_learning_now')
-    .sort((a, b) => b.encounterCount - a.encounterCount)
-    .slice(0, limit);
-  if (summaries.length === 0) return [];
-
-  const patternIds = summaries.map((summary) => summary.pattern.id);
-  const links = await db.sentenceGrammar.where('grammarPatternId').anyOf(patternIds).toArray();
-  const latestSentenceIdByPatternId = new Map<string, string>();
-  for (const link of links.slice().sort((a, b) => a.createdAt.localeCompare(b.createdAt))) {
-    latestSentenceIdByPatternId.set(link.grammarPatternId, link.sentenceId);
-  }
-
-  return summaries.map((summary) => ({
-    grammarPatternId: summary.pattern.id,
-    label: summary.pattern.canonicalName,
-    reason: summary.priorityExplanation,
-    sentenceId: latestSentenceIdByPatternId.get(summary.pattern.id),
-  }));
 }
 
 /**
@@ -12940,36 +12797,6 @@ const NO_EXCLUSIONS: SessionPlannerExclusions = {
 };
 
 /**
- * Read-only sibling of deferUnreadyGrammarReviews: return `items` with every
- * `grammarPattern`-subject entry whose pattern currently has no
- * full-review-ready context sentence removed. Non-grammar items pass through
- * untouched. Used by getSessionPlannerInput, which must not persist a
- * due-date push (planRecommendedSession previews without writing).
- */
-async function filterReadyGrammarDueItems(
-  items: StudyItem[],
-  suspendedIndex: SuspendedBookIndex | null,
-): Promise<StudyItem[]> {
-  const patternIds = [
-    ...new Set(
-      items.filter((item) => item.subjectType === 'grammarPattern').map((item) => item.subjectId),
-    ),
-  ];
-  if (patternIds.length === 0) return items;
-  const readyPatternIds = new Set<string>();
-  await Promise.all(
-    patternIds.map(async (patternId) => {
-      if (await pickContextSentenceForGrammarPattern(patternId, suspendedIndex)) {
-        readyPatternIds.add(patternId);
-      }
-    }),
-  );
-  return items.filter(
-    (item) => item.subjectType !== 'grammarPattern' || readyPatternIds.has(item.subjectId),
-  );
-}
-
-/**
  * Per-step wall-clock timings for the session planner's data gathering, logged
  * to the console as one table ("[planner timing]") so a slow "add time" tap can
  * be traced to the step responsible. Steps that run in parallel overlap, so
@@ -13362,11 +13189,6 @@ async function gatherSessionPlannerInput(
   const db = getDb();
   const timer = createPlannerTimer();
   const settings = await timer.time('readSettings', () => readSettings(db));
-  // Hoisted: the grammar/vocab-card finders below only matter when legacy drills are live.
-  // Under the default sentence-led flow their results were discarded after minutes of IndexedDB
-  // scanning (70 s total on a phone, 2026-11-04), so they are skipped outright.
-  const legacyPaused = effectiveLegacyDrillsPaused(settings);
-
   const [
     recentActivity,
     shadowCandidatesFound,
@@ -13376,9 +13198,6 @@ async function gatherSessionPlannerInput(
     recentlyMissedTransformationSentenceIds,
     dueItems,
     exploreCandidatesRaw,
-    understandCandidatesRaw,
-    grammarNoticingCandidatesRaw,
-    newCardBacklogCount,
   ] = await Promise.all([
     timer.time('getRecentActivityEvents', () => getRecentActivityEvents(now)),
     // Quiet mode (settings, per-device): the learner can't speak aloud, so withhold every
@@ -13391,7 +13210,6 @@ async function gatherSessionPlannerInput(
           findShadowCandidates(
             SHADOW_CANDIDATE_LIMIT + exclude.sentenceIds.size,
             await activeSentenceIdsForShadowing(5),
-            !legacyPaused,
           ),
         ),
     // The planner drops any sentence it actually drafts a Fresh try for (a full walkthrough already covers it).
@@ -13416,34 +13234,18 @@ async function gatherSessionPlannerInput(
         fromItems: await readAllStudyItemsForPass(),
         now,
         graduationMinScheduledDays: settings.graduationMinScheduledDays,
-        // unlessLegacyPaused drops these anyway; don't read them.
-        excludeSubjectTypes: legacyPaused ? PAUSED_LEGACY_DRILL_SUBJECT_TYPES : undefined,
+        // Word and grammar cards are retired; don't read them.
+        excludeSubjectTypes: RETIRED_DRILL_SUBJECT_TYPES,
       }),
     ),
     // Over-fetch by the exclusion count so filtering below still leaves a full page of candidates.
     timer.time('findExploreCandidates', () =>
       findExploreCandidates(
         EXPLORE_CANDIDATE_LIMIT + exclude.bookIds.size,
-        effectiveSentenceFirstPlanning(settings),
         isSequentialStudyMode(settings),
         isIPlusOneOrdering(settings) ? { stretchEvery: iPlusOneStretchEvery(settings) } : undefined,
       ),
     ),
-    legacyPaused
-      ? Promise.resolve([] as UnderstandCandidate[])
-      : timer.time('findUnderstandCandidates', () =>
-          findUnderstandCandidates(UNDERSTAND_CANDIDATE_LIMIT + exclude.grammarPatternIds.size),
-        ),
-    legacyPaused
-      ? Promise.resolve([] as GrammarNoticingCandidate[])
-      : timer.time('findGrammarNoticingCandidates', () =>
-          findGrammarNoticingCandidates(GRAMMAR_NOTICING_CANDIDATE_LIMIT + exclude.sentenceIds.size),
-        ),
-    // NOTE: not filtered for suspended books — a word only met in a suspended
-    // book still counts toward the backlog here, so the planner may slightly
-    // over-reserve review minutes while a book is shelved. Tolerable; the
-    // seeded cards themselves are held back downstream.
-    legacyPaused ? Promise.resolve(0) : timer.time('countNewVocabularyCardBacklog', () => countNewVocabularyCardBacklog()),
   ]);
 
   // Hold back the exclusive review cards of any suspended book — same
@@ -13455,41 +13257,24 @@ async function gatherSessionPlannerInput(
       ? items.filter((item) => !studyItemIsHeldBackBySuspension(item, suspendedIndex))
       : items;
 
-  // Drop grammar due items whose pattern has no full-review-ready context
-  // sentence right now — ReviewPage can't surface them (it drops the pattern
-  // when pickContextSentenceForGrammarPattern returns undefined), so counting
-  // them in the planner's review backlog just inflates it. Read-only here on
-  // purpose: planRecommendedSession must not persist anything, so unlike
-  // ReviewPage this can't lean on deferUnreadyGrammarReviews.
-  // Quiet mode also withholds pitch_accent_production due items — same
-  // "can't speak aloud right now" reasoning as shadowCandidates below, but
-  // this one lives in the ordinary due-queue rather than a separate
-  // candidate list, so it's filtered out here instead. "Pause pitch accent"
-  // (settings.pitchAccentPaused, 2026-09-28) withholds it too, same as
+  // Quiet mode withholds pitch_accent_production due items ("can't speak aloud right
+  // now", same reasoning as shadowCandidates). "Pause pitch accent"
+  // (settings.pitchAccentPaused, 2026-09-28) withholds them too, same as
   // ReviewPage's pitchAccentProductionCandidates.
-  const unlessLegacyPaused = (items: StudyItem[]): StudyItem[] =>
-    legacyPaused ? items.filter((item) => !isPausedLegacyDrillSubject(item.subjectType)) : items;
   // "Pause sentence cards" (settings.sentenceCardsPaused): the reader's Read checks replace them.
   const unlessSentenceCardsPaused = (items: StudyItem[]): StudyItem[] =>
     settings.sentenceCardsPaused ? items.filter((item) => !isSentenceCardSubject(item.subjectType)) : items;
   const retainTypes = new Set<string>(RETAIN_ACTIVITY_TYPES);
   const retainDueItems = dueItems.filter((item) => retainTypes.has(item.activityType));
   const practiceDueItems = dueItems.filter((item) => !retainTypes.has(item.activityType));
-  const practiceDueItemsForMode = unlessSentenceCardsPaused(
-    unlessLegacyPaused(
+  const practiceDueReady = notSuspended(
+    unlessSentenceCardsPaused(
       settings.quietMode || settings.pitchAccentPaused
         ? practiceDueItems.filter((item) => item.activityType !== 'pitch_accent_production')
         : practiceDueItems,
     ),
   );
-  const [retainDueReady, practiceDueReady] = await Promise.all([
-    timer.time('filterReadyGrammarDueItems(retain)', () =>
-      filterReadyGrammarDueItems(unlessSentenceCardsPaused(unlessLegacyPaused(notSuspended(retainDueItems))), suspendedIndex),
-    ),
-    timer.time('filterReadyGrammarDueItems(practice)', () =>
-      filterReadyGrammarDueItems(notSuspended(practiceDueItemsForMode), suspendedIndex),
-    ),
-  ]);
+  const retainDueReady = unlessSentenceCardsPaused(notSuspended(retainDueItems));
 
   // retainDueItems/practiceDueItems are ranked/packed together downstream
   // (one shared `review` bucket) — the 'review' tag here is only used for
@@ -13530,9 +13315,6 @@ async function gatherSessionPlannerInput(
   const exploreCandidates = exploreCandidatesRaw
     .filter((candidate) => !exclude.bookIds.has(candidate.bookId))
     .slice(0, EXPLORE_CANDIDATE_LIMIT);
-  const understandCandidates = (legacyPaused ? [] : understandCandidatesRaw)
-    .filter((candidate) => !exclude.grammarPatternIds.has(candidate.grammarPatternId))
-    .slice(0, UNDERSTAND_CANDIDATE_LIMIT);
   const shadowCandidatesTrimmed = shadowCandidatesRaw
     .filter((candidate) => !exclude.sentenceIds.has(candidate.sentenceId))
     .slice(0, SHADOW_CANDIDATE_LIMIT);
@@ -13544,10 +13326,6 @@ async function gatherSessionPlannerInput(
       return suggestion?.text ? { ...candidate, phraseText: suggestion.text } : candidate;
     }),
   );
-  const grammarNoticingCandidates = (legacyPaused ? [] : grammarNoticingCandidatesRaw)
-    .filter((candidate) => !exclude.sentenceIds.has(candidate.sentenceId))
-    .slice(0, GRAMMAR_NOTICING_CANDIDATE_LIMIT);
-
   timer.report();
   return {
     now,
@@ -13559,14 +13337,9 @@ async function gatherSessionPlannerInput(
     readCheckCandidates,
     listeningToolCandidates,
     wordCheckCandidates,
-    understandCandidates,
-    grammarNoticingCandidates,
     shadowCandidates,
-    newCardBacklogCount: legacyPaused ? 0 : newCardBacklogCount,
-    newCardsPerSessionLimit: settings.newCardsPerSessionLimit,
     baseline: baselineOverride ?? settings.sessionAllocation,
     quietMode: settings.quietMode ?? false,
-    sentenceFirst: effectiveSentenceFirstPlanning(settings),
     gameBreakCandidates,
   };
 }

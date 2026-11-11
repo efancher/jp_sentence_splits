@@ -20,7 +20,6 @@ import {
   GAME_BREAK_INTERVAL_MINUTES,
   GAME_BREAK_MAX_PER_PASS,
   GAME_BREAK_MINUTES,
-  GRAMMAR_NOTICING_PER_SESSION_LIMIT,
   MAX_NEGLECT_BOOST,
   MODE_ACTIVITY_ESTIMATE_MINUTES,
   NEGLECT_WINDOW_DAYS,
@@ -31,7 +30,6 @@ import {
   STALE_PRIORITY_FLOOR,
   STALE_REENCOUNTER_DAYS,
   SYNTHETIC_ACTIVITY_TYPES,
-  VOCAB_CONFIRM_MIN_GLOSSING_SHARE,
 } from './sessionPlannerConfig';
 
 /**
@@ -420,10 +418,7 @@ export interface ExploreCandidate {
   sentences: {
     sentenceId: string;
     preview: string;
-    vocabularyConfirmed: boolean;
-    /** At least CONTINUE_BOOK_MIN_INTRODUCED_RATIO of this sentence's reviewable vocabulary items have a reading/meaning study item that's left FSRS's `new` state — see getSentenceReadingIntroducedReadiness/isVocabularyItemIntroduced. Pitch-accent-only progress doesn't count. */
-    vocabularyIntroduced: boolean;
-    /** Sentence-first only: walked through on an earlier day and not yet said independently — a fresh try, not a first lesson. */
+    /** Walked through on an earlier day and not yet said independently — a fresh try, not a first lesson. */
     revisit?: boolean;
     /** A structure check was parked in this sentence; the revisit re-asks only that. */
     parkedGloss?: true;
@@ -438,14 +433,6 @@ export interface ExploreCandidate {
   }[];
 }
 
-export interface UnderstandCandidate {
-  grammarPatternId: string;
-  label: string;
-  reason: string;
-  /** Example-sentence id, when known — enables chain grouping with an Explore/shadow step on the same sentence. */
-  sentenceId?: string;
-}
-
 export interface ShadowCandidate {
   sentenceId: string;
   bookId?: string;
@@ -458,13 +445,10 @@ export interface ShadowCandidate {
 }
 
 /**
- * Grammar-noticing candidate (2026-09-02): a sentence the learner has
- * already worked through (structural analysis complete) and whose own
- * vocabulary is confirmed + proficient, but whose "Grammar noticed" pass
- * hasn't been marked done (`SentenceAnalysis.grammarReviewStatus !==
- * 'confirmed'`). The `grammar`-bucket equivalent of an ExploreCandidate's
- * `vocabulary_review` sentence — "go pull the grammar patterns out of this
- * one, or mark that there's nothing more to."
+ * A sentence the learner has already worked through whose "Grammar noticed"
+ * pass hasn't been marked done (`SentenceAnalysis.grammarReviewStatus !==
+ * 'confirmed'`). Listed by the standalone `GrammarNoticingFlowPage`; the
+ * planner no longer drafts steps for it.
  */
 export interface GrammarNoticingCandidate {
   sentenceId: string;
@@ -491,9 +475,9 @@ export interface SessionPlannerInput {
   /** Minutes this planning pass has to work with — the day's starting budget on first plan, or just the increment being added on a later top-up (see `addMinutesToTodaySession`). */
   totalMinutes: number;
   recentActivity: RecentActivityEvent[];
-  /** Due StudyItems costed at the quicker "retain" per-item rate (reading_in_context/reading_retrieval/listening/etc) — merged with practiceDue into one ranked `review` batch. */
+  /** Due StudyItems costed at the quicker "retain" per-item rate (reading_in_context/listening/ear_tiles) — merged with practiceDue into one ranked `review` batch. */
   retainDue: ReviewPriorityInput[];
-  /** Due StudyItems costed at the slower "practice" per-item rate (cloze/reading_production/sentence_transformation/contrastive/grammar_completion/grammar_contrast) — merged with retainDue into one ranked `review` batch. */
+  /** Due StudyItems costed at the slower "practice" per-item rate (dictation tiles, pitch production) — merged with retainDue into one ranked `review` batch. */
   practiceDue: ReviewPriorityInput[];
   exploreCandidates: ExploreCandidate[];
   /** Sentences due for a Read check, most urgent first. Drafted into the `review` bucket (sentence cards are replaced by these). */
@@ -502,28 +486,7 @@ export interface SessionPlannerInput {
   listeningToolCandidates?: ListeningToolCandidate[];
   /** Sentences due for a Word check in the reader, most urgent first. Drafted into the `review` bucket ahead of the Read checks. */
   wordCheckCandidates?: WordCheckCandidate[];
-  /** Sentence-first planning (settings.sentenceFirstPlanning): explore sentences become `sentence_learning` lessons with no vocabulary gate or reserve. */
-  sentenceFirst?: boolean;
-  understandCandidates: UnderstandCandidate[];
-  /** Worked-through sentences whose grammar-noticing pass isn't done — see GrammarNoticingCandidate. Shares the `grammar` bucket with understandCandidates. */
-  grammarNoticingCandidates: GrammarNoticingCandidate[];
   shadowCandidates: ShadowCandidate[];
-  /**
-   * Distinct confirmed vocabulary words that have never been introduced to
-   * the SRS (no `vocabularyItem` study item yet). The planner is otherwise
-   * blind to this backlog — `retainDue`/`practiceDue` only carry study items
-   * that already exist — so a large first-review backlog used to lose the
-   * review bucket's minutes to glossing and the `due_review_batch` step
-   * would auto-settle before ReviewPage ever seeded a new card (docs/STATUS.md
-   * "Review new-card backlog"). Defaults to 0 when omitted.
-   */
-  newCardBacklogCount?: number;
-  /**
-   * How many brand-new subjects ReviewPage will actually introduce this
-   * sitting (`settings.newCardsPerSessionLimit`) — bounds how much of
-   * `newCardBacklogCount` today's plan reserves room for. Defaults to 0.
-   */
-  newCardsPerSessionLimit?: number;
   reviewLimit?: number;
   /** User-adjustable override for BASELINE_SESSION_ALLOCATION (set directly on Home) — see AllocateTimeInput.baseline. */
   baseline?: Record<SessionBucket, number>;
@@ -588,9 +551,6 @@ function draftStepId(): string {
 
 const PRACTICE_ACTIVITY_TYPE_SET = new Set<string>(PRACTICE_ACTIVITY_TYPES);
 
-/** Days-to-drain past which the new-card backlog explanation names the fix (raise the per-session cap) instead of just the count. */
-const NEW_CARD_BACKLOG_NUDGE_SESSIONS_THRESHOLD = 10;
-
 /** Retain-costed items ("recognize/reveal/self-rate") are quicker than practice-costed ones ("type/produce an answer") — see MODE_ACTIVITY_ESTIMATE_MINUTES. */
 export function reviewItemCostMinutes(activityType: StudyActivityType): number {
   // pitch_accent_production is neither list (record -> align -> score is its
@@ -626,15 +586,8 @@ function reviewBatchCostMinutes(ranked: ReviewPriorityResult[], limit: number): 
 function buildReviewBatchSteps(
   ranked: ReviewPriorityResult[],
   budgetMinutes: number,
-  newCardSlots = 0,
 ): PlannerStepDraft[] {
-  // Never-introduced words are seeded by ReviewPage after the due queue
-  // drains; reserve their minutes up front (retain-costed — a first pass at a
-  // word is a reveal/self-rate, like a recognition card) so a big backlog
-  // doesn't get squeezed out by due items, then fold the slice into the last
-  // batch's targetCount so ReviewPage's auto-advance waits for the new cards
-  // too (countReviewsSince already counts newly-seeded card reviews).
-  let used = newCardSlots * MODE_ACTIVITY_ESTIMATE_MINUTES.retain;
+  let used = 0;
   const chosen: ReviewPriorityResult[] = [];
   for (const item of ranked) {
     const cost = reviewItemCostMinutes(item.activityType);
@@ -642,41 +595,25 @@ function buildReviewBatchSteps(
     used += cost;
     chosen.push(item);
   }
-  if (chosen.length === 0 && newCardSlots === 0) return [];
+  if (chosen.length === 0) return [];
 
   const batches: ReviewPriorityResult[][] = [];
   for (let index = 0; index < chosen.length; index += REVIEW_STEP_BATCH_SIZE) {
     batches.push(chosen.slice(index, index + REVIEW_STEP_BATCH_SIZE));
   }
-  if (batches.length === 0) batches.push([]); // new cards only, no due reviews
 
-  return batches.map((batch, index) => {
-    const isLastBatch = index === batches.length - 1;
-    const batchNewCardSlots = isLastBatch ? newCardSlots : 0;
-    const topReasons = [...new Set(batch.flatMap((item) => item.reasons))].slice(0, 2);
-    const newCardReason =
-      batchNewCardSlots > 0
-        ? `${batchNewCardSlots} new word${batchNewCardSlots === 1 ? '' : 's'} to introduce`
-        : null;
-    const reasons = [...topReasons, ...(newCardReason ? [newCardReason] : [])].slice(0, 2);
-    const label =
-      batch.length > 0 && batchNewCardSlots > 0
-        ? `Review ${batch.length} due + introduce ${batchNewCardSlots} new`
-        : batchNewCardSlots > 0
-          ? `Introduce ${batchNewCardSlots} new word${batchNewCardSlots === 1 ? '' : 's'}`
-          : `Review ${batch.length} high-priority item${batch.length === 1 ? '' : 's'}`;
+  return batches.map((batch) => {
+    const reasons = [...new Set(batch.flatMap((item) => item.reasons))].slice(0, 2);
     return {
       id: draftStepId(),
       bucket: 'review',
       activityType: 'due_review_batch',
       targetKind: 'review',
-      label,
-      estimatedMinutes:
-        batch.reduce((sum, item) => sum + reviewItemCostMinutes(item.activityType), 0) +
-        batchNewCardSlots * MODE_ACTIVITY_ESTIMATE_MINUTES.retain,
+      label: `Review ${batch.length} high-priority item${batch.length === 1 ? '' : 's'}`,
+      estimatedMinutes: batch.reduce((sum, item) => sum + reviewItemCostMinutes(item.activityType), 0),
       reason: reasons.length > 0 ? reasons.join(', ') : 'Due for review',
       status: 'pending',
-      targetCount: batch.length + batchNewCardSlots,
+      targetCount: batch.length,
     };
   });
 }
@@ -757,36 +694,16 @@ function buildWordCheckSteps(candidates: readonly WordCheckCandidate[], budgetMi
 }
 
 interface ExploreSentenceEntry {
-  kind: 'vocabulary' | 'analyze' | 'lesson';
   candidate: ExploreCandidate;
   sentence: ExploreCandidate['sentences'][number];
 }
 
-/** Classifies every candidate sentence into the one glossing step it's eligible for right now (or none), preserving book-then-position reading order. */
-function classifyExploreSentences(
-  candidates: ExploreCandidate[],
-  sentenceFirst = false,
-): ExploreSentenceEntry[] {
-  const entries: ExploreSentenceEntry[] = [];
-  for (const candidate of candidates) {
-    for (const sentence of candidate.sentences) {
-      if (sentenceFirst) {
-        // Sentence-first: every next sentence is a lesson, whatever its vocabulary state.
-        entries.push({ kind: 'lesson', candidate, sentence });
-      } else if (!sentence.vocabularyConfirmed) {
-        entries.push({ kind: 'vocabulary', candidate, sentence });
-      } else if (sentence.vocabularyIntroduced) {
-        entries.push({ kind: 'analyze', candidate, sentence });
-      }
-      // else: confirmed but its reading/meaning cards haven't been reviewed
-      // even once yet — no glossing step this pass; the planner moves on
-      // to the next sentence rather than blocking the book on it.
-    }
-  }
-  // Revisits (a second look at something already walked through) come before first lessons.
-  return sentenceFirst
-    ? [...entries.filter((e) => e.sentence.revisit), ...mergeByIPlusOneRank(entries.filter((e) => !e.sentence.revisit))]
-    : entries;
+/** Every candidate sentence as a lesson entry: revisits (a second look at something already walked through) first, then first lessons. */
+function classifyExploreSentences(candidates: ExploreCandidate[]): ExploreSentenceEntry[] {
+  const entries: ExploreSentenceEntry[] = candidates.flatMap((candidate) =>
+    candidate.sentences.map((sentence) => ({ candidate, sentence })),
+  );
+  return [...entries.filter((e) => e.sentence.revisit), ...mergeByIPlusOneRank(entries.filter((e) => !e.sentence.revisit))];
 }
 
 /**
@@ -812,135 +729,45 @@ function mergeByIPlusOneRank(entries: ExploreSentenceEntry[]): ExploreSentenceEn
 }
 
 function exploreEntryCost(entry: ExploreSentenceEntry): number {
-  if (entry.kind === 'lesson') {
-    return entry.sentence.revisit ? EXPLORE_STEP_MINUTES.revisit : EXPLORE_STEP_MINUTES.lesson;
-  }
-  return entry.kind === 'vocabulary'
-    ? EXPLORE_STEP_MINUTES.vocabulary
-    : EXPLORE_STEP_MINUTES.analyze;
+  return entry.sentence.revisit ? EXPLORE_STEP_MINUTES.revisit : EXPLORE_STEP_MINUTES.lesson;
 }
 
 function exploreStepFor(entry: ExploreSentenceEntry): PlannerStepDraft {
   const { candidate, sentence } = entry;
-  if (entry.kind === 'lesson') {
-    return {
-      id: draftStepId(),
-      bucket: 'glossing',
-      activityType: SYNTHETIC_ACTIVITY_TYPES.sentenceLearning,
-      targetKind: 'sentence_learning',
-      bookId: candidate.bookId,
-      sentenceId: sentence.sentenceId,
-      label: `${sentence.revisit ? 'Fresh try' : 'Learn this sentence'}: ${sentence.preview}`,
-      estimatedMinutes: exploreEntryCost(entry),
-      reason: sentence.parkedGloss
-        ? `You parked a structure check in this sentence in ${candidate.label} — try it again`
-        : sentence.revisit && sentence.weakWords?.length
-        ? `Has words that haven't stuck: ${sentence.weakWords.join('、')} — walk through it again`
-        : sentence.revisit && sentence.weakGrammar?.length
-        ? `Has grammar that hasn't stuck: ${sentence.weakGrammar.join('、')} — walk through it again`
-        : sentence.revisit
-        ? `You walked through this in ${candidate.label} on an earlier day — try saying it without cues`
-        : `Next sentence in ${candidate.label}${sentence.newWords?.length ? ` (new here: ${sentence.newWords.join('、')})` : ''} — walk through it, practise a target, then try saying it`,
-      status: 'pending',
-      ...(sentence.revisit ? { revisit: true } : {}),
-    };
-  }
-  if (entry.kind === 'vocabulary') {
-    return {
-      id: draftStepId(),
-      bucket: 'glossing',
-      activityType: SYNTHETIC_ACTIVITY_TYPES.vocabularyReview,
-      targetKind: 'vocabulary_review',
-      bookId: candidate.bookId,
-      sentenceId: sentence.sentenceId,
-      label: `Vocabulary: ${sentence.preview}`,
-      estimatedMinutes: EXPLORE_STEP_MINUTES.vocabulary,
-      reason: candidate.reason,
-      status: 'pending',
-    };
-  }
   return {
     id: draftStepId(),
     bucket: 'glossing',
-    activityType: SYNTHETIC_ACTIVITY_TYPES.newSentence,
-    targetKind: 'continue_book',
+    activityType: SYNTHETIC_ACTIVITY_TYPES.sentenceLearning,
+    targetKind: 'sentence_learning',
     bookId: candidate.bookId,
     sentenceId: sentence.sentenceId,
-    label: `Continue ${candidate.label}: ${sentence.preview}`,
-    estimatedMinutes: EXPLORE_STEP_MINUTES.analyze,
-    reason: candidate.reason,
+    label: `${sentence.revisit ? 'Fresh try' : 'Learn this sentence'}: ${sentence.preview}`,
+    estimatedMinutes: exploreEntryCost(entry),
+    reason: sentence.parkedGloss
+      ? `You parked a structure check in this sentence in ${candidate.label} — try it again`
+      : sentence.revisit && sentence.weakWords?.length
+      ? `Has words that haven't stuck: ${sentence.weakWords.join('、')} — walk through it again`
+      : sentence.revisit && sentence.weakGrammar?.length
+      ? `Has grammar that hasn't stuck: ${sentence.weakGrammar.join('、')} — walk through it again`
+      : sentence.revisit
+      ? `You walked through this in ${candidate.label} on an earlier day — try saying it without cues`
+      : `Next sentence in ${candidate.label}${sentence.newWords?.length ? ` (new here: ${sentence.newWords.join('、')})` : ''} — walk through it, practise a target, then try saying it`,
     status: 'pending',
+    ...(sentence.revisit ? { revisit: true } : {}),
   };
 }
 
 /**
- * Step 7 (glossing): continue the highest-priority book(s). Two design
- * rules, both from user requests:
- *
- * 1. A not-yet-confirmed sentence only gets its `vocabulary_review` step,
- *    never `continue_book` (structural analysis, which surfaces literal-
- *    English glosses per chunk) in the same pass (2026-08-27) — otherwise
- *    the learner sees a sentence's grammar/meaning glossed before they've
- *    even looked at its words. Once vocabulary is confirmed, `continue_book`
- *    becomes eligible once *enough* of the linked words have at least been
- *    reviewed once (`vocabularyIntroduced`,
- *    getSentenceReadingIntroducedReadiness's CONTINUE_BOOK_MIN_INTRODUCED_RATIO
- *    threshold) — a lower bar than full-sentence *review* cards
- *    (`isSentenceReadyForFullReview`), which require FSRS proficiency on
- *    every word, since structural analysis and grammar-noticing aren't
- *    testing recall the way a review card is. This gate used to be
- *    "confirmed" alone (2026-09-16 fix for `continue_book` supply near
- *    zero, when it wrongly required full proficiency), then "every word
- *    introduced" (same day — a word merely picked during vocabulary
- *    confirmation and never actually reviewed shouldn't count as "looked
- *    at" either; user report, 2026-09-16 — 皆 in "皆さん元気ですか" surfaced
- *    for analysis with zero study items of any kind; separately, a word
- *    with only `pitch_accent` reps doesn't count as introduced — pitch
- *    practice isn't reading/meaning recall). The all-or-nothing form of
- *    that fix overcorrected (2026-09-28): a sentence with even one
- *    never-reviewed word was completely unreachable for structural
- *    glossing, which blocks exactly the case glossing should help with —
- *    a sentence that's mostly unfamiliar. A ratio threshold keeps the
- *    original protection (don't analyze a sentence that's entirely
- *    unfamiliar) without requiring every last word first.
- *
- * 2. Vocabulary confirmations get first claim on the glossing budget
- *    (2026-08-29): pass 1 spends up to VOCAB_CONFIRM_MIN_GLOSSING_SHARE of
- *    the bucket on `vocabulary_review` steps across *all* candidate books
- *    before pass 2 drafts anything, so a confirmation backlog never sits
- *    behind `continue_book` steps for sentences already confirmed earlier in
- *    the reading order. Pass 2 then fills the rest of the bucket in reading
- *    order with whatever's left (both step kinds), keeping per-book
- *    coherence and chain-grouping intact for the remainder.
+ * Step 7 (glossing): one lesson per candidate sentence, revisits first, in the
+ * order `classifyExploreSentences` gives, until the budget runs out. Keeps
+ * scanning past a step that doesn't fit, since a cheaper one may still.
  */
-function buildExploreSteps(
-  candidates: ExploreCandidate[],
-  budgetMinutes: number,
-  sentenceFirst = false,
-): PlannerStepDraft[] {
-  const entries = classifyExploreSentences(candidates, sentenceFirst);
+function buildExploreSteps(candidates: ExploreCandidate[], budgetMinutes: number): PlannerStepDraft[] {
+  const entries = classifyExploreSentences(candidates);
   const steps: PlannerStepDraft[] = [];
   const consumed = new Set<ExploreSentenceEntry>();
   let remaining = budgetMinutes;
-
-  // Pass 1 (reserved): vocabulary confirmations, up to the reserve share.
-  const hasVocabBacklog = entries.some((entry) => entry.kind === 'vocabulary');
-  const vocabReserve = hasVocabBacklog ? budgetMinutes * VOCAB_CONFIRM_MIN_GLOSSING_SHARE : 0;
-  let vocabSpent = 0;
   for (const entry of entries) {
-    if (entry.kind !== 'vocabulary') continue;
-    const cost = exploreEntryCost(entry);
-    if (cost > remaining || vocabSpent + cost > vocabReserve) break;
-    steps.push(exploreStepFor(entry));
-    consumed.add(entry);
-    remaining -= cost;
-    vocabSpent += cost;
-  }
-
-  // Pass 2 (open): remaining sentences in reading order, both kinds. Keep
-  // scanning past a step that doesn't fit — a cheaper one may still.
-  for (const entry of entries) {
-    if (consumed.has(entry)) continue;
     const cost = exploreEntryCost(entry);
     if (cost > remaining) continue;
     steps.push(exploreStepFor(entry));
@@ -980,88 +807,21 @@ function grammarCheckStepFor(entry: ExploreSentenceEntry): PlannerStepDraft {
 }
 
 function isGrammarCheckCandidate(entry: ExploreSentenceEntry): boolean {
-  return entry.kind === 'lesson' && !!entry.sentence.revisit && !!entry.sentence.weakGrammar?.length;
+  return !!entry.sentence.revisit && !!entry.sentence.weakGrammar?.length;
 }
 
 /**
  * How many minutes the glossing bucket could actually absorb given its
- * candidate sentences — the sum of every eligible sentence's single step
- * cost, unbounded by budget (the pass-1 vocab reserve only reorders within a
- * fixed budget, it doesn't change total capacity). Feeds
- * allocateTimeAcrossModes' availableMinutesByMode so a thin candidate list
- * doesn't attract redistributed spillover minutes it can't spend.
+ * candidate sentences: the sum of every sentence's step cost, unbounded by
+ * budget. Feeds allocateTimeAcrossModes' availableMinutesByMode so a thin
+ * candidate list doesn't attract redistributed spillover minutes it can't spend.
  */
-function exploreCeilingMinutes(candidates: ExploreCandidate[], sentenceFirst = false): number {
-  const entries = classifyExploreSentences(candidates, sentenceFirst);
+function exploreCeilingMinutes(candidates: ExploreCandidate[]): number {
+  const entries = classifyExploreSentences(candidates);
   const lessons = entries.reduce((total, entry) => total + exploreEntryCost(entry), 0);
   // Grammar checks ride on weak-grammar revisits (see buildExploreSteps); count the ones that can be drafted.
   const grammarChecks = Math.min(GRAMMAR_CHECK_STEPS_PER_PLAN, entries.filter(isGrammarCheckCandidate).length);
   return lessons + grammarChecks * EXPLORE_STEP_MINUTES.grammarCheck;
-}
-
-/** Step 7 (grammar): one step per grammar pattern worth examining, in priority order, until the budget runs out. */
-function buildUnderstandSteps(
-  candidates: UnderstandCandidate[],
-  budgetMinutes: number,
-  perItemMinutes: number,
-): PlannerStepDraft[] {
-  const steps: PlannerStepDraft[] = [];
-  let remaining = budgetMinutes;
-  for (const candidate of candidates) {
-    if (remaining < perItemMinutes) break;
-    steps.push({
-      id: draftStepId(),
-      bucket: 'grammar',
-      activityType: SYNTHETIC_ACTIVITY_TYPES.grammarExplore,
-      targetKind: 'grammar_detail',
-      grammarPatternId: candidate.grammarPatternId,
-      sentenceId: candidate.sentenceId,
-      label: `Examine ${candidate.label}`,
-      estimatedMinutes: perItemMinutes,
-      reason: candidate.reason,
-      status: 'pending',
-    });
-    remaining -= perItemMinutes;
-  }
-  return steps;
-}
-
-/**
- * Step 7 (grammar, second pass): a single batched "notice the grammar in
- * these worked-through sentences" step. Was one step per sentence, interleaved
- * through the session by `preferCoherentChains` — the learner reported it
- * "keeps coming up" (2026-09-06). Now it's one step that walks up to
- * `GRAMMAR_NOTICING_PER_SESSION_LIMIT` sentences in `GrammarNoticingFlowPage`,
- * bounded by the remaining grammar budget. Returns `[]` (not a single-element
- * array with an empty list) when nothing fits.
- */
-function buildGrammarNoticingSteps(
-  candidates: GrammarNoticingCandidate[],
-  budgetMinutes: number,
-  perItemMinutes: number,
-): PlannerStepDraft[] {
-  const affordable = Math.floor(budgetMinutes / perItemMinutes);
-  const take = Math.min(candidates.length, affordable, GRAMMAR_NOTICING_PER_SESSION_LIMIT);
-  if (take < 1) return [];
-  const picked = candidates.slice(0, take);
-  const single = picked.length === 1 ? picked[0]! : null;
-  return [
-    {
-      id: draftStepId(),
-      bucket: 'grammar',
-      activityType: SYNTHETIC_ACTIVITY_TYPES.grammarNoticing,
-      targetKind: 'grammar_noticing',
-      bookId: single?.bookId,
-      // Kept for single-sentence coherent-chain ordering; the flow itself
-      // always reads the full `sentenceIds` list.
-      sentenceId: single?.sentenceId,
-      sentenceIds: picked.map((candidate) => candidate.sentenceId),
-      label: single ? `Notice grammar: ${single.label}` : `Notice grammar in ${picked.length} sentences`,
-      estimatedMinutes: perItemMinutes * picked.length,
-      reason: single?.reason ?? 'Vocabulary learned — pull out the grammar patterns worth tracking',
-      status: 'pending',
-    },
-  ];
 }
 
 /**
@@ -1313,13 +1073,6 @@ export function buildRecommendedSession(input: SessionPlannerInput): Recommended
   // either (one shared due-queue). reviewLimit still caps the combined pool
   // to "the best N," not both pools' worth.
   const rankedReview = rankReviewPriorities([...input.retainDue, ...input.practiceDue], reviewLimit);
-  // How many never-introduced words today's plan makes room for: the whole
-  // backlog, capped at what ReviewPage will actually seed this sitting.
-  const newCardSlots = Math.max(
-    0,
-    Math.min(input.newCardBacklogCount ?? 0, input.newCardsPerSessionLimit ?? 0),
-  );
-  const newCardMinutes = newCardSlots * MODE_ACTIVITY_ESTIMATE_MINUTES.retain;
   const readCheckMinutes =
     Math.min(READ_CHECK_STEPS_PER_PLAN, input.readCheckCandidates?.length ?? 0) * READ_CHECK_STEP_MINUTES;
   const listeningToolMinutes =
@@ -1327,7 +1080,7 @@ export function buildRecommendedSession(input: SessionPlannerInput): Recommended
   const wordCheckMinutes =
     Math.min(WORD_CHECK_STEPS_PER_PLAN, input.wordCheckCandidates?.length ?? 0) * WORD_CHECK_STEP_MINUTES;
   const reviewCeiling =
-    reviewBatchCostMinutes(rankedReview, reviewLimit) + newCardMinutes + readCheckMinutes + wordCheckMinutes + listeningToolMinutes;
+    reviewBatchCostMinutes(rankedReview, reviewLimit) + readCheckMinutes + wordCheckMinutes + listeningToolMinutes;
 
   // Every bucket — not just review — is clamped to what its candidate list
   // can actually spend. Without this, minutes freed by a capped bucket get
@@ -1340,17 +1093,15 @@ export function buildRecommendedSession(input: SessionPlannerInput): Recommended
     neglectScores,
     baseline: input.baseline,
     availableMinutesByMode: {
-      glossing: exploreCeilingMinutes(input.exploreCandidates, input.sentenceFirst),
-      grammar:
-        (input.understandCandidates.length +
-          Math.min(input.grammarNoticingCandidates.length, GRAMMAR_NOTICING_PER_SESSION_LIMIT)) *
-        MODE_ACTIVITY_ESTIMATE_MINUTES.grammar,
+      glossing: exploreCeilingMinutes(input.exploreCandidates),
+      // Nothing is drafted into the grammar bucket any more (Grammar checks ride in glossing).
+      grammar: 0,
       shadowing: input.shadowCandidates.length * MODE_ACTIVITY_ESTIMATE_MINUTES.shadowing,
       review: reviewCeiling,
     },
   });
 
-  const reviewBatchSteps = buildReviewBatchSteps(rankedReview, allocation.review, newCardSlots);
+  const reviewBatchSteps = buildReviewBatchSteps(rankedReview, allocation.review);
 
   const shadowSteps = buildShadowSteps(
     input.shadowCandidates,
@@ -1358,7 +1109,7 @@ export function buildRecommendedSession(input: SessionPlannerInput): Recommended
     MODE_ACTIVITY_ESTIMATE_MINUTES.shadowing,
   );
 
-  const exploreSteps = buildExploreSteps(input.exploreCandidates, allocation.glossing, input.sentenceFirst);
+  const exploreSteps = buildExploreSteps(input.exploreCandidates, allocation.glossing);
   // One tool per sentence per plan: a sentence drafted for a Fresh try (a full walkthrough) gets no check in
   // the same plan. Word checks go first (the meaning step comes before the next unaided read), then Read
   // checks, then listening steps, each skipping sentences an earlier one took; a skipped sentence stays due.
@@ -1375,26 +1126,8 @@ export function buildRecommendedSession(input: SessionPlannerInput): Recommended
   for (const step of readCheckSteps) taken.add(step.sentenceId);
   const listeningToolSteps = buildListeningToolSteps(untaken(input.listeningToolCandidates), reviewLeft);
   const reviewSteps = [...reviewBatchSteps, ...wordCheckSteps, ...readCheckSteps, ...listeningToolSteps];
-  // The grammar bucket runs two passes over one shared budget: corpus-flagged
-  // patterns "worth learning now" first (the corpus has already told the
-  // learner they recur), then "notice the grammar in this worked-through
-  // sentence" with whatever's left.
-  const understandSteps = buildUnderstandSteps(
-    input.understandCandidates,
-    allocation.grammar,
-    MODE_ACTIVITY_ESTIMATE_MINUTES.grammar,
-  );
-  const understandSpent = understandSteps.reduce((sum, step) => sum + step.estimatedMinutes, 0);
-  const grammarNoticingSteps = buildGrammarNoticingSteps(
-    input.grammarNoticingCandidates,
-    allocation.grammar - understandSpent,
-    MODE_ACTIVITY_ESTIMATE_MINUTES.grammar,
-  );
-
   const allSteps = [
     ...exploreSteps,
-    ...understandSteps,
-    ...grammarNoticingSteps,
     ...shadowSteps,
     ...reviewSteps,
   ];
@@ -1413,28 +1146,7 @@ export function buildRecommendedSession(input: SessionPlannerInput): Recommended
   if (input.quietMode) {
     explanation.push('Quiet mode is on — speaking practice (shadowing) is paused for now.');
   }
-  if (newCardSlots > 0) {
-    const backlogCount = input.newCardBacklogCount ?? 0;
-    if (backlogCount > newCardSlots) {
-      explanation.push(
-        `${backlogCount} words are waiting for a first review — today's plan introduces ${newCardSlots} of them once the due queue is clear.`,
-      );
-      // Below this many days-to-drain, the backlog line above is enough on
-      // its own; past it, the fix (raise the per-session cap) is worth
-      // naming outright rather than leaving the learner to find the report
-      // script that says the same thing (report-new-card-backlog.ts).
-      const sessionsToDrain = Math.ceil(backlogCount / newCardSlots);
-      if (sessionsToDrain > NEW_CARD_BACKLOG_NUDGE_SESSIONS_THRESHOLD) {
-        explanation.push(
-          `At this pace that's ~${sessionsToDrain} daily sessions to work through — raise "New cards per review session" in Settings to go faster.`,
-        );
-      }
-    } else {
-      explanation.push(
-        `Today's plan introduces ${newCardSlots} new word${newCardSlots === 1 ? '' : 's'} that haven't been reviewed yet.`,
-      );
-    }
-  } else if (
+  if (
     reviewCeiling < allocation.review + MODE_ACTIVITY_ESTIMATE_MINUTES.retain &&
     rankedReview.length < reviewLimit
   ) {

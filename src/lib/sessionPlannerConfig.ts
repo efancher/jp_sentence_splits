@@ -80,17 +80,17 @@ export function isSentenceCardSubject(subjectType: string): boolean {
   return subjectType === 'sentence';
 }
 
-/** StudyItem subjects withheld by settings.legacyDrillsPaused (word & grammar drills); sentence/chunk cards continue. */
-export const PAUSED_LEGACY_DRILL_SUBJECT_TYPES: readonly string[] = [
+/**
+ * StudyItem subjects of the retired word and grammar drill cards, left out of the planner's due
+ * scan; sentence/chunk cards continue. (Pitch-accent perception cards share the `vocabularyItem`
+ * subject, so they are not planned either; Review still serves them unless pitch accent is paused.)
+ */
+export const RETIRED_DRILL_SUBJECT_TYPES: readonly string[] = [
   'vocabularyItem',
   'vocabularyConfusion',
   'grammarPattern',
   'sentenceVocabulary',
 ];
-
-export function isPausedLegacyDrillSubject(subjectType: string): boolean {
-  return PAUSED_LEGACY_DRILL_SUBJECT_TYPES.includes(subjectType);
-}
 
 /** Synthetic (non-StudyItem) activity labels the planner itself invents for glossing/grammar/shadowing steps. */
 export const SYNTHETIC_ACTIVITY_TYPES = {

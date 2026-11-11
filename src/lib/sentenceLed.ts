@@ -1,25 +1,12 @@
 import type { AppSettings } from '../domain/types';
 import { I_PLUS_ONE_STRETCH_EVERY } from './iPlusOne';
 
-type FlowSettings = Pick<
-  AppSettings,
-  'sentenceLedFlow' | 'legacyDrillsPaused' | 'sentenceFirstPlanning' | 'sequentialStudyMode' | 'iPlusOneOrdering' | 'iPlusOneStretchEvery'
->;
-
-/** Sentence-led flow is the default; only an explicit `false` turns it off. */
-export function isSentenceLedFlow(settings: Partial<FlowSettings> | undefined): boolean {
-  return settings?.sentenceLedFlow ?? true;
-}
-
-/** Separate word/grammar drills are withheld by the manual pause or by the sentence-led flow. */
-export function effectiveLegacyDrillsPaused(settings: Partial<FlowSettings> | undefined): boolean {
-  return (settings?.legacyDrillsPaused ?? false) || isSentenceLedFlow(settings);
-}
+type FlowSettings = Pick<AppSettings, 'sequentialStudyMode' | 'iPlusOneOrdering' | 'iPlusOneStretchEvery'>;
 
 /**
- * Activity types ReviewPage withholds while word/grammar drills are paused
- * (its vocabulary, confusion, conjugation, word-listening and grammar
- * descriptors). Keep in step with the *_ACTIVITY_TYPES lists there.
+ * The retired word and grammar drill cards (vocabulary, confusion, conjugation,
+ * word-listening and grammar). Review no longer serves or creates them; their
+ * study items and reviews are kept as evidence for word strength and progress.
  */
 const LEGACY_DRILL_ACTIVITY_TYPES = new Set([
   'reading_retrieval',
@@ -44,17 +31,12 @@ const PITCH_ACCENT_ACTIVITY_TYPES = new Set(['pitch_accent', 'pitch_accent_produ
 /** Whether Review currently serves this card type under the given settings. */
 export function isActivityTypeInUse(
   activityType: string,
-  settings: Partial<FlowSettings & Pick<AppSettings, 'pitchAccentPaused' | 'sentenceCardsPaused'>> | undefined,
+  settings: Partial<Pick<AppSettings, 'pitchAccentPaused' | 'sentenceCardsPaused'>> | undefined,
 ): boolean {
-  if (LEGACY_DRILL_ACTIVITY_TYPES.has(activityType)) return !effectiveLegacyDrillsPaused(settings);
+  if (LEGACY_DRILL_ACTIVITY_TYPES.has(activityType)) return false;
   if (PITCH_ACCENT_ACTIVITY_TYPES.has(activityType)) return !settings?.pitchAccentPaused;
   if (isSentenceCardActivityType(activityType)) return !settings?.sentenceCardsPaused;
   return true;
-}
-
-/** Planner explore steps become sentence lessons (walkthrough first) under the sentence-led flow. */
-export function effectiveSentenceFirstPlanning(settings: Partial<FlowSettings> | undefined): boolean {
-  return (settings?.sentenceFirstPlanning ?? false) || isSentenceLedFlow(settings);
 }
 
 export function isSequentialStudyMode(settings: Partial<FlowSettings> | undefined): boolean {

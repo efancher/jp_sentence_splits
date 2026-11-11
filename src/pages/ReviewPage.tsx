@@ -13,8 +13,6 @@ import { WordPitchContour } from '../components/WordPitchContour';
 import { PitchChoiceContour } from '../components/PitchChoiceContour';
 import { PitchWordPhraseWarmup } from '../components/PitchWordPhraseWarmup';
 import { RecordToggleButton } from '../components/RecordToggleButton';
-import { ReviewDocumentText } from '../components/ReviewDocumentText';
-import { SegmentLoopPlayer } from '../components/SegmentLoopPlayer';
 import { SentenceAudioAdjuster } from '../components/SentenceAudioAdjuster';
 import { SentencePitchAccentRow } from '../components/SentencePitchAccentRow';
 import { SentencePitchAccentText } from '../components/SentencePitchAccentText';
@@ -27,19 +25,12 @@ import { FuriganaText } from '../lib/furigana';
 import { parseInlineReadings } from '../lib/parseInlineReadings';
 import {
   countReviewsSince,
-  deferUnreadyGrammarReviews,
-  deferUnreadyReadingInContextReviews,
-  deferUnreadySentenceReviews,
   deleteSentenceCascade,
-  ensureGrammarStudyItem,
   ensureStudyItem,
   ensureVocabularyStudyItem,
-  getAutoTrackEligibleGrammarCandidates,
-  getConfusionPairCandidates,
   getDb,
   logGlossDecision,
   countSentencesSeededSince,
-  countVocabularyWordsSeededSince,
   getDueStudyItems,
   getSentenceReviewHistory,
   getWeakWordRecallTarget,
@@ -47,35 +38,24 @@ import {
   getReferencePitchTrack,
   loadSuspendedBookIndex,
   saveReferencePitchTrack,
-  getProficientGrammarRecognitionPatternIds,
-  getProficientReadingVocabularyItemIds,
-  getSentenceFullReviewReadiness,
-  getSentenceListeningReadiness,
   getTrackedGrammarSpansForSentences,
   getVocabularyOccurrenceCandidates,
-  getVocabularyTargetCandidates,
-  listAttemptsForSentence,
-  pickContextSentenceForGrammarPattern,
   readSettings,
   recordReview,
   recordReviewTroubleTags,
   reportCardIssue,
   settleSessionStep,
   updatePlannerSessionStep,
-  type ConfusionPairCandidate,
   type PitchAccentDrillSentence,
   type SentenceReviewHistory,
   type TrackedGrammarSpan,
   type VocabularyOccurrenceCandidate,
-  type VocabularyTargetCandidate,
   requestFreshTry,
 } from '../db/repository';
 import { useActiveSession } from '../hooks/useActiveSession';
 import { distractorHistoryFromRecords, sampleMeaningQuestion } from '../lib/meaningChoices';
-import { effectiveLegacyDrillsPaused, isSentenceLedFlow } from '../lib/sentenceLed';
 import { useNativeAudio } from '../hooks/useNativeAudio';
 import { nativeAudioController } from '../lib/nativeAudio';
-import { useRangeLoop } from '../hooks/useRangeLoop';
 import { useSentenceAudioBlob } from '../hooks/useSentenceAudioBlob';
 import { useShadowing } from '../hooks/useShadowing';
 import { sessionStepTargetPath } from '../lib/sessionPlanner';
@@ -84,34 +64,20 @@ import type {
   Book,
   ComprehensionCheck,
   MeaningChoiceRecord,
-  GrammarPattern,
   ReviewAssistance,
   ReviewRating,
   ReviewTroubleTag,
   Sentence,
   SentenceAudio,
-  SentenceGrammar,
   SentenceVocabulary,
   StudyActivityType,
   StudyItem,
   VocabularyItem,
 } from '../domain/types';
 import {
-  conjugate,
-  conjugationWordClassFromPartOfSpeech,
-  findInflectedSurfaceInSentence,
-  identifyConjugationForm,
-  type ConjugationForm,
   type ConjugationFormKey,
-  type ConjugationWordClass,
 } from '../lib/conjugation';
-import {
-  blankSentenceGrammar,
-  isGrammarPatternAnswerCorrect,
-} from '../lib/grammarPatterns';
-import { containsKanji } from '../lib/kanji';
 import { buildReadingContextMap, type ReadingContext } from '../lib/readingContext';
-import { reviewSpans } from '../lib/reviewDocument';
 import { AMBIGUITY_PRONE_ROLES } from '../lib/roleGuide';
 import { sentenceIsSuspendedOnly } from '../lib/suspendedBooks';
 import { startOfLocalDayIso } from '../lib/dailyPractice';
@@ -119,10 +85,8 @@ import {
   AUDIO_DESCRIPTOR_KEY,
   pickSentenceQuotaSubjects,
   pickAudioQuotaSubjects,
-  pickQuotaSubjects,
   quotaRemaining,
   SENTENCE_DESCRIPTOR_KEY,
-  VOCABULARY_DESCRIPTOR_KEY,
 } from '../lib/newWordQuota';
 import { segmentIntoMorae } from '../lib/mora';
 import type { PitchAnalysisPayload } from '../lib/pitch';
@@ -158,9 +122,6 @@ import { isReadingAnswerCorrect, surfaceReadingFromInline } from '../lib/reading
 import { MAX_RECORDING_DURATION_MS, PLAYBACK_SPEEDS, type TimeRangeMs } from '../lib/recording';
 import { splitOnSurfaceForm } from '../lib/surfaceForm';
 
-/** Card types that can show the whole chapter around the sentence (and carry the layout dropdown). */
-const CHAPTER_LAYOUT_ACTIVITIES: StudyActivityType[] = ['reading_retrieval', 'reading_production', 'cloze', 'grammar_recognition', 'sentence_transformation'];
-
 /**
  * Sentence-subject review: one activity type, `reading_in_context`. Shows
  * the Japanese sentence framed by its reading-order neighbours (preceding
@@ -170,12 +131,6 @@ const CHAPTER_LAYOUT_ACTIVITIES: StudyActivityType[] = ['reading_retrieval', 're
  * layout when no passage is available (inbox-only sentence, or a
  * book-scoped queue that can't see the neighbours).
  *
- * Gating: the Phase 7.11 full-sentence gate on the sentence's own
- * vocabulary (`ActivityDescriptor.gateSentenceId`), *plus* — since a
- * passage is only worth studying once you can actually read it — every
- * sentence shown in the surrounding passage must itself be full-review
- * ready (user request, 2026-09-03, via the descriptor's `activityIsReady`).
- *
  * History: this was two types — a plain isolated `comprehension` and
  * `reading_in_context`. `comprehension` was retired 2026-09-08 (user:
  * "always better to learn in context if possible"); its existing study
@@ -183,30 +138,6 @@ const CHAPTER_LAYOUT_ACTIVITIES: StudyActivityType[] = ['reading_retrieval', 're
  * (scripts/migrate-comprehension-to-reading-in-context.ts).
  */
 const SENTENCE_ACTIVITY_TYPES: StudyActivityType[] = ['reading_in_context'];
-
-/**
- * Vocabulary-item-subject activity types (Phase 7.2/7.3/7.9, docs/STATUS.md) —
- * all three target a specific occurrence of a word in one of its sentences,
- * and so share one eligibility condition and candidate source (see
- * getVocabularyTargetCandidates): a surfaceForm-bearing sentence_vocabulary
- * link. Vocabulary confirmed before that field existed, or imported outside
- * the picker, isn't a candidate for any of them yet. `reading_retrieval`
- * shows the word (hides the reading); `cloze` hides the word entirely;
- * `reading_production` (Phase 7.9, docs brief §12) shows the word and asks
- * the learner to type the reading — recognition vs. production is a
- * separate axis from what's hidden, so this is a third, harder rung on the
- * same word rather than a variant of reading_retrieval.
- *
- * The two reading cards only seed for a word whose dictionary form has
- * kanji — for an all-kana lemma (する, わかる, テレビ) there's no reading to
- * recall and both degenerate to copying the on-screen kana. See the
- * `vocabulary` descriptor's `activityIsReady`; `cloze` still seeds.
- */
-const VOCABULARY_ACTIVITY_TYPES: StudyActivityType[] = [
-  'reading_retrieval',
-  'cloze',
-  'reading_production',
-];
 
 /**
  * Audio comprehension (Phase 7.4, docs/STATUS.md) — sentence-subject, like
@@ -225,54 +156,6 @@ const AUDIO_ACTIVITY_TYPES: StudyActivityType[] = [
   EAR_TILES_ACTIVITY,
   ...DICTATION_TILE_TYPES,
 ];
-
-/**
- * Word-in-context listening (user request): subjectType `sentenceVocabulary`,
- * subjectId a `SentenceVocabulary.id` — one card per surface-form occurrence
- * of a word in a sentence that has reference audio, like the contextual
- * conjugation card. Reworked 2026-09-02 into an audio cloze: the whole
- * sentence is played, then shown with the target word blanked (+ its
- * translation) for the learner to recall from sound + context — see
- * WordListeningCard. A two-tier listening ladder: these are gated behind the
- * word's own reading/meaning proficiency (tier 1, ActivityDescriptor.isReady
- * → getProficientReadingVocabularyItemIds — scoped to reading_retrieval/
- * cloze/reading_production specifically since 2026-09-16; `pitch_accent`
- * reps on the same subject don't count here), and in turn the full-sentence
- * `listening` card is gated behind *these* plus its own separate
- * `pitch_accent`-proficiency requirement (tier 2,
- * getSentenceListeningReadiness) — so the learner has parsed every content
- * word inside its clause, by both reading and ear, before being asked to
- * parse the whole clip cold.
- */
-const WORD_LISTENING_ACTIVITY_TYPES: StudyActivityType[] = ['word_listening'];
-
-/**
- * Contrastive pair review (Phase 7.7, docs brief §10): subjectType
- * `vocabularyConfusion`, subjectId a VocabularyConfusion.id — one study item
- * per pair, not per word, so FSRS scheduling reflects "can this learner tell
- * these two apart" rather than either word's individual recall (that's
- * already covered by reading_retrieval/cloze). Eligibility is handled by
- * getConfusionPairCandidates (both members must be vocabulary-target
- * candidates in scope); see docs/STATUS.md.
- */
-const CONFUSION_ACTIVITY_TYPES: StudyActivityType[] = ['contrastive'];
-
-/**
- * Contextual conjugation (docs/STATUS.md — supersedes the Phase 7.9b
- * "sentence transformation" design and its per-word-hash follow-up). One
- * card per *occurrence* of a conjugable word in a sentence — subjectType
- * `sentenceVocabulary`, subjectId a `SentenceVocabulary.id` — quizzing the
- * form that sentence actually uses. A verb read in a te-form sentence and a
- * conditional sentence gets one card for each; a form never encountered is
- * never drilled. The `activityType` string stays `'sentence_transformation'`
- * (so `classifyReviewError`, the session planner's practice pool, and
- * `ACTIVITY_LABELS` keep working unchanged). Eligibility: `partOfSpeech`
- * maps to a conjugation word class *and* `identifyConjugationForm`
- * (src/lib/conjugation.ts) recognizes the surface as exactly one form —
- * stacked/compound surfaces (話している, 食べられなかった) get no card. See
- * getSentenceConjugationCandidates.
- */
-const CONJUGATION_ACTIVITY_TYPES: StudyActivityType[] = ['sentence_transformation'];
 
 /**
  * Pitch-accent review (docs/STATUS.md): subjectType stays `vocabularyItem`,
@@ -312,36 +195,6 @@ const PITCH_ACCENT_ACTIVITY_TYPES: StudyActivityType[] = ['pitch_accent'];
  */
 const PITCH_ACCENT_PRODUCTION_ACTIVITY_TYPES: StudyActivityType[] = ['pitch_accent_production'];
 
-/**
- * Grammar-pattern review: subjectType `grammarPattern`, subjectId a
- * GrammarPattern.id. Was a 4-card ladder (grammar_comprehension/
- * grammar_completion/grammar_contrast/grammar_production), collapsed
- * 2026-09-15 to one `grammar_completion` card (docs/ROADMAP.md) — the
- * other three were barely used, and hid the pattern's explanation behind a
- * separate self-rated card instead of putting it in the one moment that
- * actually mattered (choosing the right construction).
- *
- * **2026-09-22 (card issue triage):** collapsing to one production-only
- * card traded away the thing vocab cloze has that grammar didn't — a
- * lower, context-inferable rung before blind recall. Reintroduced as a
- * 2-tier ladder, not the old 4-card one: `grammar_recognition` (self-rated
- * — the construction is already visible in the sentence, the learner
- * notices its *function*, same shape as the retired grammar_comprehension)
- * is the entry rung, seeded by "Track" in GrammarPicker
- * (src/components/GrammarPicker.tsx — still the *only* entry point into a
- * pattern's FSRS rotation; grammarPattern items are never lazily seeded
- * from scratch here). `grammar_completion` (typed production: recall the
- * construction from a blank) is now *lazily seeded by ReviewPage*, same as
- * every other tier-2 card, once `grammar_recognition` reaches FSRS
- * proficiency (`GateContext.grammarRecognitionProficientPatternIds`) — see
- * the `activityIsReady` on the 'grammar' descriptor below. `candidates`
- * below is therefore built from *already-tracked* patterns only (any
- * existing grammarPattern study item, either rung), not "every pattern in
- * scope". Global scope only (no bookId): a pattern isn't really "of" one
- * book the way a sentence is.
- */
-const GRAMMAR_ACTIVITY_TYPES: StudyActivityType[] = ['grammar_recognition', 'grammar_completion'];
-
 const ACTIVITY_LABELS: Record<string, string> = {
   comprehension: 'Comprehension',
   reading_in_context: 'Reading in context',
@@ -359,127 +212,6 @@ const ACTIVITY_LABELS: Record<string, string> = {
   grammar_completion: 'Grammar completion',
   grammar_recognition: 'Grammar recognition',
 };
-
-interface SentenceConjugationCandidate {
-  link: VocabularyOccurrenceCandidate['link'];
-  vocabularyItem: VocabularyItem;
-  sentence: Sentence;
-  surfaceForm: string;
-  wordClass: ConjugationWordClass;
-  /** The form this occurrence is in, per identifyConjugationForm. */
-  form: ConjugationForm;
-  /** Readings accepted as correct — the in-context inflected reading, and the engine's own as a fallback. */
-  expectedReadings: string[];
-}
-
-/**
- * Pure filter over per-occurrence vocabulary candidates (no DB access) — an
- * occurrence is a candidate only if its `partOfSpeech` maps to a conjugation
- * word class and `identifyConjugationForm` recognizes the surface as exactly
- * one form (i.e. it's a single conjugation step off the dictionary form, not
- * a stacked/compound surface). See CONJUGATION_ACTIVITY_TYPES.
- */
-function getSentenceConjugationCandidates(
-  occurrences: VocabularyOccurrenceCandidate[],
-): SentenceConjugationCandidate[] {
-  const result: SentenceConjugationCandidate[] = [];
-  for (const occurrence of occurrences) {
-    const { vocabularyItem, sentence, surfaceForm: storedSurface } = occurrence;
-    const wordClass = conjugationWordClassFromPartOfSpeech(vocabularyItem.partOfSpeech);
-    if (!wordClass) continue;
-
-    // Prefer the stored surface form when it's already a recognizable single
-    // conjugation step. When it isn't, the picker often truncated it to the
-    // bare stem (言っ for 言って, 思わ for 思わない) — recover the full
-    // inflected word from the sentence, but only accept it when it *extends*
-    // the stored surface, so a genuinely stacked/compound occurrence
-    // (食べられなかった) still gets no card and a multi-occurrence word can't
-    // be matched to the wrong form.
-    let surfaceForm = storedSurface;
-    let form: ConjugationForm;
-    const identified = identifyConjugationForm(
-      vocabularyItem.expression,
-      vocabularyItem.reading,
-      wordClass,
-      storedSurface,
-      surfaceReadingFromInline(sentence.inlineReading, storedSurface) ?? undefined,
-    );
-    if (identified) {
-      form = identified.form;
-    } else {
-      const resolved = findInflectedSurfaceInSentence(
-        sentence.japanese,
-        vocabularyItem.expression,
-        vocabularyItem.reading,
-        wordClass,
-      );
-      if (
-        !resolved ||
-        resolved.surface === storedSurface ||
-        !resolved.surface.startsWith(storedSurface)
-      ) {
-        continue;
-      }
-      surfaceForm = resolved.surface;
-      form = resolved.form;
-    }
-
-    const inContextReading = surfaceReadingFromInline(sentence.inlineReading, surfaceForm);
-    const engineReading = conjugate(
-      vocabularyItem.expression,
-      vocabularyItem.reading,
-      wordClass,
-      form.key,
-    )?.reading;
-    const expectedReadings = [...new Set([inContextReading, engineReading].filter(
-      (value): value is string => !!value,
-    ))];
-    if (expectedReadings.length === 0) continue;
-    result.push({
-      link: occurrence.link,
-      vocabularyItem,
-      sentence,
-      surfaceForm,
-      wordClass,
-      form,
-      expectedReadings,
-    });
-  }
-  return result;
-}
-
-interface WordListeningCandidate {
-  link: VocabularyOccurrenceCandidate['link'];
-  vocabularyItem: VocabularyItem;
-  sentence: Sentence;
-  surfaceForm: string;
-  /** The sentence's first reference recording — required (see getWordListeningCandidates). */
-  audio: SentenceAudio;
-}
-
-/**
- * Pure filter over per-occurrence vocabulary candidates (no DB access) — an
- * occurrence is a word-listening candidate only if its sentence has a
- * reference recording. See WORD_LISTENING_ACTIVITY_TYPES.
- */
-function getWordListeningCandidates(
-  occurrences: VocabularyOccurrenceCandidate[],
-  audioBySentenceId: Map<string, SentenceAudio>,
-): WordListeningCandidate[] {
-  const result: WordListeningCandidate[] = [];
-  for (const occurrence of occurrences) {
-    const audio = audioBySentenceId.get(occurrence.sentence.id);
-    if (!audio) continue;
-    result.push({
-      link: occurrence.link,
-      vocabularyItem: occurrence.vocabularyItem,
-      sentence: occurrence.sentence,
-      surfaceForm: occurrence.surfaceForm,
-      audio,
-    });
-  }
-  return result;
-}
 
 interface PitchAccentReviewCandidate {
   vocabularyItem: VocabularyItem;
@@ -672,34 +404,16 @@ const RATINGS: { value: ReviewRating; label: string }[] = [
   { value: 'easy', label: 'Easy' },
 ];
 
-interface GrammarReviewCandidate {
-  pattern: GrammarPattern;
-  sentence: Sentence;
-  sentenceGrammar: SentenceGrammar;
-  /** Passage framing for the target sentence — same shape reading_in_context uses. */
-  readingContext: ReadingContext;
-}
-
 interface QueueCard {
   studyItem: StudyItem;
   sentence: Sentence;
-  /** Set only for vocabulary-item-subject cards (e.g. reading_retrieval). */
-  target?: { vocabularyItem: VocabularyItem; surfaceForm: string; link?: SentenceVocabulary };
   /** Set only for audio-comprehension cards (listening). */
   audio?: SentenceAudio;
-  /** Set only for word-in-context listening cards (per-occurrence word_listening). */
-  wordListening?: WordListeningCandidate;
-  /** Set only for contrastive-pair cards (Phase 7.7). */
-  confusionPair?: ConfusionPairCandidate;
-  /** Set only for contextual conjugation cards (per-occurrence sentence_transformation). */
-  conjugation?: SentenceConjugationCandidate;
   /** Set only for pitch-accent cards. */
   pitchAccent?: PitchAccentReviewCandidate;
   /** Set only for pitch-accent *production* cards. */
   pitchAccentProduction?: PitchAccentDrillSentence;
-  /** Set only for grammar-pattern cards (grammar-learning system Phase 5). */
-  grammar?: GrammarReviewCandidate;
-  /** Set for `reading_in_context` and vocabulary-target cards — the surrounding passage. */
+  /** Set for `reading_in_context` cards — the surrounding passage. */
   readingContext?: ReadingContext;
   /** Set for `reading_in_context`/`listening` cards whose sentence has an authored comprehension check. */
   comprehensionCheck?: ComprehensionCheck;
@@ -713,22 +427,12 @@ function queueCardSubjectKey(card: QueueCard): string {
 }
 
 /**
- * A word-in-sentence has different subjectKeys across descriptors — e.g.
- * `reading_retrieval` keys on the vocabularyItem, `word_listening` keys on
- * the sentenceVocabulary occurrence — so two cards drilling the *same* word
- * in the *same* sentence don't share a subjectKey and slip past both the
- * bury filter and spaceOutSiblingCards's subjectKey check. Resolved whenever
- * the card carries a single target word (vocabulary/wordListening/
- * conjugation/pitchAccent); undefined for sentence/listening/grammar/
- * confusion-pair cards, which have no one vocabulary item to key on (user
- * report 2026-09-17: same word+sentence cards landing back to back).
+ * A pitch-accent card keys on the vocabulary item, so it also carries a
+ * word-in-sentence key: two cards on the same word in the same sentence are
+ * siblings even when their subject keys differ.
  */
 function queueCardVocabularySiblingKey(card: QueueCard): string | undefined {
-  const vocabularyItemId =
-    card.target?.vocabularyItem.id ??
-    card.wordListening?.vocabularyItem.id ??
-    card.conjugation?.vocabularyItem.id ??
-    card.pitchAccent?.vocabularyItem.id;
+  const vocabularyItemId = card.pitchAccent?.vocabularyItem.id;
   return vocabularyItemId ? `vocab:${card.sentence.id}:${vocabularyItemId}` : undefined;
 }
 
@@ -796,50 +500,11 @@ interface ActivityDescriptor {
   buildCard: (studyItem: StudyItem, candidate: unknown) => QueueCard;
   ensure: (candidate: unknown, activityType: StudyActivityType) => Promise<StudyItem>;
   /**
-   * When set, the candidate's card is a "full sentence" card subject to
-   * Phase 7.11 gating — withheld (from both seeding and the due queue) while
-   * that sentence isn't ready for full review. Returns the sentence id to
-   * check, or undefined to never gate this candidate.
+   * Per activity type: returns false to withhold just that (candidate,
+   * activityType) pair from both the due queue and seeding. Used by the
+   * listening descriptor's tile cards.
    */
-  gateSentenceId?: (candidate: unknown) => string | undefined;
-  /**
-   * A finer-grained gate than `gateSentenceId`'s sentence-readiness map:
-   * returns false to withhold this candidate (from both seeding and the due
-   * queue). Used for the two-tier listening ladder — tier-1 `word_listening`
-   * waits on the word's own reading proficiency, tier-2 `listening` waits on
-   * every tier-1 item — and for the contrastive pair card, which waits on both
-   * member words' reading proficiency. Evaluated in addition to `gateSentenceId`.
-   */
-  isReady?: (candidate: unknown, ctx: GateContext) => boolean;
-  /**
-   * Like `isReady`, but per activity type — for a descriptor whose activity
-   * types don't all share the same gate. Returns false to withhold just
-   * that (candidate, activityType) pair from both the due queue and
-   * seeding. Used by the sentence descriptor: `reading_in_context` waits on
-   * its whole passage's readiness, `comprehension` doesn't.
-   */
-  activityIsReady?: (
-    candidate: unknown,
-    activityType: StudyActivityType,
-    ctx: GateContext,
-  ) => boolean;
-}
-
-/** Shared inputs for ActivityDescriptor.isReady, built once per queue build. */
-interface GateContext {
-  /** Vocabulary item ids (in scope) whose reading/meaning study item(s) have reached FSRS proficiency — pitch_accent reps on the same subject don't count (getProficientReadingVocabularyItemIds). */
-  proficientVocabularyItemIds: Set<string>;
-  /** Sentence id -> every surface-form occurrence has a proficient `word_listening` item. */
-  listeningReadiness: Map<string, boolean>;
-  /**
-   * Sentence id -> ready for full review (vocab confirmed AND every
-   * surface-form vocab item FSRS-proficient — getSentenceFullReviewReadiness).
-   * The same map `gateSentenceId` is checked against; exposed here so
-   * `reading_in_context` can also check its passage neighbours.
-   */
-  sentenceReadiness: Map<string, boolean>;
-  /** Grammar pattern ids whose `grammar_recognition` item has reached FSRS proficiency — the tier-1 gate for `grammar_completion` (2026-09-22 recognition/production split). */
-  grammarRecognitionProficientPatternIds: Set<string>;
+  activityIsReady?: (candidate: unknown, activityType: StudyActivityType) => boolean;
 }
 
 /**
@@ -857,13 +522,7 @@ function defineActivityDescriptor<C>(descriptor: {
   subjectId: (candidate: C) => string;
   buildCard: (studyItem: StudyItem, candidate: C) => QueueCard;
   ensure: (candidate: C, activityType: StudyActivityType) => Promise<StudyItem>;
-  gateSentenceId?: (candidate: C) => string | undefined;
-  isReady?: (candidate: C, ctx: GateContext) => boolean;
-  activityIsReady?: (
-    candidate: C,
-    activityType: StudyActivityType,
-    ctx: GateContext,
-  ) => boolean;
+  activityIsReady?: (candidate: C, activityType: StudyActivityType) => boolean;
 }): ActivityDescriptor {
   return descriptor as unknown as ActivityDescriptor;
 }
@@ -884,29 +543,16 @@ interface ReviewScope {
   /** Saved structural-analysis chunks per in-scope sentence, for `reading_in_context`'s later-review structure check. */
   chunksBySentenceId: Map<string, AnalysisChunk[]>;
   /**
-   * Sentence-led flow only: sentences the learner has been introduced to
-   * (gloss walkthrough done, started/completed in a book, or already carrying a
-   * sentence card). Undefined = no restriction (legacy flow).
+   * Sentences the learner has been introduced to (gloss walkthrough done,
+   * started/completed in a book, or already carrying a sentence card).
    */
-  introducedSentenceIds: Set<string> | undefined;
-  /** Flow the scope was built under; the queue waits until it matches the loaded settings. */
-  ledFlow: boolean;
-  vocabularyTargetCandidates: VocabularyTargetCandidate[];
-  existingVocabularyItems: StudyItem[];
+  introducedSentenceIds: Set<string>;
   audioCandidates: AudioCandidate[];
   existingAudioItems: StudyItem[];
-  confusionPairCandidates: ConfusionPairCandidate[];
-  existingConfusionItems: StudyItem[];
-  sentenceConjugationCandidates: SentenceConjugationCandidate[];
-  existingConjugationItems: StudyItem[];
-  wordListeningCandidates: WordListeningCandidate[];
-  existingWordListeningItems: StudyItem[];
   pitchAccentCandidates: PitchAccentReviewCandidate[];
   existingPitchAccentItems: StudyItem[];
   pitchAccentProductionCandidates: PitchAccentDrillSentence[];
   existingPitchAccentProductionItems: StudyItem[];
-  grammarCandidates: GrammarReviewCandidate[];
-  existingGrammarItems: StudyItem[];
 }
 
 /** Descriptor keys whose cards are sentence-subject cards (reading_in_context; listening/Ear Tiles/dictation). */
@@ -917,9 +563,7 @@ function buildActivityDescriptors(scope: ReviewScope): ActivityDescriptor[] {
     defineActivityDescriptor<Sentence>({
       key: 'sentence',
       activityTypes: SENTENCE_ACTIVITY_TYPES,
-      candidates: scope.introducedSentenceIds
-        ? scope.sentences.filter((sentence) => scope.introducedSentenceIds!.has(sentence.id))
-        : scope.sentences,
+      candidates: scope.sentences.filter((sentence) => scope.introducedSentenceIds.has(sentence.id)),
       existingItems: scope.existingSentenceItems,
       subjectId: (sentence) => sentence.id,
       buildCard: (studyItem, sentence) => ({
@@ -930,58 +574,13 @@ function buildActivityDescriptors(scope: ReviewScope): ActivityDescriptor[] {
         analysisChunks: scope.chunksBySentenceId.get(sentence.id),
       }),
       ensure: (sentence, activityType) => ensureStudyItem('sentence', sentence.id, activityType),
-      gateSentenceId: (sentence) => sentence.id,
-      // On top of gateSentenceId (the card's own sentence vocab), the
-      // sentence card waits until every sentence shown in the surrounding
-      // passage is itself ready for full review, so the learner never
-      // studies a passage containing words they haven't confirmed + made
-      // proficient yet (user request, 2026-09-03). Empty context (no book
-      // membership, or a book-scoped queue that can't see the neighbours)
-      // => nothing to gate on, ready.
-      activityIsReady: (sentence, _activityType, ctx) => {
-        const context = scope.readingContextBySentenceId.get(sentence.id);
-        if (!context) return true;
-        return [...context.before, ...context.after].every(
-          (neighbour) => ctx.sentenceReadiness.get(neighbour.id) !== false,
-        );
-      },
-    }),
-    defineActivityDescriptor<VocabularyTargetCandidate>({
-      key: 'vocabulary',
-      activityTypes: VOCABULARY_ACTIVITY_TYPES,
-      candidates: scope.vocabularyTargetCandidates,
-      existingItems: scope.existingVocabularyItems,
-      subjectId: (candidate) => candidate.vocabularyItem.id,
-      buildCard: (studyItem, candidate) => ({
-        studyItem,
-        sentence: candidate.sentence,
-        target: {
-          vocabularyItem: candidate.vocabularyItem,
-          surfaceForm: candidate.surfaceForm,
-          link: candidate.link,
-        },
-        readingContext: scope.readingContextBySentenceId.get(candidate.sentence.id),
-      }),
-      ensure: (candidate, activityType) =>
-        ensureVocabularyStudyItem(candidate.vocabularyItem.id, activityType),
-      // A word with no kanji in its dictionary form has no reading to recall —
-      // `reading_retrieval` / `reading_production` degenerate into copying the
-      // kana already on screen (user request). `cloze` (recall which word
-      // fills the blank from meaning/context) still tests something real, so
-      // it's the only vocabulary-target card an all-kana word gets. Existing
-      // such study items just stop surfacing; nothing is deleted, and the
-      // word's proficiency still counts toward sentence readiness.
-      activityIsReady: (candidate, activityType) =>
-        activityType === 'cloze' || containsKanji(candidate.vocabularyItem.expression),
     }),
     defineActivityDescriptor<AudioCandidate>({
       key: 'listening',
       activityTypes: AUDIO_ACTIVITY_TYPES,
-      candidates: scope.introducedSentenceIds
-        ? scope.audioCandidates.filter((candidate) =>
-            scope.introducedSentenceIds!.has(candidate.sentence.id),
-          )
-        : scope.audioCandidates,
+      candidates: scope.audioCandidates.filter((candidate) =>
+        scope.introducedSentenceIds.has(candidate.sentence.id),
+      ),
       existingItems: scope.existingAudioItems,
       subjectId: (candidate) => candidate.sentence.id,
       buildCard: (studyItem, candidate) => ({
@@ -992,12 +591,6 @@ function buildActivityDescriptors(scope: ReviewScope): ActivityDescriptor[] {
       }),
       ensure: (candidate, activityType) =>
         ensureStudyItem('sentence', candidate.sentence.id, activityType),
-      // Tier 2 of the listening ladder: withheld until the sentence is ready
-      // for full review (gateSentenceId) *and* every word_listening item for
-      // its occurrences is proficient (isReady).
-      gateSentenceId: (candidate) => candidate.sentence.id,
-      isReady: (candidate, ctx) =>
-        ctx.listeningReadiness.get(candidate.sentence.id) !== false,
       activityIsReady: (candidate, activityType) => {
         if (activityType === 'listening') return true;
         // Both tile cards need a sentence that splits cleanly into check-sized tiles.
@@ -1037,60 +630,6 @@ function buildActivityDescriptors(scope: ReviewScope): ActivityDescriptor[] {
         return chooseDictationTile(candidate.sentence, claimedKeys) === tile;
       },
     }),
-    defineActivityDescriptor<WordListeningCandidate>({
-      key: 'wordListening',
-      activityTypes: WORD_LISTENING_ACTIVITY_TYPES,
-      candidates: scope.wordListeningCandidates,
-      existingItems: scope.existingWordListeningItems,
-      subjectId: (candidate) => candidate.link.id,
-      buildCard: (studyItem, candidate) => ({
-        studyItem,
-        sentence: candidate.sentence,
-        wordListening: candidate,
-      }),
-      ensure: (candidate, activityType) =>
-        ensureStudyItem('sentenceVocabulary', candidate.link.id, activityType),
-      // Tier 1: withheld until the learner has demonstrated recall of the
-      // word's reading (see WORD_LISTENING_ACTIVITY_TYPES).
-      isReady: (candidate, ctx) =>
-        ctx.proficientVocabularyItemIds.has(candidate.vocabularyItem.id),
-    }),
-    defineActivityDescriptor<ConfusionPairCandidate>({
-      key: 'confusion',
-      activityTypes: CONFUSION_ACTIVITY_TYPES,
-      candidates: scope.confusionPairCandidates,
-      existingItems: scope.existingConfusionItems,
-      subjectId: (candidate) => candidate.confusion.id,
-      buildCard: (studyItem, candidate) => ({
-        studyItem,
-        sentence: candidate.itemA.sentence,
-        confusionPair: candidate,
-      }),
-      ensure: (candidate, activityType) =>
-        ensureStudyItem('vocabularyConfusion', candidate.confusion.id, activityType),
-      // Vocab gate (user request, 2026-09-03): a contrastive pair is only
-      // worth drilling once each side is individually known — withhold the
-      // card until BOTH member words' readings have reached FSRS proficiency,
-      // mirroring the tier-1 word_listening gate above.
-      isReady: (candidate, ctx) =>
-        ctx.proficientVocabularyItemIds.has(candidate.itemA.vocabularyItem.id) &&
-        ctx.proficientVocabularyItemIds.has(candidate.itemB.vocabularyItem.id),
-    }),
-    defineActivityDescriptor<SentenceConjugationCandidate>({
-      key: 'conjugation',
-      activityTypes: CONJUGATION_ACTIVITY_TYPES,
-      candidates: scope.sentenceConjugationCandidates,
-      existingItems: scope.existingConjugationItems,
-      subjectId: (candidate) => candidate.link.id,
-      buildCard: (studyItem, candidate) => ({
-        studyItem,
-        sentence: candidate.sentence,
-        conjugation: candidate,
-      }),
-      ensure: (candidate, activityType) =>
-        ensureStudyItem('sentenceVocabulary', candidate.link.id, activityType),
-      gateSentenceId: (candidate) => candidate.sentence.id,
-    }),
     defineActivityDescriptor<PitchAccentReviewCandidate>({
       key: 'pitchAccent',
       activityTypes: PITCH_ACCENT_ACTIVITY_TYPES,
@@ -1118,29 +657,6 @@ function buildActivityDescriptors(scope: ReviewScope): ActivityDescriptor[] {
       }),
       ensure: (candidate, activityType) =>
         ensureStudyItem('sentence', candidate.sentence.id, activityType),
-      gateSentenceId: (candidate) => candidate.sentence.id,
-    }),
-    defineActivityDescriptor<GrammarReviewCandidate>({
-      key: 'grammar',
-      activityTypes: GRAMMAR_ACTIVITY_TYPES,
-      candidates: scope.grammarCandidates,
-      existingItems: scope.existingGrammarItems,
-      subjectId: (candidate) => candidate.pattern.id,
-      buildCard: (studyItem, candidate) => ({
-        studyItem,
-        sentence: candidate.sentence,
-        grammar: candidate,
-      }),
-      ensure: (candidate, activityType) =>
-        ensureGrammarStudyItem(candidate.pattern.id, activityType),
-      // Tier 2: `grammar_completion` is withheld (from both seeding and the
-      // due queue) until the pattern's `grammar_recognition` item is itself
-      // FSRS-proficient — same two-tier shape as word_listening -> listening.
-      // `grammar_recognition` itself has no gate of its own beyond being
-      // tracked at all.
-      activityIsReady: (candidate, activityType, ctx) =>
-        activityType !== 'grammar_completion' ||
-        ctx.grammarRecognitionProficientPatternIds.has(candidate.pattern.id),
     }),
   ];
 }
@@ -1153,12 +669,7 @@ interface PendingSeed {
   subjectId: string;
 }
 
-/**
- * The vocabulary/wordListening/conjugation/pitchAccent candidate shapes all
- * carry `.vocabularyItem` and `.sentence` directly (see buildActivityDescriptors)
- * even though their `subjectId` differs by descriptor — duck-typed here so
- * batch spacing below doesn't need a descriptor-specific switch.
- */
+/** The pitch-accent candidate carries `.vocabularyItem` and `.sentence`; other candidates have no single word to key on. */
 function pendingSeedVocabularySiblingKey(candidate: unknown): string | undefined {
   const { vocabularyItem, sentence } = candidate as {
     vocabularyItem?: { id: string };
@@ -1167,19 +678,10 @@ function pendingSeedVocabularySiblingKey(candidate: unknown): string | undefined
   return vocabularyItem && sentence ? `vocab:${sentence.id}:${vocabularyItem.id}` : undefined;
 }
 
-/**
- * Same duck-typing as pendingSeedVocabularySiblingKey, generalized to every
- * descriptor's candidate shape (the 'sentence' descriptor's candidate *is*
- * the sentence; 'confusion' nests it under itemA) — used to drop a just-
- * deleted sentence's not-yet-seeded pool entries so a stale card can't
- * surface later in the same sitting.
- */
+/** The sentence a pending seed belongs to: the 'sentence' descriptor's candidate is the sentence itself, the others nest it. */
 function pendingSeedSentenceId(seed: PendingSeed): string | undefined {
   if (seed.descriptorKey === 'sentence') {
     return (seed.candidate as { id?: string }).id;
-  }
-  if (seed.descriptorKey === 'confusion') {
-    return (seed.candidate as { itemA?: { sentence?: { id: string } } }).itemA?.sentence?.id;
   }
   return (seed.candidate as { sentence?: { id: string } }).sentence?.id;
 }
@@ -1216,20 +718,6 @@ function spaceOutPendingSeedBatches(seeds: PendingSeed[]): PendingSeed[] {
 }
 
 export function ReviewPage() {
-  const [chapterView, setChapterView] = useState(() => {
-    try { return localStorage.getItem('satori-glossbook:review-layout') !== 'original'; }
-    catch { return true; }
-  });
-  // Presentation evidence for the card being answered; reset when the card changes.
-  // Keyed by study item id so a child's report can't be wiped by the card-change reset effect.
-  const [documentShown, setDocumentShown] = useState<{ studyItemId: string; count: number }>();
-  const [layoutSwitchedFor, setLayoutSwitchedFor] = useState<string>();
-  const changeReviewLayout = (chapter: boolean, studyItemId?: string) => {
-    setChapterView(chapter);
-    setLayoutSwitchedFor(studyItemId);
-    try { localStorage.setItem('satori-glossbook:review-layout', chapter ? 'chapter' : 'original'); }
-    catch { /* The view still works when browser storage is unavailable. */ }
-  };
   const { bookId } = useParams();
   const navigate = useNavigate();
   const activeSession = useActiveSession();
@@ -1378,21 +866,6 @@ export function ReviewPage() {
       (item) => item.subjectType === 'sentence' && sentenceIdSet.has(item.subjectId),
     );
 
-    const vocabularyTargetCandidates = await getVocabularyTargetCandidates(sentenceIds);
-    const vocabularyItemIdSet = new Set(
-      vocabularyTargetCandidates.map((candidate) => candidate.vocabularyItem.id),
-    );
-    const existingVocabularyItems = (
-      await db.studyItems
-        .where('activityType')
-        .anyOf(VOCABULARY_ACTIVITY_TYPES)
-        .toArray()
-    ).filter(
-      (item) =>
-        item.subjectType === 'vocabularyItem' &&
-        vocabularyItemIdSet.has(item.subjectId),
-    );
-
     // Audio comprehension is only eligible for sentences that have at
     // least one reference recording — first one found per sentence wins
     // (no book-specific source preference, unlike PracticePage's audio
@@ -1421,66 +894,14 @@ export function ReviewPage() {
       (item) => item.subjectType === 'sentence' && audioBySentenceId.has(item.subjectId),
     );
 
-    const confusionPairCandidates = await getConfusionPairCandidates(
-      vocabularyTargetCandidates,
-    );
-    const confusionPairIdSet = new Set(
-      confusionPairCandidates.map((candidate) => candidate.confusion.id),
-    );
-    const existingConfusionItems = (
-      await db.studyItems
-        .where('activityType')
-        .anyOf(CONFUSION_ACTIVITY_TYPES)
-        .toArray()
-    ).filter(
-      (item) =>
-        item.subjectType === 'vocabularyConfusion' &&
-        confusionPairIdSet.has(item.subjectId),
-    );
-
     const occurrenceCandidates = await getVocabularyOccurrenceCandidates(sentenceIds);
-
-    const sentenceConjugationCandidates =
-      getSentenceConjugationCandidates(occurrenceCandidates);
-    const conjugationLinkIdSet = new Set(
-      sentenceConjugationCandidates.map((candidate) => candidate.link.id),
-    );
-    const existingConjugationItems = (
-      await db.studyItems
-        .where('activityType')
-        .anyOf(CONJUGATION_ACTIVITY_TYPES)
-        .toArray()
-    ).filter(
-      (item) =>
-        item.subjectType === 'sentenceVocabulary' &&
-        conjugationLinkIdSet.has(item.subjectId),
-    );
-
-    const wordListeningCandidates = getWordListeningCandidates(
-      occurrenceCandidates,
-      audioBySentenceId,
-    );
-    const wordListeningLinkIdSet = new Set(
-      wordListeningCandidates.map((candidate) => candidate.link.id),
-    );
-    const existingWordListeningItems = (
-      await db.studyItems
-        .where('activityType')
-        .anyOf(WORD_LISTENING_ACTIVITY_TYPES)
-        .toArray()
-    ).filter(
-      (item) =>
-        item.subjectType === 'sentenceVocabulary' &&
-        wordListeningLinkIdSet.has(item.subjectId),
-    );
 
     // "Pause pitch accent" (settings.pitchAccentPaused, 2026-09-28 user
     // decision to let shadowing carry pitch accent for now) withholds both
     // the pitch_accent and pitch_accent_production candidate lists entirely
     // — an empty candidates list makes getDueStudyItems' subjectIds filter
     // match nothing, so existing due items are withheld too, not just new
-    // seeding. See src/db/repository.ts#getSentenceListeningReadiness for
-    // the matching exemption on the listening card's pitch sub-requirement.
+    // seeding.
     const pitchAccentCandidates = settings?.pitchAccentPaused
       ? []
       : getPitchAccentReviewCandidates(occurrenceCandidates, audioBySentenceId);
@@ -1525,51 +946,6 @@ export function ReviewPage() {
         sentenceIdSet.has(item.subjectId),
     );
 
-    // Grammar patterns: global scope only (bookId unset) — a tracked
-    // pattern isn't scoped to one book the way a sentence is, and its
-    // "context sentence" may come from any book it's been encountered in.
-    // Candidates are built from already-tracked patterns (any existing
-    // grammarPattern study item), not "every pattern in the corpus" — see
-    // GRAMMAR_ACTIVITY_TYPES's doc comment.
-    let grammarCandidates: GrammarReviewCandidate[] = [];
-    let existingGrammarItems: StudyItem[] = [];
-    if (!bookId) {
-      const grammarStudyItems = (
-        await db.studyItems.where('activityType').anyOf(GRAMMAR_ACTIVITY_TYPES).toArray()
-      ).filter((item) => item.subjectType === 'grammarPattern');
-      const trackedPatternIds = new Set(grammarStudyItems.map((item) => item.subjectId));
-      // Skip encounters that live only in suspended books (a shelved book's
-      // sentence shouldn't keep coming up as a grammar card's context).
-      const suspendedIndex = await loadSuspendedBookIndex();
-      if (trackedPatternIds.size > 0) {
-        const trackedPatterns = await db.grammarPatterns.bulkGet([...trackedPatternIds]);
-        for (const pattern of trackedPatterns) {
-          if (!pattern) continue;
-          const context = await pickContextSentenceForGrammarPattern(pattern.id, suspendedIndex);
-          if (!context) continue;
-          grammarCandidates.push({
-            pattern,
-            sentence: context.sentence,
-            sentenceGrammar: context.sentenceGrammar,
-            readingContext: context.readingContext,
-          });
-        }
-      }
-      // Auto-track (docs/ROADMAP.md "grammar auto-track once eligible",
-      // 2026-09-28): an annotated pattern whose vocabulary has caught up
-      // enough to review flows into the same lazy-seed pool as everything
-      // else below, instead of requiring a manual "Track" revisit.
-      const autoTrackCandidates = await getAutoTrackEligibleGrammarCandidates(
-        trackedPatternIds,
-        suspendedIndex,
-      );
-      grammarCandidates.push(...autoTrackCandidates);
-      const grammarCandidateIds = new Set(grammarCandidates.map((c) => c.pattern.id));
-      existingGrammarItems = grammarStudyItems.filter((item) =>
-        grammarCandidateIds.has(item.subjectId),
-      );
-    }
-
     // Reading-order neighbours for `reading_in_context` cards
     // (docs/ROADMAP.md). Book scope: the queue only holds one book's
     // sentences, so context stays within that book. Global scope: load
@@ -1598,25 +974,17 @@ export function ReviewPage() {
       }
     });
 
-    const ledFlow = isSentenceLedFlow(settings);
-    let introducedSentenceIds: Set<string> | undefined;
-    if (ledFlow) {
-      const walked = (await db.sentenceLearningEvents.toArray())
-        .filter((event) => event.action === 'walkthrough_completed')
-        .map((event) => event.sentenceId);
-      introducedSentenceIds = new Set([
-        ...walked,
-        ...contextBookSentences
-          .filter((membership) => membership.status !== 'unstarted')
-          .map((membership) => membership.sentenceId),
-        ...existingSentenceItems.map((item) => item.subjectId),
-      ]);
-    }
+    const walked = (await db.sentenceLearningEvents.toArray())
+      .filter((event) => event.action === 'walkthrough_completed')
+      .map((event) => event.sentenceId);
+    const introducedSentenceIds = new Set([
+      ...walked,
+      ...contextBookSentences
+        .filter((membership) => membership.status !== 'unstarted')
+        .map((membership) => membership.sentenceId),
+      ...existingSentenceItems.map((item) => item.subjectId),
+    ]);
 
-    // "Pause word & grammar drills" (settings.legacyDrillsPaused, or the sentence-led flow): empty the
-    // vocabulary/grammar candidate lists so neither due nor new cards of those
-    // kinds are queued. Sentence cards, audio and pitch (own pause) continue.
-    const paused = effectiveLegacyDrillsPaused(settings);
     return {
       book,
       sentences,
@@ -1625,31 +993,18 @@ export function ReviewPage() {
       comprehensionCheckBySentenceId,
       chunksBySentenceId,
       introducedSentenceIds,
-      ledFlow,
-      vocabularyTargetCandidates: paused ? [] : vocabularyTargetCandidates,
-      existingVocabularyItems: paused ? [] : existingVocabularyItems,
       audioCandidates,
       existingAudioItems,
-      confusionPairCandidates: paused ? [] : confusionPairCandidates,
-      existingConfusionItems: paused ? [] : existingConfusionItems,
-      sentenceConjugationCandidates: paused ? [] : sentenceConjugationCandidates,
-      existingConjugationItems: paused ? [] : existingConjugationItems,
-      wordListeningCandidates: paused ? [] : wordListeningCandidates,
-      existingWordListeningItems: paused ? [] : existingWordListeningItems,
       pitchAccentCandidates,
       existingPitchAccentItems,
       pitchAccentProductionCandidates,
       existingPitchAccentProductionItems,
-      grammarCandidates: paused ? [] : grammarCandidates,
-      existingGrammarItems: paused ? [] : existingGrammarItems,
     };
   }, [
     bookId,
     deepDiveSentenceId,
     settings?.quietMode,
     settings?.pitchAccentPaused,
-    settings?.legacyDrillsPaused,
-    settings?.sentenceLedFlow,
   ]);
 
   const sentenceCardsPaused = settings?.sentenceCardsPaused ?? false;
@@ -1671,69 +1026,8 @@ export function ReviewPage() {
   // source of truth for "due" semantics (not reimplemented here too).
   useEffect(() => {
     if (!scope || initialized || !settings) return;
-    if (scope.ledFlow !== isSentenceLedFlow(settings)) return;
     let cancelled = false;
     void (async () => {
-      // Full-sentence review gating (user request, 2026-08-16): before
-      // computing what's due, push out any sentence card whose vocabulary
-      // hasn't been shown proficient yet — see deferUnreadySentenceReviews.
-      // That only covers items that already exist; a sentence with no
-      // reading_in_context study_item yet would otherwise bypass it
-      // entirely via lazy seeding below — sentenceReadiness covers that path.
-      // Sentence-led flow: sentence cards are gated by having been introduced
-      // through the gloss (scope.introducedSentenceIds), not by vocabulary
-      // proficiency, so the proficiency defers/gates are skipped entirely.
-      const ledFlow = isSentenceLedFlow(settings);
-      if (!ledFlow) await deferUnreadySentenceReviews(SENTENCE_ACTIVITY_TYPES);
-      // reading_in_context also waits on its passage neighbours' vocab, on
-      // top of its own sentence. deferUnreadySentenceReviews above only
-      // checked each card's own target sentence; this pushes out any
-      // already-due reading_in_context item whose surrounding passage isn't
-      // ready yet (the isGatedOut filter below covers the not-yet-seeded
-      // path, same split as the sentence gate).
-      if (!ledFlow) await deferUnreadyReadingInContextReviews();
-      // Same gate for tracked grammar patterns: a grammarPattern-subject card
-      // (comprehension/completion/contrast/production) whose pattern has no
-      // full-review-ready linked sentence is dropped from the queue below
-      // anyway (pickContextSentenceForGrammarPattern → undefined) — push its
-      // stored due date out too so it stops counting as due backlog.
-      if (!ledFlow) await deferUnreadyGrammarReviews();
-      const sentenceIds = scope.sentences.map((sentence) => sentence.id);
-      const sentenceReadiness = ledFlow
-        ? new Map<string, boolean>()
-        : await getSentenceFullReviewReadiness(sentenceIds);
-
-      // Per-candidate gates (ActivityDescriptor.isReady). Listening ladder:
-      // tier 1 (word_listening) waits on the word's reading proficiency; tier 2
-      // (listening) waits on every tier-1 item. Contrastive pair: waits on both
-      // member words' reading proficiency. Like the conjugation card, these have
-      // no defer pass of their own — the isGatedOut filter below keeps them out
-      // of the queue and the pending-seed pool.
-      const gateContext: GateContext = {
-        proficientVocabularyItemIds: await getProficientReadingVocabularyItemIds([
-          ...new Set([
-            ...scope.wordListeningCandidates.map((candidate) => candidate.vocabularyItem.id),
-            // Contrastive pair members are gated on their own reading
-            // proficiency too (see the `confusion` descriptor's isReady) — their
-            // ids must be in this set or every contrastive card is gated out.
-            ...scope.confusionPairCandidates.flatMap((candidate) => [
-              candidate.itemA.vocabularyItem.id,
-              candidate.itemB.vocabularyItem.id,
-            ]),
-          ]),
-        ]),
-        // Sentence-led flow pauses word_listening (no candidates), so the tier-2
-        // gate on proficient word_listening items could never open and would hide
-        // every audio card (ear_tiles, dictation_tile:N). An empty map means ready.
-        listeningReadiness: ledFlow
-          ? new Map<string, boolean>()
-          : await getSentenceListeningReadiness(sentenceIds),
-        sentenceReadiness,
-        grammarRecognitionProficientPatternIds: await getProficientGrammarRecognitionPatternIds(
-          scope.grammarCandidates.map((candidate) => candidate.pattern.id),
-        ),
-      };
-
       const dueByDescriptor = await Promise.all(
         descriptors.map((descriptor) =>
           getDueStudyItems(descriptor.activityTypes, {
@@ -1744,30 +1038,13 @@ export function ReviewPage() {
         ),
       );
 
-      // Phase 7.11 gating: a "full sentence" card (see descriptor.gateSentenceId
-      // — the sentence-subject cards, and the contextual conjugation card,
-      // which is per-sentence-occurrence) is withheld while its sentence isn't
-      // ready for full review. deferUnreadySentenceReviews above pushes out
-      // existing sentence-subject due items; this check also covers the
-      // conjugation card (no defer pass of its own) and is belt-and-braces for
-      // sentence cards.
+      // A (candidate, activityType) pair its descriptor says isn't ready yet is kept out of
+      // both the due queue and the pending-seed pool.
       const isGatedOut = (
         descriptor: ActivityDescriptor,
         candidate: unknown,
-        activityType?: StudyActivityType,
-      ): boolean => {
-        const gateSentenceId = descriptor.gateSentenceId?.(candidate);
-        if (!!gateSentenceId && sentenceReadiness.get(gateSentenceId) === false) return true;
-        if (descriptor.isReady && !descriptor.isReady(candidate, gateContext)) return true;
-        if (
-          activityType &&
-          descriptor.activityIsReady &&
-          !descriptor.activityIsReady(candidate, activityType, gateContext)
-        ) {
-          return true;
-        }
-        return false;
-      };
+        activityType: StudyActivityType,
+      ): boolean => Boolean(descriptor.activityIsReady && !descriptor.activityIsReady(candidate, activityType));
 
       const due: QueueCard[] = [];
       descriptors.forEach((descriptor, index) => {
@@ -1783,19 +1060,12 @@ export function ReviewPage() {
       });
       due.sort((a, b) => a.studyItem.fsrsState.due.localeCompare(b.studyItem.fsrsState.due));
 
-      // Bury siblings for the session (Anki's default behaviour). 世話's
-      // cloze / reading_retrieval / reading_production are three study items
-      // on one subject; graded alike each session they converge on
-      // near-identical FSRS due timestamps, so the sort above lands them
-      // adjacently and the first card's reveal turns the rest into a
-      // short-term echo test — a hollow "Good" that inflates their intervals.
-      // Once a subject has a card in the queue, hold its other *due* cards
-      // for the next session; they stay due, they just don't compete for a
-      // slot today. Only `review`/`relearning` items are buried: `new` and
-      // `learning` are early acquisition where the multi-card run is intended
-      // first-exposure scaffolding (and the lazy-seed path below deliberately
-      // seeds a whole batch at once). Keyed by subjectType+subjectId so a
-      // word's reading cards and its pitch-accent card count as siblings too.
+      // Bury siblings for the session (Anki's default behaviour): several cards on
+      // one subject, graded alike, converge on near-identical due timestamps, so the
+      // first card's reveal would turn the rest into a short-term echo test. Once a
+      // subject has a card in the queue, its other *due* cards wait for the next
+      // session; they stay due. Only `review`/`relearning` items are buried: `new`
+      // and `learning` cards are first-exposure scaffolding, seeded as a batch below.
       const shownSubjects = new Set<string>();
       const deduped = due.filter((card) => {
         const key = `${card.studyItem.subjectType}:${card.studyItem.subjectId}`;
@@ -1810,23 +1080,12 @@ export function ReviewPage() {
       // get spread apart so they aren't shown back to back.
       const spaced = spaceOutSiblingCards(deduped);
 
-      // Any (subject, activityType) pair with no study_item yet needs
-      // seeding — tracked per-pair (not per-subject) so a subject left with
-      // only some activity types seeded still gets the rest. Built per
-      // descriptor first, then interleaved round-robin across descriptors
-      // (Phase 7.10, docs/STATUS.md) rather than concatenated — a
-      // real-data check found a book with 206 sentences and ~50 eligible
-      // vocabulary items would've required clicking through ~400 sentence
-      // cards before a single vocabulary-based card ever seeded, since the
-      // seeding effect below always takes pool[0]. Interleaving means a
-      // mix of card types shows up from early in the session instead,
-      // matching the "one unified session, not six mandatory cards"
-      // principle Phase 7.2 already established for the due-queue merge —
-      // this is the same principle applied to lazy seeding. Batching by
-      // (descriptorKey, subjectId) below is a filter over the whole pool,
-      // not a positional slice, so a candidate's several activity types
-      // (e.g. a word's reading_retrieval/cloze/reading_production) still
-      // seed together as one batch even when scattered non-adjacently.
+      // Any (subject, activityType) pair with no study_item yet needs seeding,
+      // tracked per pair so a subject left with only some activity types seeded
+      // still gets the rest. Built per descriptor, then interleaved round-robin
+      // so a mix of card types shows up early instead of one descriptor's whole
+      // backlog first. Batching by (descriptorKey, subjectId) below filters the
+      // whole pool, so a candidate's activity types still seed together.
       const pendingSeedsByDescriptor: PendingSeed[][] = descriptors.map((descriptor) => {
         const existingKeys = new Set(
           descriptor.existingItems.map(
@@ -1836,13 +1095,6 @@ export function ReviewPage() {
         const seeds: PendingSeed[] = [];
         for (const candidate of descriptor.candidates) {
           const subjectId = descriptor.subjectId(candidate);
-          // A not-yet-ready sentence (Phase 7.11) never gets a *new*
-          // full-sentence study item lazily seeded (existing ones are
-          // handled above) — same rule for the per-occurrence conjugation
-          // card, see descriptor.gateSentenceId.
-          if (isGatedOut(descriptor, candidate)) {
-            continue;
-          }
           for (const activityType of descriptor.activityTypes) {
             if (isGatedOut(descriptor, candidate, activityType)) continue;
             if (!existingKeys.has(`${subjectId}:${activityType}`)) {
@@ -1864,47 +1116,9 @@ export function ReviewPage() {
       // apart before they're lazily seeded one batch at a time.
       let spacedPendingSeeds = spaceOutPendingSeedBatches(pendingSeeds);
 
-      // Daily new-word top-up (settings.dailyNewWordQuota): introduce up to the
-      // day's quota of never-seeded vocabulary words now, appended after the due
-      // cards — not only once the queue runs dry, which on a heavy review day it
-      // never did (532 confirmed words sat waiting while ~7 a day were seeded).
-      // Counted from the database, so reopening Review can't exceed the quota.
-      const vocabularyDescriptor = descriptors.find(
-        (descriptor) => descriptor.key === VOCABULARY_DESCRIPTOR_KEY,
-      );
-      const quotaSubjects = vocabularyDescriptor
-        ? pickQuotaSubjects(
-            spacedPendingSeeds,
-            quotaRemaining(
-              settings.dailyNewWordQuota,
-              await countVocabularyWordsSeededSince(startOfLocalDayIso(new Date())),
-            ),
-          )
-        : [];
       const topUpCards: QueueCard[] = [];
-      if (vocabularyDescriptor && !cancelled) {
-        for (const subjectId of quotaSubjects) {
-          const batch = spacedPendingSeeds.filter(
-            (item) => item.descriptorKey === VOCABULARY_DESCRIPTOR_KEY && item.subjectId === subjectId,
-          );
-          topUpCards.push(
-            ...(await Promise.all(
-              batch.map(async (item) =>
-                vocabularyDescriptor.buildCard(
-                  await vocabularyDescriptor.ensure(item.candidate, item.activityType),
-                  item.candidate,
-                ),
-              ),
-            )),
-          );
-        }
-        const seeded = new Set(quotaSubjects);
-        spacedPendingSeeds = spacedPendingSeeds.filter(
-          (item) => !(item.descriptorKey === VOCABULARY_DESCRIPTOR_KEY && seeded.has(item.subjectId)),
-        );
-      }
 
-      // Daily sentence top-ups: the same floor for sentences' first
+      // Daily sentence top-ups: a floor for sentences' first
       // `reading_in_context` card (settings.dailyNewSentenceCardQuota) and first
       // `ear_tiles` card, which starts the Ear Tiles → dictation ladder
       // (settings.dailyNewAudioCardQuota). Each picked sentence is seeded as its
@@ -1960,7 +1174,7 @@ export function ReviewPage() {
       setQueue([...spaced, ...topUpCards]);
       setPool(spacedPendingSeeds);
       // The top-ups count toward this sitting's new-card cap like any other new subject.
-      setNewCardsIntroduced(quotaSubjects.length + sentenceTopUpCount);
+      setNewCardsIntroduced(sentenceTopUpCount);
       setInitialized(true);
     })();
     return () => {
@@ -2089,13 +1303,7 @@ export function ReviewPage() {
     if (!current || submitting) return;
     setSubmitting(true);
     try {
-      const expectedAnswerValue =
-        typedResponseExpected ??
-        (current.conjugation
-          ? current.conjugation.expectedReadings[0]
-          : current.grammar
-            ? current.grammar.pattern.canonicalName
-            : current.target?.vocabularyItem.reading);
+      const expectedAnswerValue = typedResponseExpected ?? undefined;
       // Pitch-accent shape tracking (docs/STATUS.md): the H/L shape implied
       // by the chosen vs. correct drop position, purely for later
       // shape-confusion analysis — never used for grading, which already
@@ -2136,16 +1344,6 @@ export function ReviewPage() {
         // miss can be traced back to a sentence — see "cross-activity error
         // routing" (docs/ROADMAP.md "Possibilities").
         contextSentenceId: current.sentence.id,
-        presentation: CHAPTER_LAYOUT_ACTIVITIES.includes(current.studyItem.activityType)
-          ? {
-              layout: chapterView ? 'chapter' : 'sentence',
-              documentSentenceCount:
-                chapterView && documentShown?.studyItemId === current.studyItem.id
-                  ? documentShown.count
-                  : undefined,
-              layoutSwitched: layoutSwitchedFor === current.studyItem.id ? true : undefined,
-            }
-          : undefined,
       });
       if (troubleTags.length > 0) {
         // Supplementary: a failure here must not undo the review just recorded.
@@ -2162,12 +1360,9 @@ export function ReviewPage() {
       // review completes the active session's `review` step's target
       // count, settle the step and jump straight to the next one, instead
       // of leaving the learner to notice and go back to Mark it complete.
-      // But hold the step open while never-introduced words are still
-      // waiting to be seeded this sitting (docs/STATUS.md "Review new-card
-      // backlog") — the planner reserves review minutes for them, and
-      // `targetCount` undercounts them (one increment per word, ~3 cards
-      // seeded), so without this guard the step would settle before
-      // ReviewPage ever drains the pending-seed pool.
+      // But hold the step open while never-introduced sentences are still
+      // waiting to be seeded this sitting, or the step would settle before
+      // ReviewPage drains the pending-seed pool.
       const moreNewCardsThisSession =
         pool.length > 0 &&
         !!settings &&
@@ -2251,8 +1446,7 @@ export function ReviewPage() {
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <div>
             <div className="muted">
-              {scope?.book && !(current?.studyItem.activityType === 'cloze' && !revealed)
-                ? `${scope.book.title} · Review` : 'Review'}
+              {scope?.book ? `${scope.book.title} · Review` : 'Review'}
             </div>
           </div>
           {bookId ? (
@@ -2282,19 +1476,10 @@ export function ReviewPage() {
         ) : !current ? (
           <div className="empty-state">
             <strong>All caught up.</strong>
-            {isSentenceLedFlow(settings) ? (
-              <span className="muted">
-                Sentence-led flow: reviews are sentences you've already worked through in the
-                gloss. Introduce a new sentence from the book page or today's plan and it will
-                show up here.
-              </span>
-            ) : settings?.legacyDrillsPaused ? (
-              <span className="muted">
-                Word &amp; grammar drills are paused in Settings, and sentence cards wait until
-                their words are proficient — so the queue can be empty. Turn the pause off to see
-                everything that's due.
-              </span>
-            ) : null}
+            <span className="muted">
+              Reviews are sentences you've already worked through in the gloss. Introduce a new
+              sentence from the book page or today's plan and it will show up here.
+            </span>
             {newCardLimitReached ? (
               <span className="muted">
                 New-card limit reached for this session ({newCardsIntroduced} of{' '}
@@ -2410,46 +1595,7 @@ export function ReviewPage() {
                 ) : null}
               </div>
             )}
-            {CHAPTER_LAYOUT_ACTIVITIES.includes(current.studyItem.activityType) ? (
-              <label className="row">
-                Review layout
-                <select value={chapterView ? 'chapter' : 'original'} onChange={(event) => changeReviewLayout(event.target.value === 'chapter', current.studyItem.id)}>
-                  <option value="original">Original · sentence</option>
-                  <option value="chapter">New · chapter</option>
-                </select>
-              </label>
-            ) : null}
-            {current.target && current.studyItem.activityType === 'reading_production' ? (
-              <ReadingProductionCard
-                chapterView={chapterView}
-                bookId={current.readingContext?.bookId}
-                onDocumentShown={(count) => setDocumentShown({ studyItemId: current.studyItem.id, count })}
-                key={current.studyItem.id}
-                sentence={current.sentence}
-                vocabularyItem={current.target.vocabularyItem}
-                surfaceForm={current.target.surfaceForm}
-                revealed={revealed}
-                onCheck={(value, gradedAgainst) => {
-                  setTypedResponse(value);
-                  setTypedResponseExpected(gradedAgainst);
-                  setRevealed(true);
-                }}
-              />
-            ) : current.target ? (
-              <VocabularyTargetCard
-                chapterView={chapterView}
-                onDocumentShown={(count) => setDocumentShown({ studyItemId: current.studyItem.id, count })}
-                key={current.studyItem.id}
-                activityType={current.studyItem.activityType}
-                sentence={current.sentence}
-                vocabularyItem={current.target.vocabularyItem}
-                surfaceForm={current.target.surfaceForm}
-                link={current.target.link}
-                context={current.readingContext}
-                revealed={revealed}
-                onReveal={() => setRevealed(true)}
-              />
-            ) : current.audio && current.studyItem.activityType === EAR_TILES_ACTIVITY ? (
+            {current.audio && current.studyItem.activityType === EAR_TILES_ACTIVITY ? (
               <EarTilesCard
                 key={current.studyItem.id}
                 sentence={current.sentence}
@@ -2488,36 +1634,6 @@ export function ReviewPage() {
                   setComprehensionCheckAnswer({ correct, chosenIndex, meaningChoice })
                 }
               />
-            ) : current.wordListening ? (
-              <WordListeningCard
-                key={current.studyItem.id}
-                candidate={current.wordListening}
-                revealed={revealed}
-                onReveal={() => setRevealed(true)}
-                onReplay={() => markAssistance('audio_replayed')}
-                playbackRate={audioSpeed}
-                onPlaybackRateChange={setAudioSpeed}
-              />
-            ) : current.confusionPair ? (
-              <ContrastivePairCard
-                candidate={current.confusionPair}
-                revealed={revealed}
-                onReveal={() => setRevealed(true)}
-              />
-            ) : current.conjugation ? (
-              <SentenceConjugationCard
-                key={current.studyItem.id}
-                candidate={current.conjugation}
-                chapterView={chapterView}
-                bookId={current.readingContext?.bookId}
-                onDocumentShown={(count) => setDocumentShown({ studyItemId: current.studyItem.id, count })}
-                revealed={revealed}
-                onCheck={(value, gradedAgainst) => {
-                  setTypedResponse(value);
-                  setTypedResponseExpected(gradedAgainst);
-                  setRevealed(true);
-                }}
-              />
             ) : current.pitchAccent ? (
               <PitchAccentCard
                 key={current.studyItem.id}
@@ -2537,26 +1653,6 @@ export function ReviewPage() {
                 candidate={current.pitchAccentProduction}
                 onAnalyzed={(measuredCount, mismatchCount) => {
                   setPitchProductionEvidence({ measuredCount, mismatchCount });
-                  setRevealed(true);
-                }}
-              />
-            ) : current.grammar && current.studyItem.activityType === 'grammar_recognition' ? (
-              <GrammarRecognitionCard
-                chapterView={chapterView}
-                onDocumentShown={(count) => setDocumentShown({ studyItemId: current.studyItem.id, count })}
-                key={current.studyItem.id}
-                candidate={current.grammar}
-                revealed={revealed}
-                onReveal={() => setRevealed(true)}
-              />
-            ) : current.grammar ? (
-              <GrammarCompletionCard
-                key={current.studyItem.id}
-                candidate={current.grammar}
-                revealed={revealed}
-                onCheck={(value, gradedAgainst) => {
-                  setTypedResponse(value);
-                  setTypedResponseExpected(gradedAgainst);
                   setRevealed(true);
                 }}
               />
@@ -2615,14 +1711,12 @@ export function ReviewPage() {
               </>
             )}
             {revealed ? <RevealedFurigana sentence={current.sentence} /> : null}
-            {(current.audio ?? current.wordListening?.audio) ? (
-              <ReviewClipAdjuster audioId={(current.audio ?? current.wordListening?.audio)!.id} />
-            ) : null}
-            {revealed && (current.audio ?? current.wordListening?.audio) ? (
+            {current.audio ? <ReviewClipAdjuster audioId={current.audio.id} /> : null}
+            {revealed && current.audio ? (
               // Measured pitch of the native clip — directly under the
               // sentence, above the dictionary H/L row. Only on the
-              // audio-centric cards (listening / word_listening).
-              <ReviewPitchContour audio={(current.audio ?? current.wordListening?.audio)!} />
+              // audio-centric cards (listening).
+              <ReviewPitchContour audio={current.audio} />
             ) : null}
             {revealed &&
             current.studyItem.activityType !== 'pitch_accent' &&
@@ -2636,7 +1730,7 @@ export function ReviewPage() {
               // resolveInflectedPitchAccent, dropping (not misdrawing) any
               // occurrence outside that resolver's narrow coverage.
               <>
-                {!(current.audio ?? current.wordListening?.audio) ? (
+                {!current.audio ? (
                   // The measured native contour, when the sentence has a
                   // reference clip — the listening cards above already show
                   // it from their own audio, so only add it for the rest.
@@ -3066,410 +2160,6 @@ function ContextSentenceReading({
 }) {
   if (!revealed || !sentence.readingOnly) return null;
   return <p className="jp jp-sm muted reading-context-reading">{sentence.readingOnly}</p>;
-}
-
-/**
- * Renders both vocabulary-item-subject card types (Phase 7.2/7.3): they
- * share the highlighted-sentence layout and only differ in what's hidden
- * before reveal. `reading_retrieval` shows the target word, hides its
- * reading. `cloze` hides the target word itself (a blank), and reveals it
- * alongside the reading — a step harder, since there's no visible word to
- * anchor recall against.
- *
- * `cloze` also shows the sentence translation as a pre-reveal hint: a bare
- * grammatical blank often admits many plausible fillers (e.g. "the ___ I
- * saw" fits movie/book/photo/... equally), so without the meaning the
- * exercise degenerates into remembering which exact word this sentence
- * used rather than recalling the word from its meaning-in-context.
- *
- * Both are framed by the passage they came from (user request, 2026-09-20):
- * the two preceding sentences, or — for a sentence with nothing before it —
- * the following one, shown untranslated above/below the target sentence.
- * Short conversational lines ("まあでも…", "リンクは説明欄にあります。") are
- * near-unanswerable in isolation. On an unrevealed `cloze` the target word is
- * blanked out of those neighbours too, so the context can't hand over the
- * answer.
- */
-function VocabularyTargetCard({
-  activityType,
-  sentence,
-  vocabularyItem,
-  surfaceForm,
-  link,
-  context,
-  chapterView,
-  onDocumentShown,
-  revealed,
-  onReveal,
-}: {
-  activityType: StudyActivityType;
-  sentence: Sentence;
-  vocabularyItem: VocabularyItem;
-  surfaceForm: string;
-  /** The occurrence link this candidate was chosen from — carries any manual word-audio range, forwarded to the reveal-side native audio. */
-  link?: SentenceVocabulary;
-  context: ReadingContext | undefined;
-  chapterView: boolean;
-  onDocumentShown: (sentenceCount: number) => void;
-  revealed: boolean;
-  onReveal: () => void;
-}) {
-  const isCloze = activityType === 'cloze';
-  const precedes = (context?.before.length ?? 0) > 0;
-  const contextLines = precedes ? (context?.before ?? []) : (context?.after ?? []);
-  const hideTarget = isCloze && !revealed;
-  const contextText = (text: string): string => {
-    if (!hideTarget) return text;
-    let masked = text;
-    for (const word of new Set([surfaceForm, vocabularyItem.expression])) {
-      if (word) masked = masked.split(word).join('_____');
-    }
-    return masked;
-  };
-  const contextBlock = contextLines.length ? (
-    <div className="reading-context">
-      {contextLines.map((item) => (
-        <div key={item.id}>
-          <p className="jp jp-sm reading-context-line">{contextText(item.japanese)}</p>
-          <ContextSentenceReading sentence={item} revealed={revealed} />
-        </div>
-      ))}
-    </div>
-  ) : null;
-  const [before, target, after] = splitOnSurfaceForm(sentence.japanese, surfaceForm);
-  // Only reading_retrieval names the dictionary form — cloze hides the word
-  // itself pre-reveal, so spelling out its lemma would give the answer away.
-  const showDictionaryForm =
-    !isCloze &&
-    !revealed &&
-    !!vocabularyItem.expression &&
-    surfaceForm !== vocabularyItem.expression;
-  return (
-    <>
-      {chapterView ? (
-        <ReviewDocumentText
-          sentence={sentence}
-          bookId={context?.bookId}
-          target={reviewSpans(sentence.japanese, surfaceForm)}
-          revealed={revealed}
-          onDocumentShown={onDocumentShown}
-          cloze={isCloze ? { vocabularyItemId: vocabularyItem.id, expression: vocabularyItem.expression, surface: surfaceForm } : undefined}
-        />
-      ) : (
-        <>
-          {precedes ? contextBlock : null}
-          <div className="jp jp-lg">
-            {before}
-            <mark>{isCloze && !revealed ? '_____' : target || surfaceForm}</mark>
-            {after}
-          </div>
-          {precedes ? null : contextBlock}
-        </>
-      )}
-      <div>{isCloze ? 'Recall the missing word.' : showDictionaryForm ? 'Recall the dictionary reading of the highlighted word.' : 'How do you read the highlighted word?'}</div>
-      {showDictionaryForm ? (
-        <div className="muted">Dictionary form: {vocabularyItem.expression}</div>
-      ) : null}
-      {isCloze && !revealed && sentence.translation ? (
-        <div className="muted">{sentence.translation}</div>
-      ) : null}
-      {!revealed ? (
-        <button type="button" onClick={onReveal}>
-          {isCloze ? 'Reveal word' : showDictionaryForm ? 'Reveal dictionary reading' : 'Reveal reading'}
-        </button>
-      ) : (
-        <>
-          <div className="jp">{vocabularyItem.reading || '(no reading recorded)'}</div>
-          {vocabularyItem.meaning ? (
-            <div className="muted">{vocabularyItem.meaning}</div>
-          ) : null}
-          {sentence.readingOnly ? <div className="jp muted">{sentence.readingOnly}</div> : null}
-          {sentence.translation ? <div className="muted">{sentence.translation}</div> : null}
-          <VocabularyTargetNativeAudio
-            sentenceId={sentence.id}
-            japanese={sentence.japanese}
-            inlineReading={sentence.inlineReading}
-            surfaceForm={surfaceForm}
-            link={link}
-          />
-          {isCloze ? <ShadowingReplayNote sentenceId={sentence.id} /> : null}
-        </>
-      )}
-    </>
-  );
-}
-
-/**
- * Ambient connective tissue (docs/ROADMAP.md): on a `cloze` reveal, a small
- * note when the learner has already shadowed this exact sentence, with a
- * one-tap replay of their own most recent attempt — reinforcement, not a
- * link away to another activity. Renders nothing for a sentence with no
- * attempts, so most reveals are unaffected.
- */
-function ShadowingReplayNote({ sentenceId }: { sentenceId: string }) {
-  const attempts = useLiveQuery(() => listAttemptsForSentence(sentenceId), [sentenceId]);
-  const latest = attempts?.[0];
-  const loop = useRangeLoop(latest?.id ?? 'none', latest?.blob ?? null);
-  if (!attempts || attempts.length === 0 || !latest) return null;
-  return (
-    <div className="row muted" style={{ alignItems: 'center', fontSize: '0.85rem' }}>
-      <audio ref={loop.audioElRef} src={loop.objectUrl ?? undefined} hidden />
-      <span>
-        You've shadowed this sentence{attempts.length > 1 ? ` (${attempts.length}×)` : ''} —
-      </span>
-      <button
-        type="button"
-        className={`speak-button${loop.isLooping ? ' speaking' : ''}`}
-        onClick={() => void loop.toggleLoop({ startMs: 0, endMs: latest.durationMs })}
-      >
-        {loop.isLooping ? '⏸ Stop' : '🔁 Replay your attempt'}
-      </button>
-      {loop.playbackError ? <span>{loop.playbackError}</span> : null}
-    </div>
-  );
-}
-
-/**
- * Reveal-side native audio for `reading_retrieval`/`cloze` (user request,
- * 2026-09-24): loops just the target word and offers whole-sentence
- * playback, same control PitchAccentNativeAudio already gives the
- * pitch-accent card. Sentence audio isn't guaranteed here (unlike the
- * audio-centric cards, which gate candidacy on it), so this live-queries it
- * and renders nothing when the sentence has no reference recording.
- */
-function VocabularyTargetNativeAudio({
-  sentenceId,
-  japanese,
-  inlineReading,
-  surfaceForm,
-  link,
-}: {
-  sentenceId: string;
-  japanese: string;
-  inlineReading?: string;
-  surfaceForm: string;
-  link?: SentenceVocabulary;
-}) {
-  const audio = useLiveQuery(
-    () => getDb().sentenceAudio.where('sentenceId').equals(sentenceId).first(),
-    [sentenceId],
-  );
-  if (!audio) return null;
-  return (
-    <SegmentLoopPlayer
-      audio={audio}
-      japanese={japanese}
-      inlineReading={inlineReading}
-      surfaceForm={surfaceForm}
-      link={link}
-      fallbackHint="Couldn’t isolate just the word — play the whole sentence for the native model."
-    />
-  );
-}
-
-/**
- * Reading production (Phase 7.9, docs brief §12): the "production ladder"'s
- * first rung — same word/sentence as reading_retrieval, but the learner
- * types the reading instead of just revealing it, so recall is checked
- * (auto, via isReadingAnswerCorrect) rather than self-assessed from a
- * shown answer. The 4-point self-rate afterward stays the actual scheduling
- * signal, same as every other card type — correctness is recorded
- * (Review.responseRaw/expectedAnswer, threaded up via onCheck) as
- * supplementary evidence, not used to auto-pick a rating.
- *
- * When the word appears inflected in the sentence (頑張って for 頑張る) the
- * highlighted text alone doesn't say whether the dictionary reading or the
- * in-context one is wanted — `sentence_transformation` is the card that
- * tests producing the inflected form. So this card names the dictionary
- * form explicitly *and* accepts the in-context reading pulled from
- * `inlineReading` (`surfaceReadingFromInline`), so reading 頑張って off the
- * screen as がんばって is never marked wrong. `onCheck`'s second argument is
- * whichever reading the answer was actually graded against, recorded as
- * `Review.expectedAnswer` (see `typedResponseExpected`).
- */
-function ReadingProductionCard({
-  chapterView,
-  bookId,
-  onDocumentShown,
-  sentence,
-  vocabularyItem,
-  surfaceForm,
-  revealed,
-  onCheck,
-}: {
-  chapterView: boolean;
-  bookId?: string;
-  onDocumentShown: (sentenceCount: number) => void;
-  sentence: Sentence;
-  vocabularyItem: VocabularyItem;
-  surfaceForm: string;
-  revealed: boolean;
-  onCheck: (typedReading: string, gradedAgainst: string) => void;
-}) {
-  const [value, setValue] = useState('');
-  const [wasCorrect, setWasCorrect] = useState(false);
-  const [before, target, after] = splitOnSurfaceForm(sentence.japanese, surfaceForm);
-  const isInflected =
-    !!vocabularyItem.expression && surfaceForm !== vocabularyItem.expression;
-  const inContextReading = surfaceReadingFromInline(sentence.inlineReading, surfaceForm);
-  const acceptableReadings = [
-    vocabularyItem.reading,
-    ...(inContextReading ? [inContextReading] : []),
-  ].filter((reading): reading is string => reading.length > 0);
-
-  return (
-    <>
-      {chapterView ? (
-        <ReviewDocumentText
-          sentence={sentence}
-          bookId={bookId}
-          target={reviewSpans(sentence.japanese, surfaceForm)}
-          revealed={revealed}
-          onDocumentShown={onDocumentShown}
-        />
-      ) : (
-        <div className="jp jp-lg">
-          {before}
-          <mark>{target || surfaceForm}</mark>
-          {after}
-        </div>
-      )}
-      {isInflected ? (
-        <div className="muted">Dictionary form: {vocabularyItem.expression}</div>
-      ) : null}
-      {!revealed ? (
-        <form
-          className="row"
-          onSubmit={(event) => {
-            event.preventDefault();
-            const matched = acceptableReadings.find((reading) =>
-              isReadingAnswerCorrect(value, reading),
-            );
-            setWasCorrect(Boolean(matched));
-            onCheck(value, matched ?? vocabularyItem.reading);
-          }}
-        >
-          <label>
-            {isInflected ? 'Type the dictionary reading' : 'Type the reading'}
-            <input
-              type="text"
-              value={value}
-              autoComplete="off"
-              onChange={(event) => setValue(event.target.value)}
-            />
-          </label>
-          <button type="submit">Check</button>
-        </form>
-      ) : (
-        <>
-          <div className="muted">{wasCorrect ? '✓ Correct' : '✗ Not quite'}</div>
-          {!wasCorrect ? (
-            <div className="muted">
-              You typed: <span className="jp">{value.trim() || '(blank)'}</span>
-            </div>
-          ) : null}
-          <div className="jp">{vocabularyItem.reading || '(no reading recorded)'}</div>
-          {vocabularyItem.meaning ? (
-            <div className="muted">{vocabularyItem.meaning}</div>
-          ) : null}
-        </>
-      )}
-    </>
-  );
-}
-
-/**
- * Contextual conjugation (docs/STATUS.md — supersedes Phase 7.9b's per-word
- * "sentence transformation"): the sentence is shown with the target word
- * blanked, the dictionary form and the form-name are given, and the learner
- * types the reading of the form *this sentence uses*. The form is never
- * forced — it's whichever one `identifyConjugationForm` found this occurrence
- * to be in (see getSentenceConjugationCandidates). Same typed-input + check
- * + reveal + self-rate shape as ReadingProductionCard; accepts either the
- * in-context inflected reading or the engine's own (candidate.expectedReadings),
- * and `onCheck`'s second argument is the reading actually matched, threaded up
- * as `Review.expectedAnswer` (see `typedResponseExpected`).
- */
-function SentenceConjugationCard({
-  candidate,
-  chapterView,
-  bookId,
-  onDocumentShown,
-  revealed,
-  onCheck,
-}: {
-  candidate: SentenceConjugationCandidate;
-  chapterView: boolean;
-  bookId?: string;
-  onDocumentShown: (sentenceCount: number) => void;
-  revealed: boolean;
-  onCheck: (typedReading: string, gradedAgainst: string) => void;
-}) {
-  const [value, setValue] = useState('');
-  const [wasCorrect, setWasCorrect] = useState(false);
-  const { vocabularyItem, sentence, surfaceForm, form, expectedReadings } = candidate;
-  const [before, , after] = splitOnSurfaceForm(sentence.japanese, surfaceForm);
-
-  return (
-    <>
-      {chapterView ? (
-        <ReviewDocumentText
-          sentence={sentence}
-          bookId={bookId}
-          target={reviewSpans(sentence.japanese, surfaceForm)}
-          revealed={revealed}
-          onDocumentShown={onDocumentShown}
-          cloze={{ vocabularyItemId: vocabularyItem.id, expression: vocabularyItem.expression, surface: surfaceForm }}
-        />
-      ) : (
-        <div className="jp jp-lg">
-          {before}
-          <mark>{revealed ? surfaceForm : '_____'}</mark>
-          {after}
-        </div>
-      )}
-      <div className="muted">Dictionary form: {vocabularyItem.expression}</div>
-      <div className="muted">Produce: {form.label}</div>
-      {!revealed ? (
-        <form
-          className="row"
-          onSubmit={(event) => {
-            event.preventDefault();
-            const matched = expectedReadings.find((reading) =>
-              isReadingAnswerCorrect(value, reading),
-            );
-            setWasCorrect(Boolean(matched));
-            onCheck(value, matched ?? expectedReadings[0]!);
-          }}
-        >
-          <label>
-            Type the reading of the {form.label.toLowerCase()}
-            <input
-              type="text"
-              value={value}
-              autoComplete="off"
-              onChange={(event) => setValue(event.target.value)}
-            />
-          </label>
-          <button type="submit">Check</button>
-        </form>
-      ) : (
-        <>
-          <div className="muted">{wasCorrect ? '✓ Correct' : '✗ Not quite'}</div>
-          {!wasCorrect ? (
-            <div className="muted">
-              You typed: <span className="jp">{value.trim() || '(blank)'}</span>
-            </div>
-          ) : null}
-          <div className="jp">{surfaceForm}</div>
-          <div className="jp">{expectedReadings[0]}</div>
-          {vocabularyItem.meaning ? (
-            <div className="muted">{vocabularyItem.meaning}</div>
-          ) : null}
-        </>
-      )}
-    </>
-  );
 }
 
 const PITCH_ACCENT_PATTERN_LABELS: Record<PitchAccentPattern, string> = {
@@ -4321,481 +3011,3 @@ function AudioComprehensionCard({
   );
 }
 
-/**
- * Word-in-context listening (user request; reworked 2026-09-02): tier 1 of
- * the listening ladder. An audio cloze — the listening analog of `cloze`.
- * The whole sentence is the stimulus (not an isolated word span, which made
- * a 2-mora function word like いい an unfair vacuum test and degraded to
- * bare whole-sentence playback whenever forced alignment couldn't isolate
- * the word). Staged like `listening`:
- *   1. Audio only, text hidden — attempt to parse the clip.
- *   2. "Reveal sentence" — the sentence with the target occurrence blanked,
- *      plus its translation as the cloze constraint; recall the missing
- *      word from sound + context. The isolated-word loop is offered here as
- *      optional scaffolding (`SegmentLoopPlayer wordOnly` — shows nothing
- *      when it can't isolate), never as the test.
- *   3. "Reveal answer" — the word filled in, reading, meaning, dict form.
- * The 4-point self-rate after step 3 is the scheduling signal, same as the
- * other reveal-based cards; the full-sentence `listening` card (tier 2)
- * stays gated behind every one of these.
- */
-function WordListeningCard({
-  candidate,
-  revealed,
-  onReveal,
-  onReplay,
-  playbackRate,
-  onPlaybackRateChange,
-}: {
-  candidate: WordListeningCandidate;
-  revealed: boolean;
-  onReveal: () => void;
-  /** Called on every play *after* the first — the first play is the exercise itself. */
-  onReplay: () => void;
-  playbackRate: number;
-  onPlaybackRateChange: (value: number) => void;
-}) {
-  const { sentence, audio, surfaceForm, vocabularyItem, link } = candidate;
-  const [before, target, after] = splitOnSurfaceForm(sentence.japanese, surfaceForm);
-  const isInflected =
-    !!vocabularyItem.expression && surfaceForm !== vocabularyItem.expression;
-  const playCountRef = useRef(0);
-  const [sentenceRevealed, setSentenceRevealed] = useState(false);
-  return (
-    <>
-      <div className="row" style={{ alignItems: 'center' }}>
-        <NativeAudioButton
-          audio={audio}
-          displayLabel="Play sentence"
-          playbackRate={playbackRate}
-          onPlay={() => {
-            playCountRef.current += 1;
-            if (playCountRef.current > 1) onReplay();
-          }}
-        />
-        <label>
-          Speed{' '}
-          <select
-            value={playbackRate}
-            onChange={(event) => onPlaybackRateChange(Number(event.target.value))}
-          >
-            {PLAYBACK_SPEEDS.map((value) => (
-              <option key={value} value={value}>
-                {value === 1 ? '1× (normal)' : `${value}×`}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-      {!sentenceRevealed ? (
-        <>
-          <p className="muted">
-            Listen to the whole sentence, then reveal which word to identify.
-          </p>
-          <button type="button" onClick={() => setSentenceRevealed(true)}>
-            Reveal sentence
-          </button>
-        </>
-      ) : !revealed ? (
-        <>
-          <div className="jp jp-lg">
-            {before}
-            <mark>_____</mark>
-            {after}
-          </div>
-          {sentence.translation ? <div className="muted">{sentence.translation}</div> : null}
-          <p className="muted">Which word fills the blank? Recall its reading and meaning.</p>
-          <SegmentLoopPlayer
-            audio={audio}
-            japanese={sentence.japanese}
-            inlineReading={sentence.inlineReading}
-            surfaceForm={surfaceForm}
-            link={link}
-            loopLabel="Hear just the word"
-            loopingLabel="Looping word…"
-            wordOnly
-          />
-          <button type="button" onClick={onReveal}>
-            Reveal answer
-          </button>
-        </>
-      ) : (
-        <>
-          <div className="jp jp-lg">
-            {before}
-            <mark>{target || surfaceForm}</mark>
-            {after}
-          </div>
-          <div className="jp">{vocabularyItem.reading || '(no reading recorded)'}</div>
-          {vocabularyItem.meaning ? (
-            <div className="muted">{vocabularyItem.meaning}</div>
-          ) : null}
-          {isInflected ? (
-            <div className="muted">Dictionary form: {vocabularyItem.expression}</div>
-          ) : null}
-          {sentence.translation ? <div className="muted">{sentence.translation}</div> : null}
-        </>
-      )}
-    </>
-  );
-}
-
-/**
- * Contrastive pair review (Phase 7.7, docs brief §10): both confusable
- * words shown together, each highlighted (not blanked — the target word
- * stays visible, same as reading_retrieval) in one of its own sentences, so
- * the learner has to recall and distinguish both readings/meanings at once
- * rather than reviewing either word in isolation. One shared reveal for the
- * pair, one self-rating — the evidence is "could this learner tell these
- * two apart," not either word's individual recall (already covered by
- * reading_retrieval/cloze).
- */
-function ContrastivePairCard({
-  candidate,
-  revealed,
-  onReveal,
-}: {
-  candidate: ConfusionPairCandidate;
-  revealed: boolean;
-  onReveal: () => void;
-}) {
-  return (
-    <>
-      {[candidate.itemA, candidate.itemB].map((item) => {
-        const [before, target, after] = splitOnSurfaceForm(
-          item.sentence.japanese,
-          item.surfaceForm,
-        );
-        return (
-          <div key={item.vocabularyItem.id} className="stack">
-            <div className="jp jp-lg">
-              {before}
-              <mark>{target || item.surfaceForm}</mark>
-              {after}
-            </div>
-            {revealed ? (
-              <>
-                <div className="jp">{item.vocabularyItem.reading || '(no reading recorded)'}</div>
-                {item.vocabularyItem.meaning ? (
-                  <div className="muted">{item.vocabularyItem.meaning}</div>
-                ) : null}
-                {item.sentence.readingOnly ? (
-                  <div className="jp muted">{item.sentence.readingOnly}</div>
-                ) : null}
-                {item.sentence.translation ? (
-                  <div className="muted">{item.sentence.translation}</div>
-                ) : null}
-              </>
-            ) : null}
-          </div>
-        );
-      })}
-      {!revealed ? (
-        <button type="button" onClick={onReveal}>
-          Reveal
-        </button>
-      ) : null}
-    </>
-  );
-}
-
-/**
- * Grammar recognition — the entry rung of the 2-tier grammar ladder
- * (2026-09-22, card issue triage: "this card as it is is just v a bit of
- * memorization... i don't feel [context gives hints] for grammar"). Unlike
- * `GrammarCompletionCard` below, the construction is *not* blanked — it's
- * highlighted right where it sits in the sentence, because the skill this
- * card tests is noticing what a visible construction is doing, not
- * recalling its exact surface form. Self-rated (no typed/graded answer,
- * same "bare self-rating" shape as `ReadingInContextCard`): the learner
- * silently works out the pattern's function, reveals `shortMeaning`/
- * `explanation`/`structuralNotes` to check themselves, then rates.
- *
- * A near-verbatim revival of the pre-2026-09-15 `grammar_comprehension`
- * card (see git history), brought up to the current passage-context
- * convention (`readingContext`) `GrammarCompletionCard` already uses, so
- * the two cards read as one consistent family rather than a regression to
- * the old card's plainer layout.
- *
- * Reuses `blankPatternInSentence` purely as a literal-match check: when
- * the pattern's dictionary form doesn't appear verbatim in the sentence
- * (a conjugated/colloquial surface, e.g. てる for ている), a note flags
- * that on reveal instead of silently mis-highlighting nothing (the same
- * gap a 2026-09-10 report on the old comprehension card found).
- */
-function GrammarRecognitionCard({
-  candidate,
-  chapterView,
-  onDocumentShown,
-  revealed,
-  onReveal,
-}: {
-  candidate: GrammarReviewCandidate;
-  chapterView: boolean;
-  onDocumentShown: (sentenceCount: number) => void;
-  revealed: boolean;
-  onReveal: () => void;
-}) {
-  const { pattern, sentence, sentenceGrammar, readingContext } = candidate;
-  const blank = blankSentenceGrammar(sentence.japanese, sentenceGrammar, pattern.canonicalName);
-
-  const { before, after } = readingContext;
-
-  const passageBefore = readingContext.bookTitle ? (
-    <>
-      <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
-        In context · {readingContext.bookTitle}
-      </p>
-      {before.length ? (
-        <div className="reading-context">
-          {before.map((item) => (
-            <div key={item.id}>
-              <p className="jp jp-sm reading-context-line">{item.japanese}</p>
-              <ContextSentenceReading sentence={item} revealed={revealed} />
-            </div>
-          ))}
-        </div>
-      ) : null}
-    </>
-  ) : null;
-
-  const passageAfter = after.length ? (
-    <div className="reading-context">
-      {after.map((item) => (
-        <div key={item.id}>
-          <p className="reading-context-line">
-            <span className="jp jp-sm">{item.japanese}</span>
-            {item.translation ? <span className="muted"> — {item.translation}</span> : null}
-          </p>
-          <ContextSentenceReading sentence={item} revealed={revealed} />
-        </div>
-      ))}
-    </div>
-  ) : null;
-
-  return (
-    <>
-      {chapterView ? (
-        <ReviewDocumentText
-          sentence={sentence}
-          bookId={readingContext.bookId}
-          target={blank ? [{ start: blank.before.length, end: blank.before.length + blank.match.length }] : undefined}
-          revealed={revealed}
-          onDocumentShown={onDocumentShown}
-        />
-      ) : (
-        <>
-          {passageBefore}
-          <div className="jp jp-lg">
-            {blank ? (
-              <>
-                {blank.before}
-                <mark>{blank.match}</mark>
-                {blank.after}
-              </>
-            ) : (
-              sentence.japanese
-            )}
-          </div>
-        </>
-      )}
-      <div className="muted">
-        What is <span className="jp">{pattern.canonicalName}</span> doing in this sentence?
-      </div>
-      {!revealed ? (
-        <button type="button" onClick={onReveal}>
-          Reveal
-        </button>
-      ) : (
-        <>
-          {!blank ? (
-            <div className="muted">
-              Note: {pattern.canonicalName} doesn&rsquo;t appear as a fixed phrase in this
-              sentence — either it&rsquo;s a conjugated/colloquial surface form, or it&rsquo;s a
-              structural pattern with no single literal span.
-            </div>
-          ) : null}
-          {pattern.shortMeaning ? <div>{pattern.shortMeaning}</div> : null}
-          {pattern.explanation ? <div className="muted">{pattern.explanation}</div> : null}
-          {pattern.structuralNotes ? (
-            <div className="muted">{pattern.structuralNotes}</div>
-          ) : null}
-          {sentence.translation ? <div className="muted">{sentence.translation}</div> : null}
-          {!chapterView ? passageAfter : null}
-        </>
-      )}
-    </>
-  );
-}
-
-/**
- * Grammar completion — the production rung of the 2-tier grammar ladder,
- * gated behind `grammar_recognition` above (`activityIsReady` on the
- * 'grammar' descriptor). Was the sole grammar review card between
- * 2026-09-15 and 2026-09-22, when `grammar_comprehension`/`grammar_contrast`/
- * `grammar_production` were retired (docs/ROADMAP.md): a prior redesign
- * collapsed all four into an ambient notice strip under every review card,
- * which in real use "makes the review cards clunky and doesn't help with
- * learning" (user). The target sentence's English translation is always visible —
- * it's the input signal for producing the right construct, the same idea
- * as giving the audio in a pitch-accent card and asking for the pitch
- * shape — and the sentence is framed by its reading-order passage
- * context, same convention as ReadingInContextCard (before shown
- * untranslated always; after shown untranslated pre-reveal, translated
- * post-reveal). Blanks the pattern's surface form when it appears
- * verbatim in the sentence (blankPatternInSentence — best-effort, no real
- * span data exists yet); otherwise shows the full sentence and asks which
- * construction it uses.
- *
- * **2026-09-17 redesign** (card issue triage — "not sure if the way this
- * card type is setup is helpful, it's just kind of a search and find"):
- * was multiple choice among the pattern and up to 3 distractors. Given the
- * translation is already shown, a learner can eliminate options by
- * grammatical shape alone without ever recalling the construct from its
- * meaning — the complaint was exactly that shortcut. Replaced with a
- * typed answer, same shape as SentenceConjugationCard/ReadingProductionCard:
- * the learner types the construction, graded leniently via
- * `isGrammarPatternAnswerCorrect` (tilde/annotation/whitespace-insensitive,
- * same normalization `blankPatternInSentence` and pattern dedup already
- * use). This also means every tracked pattern gets the same card shape now,
- * even a lone pattern with nothing to contrast against — there's no longer
- * a "not enough distractors" degenerate case to special-case.
- * `buildGrammarCompletionChoices`/`GRAMMAR_COMPLETION_CHOICE_COUNT` and the
- * GrammarRelationship-ranked-distractor logic this replaced are gone from
- * `grammarPatterns.ts` (git history/docs/ROADMAP.md's "grammar pattern
- * discrimination" entry has the distractor-ranking approach if a future
- * card wants it back). Still auto-graded, still funnels through the same
- * typed-response/self-rate flow every other typed card uses. Reveals the
- * pattern's own explanation — the only place that used to surface on the
- * retired `grammar_comprehension`, so it must not be lost here.
- *
- * **2026-09-22 — role line always shown** (card issue triage: "this card
- * as it is is just v a bit of memorization. maybe better to have on the
- * front the role"). `pattern.shortMeaning` used to only appear post-reveal,
- * so pre-answer the only cue was the translation — which rewards
- * memorizing *this sentence's* wording rather than the pattern's function,
- * and degrades after enough reps of the same sentence (this report's item
- * had 11 reps, 1 lapse, in relearning). Moved `shortMeaning` up next to the
- * translation, labeled "Role:", shown regardless of revealed state; dropped
- * from the post-reveal `explanation` block to avoid showing it twice.
- */
-function GrammarCompletionCard({
-  candidate,
-  revealed,
-  onCheck,
-}: {
-  candidate: GrammarReviewCandidate;
-  revealed: boolean;
-  onCheck: (typed: string, gradedAgainst: string) => void;
-}) {
-  const { pattern, sentence, sentenceGrammar, readingContext } = candidate;
-  const [value, setValue] = useState('');
-  const [wasCorrect, setWasCorrect] = useState(false);
-  const blank = blankSentenceGrammar(sentence.japanese, sentenceGrammar, pattern.canonicalName);
-  const { before, after } = readingContext;
-
-  const explanation = (
-    <>
-      {pattern.explanation ? <div className="muted">{pattern.explanation}</div> : null}
-      {pattern.structuralNotes ? (
-        <div className="muted">{pattern.structuralNotes}</div>
-      ) : null}
-    </>
-  );
-
-  const passageBefore = readingContext.bookTitle ? (
-    <>
-      <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
-        In context · {readingContext.bookTitle}
-      </p>
-      {before.length ? (
-        <div className="reading-context">
-          {before.map((item) => (
-            <div key={item.id}>
-              <p className="jp jp-sm reading-context-line">{item.japanese}</p>
-              <ContextSentenceReading sentence={item} revealed={revealed} />
-            </div>
-          ))}
-        </div>
-      ) : null}
-    </>
-  ) : null;
-
-  const passageAfter = after.length ? (
-    <div className="reading-context">
-      {after.map((item) => (
-        <div key={item.id}>
-          <p className="reading-context-line">
-            <span className="jp jp-sm">{item.japanese}</span>
-            {item.translation ? <span className="muted"> — {item.translation}</span> : null}
-          </p>
-          <ContextSentenceReading sentence={item} revealed={revealed} />
-        </div>
-      ))}
-    </div>
-  ) : null;
-
-  return (
-    <>
-      {passageBefore}
-      <div className="jp jp-lg">
-        {blank ? (
-          <>
-            {blank.before}
-            <mark>{revealed ? pattern.canonicalName : '_____'}</mark>
-            {blank.after}
-          </>
-        ) : (
-          sentence.japanese
-        )}
-      </div>
-      {sentence.translation ? <div className="muted">{sentence.translation}</div> : null}
-      {pattern.shortMeaning ? (
-        <div className="muted">Role: {pattern.shortMeaning}</div>
-      ) : null}
-      {!revealed ? (
-        <form
-          className="row"
-          onSubmit={(event) => {
-            event.preventDefault();
-            setWasCorrect(isGrammarPatternAnswerCorrect(value, pattern.canonicalName, pattern.reading));
-            onCheck(value, pattern.canonicalName);
-          }}
-        >
-          <label>
-            {blank
-              ? 'What construction fills the blank?'
-              : 'Which construction does this sentence use?'}
-            <input
-              type="text"
-              className="jp"
-              value={value}
-              autoComplete="off"
-              onChange={(event) => setValue(event.target.value)}
-            />
-          </label>
-          {pattern.reading ? (
-            <span className="muted" style={{ fontSize: '0.8rem' }}>
-              Kana or romaji is fine.
-            </span>
-          ) : null}
-          <button type="submit">Check</button>
-        </form>
-      ) : (
-        <>
-          <div className="muted">{wasCorrect ? '✓ Correct' : '✗ Not quite'}</div>
-          {!wasCorrect ? (
-            <div className="muted">
-              You typed: <span className="jp">{value.trim() || '(blank)'}</span>
-            </div>
-          ) : null}
-          <div className="muted">
-            Correct: <span className="jp">{pattern.canonicalName}</span>
-          </div>
-          {explanation}
-          {passageAfter}
-        </>
-      )}
-    </>
-  );
-}

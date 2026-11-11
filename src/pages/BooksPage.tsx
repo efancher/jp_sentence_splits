@@ -6,52 +6,24 @@ import {
   createBook,
   getBookProgress,
   getBookStageCounts,
-  getBookVocabularyCoverage,
   getDb,
 } from '../db/repository';
-import { readSettings } from '../db/database';
-import { isSentenceLedFlow } from '../lib/sentenceLed';
 import { StageProgressBar } from '../components/StageProgressBar';
-import { coveragePercent } from '../lib/bookCoverage';
 import { isBookInStudyRotation } from '../lib/suspendedBooks';
-
-type SortMode = 'recent' | 'easiest';
 
 export function BooksPage() {
   const navigate = useNavigate();
   const [title, setTitle] = useState('');
-  const [sortMode, setSortMode] = useState<SortMode>('recent');
   const books = useLiveQuery(async () => {
     const db = getDb();
-    // Card-based vocabulary coverage is a paused signal under the sentence-led
-    // flow (and the costliest scan here), so only compute it for the legacy flow.
-    const legacyFlow = !isSentenceLedFlow(await readSettings());
-    const [all, coverageByBookId, stagesByBookId] = await Promise.all([
-      db.books.toArray(),
-      legacyFlow ? getBookVocabularyCoverage() : Promise.resolve(null),
-      getBookStageCounts(),
-    ]);
+    const [all, stagesByBookId] = await Promise.all([db.books.toArray(), getBookStageCounts()]);
     const withProgress = await Promise.all(
       all.map(async (book) => ({
         book,
         progress: await getBookProgress(book.id),
-        coverage: coverageByBookId?.get(book.id) ?? null,
-        legacyFlow,
         stages: stagesByBookId.get(book.id),
       })),
     );
-    if (sortMode === 'easiest') {
-      // Not-yet-analyzed books (null ratio) sort last — there's nothing to
-      // call "easy" or "hard" about a book with no confirmed vocabulary yet.
-      return withProgress.sort((a, b) => {
-        const aRatio = a.coverage?.ratio;
-        const bRatio = b.coverage?.ratio;
-        if (aRatio == null && bRatio == null) return 0;
-        if (aRatio == null) return 1;
-        if (bRatio == null) return -1;
-        return bRatio - aRatio;
-      });
-    }
     return withProgress.sort((a, b) => {
       const aActive = isBookInStudyRotation(a.book);
       const bActive = isBookInStudyRotation(b.book);
@@ -62,7 +34,7 @@ export function BooksPage() {
         a.book.lastOpenedAt ?? a.book.updatedAt,
       );
     });
-  }, [sortMode]);
+  }, []);
 
   return (
     <div className="stack">
@@ -93,29 +65,8 @@ export function BooksPage() {
         </form>
       </section>
 
-      {books?.[0]?.legacyFlow ? (
-      <section className="row" style={{ justifyContent: 'flex-end', gap: '0.4rem' }}>
-        <span className="muted" style={{ fontSize: '0.85rem' }}>Sort:</span>
-        <button
-          type="button"
-          className={sortMode === 'recent' ? 'primary' : undefined}
-          onClick={() => setSortMode('recent')}
-        >
-          Recent
-        </button>
-        <button
-          type="button"
-          className={sortMode === 'easiest' ? 'primary' : undefined}
-          onClick={() => setSortMode('easiest')}
-        >
-          Easiest first
-        </button>
-      </section>
-      ) : null}
-
       <section className="stack">
-        {(books ?? []).map(({ book, progress, coverage, legacyFlow, stages }) => {
-          const percent = coverage ? coveragePercent(coverage) : null;
+        {(books ?? []).map(({ book, progress, stages }) => {
           return (
             <article key={book.id} className="list-card">
               <div className="row" style={{ justifyContent: 'space-between' }}>
@@ -144,13 +95,6 @@ export function BooksPage() {
                     </div>
                   ) : null}
                 </>
-              ) : null}
-              {legacyFlow ? (
-                <div className="muted" style={{ fontSize: '0.85rem' }}>
-                  {percent === null
-                    ? 'Vocabulary not confirmed yet'
-                    : `~${percent}% known vocabulary (${coverage!.knownCount}/${coverage!.totalCount} words)`}
-                </div>
               ) : null}
               <div className="muted" style={{ fontSize: '0.85rem' }}>
                 Last opened:{' '}

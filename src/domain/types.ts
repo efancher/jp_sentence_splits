@@ -713,16 +713,6 @@ export interface AppSettings {
    */
   newCardsPerSessionLimit: number;
   /**
-   * How many never-introduced vocabulary words Review tops up each local day
-   * (2026-09-21) — seeded when Review opens, whether or not the due queue is
-   * empty. Without it, new words were only introduced once the queue ran dry,
-   * so a heavy review day starved them (532 confirmed words waiting, 22
-   * seeded in a week). A floor, not a ceiling: the lazy path above can still
-   * introduce more once the queue empties, up to `newCardsPerSessionLimit`.
-   * `0` turns the top-up off.
-   */
-  dailyNewWordQuota: number;
-  /**
    * How many sentences get their first `ear_tiles` card (plus a first
    * `listening` card for new ones) each local day when Review opens, whether or
    * not the due queue is empty (2026-10-21). Without it the lazy seeding path
@@ -826,29 +816,6 @@ export interface AppSettings {
    * selection skips them until then. A new "sound" flag clears the snooze.
    */
   shadowSnoozes?: Record<string, string>;
-  /**
-   * Sentence-first planning (Phase 5): the daily plan's glossing bucket drafts
-   * `sentence_learning` lesson steps (eligible with zero confirmed vocabulary)
-   * instead of vocabulary_review/continue_book. Existing in-progress sessions
-   * are never rewritten. Defaults to `false`.
-   */
-  sentenceFirstPlanning?: boolean;
-  /**
-   * "Pause word & grammar drills": withholds vocabulary, vocabulary-confusion,
-   * word-listening/conjugation and grammar cards (and vocabulary/grammar
-   * planner steps) everywhere. Nothing is deleted or rescheduled; turning it
-   * off restores everything. Sentence cards, shadowing and lessons continue.
-   * Defaults to `false`.
-   */
-  legacyDrillsPaused?: boolean;
-  /**
-   * Sentence-led learning flow: introduce a sentence through its guided gloss,
-   * review it by picking its English meaning, and withhold the separate
-   * vocabulary/grammar drills (and the vocabulary-proficiency readiness gates
-   * that fed them). Nothing is deleted; turning it off restores the previous
-   * gated flow. Treated as off when undefined (it spends Claude API credit). See `src/lib/sentenceLed.ts`.
-   */
-  sentenceLedFlow?: boolean;
   /**
    * Sequential study (opt-in, local to this device): a book's sentences are
    * introduced in episode order, the next unlocking once the previous one's
