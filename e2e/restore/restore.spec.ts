@@ -126,7 +126,7 @@ test('fresh device restores a study library through the real browser sync', asyn
   const progress: Array<{ ms: number; reviews: number }> = [];
   let tDone = 0;
   let last: number[] | null = null;
-  const deadline = t0 + 800_000;
+  const deadline = t0 + Number(process.env.RESTORE_DEADLINE_MS ?? 800_000);
   while (Date.now() < deadline) {
     last = await counts().catch(() => null);
     if (last) {

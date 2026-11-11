@@ -169,7 +169,8 @@ runs `playwright.restore.config.ts` in the Playwright container: desktop Chromiu
 and iPhone-emulated WebKit, each with a signed-in session injected and no other
 state. Results go to `test-results/performance/restore/<size>[-route]-<project>.json`
 with request counts, bytes, per-request time and per-page apply time.
-Options: `RESTORE_PROJECT=chromium-desktop|webkit-phone`, `RESTORE_ROUTE='/#/help'`
+Options: `RESTORE_PROJECT=chromium-desktop|webkit-phone`, `RESTORE_DEADLINE_MS=3600000`
+(the default 800 s is too short for the large size), `RESTORE_ROUTE='/#/help'`
 (the route the app sits on during the restore) and `RESTORE_PROFILE=1` (a Chromium
 CPU profile). The database it wipes is the throwaway container, never Supabase.
 
@@ -177,7 +178,7 @@ CPU profile). The database it wipes is the throwaway container, never Supabase.
 | --- | ---: | ---: | ---: | ---: |
 | small | 2,804 | 27 to 29 s (3 runs) | 21 to 24 s (2 runs) | 8.7 s |
 | medium | 11,204 | 242 and 297 s (2 runs) | 164 s | 36.4 s |
-| large | 36,020 | not run (see below) | not run | not run |
+| large | 36,020 | **3,338 s (55.6 min)** | **1,918 s (32 min)** | not run |
 
 - **Requests and bytes match the Postgres suite exactly** (63 requests and
   2.33 MB, 231 and 9.3 MB), and each request takes 5 to 10 ms, so the server and
@@ -188,21 +189,32 @@ CPU profile). The database it wipes is the throwaway container, never Supabase.
   rows took about 10 times as long in Chromium. On a light page the same restores
   scale linearly (8.7 s to 36.4 s, 4.2 times for 4 times the rows).
 - **The cause is on the landing page, not in the data or server.** Per 100-event page,
-  applying books, sentences, membership, cards and events took about 300 ms
-  (3 ms per event) at every point, but pages of reviews took 3 to 5 s (33 to 54 ms
-  per event) and got slower as reviews accumulated. A Chromium profile showed the
-  main thread about 55 percent idle, so it was waiting on IndexedDB rather than
-  computing. Moving the same restore to the Help page removed 85 to 88 percent of the
-  time. The landing page runs live queries (`useLiveQuery`: `computeLearningBalance`,
-  `getDailyPracticeCounts` and others) that Dexie re-runs after every committed write,
-  and the engine commits each pulled record, plus its metadata, in its own transaction
-  after several separate reads per event (open-conflict list, record metadata,
-  existence check). The live-query cause is the best fit for the evidence; the exact
-  queries that scan reviews were not isolated one by one.
-- **Not measured:** the 36,020-row library. The box was out of swap (4 GB full,
-  about 1.4 GB RAM free) and, extrapolating the medium result, the landing-page
-  restore would take on the order of 15 to 35 minutes. Run it on a quieter machine
-  with `scripts/perf-restore.sh large` after raising the spec's 800-second deadline.
+  applying books, sentences, membership, cards and learning events takes about 300 to
+  450 ms (3 to 4 ms per event) with no growth, 12 to 18 s per phase even at 36,020
+  rows. The reviews phase is where the time goes: 98 percent of the large Chromium
+  restore (3,278 of 3,338 s) and 95 percent of WebKit's (1,832 of 1,918 s). Its cost per
+  page grows in a straight line with the reviews already stored (Chromium: 5.5 s per page
+  over the first 40 review pages, then 10.8, 16.2, 22.1 and 27.3 s; WebKit 3.5 to 15.2 s),
+  so the total grows with the square of the review count. A Chromium profile of the
+  small run showed the main thread about 55 percent idle, so it was waiting on
+  IndexedDB rather than computing. Moving the same restore to the Help page removed 85
+  to 88 percent of the time at 11,204 rows.
+- **Most likely mechanism (matches all of the above; the fix has not been tried):** the
+  landing page's `computeLearningBalance` calls `getRecentActivityEvents`
+  (`src/db/repository.ts`), which counts reviews in the last 14 days with an indexed
+  range `count()` (still proportional to the matching rows in IndexedDB) and then builds
+  one array entry per counted review. Dexie re-runs that live query after committed
+  writes, so while reviews arrive each re-run costs time proportional to the recent
+  reviews already stored. No other table is counted that way, which fits only the
+  reviews phase slowing. The engine also commits every pulled record, plus its
+  metadata, in its own transaction after several separate reads per event (open
+  conflicts, record metadata, existence check); that is the steady 3 to 4 ms per event.
+- **Caveat on the size of the effect:** the seed puts every review inside the 14-day
+  window (the worst case for that query). A real library has most reviews older than
+  that, so the real slowdown is smaller than these numbers, though it still grows with
+  the reviews of the last two weeks. The seed's timestamps are now relative to the
+  current time so the worst case stays reproducible; the runs above used fixed 1
+  November 2026 timestamps, which were inside the window when they ran.
 - **Reproduction pitfalls fixed in the harness:** the preview server is started
   directly (not through `npx`) so the cleanup trap actually stops it; a stale preview
   on port 4184 otherwise serves a deleted directory and the browser makes no

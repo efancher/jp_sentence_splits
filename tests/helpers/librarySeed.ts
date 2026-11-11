@@ -16,6 +16,10 @@ export function libraryRows({ books, sentences, reviewsPerCard }: LibrarySize): 
  * book membership, one sentence card each, `reviewsPerCard` reviews per card and one
  * walkthrough event per sentence. Used by the Postgres usage tests and the real-browser
  * restore measurement so both restore identical data. Ids are stable (`s_1`, `r_1_2`, ...).
+ * Review timestamps are relative to now (all within the last day, so inside the 14-day
+ * window the landing page's learning-balance query counts): the worst case for that
+ * query, and one that does not decay as the calendar moves. Real libraries have fewer
+ * reviews inside that window.
  */
 export function librarySeedStatements(userId: string, size: LibrarySize): string[] {
   const { books, sentences, reviewsPerCard } = size;
@@ -30,7 +34,7 @@ export function librarySeedStatements(userId: string, size: LibrarySize): string
       select 'si_' || n, '${userId}', 'sentence', 's_' || n, 'reading_in_context', '${fsrs}'::jsonb from generate_series(1,${sentences}) n`,
     `insert into reviews (id, owner_id, study_item_id, rating, "timestamp")
       select 'r_' || n || '_' || k, '${userId}', 'si_' || n, (array['again','hard','good','easy'])[1 + (n + k) % 4],
-        timestamptz '2026-11-01' + (n * k) * interval '1 second' from generate_series(1,${sentences}) n, generate_series(1,${reviewsPerCard}) k`,
+        now() - interval '1 day' + (n * k) * interval '1 second' from generate_series(1,${sentences}) n, generate_series(1,${reviewsPerCard}) k`,
     `insert into sentence_learning_events (id, owner_id, visit_id, action, book_id, sentence_id)
       select 'e_' || n, '${userId}', 'visit_' || n, 'walkthrough_completed', 'book_' || ((n - 1) % ${books} + 1), 's_' || n from generate_series(1,${sentences}) n`,
   ];

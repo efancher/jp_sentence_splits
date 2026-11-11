@@ -329,9 +329,10 @@ Supabase, second-account and limit checks) are in
 see [PERFORMANCE.md](PERFORMANCE.md) for what restore coverage remains. A
 real-browser measurement (2026-11-10) found that restoring a library onto an empty
 device is slow while the landing page is open: 11,204 rows took 242 to 297 s in
-Chromium and 164 s in emulated WebKit, versus 36 s on a light page. The cause is
-the landing page's live queries and per-record writes; no fix has been made yet
-(roadmap: "Speed up fresh-device restore").
+Chromium and 164 s in emulated WebKit, versus 36 s on a light page; 36,020 rows
+(worst case: 20,000 recent reviews) took 56 and 32 minutes. The likely cause is the
+landing page's learning-balance live query re-scanning recent reviews after every
+write; no fix has been made yet (roadmap: "Speed up fresh-device restore").
 
 Review now reads meaning-choice and missed-reading history for the active card
 only, through existing indexes. The question waits for a fixed history snapshot

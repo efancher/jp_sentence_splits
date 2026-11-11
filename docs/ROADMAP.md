@@ -203,13 +203,20 @@ Unfinished work and optional extensions; completed behavior is in `AI_OVERVIEW.m
     latency; inspect query plans for server hotspots. Catch repeated per-row
     queries, full-table reloads, unnecessary polling and redundant audio transfers.
     Measured 2026-11-10: a fresh-device restore costs about 2.1 to 2.3 requests per
-    100 rows (linear). In a real browser the restore of an 11,204-row library takes
-    242 to 297 s in Chromium and 164 s in emulated WebKit while the landing page is
-    open, but 36 s on a light page, because of work the landing page's live queries
-    and the per-record write path do on every pulled record. See PERFORMANCE.md,
-    "Fresh-device restore in a real browser", and the restore-speed item below.
-  - **Speed up fresh-device restore (found 2026-11-10, not started).** Candidates, in
-    order of expected payoff and risk: (1) write each pulled page in one Dexie
+    100 rows (linear). In a real browser, with the landing page open, restoring an
+    11,204-row library takes 242 to 297 s in Chromium and 164 s in emulated WebKit, and
+    a 36,020-row library (20,000 reviews, all inside the 14-day window: the worst case)
+    takes 56 min in Chromium and 32 min in WebKit, 98 percent of it in the reviews
+    phase and growing with the square of the review count. On a light page the 11,204
+    rows take 36 s. See PERFORMANCE.md, "Fresh-device restore in a real browser", and
+    the restore-speed item below.
+  - **Speed up fresh-device restore (found 2026-11-10, not started).** Most likely root
+    cause of the quadratic part: `getRecentActivityEvents` (`src/db/repository.ts`),
+    behind the landing page's `computeLearningBalance`, counts recent reviews and builds
+    one array entry per review, and Dexie re-runs it after committed writes. Candidates, in
+    order of expected payoff and risk: (0) return counts and the latest timestamp from that
+    query instead of expanding one object per review, since the planner only uses the count
+    and newest time per mode; (1) write each pulled page in one Dexie
     transaction per entity (bulk put of records plus their record-meta) so live queries
     fire once per page instead of once per record, and batch the per-event conflict,
     record-meta and existence reads into one read per page; (2) make the landing page's

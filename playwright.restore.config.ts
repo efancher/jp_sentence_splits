@@ -12,7 +12,8 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   retries: 0,
-  timeout: 900_000,
+  // The spec's own deadline (RESTORE_DEADLINE_MS, default 800 s) plus room for startup and teardown.
+  timeout: Number(process.env.RESTORE_DEADLINE_MS ?? 800_000) + 180_000,
   outputDir: 'test-results/performance/restore-browser',
   reporter: [['list']],
   use: {
