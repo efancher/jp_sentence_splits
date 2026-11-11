@@ -62,6 +62,12 @@ function clamp(value: number, min: number, max: number): number {
 export interface RecentActivityEvent {
   mode: SessionBucket;
   timestamp: string;
+  /**
+   * How many events this entry stands for (default 1). Large tables report one entry
+   * with a count and their newest time instead of one object per row, which keeps this
+   * live query cheap while thousands of rows are being written.
+   */
+  count?: number;
 }
 
 export interface ModeActivitySummary {
@@ -79,20 +85,24 @@ export function computeRecentActivityDistribution(
   windowDays: number = NEGLECT_WINDOW_DAYS,
 ): ActivityDistribution {
   const windowStart = now.getTime() - windowDays * 24 * 60 * 60 * 1000;
+  // One pass over the events, not a filter per mode: each timestamp is parsed once.
+  const inWindowCount = new Map<SessionBucket, number>();
+  const mostRecentTime = new Map<SessionBucket, number>();
+  for (const event of events) {
+    const time = new Date(event.timestamp).getTime();
+    const latest = mostRecentTime.get(event.mode);
+    if (latest === undefined || time > latest) mostRecentTime.set(event.mode, time);
+    if (time >= windowStart) {
+      inWindowCount.set(event.mode, (inWindowCount.get(event.mode) ?? 0) + (event.count ?? 1));
+    }
+  }
   const distribution = {} as ActivityDistribution;
   for (const mode of ALL_SESSION_BUCKETS) {
-    const modeEvents = events.filter((event) => event.mode === mode);
-    const inWindow = modeEvents.filter(
-      (event) => new Date(event.timestamp).getTime() >= windowStart,
-    );
-    const mostRecent = modeEvents.reduce<number | null>((latest, event) => {
-      const time = new Date(event.timestamp).getTime();
-      return latest === null || time > latest ? time : latest;
-    }, null);
+    const mostRecent = mostRecentTime.get(mode);
     distribution[mode] = {
-      count: inWindow.length,
+      count: inWindowCount.get(mode) ?? 0,
       daysSinceLast:
-        mostRecent === null ? null : (now.getTime() - mostRecent) / (24 * 60 * 60 * 1000),
+        mostRecent === undefined ? null : (now.getTime() - mostRecent) / (24 * 60 * 60 * 1000),
     };
   }
   return distribution;

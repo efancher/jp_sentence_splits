@@ -12749,7 +12749,8 @@ async function getRecentActivityEvents(now: Date): Promise<RecentActivityEvent[]
   // The planner only uses, per mode, how many events fell in the window and when the latest one was.
   // IndexedDB charges per row read (about 0.3 ms each in WebKit, more on a phone) but a range count is
   // nearly free, so indexed tables are summarised with `count()` plus the single newest row instead of
-  // reading thousands of timestamps. Events are then expanded at that latest time.
+  // reading thousands of timestamps. Each table yields one entry carrying its count at that latest time
+  // (not one object per row, which made this live query cost grow with the table while a restore wrote it).
   const summarise = async (
     mode: SessionBucket,
     label: string,
@@ -12761,7 +12762,7 @@ async function getRecentActivityEvents(now: Date): Promise<RecentActivityEvent[]
     const newest = await traceStep(`recent: ${label} newest`, () => table.orderBy(index).last());
     const timestamp = (newest as Record<string, unknown> | undefined)?.[index] as string | undefined;
     if (!timestamp) return [];
-    return Array.from({ length: count }, () => ({ mode, timestamp }));
+    return [{ mode, timestamp, count }];
   };
 
   const [review, shadowing, grammarFromAnalyses, grammarFromLinks, allBookSentences] = await Promise.all([

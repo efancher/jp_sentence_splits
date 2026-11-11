@@ -96,6 +96,34 @@ describe('computeRecentActivityDistribution / computeNeglectScores', () => {
     expect(neglect.review).toBeCloseTo(0, 5);
   });
 
+  it('treats one counted entry exactly like that many single events', () => {
+    const newest = daysAgo(2);
+    const expanded: RecentActivityEvent[] = [
+      ...Array.from({ length: 500 }, () => ({ mode: 'review' as const, timestamp: newest })),
+      ...Array.from({ length: 7 }, () => ({ mode: 'grammar' as const, timestamp: daysAgo(5) })),
+      { mode: 'glossing', timestamp: daysAgo(40) }, // outside the window: counted nowhere, still the newest glossing event
+    ];
+    const counted: RecentActivityEvent[] = [
+      { mode: 'review', timestamp: newest, count: 500 },
+      { mode: 'grammar', timestamp: daysAgo(5), count: 7 },
+      { mode: 'glossing', timestamp: daysAgo(40) },
+    ];
+    const fromExpanded = computeRecentActivityDistribution(expanded, NOW);
+    expect(computeRecentActivityDistribution(counted, NOW)).toEqual(fromExpanded);
+    expect(fromExpanded.review.count).toBe(500);
+    expect(fromExpanded.glossing.count).toBe(0);
+    expect(fromExpanded.glossing.daysSinceLast).toBeCloseTo(40, 5);
+  });
+
+  it('uses the newest timestamp per mode across several entries', () => {
+    const distribution = computeRecentActivityDistribution(
+      [{ mode: 'review', timestamp: daysAgo(6), count: 3 }, { mode: 'review', timestamp: daysAgo(1), count: 2 }],
+      NOW,
+    );
+    expect(distribution.review.count).toBe(5);
+    expect(distribution.review.daysSinceLast).toBeCloseTo(1, 5);
+  });
+
   it('scales neglect linearly up to the window, then clamps at 1', () => {
     const events: RecentActivityEvent[] = [{ mode: 'grammar', timestamp: daysAgo(30) }];
     const distribution = computeRecentActivityDistribution(events, NOW, 14);

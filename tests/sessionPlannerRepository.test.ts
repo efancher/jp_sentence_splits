@@ -520,6 +520,22 @@ describe('Learning Orchestrator repository layer', () => {
     expect(grammar.daysSinceLast).toBeNull();
   });
 
+  it('learning balance counts only reviews inside the window, and measures recency from the newest one', async () => {
+    const db = getDb();
+    const hours = (n: number) => new Date(Date.now() - n * 3_600_000).toISOString();
+    const inWindow = Array.from({ length: 120 }, (_, i) => ({
+      id: `in-${i}`, studyItemId: 'item-1', rating: 'good' as const, timestamp: hours(24 + i), // 1 to 6 days ago
+    }));
+    const outside = Array.from({ length: 40 }, (_, i) => ({
+      id: `old-${i}`, studyItemId: 'item-1', rating: 'good' as const, timestamp: hours(24 * 30 + i), // 30 days ago
+    }));
+    await db.reviews.bulkPut([...inWindow, ...outside]);
+
+    const review = (await computeLearningBalance()).find((entry) => entry.bucket === 'review')!;
+    expect(review.count).toBe(120);
+    expect(review.daysSinceLast).toBeCloseTo(1, 1);
+  });
+
   it('gives a sentence no shadow step until its vocabulary is confirmed and proficient (user request, 2026-08-27)', async () => {
     const book = await createBook({ title: 'Shadow Me' });
     const db = getDb();
