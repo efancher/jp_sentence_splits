@@ -196,6 +196,8 @@ describe('conflictContentsMatch', () => {
       ['inbox', { id: 'in_1', addedAt: '2026-09-18T04:18:06.660Z' }],
       ['reference_audio', { id: 'ra_1', importedAt: '2026-09-18T04:18:06.660Z' }],
       ['pitch_drill_attempts', { id: 'pd_1', timestamp: '2026-09-18T04:18:06.660Z' }],
+      ['review_trouble_logs', { id: 'rt_1', timestamp: '2026-09-18T04:18:06.660Z' }],
+      ['game_rounds', { id: 'gr_1', timestamp: '2026-09-18T04:18:06.660Z' }],
     ];
     for (const [entity, local] of cases) {
       const remote = {

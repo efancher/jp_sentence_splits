@@ -744,7 +744,7 @@ export class GlossbookDatabase extends Dexie {
       clauseQuestionFeedback: 'id, timestamp, sentenceId, referenceId',
     });
 
-    // Review trouble-tag log — local-only and purely additive.
+    // Review trouble-tag log — purely additive (synced as review_trouble_logs since 2026-11-12).
     this.version(28).stores({
       reviewTroubleLogs: 'id, timestamp, sentenceId',
     });

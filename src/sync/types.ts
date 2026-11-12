@@ -22,6 +22,8 @@ export type SyncEntity =
   | 'sync_issue_reports'
   | 'chunk_issue_reports'
   | 'pitch_drill_attempts'
+  | 'review_trouble_logs'
+  | 'game_rounds'
   | 'sentence_learning_events'
   | 'gloss_decisions'
   | 'clause_question_feedback'

@@ -117,8 +117,12 @@ In the order they were proposed; none of these is started unless noted.
    directly by a Meaning/Kanji/Reading trouble tag, decoupling the Grammar check
    from its revisit the same way, and comparing the next Read check after a
    standalone Word check or Dictation. Re-read usage after about a week.
-3. **Sync per-device evidence:** `reviewTroubleLogs`, `shadowRequests`,
-   `shadowSnoozes`, game rounds and the i+1 setting are local-only.
+3. **Sync per-device evidence:** `reviewTroubleLogs` and game rounds sync as
+   append-only `review_trouble_logs` / `game_rounds` (migration
+   `20261112000000`, pending apply). Still local-only: `shadowRequests`,
+   `shadowSnoozes` and the i+1 setting, because `AppSettings` has no synced
+   mechanism; they need a small LWW table (like `planner_sessions`) or a
+   settings-sync design.
 4. **Verification week.** Items marked "local checks only" in `STATUS.md`:
    phrase-shadow checklist P1–P8 in `MANUAL_TEST_LOG.md`, grammar links through
    the real panel, parallel assistant agents on the 8 GB box, chunked ASR on a

@@ -1099,4 +1099,46 @@ describe('sync mappers', () => {
     expect(withoutItem.vocabulary_item_id).toBeNull();
     expect(remoteToPitchDrillAttempt(withoutItem).vocabularyItemId).toBeUndefined();
   });
+
+  it('round-trips a review trouble log and a game round through remote shape', async () => {
+    const { reviewTroubleLogToRemote, remoteToReviewTroubleLog, gameRoundToRemote, remoteToGameRound } =
+      await import('../src/sync/mappers');
+    const log = {
+      id: 'review_trouble_1',
+      timestamp: '2026-11-12T00:00:00.000Z',
+      studyItemId: 'study-1',
+      sentenceId: 'sent-1',
+      rating: 'again' as const,
+      tags: ['lost_the_thread'] as never,
+      queued: { freshTry: true, shadow: false },
+    };
+    const remoteLog = reviewTroubleLogToRemote(log, 'user-1', 1);
+    expect(remoteLog.owner_id).toBe('user-1');
+    expect(remoteLog.sentence_id).toBe('sent-1');
+    expect(remoteToReviewTroubleLog(remoteLog)).toEqual(log);
+
+    const round = {
+      id: 'game_round_1',
+      timestamp: '2026-11-12T00:01:00.000Z',
+      gameId: 'particle_puzzle',
+      signal: 'weak_words' as never,
+      poolSize: 8,
+      items: [
+        {
+          ref: 'v1',
+          correct: false,
+          cluesUsed: 1,
+          wrongGuesses: 2,
+          points: 0,
+          ms: 4200,
+          parts: [{ key: 'に', correct: false, note: 'で' }],
+          selfRating: 'hard' as const,
+        },
+      ],
+    };
+    const remoteRound = gameRoundToRemote(round, 'user-1', 1);
+    expect(remoteRound.game_id).toBe('particle_puzzle');
+    expect(remoteRound.pool_size).toBe(8);
+    expect(remoteToGameRound(remoteRound)).toEqual(round);
+  });
 });

@@ -7695,8 +7695,8 @@ export async function logPitchDrillAttempt(input: {
 }
 
 /**
- * Append one finished short-game round to the local `gameRounds` log
- * (docs/ROADMAP.md "Short games"). Local-only — not synced, not backed up —
+ * Append one finished short-game round to the `gameRounds` log
+ * (docs/ROADMAP.md "Short games"). Append-only and synced (`game_rounds`) —
  * and never read by FSRS or the session planner: games are cued, so grading
  * them would inflate the proficiency signals that gate other activities.
  */
@@ -7716,6 +7716,7 @@ export async function logGameRound(input: {
     items: input.items,
   };
   await getDb().gameRounds.put(round);
+  notifySyncMany([{ entity: 'game_rounds', recordId: round.id, payload: round }]);
   return round;
 }
 
@@ -7733,8 +7734,8 @@ export async function getRecentGameDifficulty(gameId: string): Promise<Difficult
  * What today's "Daily practice" panel counts (`src/lib/dailyPractice.ts`):
  * scored pitch-drill words and finished game rounds since local midnight.
  * Both are logs the activities already write, so the panel needs no state of
- * its own. `gameRounds` is local-only (not synced), so game progress is
- * per-device; `pitchDrillAttempts` syncs.
+ * its own. Both `gameRounds` and `pitchDrillAttempts` sync, so the counts
+ * include rounds from other devices once they have arrived.
  */
 export async function getDailyPracticeCounts(
   now: Date = new Date(),
@@ -11258,6 +11259,7 @@ export async function recordReviewTroubleTags(input: {
     queued,
   };
   await getDb().reviewTroubleLogs.put(log);
+  notifySyncMany([{ entity: 'review_trouble_logs', recordId: log.id, payload: log }]);
   return log;
 }
 

@@ -11,6 +11,8 @@ import type {
   MiningImport,
   SentenceExtras,
   PitchDrillAttempt,
+  ReviewTroubleLog,
+  GameRound,
   SentenceLearningEvent,
   ClauseQuestionFeedback,
   GlossDecision,
@@ -53,6 +55,8 @@ export type LocalSyncPayload =
   | SyncIssueReport
   | ChunkIssueReport
   | PitchDrillAttempt
+  | ReviewTroubleLog
+  | GameRound
   | SentenceLearningEvent
   | GlossDecision
   | ClauseQuestionFeedback
@@ -1121,6 +1125,62 @@ export function remoteToPitchDrillAttempt(
   };
 }
 
+export function reviewTroubleLogToRemote(log: ReviewTroubleLog, ownerId: string, version: number) {
+  return {
+    id: log.id,
+    owner_id: ownerId,
+    timestamp: log.timestamp,
+    study_item_id: log.studyItemId,
+    sentence_id: log.sentenceId,
+    rating: log.rating,
+    tags: log.tags,
+    queued: log.queued,
+    created_at: log.timestamp,
+    updated_at: log.timestamp,
+    deleted_at: null,
+    version,
+  };
+}
+
+export function remoteToReviewTroubleLog(row: Record<string, unknown>): ReviewTroubleLog {
+  return {
+    id: String(row.id),
+    timestamp: String(row.timestamp),
+    studyItemId: String(row.study_item_id),
+    sentenceId: String(row.sentence_id),
+    rating: row.rating as ReviewTroubleLog['rating'],
+    tags: (row.tags as ReviewTroubleLog['tags'] | null) ?? [],
+    queued: (row.queued as ReviewTroubleLog['queued'] | null) ?? { freshTry: false, shadow: false },
+  };
+}
+
+export function gameRoundToRemote(round: GameRound, ownerId: string, version: number) {
+  return {
+    id: round.id,
+    owner_id: ownerId,
+    timestamp: round.timestamp,
+    game_id: round.gameId,
+    signal: round.signal,
+    pool_size: round.poolSize,
+    items: round.items,
+    created_at: round.timestamp,
+    updated_at: round.timestamp,
+    deleted_at: null,
+    version,
+  };
+}
+
+export function remoteToGameRound(row: Record<string, unknown>): GameRound {
+  return {
+    id: String(row.id),
+    timestamp: String(row.timestamp),
+    gameId: String(row.game_id),
+    signal: row.signal as GameRound['signal'],
+    poolSize: Number(row.pool_size),
+    items: (row.items as GameRound['items'] | null) ?? [],
+  };
+}
+
 export function sentenceLearningEventToRemote(event: SentenceLearningEvent, ownerId: string, version: number) {
   return {
     id: event.id,
@@ -1363,6 +1423,10 @@ export function toRemoteRow(
       return chunkIssueReportToRemote(payload as ChunkIssueReport, ownerId, version);
     case 'pitch_drill_attempts':
       return pitchDrillAttemptToRemote(payload as PitchDrillAttempt, ownerId, version);
+    case 'review_trouble_logs':
+      return reviewTroubleLogToRemote(payload as ReviewTroubleLog, ownerId, version);
+    case 'game_rounds':
+      return gameRoundToRemote(payload as GameRound, ownerId, version);
     case 'sentence_learning_events':
       return sentenceLearningEventToRemote(payload as SentenceLearningEvent, ownerId, version);
     case 'gloss_decisions':

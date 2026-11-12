@@ -99,6 +99,8 @@ const ENTITY_EXTRA_KEYS: Partial<Record<SyncEntity, Set<string>>> = {
   inbox: NO_LOCAL_CREATED_AT,
   reference_audio: NO_LOCAL_CREATED_AT,
   pitch_drill_attempts: NO_LOCAL_CREATED_AT,
+  review_trouble_logs: NO_LOCAL_CREATED_AT,
+  game_rounds: NO_LOCAL_CREATED_AT,
   sentence_learning_events: NO_LOCAL_CREATED_AT,
   gloss_decisions: NO_LOCAL_CREATED_AT,
   clause_question_feedback: NO_LOCAL_CREATED_AT,

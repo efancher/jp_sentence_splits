@@ -230,10 +230,10 @@ decisions worth knowing before adding one:
 - **Games read FSRS, never write it.** They're cued (clues, hints, pacing), so
   feeding results into `recordReview` would inflate the proficiency signals that
   gate `continue_book`/shadowing/listening (`getProficientVocabularyItemIds`).
-  Results go to an append-only, **local-only** `gameRounds` Dexie table
-  (`logGameRound`; modelled on `PitchDrillAttempt` but deliberately not in the
-  sync engine, so no Supabase migration). Sync + any FSRS-adjacent write
-  ("queue misses") are later, opt-in phases — see ROADMAP "Short games".
+  Results go to an append-only `gameRounds` Dexie table, synced as
+  `game_rounds` (`logGameRound`; modelled on `PitchDrillAttempt`; owner RLS,
+  insert/select only). Any FSRS-adjacent write
+  ("queue misses") is a later, opt-in phase — see ROADMAP "Short games".
 - **Eligibility before ranking.** Each game builds its own eligible candidate
   set (`getWordDetectiveCandidates`); the shared pure picker
   (`src/lib/gamePicker.ts`) then ranks by a signal (weak/stale/strong) and

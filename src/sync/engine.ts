@@ -32,6 +32,8 @@ import {
   remoteToMiningImport,
   remoteToSentenceExtras,
   remoteToPitchDrillAttempt,
+  remoteToReviewTroubleLog,
+  remoteToGameRound,
   remoteToSentenceLearningEvent,
   remoteToClauseQuestionFeedback,
   remoteToGlossDecision,
@@ -173,6 +175,8 @@ const PUSH_TIER: Partial<Record<SyncEntity, number>> = {
   study_items: 2,
   reviews: 3,
   pitch_drill_attempts: 3,
+  review_trouble_logs: 3,
+  game_rounds: 3,
   sentence_learning_events: 3,
   gloss_decisions: 3,
   clause_question_feedback: 3,
@@ -1580,6 +1584,10 @@ async function localRecordExists(entity: SyncEntity, recordId: string): Promise<
       return (await db.chunkIssueReports.get(recordId)) != null;
     case 'pitch_drill_attempts':
       return (await db.pitchDrillAttempts.get(recordId)) != null;
+    case 'review_trouble_logs':
+      return (await db.reviewTroubleLogs.get(recordId)) != null;
+    case 'game_rounds':
+      return (await db.gameRounds.get(recordId)) != null;
     case 'sentence_learning_events':
       return (await db.sentenceLearningEvents.get(recordId)) != null;
     case 'gloss_decisions':
@@ -1832,6 +1840,12 @@ async function applyRemoteDelete(
     case 'pitch_drill_attempts':
       await db.pitchDrillAttempts.delete(recordId);
       break;
+    case 'review_trouble_logs':
+      await db.reviewTroubleLogs.delete(recordId);
+      break;
+    case 'game_rounds':
+      await db.gameRounds.delete(recordId);
+      break;
     case 'sentence_learning_events':
       await db.sentenceLearningEvents.delete(recordId);
       break;
@@ -1991,6 +2005,12 @@ export async function applyRemoteUpsert(
     case 'pitch_drill_attempts':
       await db.pitchDrillAttempts.put(remoteToPitchDrillAttempt(remote));
       break;
+    case 'review_trouble_logs':
+      await db.reviewTroubleLogs.put(remoteToReviewTroubleLog(remote));
+      break;
+    case 'game_rounds':
+      await db.gameRounds.put(remoteToGameRound(remote));
+      break;
     case 'sentence_learning_events':
       await db.sentenceLearningEvents.put(remoteToSentenceLearningEvent(remote));
       break;
@@ -2047,6 +2067,8 @@ export async function uploadAllLocalData(userId: string): Promise<void> {
   const syncIssueReports = await db.syncIssueReports.toArray();
   const chunkIssueReports = await db.chunkIssueReports.toArray();
   const pitchDrillAttempts = await db.pitchDrillAttempts.toArray();
+  const reviewTroubleLogs = await db.reviewTroubleLogs.toArray();
+  const gameRounds = await db.gameRounds.toArray();
   const sentenceLearningEvents = await db.sentenceLearningEvents.toArray();
   const glossDecisions = await db.glossDecisions.toArray();
   const clauseQuestionFeedback = await db.clauseQuestionFeedback.toArray();
@@ -2119,6 +2141,12 @@ export async function uploadAllLocalData(userId: string): Promise<void> {
   }
   for (const attempt of pitchDrillAttempts) {
     await trackAndEnqueue('pitch_drill_attempts', attempt.id, attempt);
+  }
+  for (const log of reviewTroubleLogs) {
+    await trackAndEnqueue('review_trouble_logs', log.id, log);
+  }
+  for (const round of gameRounds) {
+    await trackAndEnqueue('game_rounds', round.id, round);
   }
   for (const event of sentenceLearningEvents) {
     await trackAndEnqueue('sentence_learning_events', event.id, event);
@@ -2195,6 +2223,8 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
       db.syncIssueReports,
       db.chunkIssueReports,
       db.pitchDrillAttempts,
+      db.reviewTroubleLogs,
+      db.gameRounds,
       db.sentenceLearningEvents,
       db.glossDecisions,
       db.clauseQuestionFeedback,
@@ -2227,6 +2257,8 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
       await db.syncIssueReports.clear();
       await db.chunkIssueReports.clear();
       await db.pitchDrillAttempts.clear();
+      await db.reviewTroubleLogs.clear();
+      await db.gameRounds.clear();
       await db.sentenceLearningEvents.clear();
       await db.glossDecisions.clear();
       await db.clauseQuestionFeedback.clear();
@@ -2310,6 +2342,12 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
   });
   await pullFullTable('pitch_drill_attempts', userId, async (rows) => {
     await db.pitchDrillAttempts.bulkPut(rows.map((r) => remoteToPitchDrillAttempt(r)));
+  });
+  await pullFullTable('review_trouble_logs', userId, async (rows) => {
+    await db.reviewTroubleLogs.bulkPut(rows.map((r) => remoteToReviewTroubleLog(r)));
+  });
+  await pullFullTable('game_rounds', userId, async (rows) => {
+    await db.gameRounds.bulkPut(rows.map((r) => remoteToGameRound(r)));
   });
   await pullFullTable('sentence_learning_events', userId, async (rows) => {
     await db.sentenceLearningEvents.bulkPut(rows.map((r) => remoteToSentenceLearningEvent(r)));

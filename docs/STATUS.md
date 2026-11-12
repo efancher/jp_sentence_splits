@@ -127,8 +127,9 @@ and possible extensions. This snapshot does not certify a live deployment.
   sentences only; otherwise nothing is queued, the sentence is still a first
   lesson); Sound puts the sentence first in shadow candidates until a shadowing
   attempt is saved after the flag (`settings.shadowRequests`). Tag use is logged
-  in the local-only `reviewTroubleLogs` table (not synced or backed up), so
-  tags are per-device evidence. The `/progress` "Review trouble tags" panel
+  in the append-only `reviewTroubleLogs` table, synced as `review_trouble_logs`
+  (migration `20261112000000`; not in backups), so tags follow the learner
+  between devices. The `/progress` "Review trouble tags" panel
   summarises that log: tag counts, share of misses tagged, follow-ups done, and
   the next review's good/easy split with vs without the follow-up first (counts
   only, uncontrolled). The soft gate (surface remediation shortly after
@@ -292,7 +293,7 @@ and possible extensions. This snapshot does not certify a live deployment.
 - Remix and Sentence Growth are implemented on `/play`, using UniDic tokens.
   Both accept introduced sentences without vocabulary confirmation in the
   default flow. Growth rebuilds the original sentence from its own chunks and
-  records Hard/Okay/Easy self-ratings. Game rounds remain local-only and do not
+  records Hard/Okay/Easy self-ratings. Game rounds sync (`game_rounds`, same migration) and do not
   write FSRS reviews. Growth-eligible lessons float within each book's existing
   preview window when planning is non-sequential.
 - Shadowing includes native pitch preparation, phone-aligned mora targets,

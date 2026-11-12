@@ -1269,8 +1269,8 @@ export type EffectiveGameSignal = GameSignal | 'any';
 export type ReviewTroubleTag = 'reading' | 'meaning' | 'kanji' | 'sound';
 
 /**
- * One review's trouble tags. Local-only append-only log (like `GameRound`; no
- * Supabase table), kept so tag usefulness can be judged before wiring sync.
+ * One review's trouble tags. Append-only log synced as `review_trouble_logs`
+ * (like `GameRound`), kept so tag usefulness can be judged across devices.
  * Never read by FSRS: the rating stays the learner's explicit choice.
  */
 export interface ReviewTroubleLog {
@@ -1307,8 +1307,7 @@ export interface GameRoundItem {
 
 /**
  * One finished round of a short game (`/play`). Append-only usage log,
- * modelled on `PitchDrillAttempt` — but **local-only** for now (not in the
- * sync engine; no Supabase table), so it needs no migration. Deliberately
+ * modelled on `PitchDrillAttempt` and synced as `game_rounds`. Deliberately
  * never read by FSRS/the session planner: games are cued (clues, pacing), so
  * feeding them into proficiency would inflate the signals that gate
  * `continue_book`/shadowing/listening. Only ever written by

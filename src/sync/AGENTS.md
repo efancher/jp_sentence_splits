@@ -14,7 +14,8 @@ Apply the root and `src/` guidance. Paths below are relative to this directory.
   books, sentences or analyses to make a conflict disappear.
 - New synced entities require coordinated types, mappers, queue tracking,
   push/pull/delete handling and SQL/RLS changes. Check local-only entities
-  deliberately: game rounds are not currently synced.
+  deliberately: settings (`shadowRequests`, `shadowSnoozes`, `iPlusOneOrdering`)
+  and `plannerSnapshots` are not synced; game rounds and review trouble logs are.
 - Auth and transfer failures must leave local study usable and recoverable.
   Preserve the signed-out reminder/offline choice and avoid logging credentials
   or access tokens when adding diagnostics.
