@@ -1,4 +1,4 @@
-"""Run a text prompt through a local LLM CLI (Codex, then Claude) so the
+"""Run a text prompt through a local LLM CLI (Codex, Claude or opencode) so the
 frontend can automate its "copy prompt into a chat, paste the reply back"
 step. A bounded number of requests at a time (MINING_ASSIST_MAX_CONCURRENCY, default 3), single attempt per backend —
 the client owns retry policy so a misbehaving run can't loop unattended.
@@ -8,6 +8,7 @@ resubmits.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import shutil
@@ -78,6 +79,8 @@ def _tail(text: str) -> str:
 def _run(cmd: list[str], prompt: str, binary: str, cwd: str) -> subprocess.CompletedProcess[str]:
     timeout = getattr(_ctx, "timeout", None) or config.ASSIST_TIMEOUT_SECONDS
     abort: threading.Event | None = getattr(_ctx, "abort", None)
+    # opencode finds its project config through $PWD, which Popen's cwd does not update.
+    env = {**_env_for(binary), "PWD": cwd}
     try:
         proc = subprocess.Popen(
             cmd,
@@ -86,7 +89,7 @@ def _run(cmd: list[str], prompt: str, binary: str, cwd: str) -> subprocess.Compl
             stderr=subprocess.PIPE,
             text=True,
             cwd=cwd,
-            env=_env_for(binary),
+            env=env,
         )
     except OSError as exc:
         raise AssistError(str(exc)) from exc
@@ -129,6 +132,31 @@ def claude_args() -> list[str]:
     if config.CLAUDE_ASSIST_EFFORT:
         args += ["--effort", config.CLAUDE_ASSIST_EFFORT]
     return args
+
+
+def opencode_args() -> list[str]:
+    args: list[str] = []
+    if config.OPENCODE_ASSIST_MODEL:
+        args += ["-m", config.OPENCODE_ASSIST_MODEL]
+    if config.OPENCODE_ASSIST_EFFORT:
+        args += ["--variant", config.OPENCODE_ASSIST_EFFORT]
+    return args
+
+
+# opencode has no "no tools" flag; a project config in the (temporary) working directory defines an agent
+# with every permission denied, so the reply is text only.
+OPENCODE_AGENT = "assist"
+OPENCODE_PROJECT_CONFIG = {
+    "$schema": "https://opencode.ai/config.json",
+    "permission": {"*": "deny"},
+    "agent": {
+        OPENCODE_AGENT: {
+            "mode": "primary",
+            "description": "Text-only reply, no tools",
+            "permission": {"*": "deny"},
+        }
+    },
+}
 
 
 def run_codex(prompt: str) -> str:
@@ -185,7 +213,24 @@ def run_claude(prompt: str) -> str:
     return proc.stdout
 
 
-RUNNERS = {"codex": run_codex, "claude": run_claude}
+def run_opencode(prompt: str) -> str:
+    binary = _resolve(config.OPENCODE_PATH, "opencode")
+    with tempfile.TemporaryDirectory(prefix="assist-opencode-") as tmp:
+        (Path(tmp) / "opencode.json").write_text(json.dumps(OPENCODE_PROJECT_CONFIG), encoding="utf-8")
+        proc = _run(
+            [binary, "run", "--agent", OPENCODE_AGENT, *opencode_args()],
+            prompt,
+            binary,
+            tmp,
+        )
+    if proc.returncode != 0:
+        raise AssistError(f"exit {proc.returncode}: {_tail(proc.stderr or proc.stdout)}")
+    if not proc.stdout.strip():
+        raise AssistError("empty reply")
+    return proc.stdout
+
+
+RUNNERS = {"codex": run_codex, "claude": run_claude, "opencode": run_opencode}
 
 
 def backend_order(requested: str) -> list[str]:

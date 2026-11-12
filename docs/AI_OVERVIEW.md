@@ -971,8 +971,8 @@ Targets are constants; no settings UI.
   (`src/lib/assistExtras.ts`), orchestrated by `src/lib/assistRun.ts`. Each
   prompt goes to the box's `POST /assist` (the `codex` CLI, then `claude -p` as
   backup, tailnet-only; up to `MINING_ASSIST_MAX_CONCURRENCY` (default 3) calls run at once and an "Agents" 1–5 selector (localStorage `quickmine.assistConcurrency`, sent as `concurrency`, clamped by the box) sets how many of a run's parts are in flight — a failed part lets in-flight ones finish and be saved; a "Primary" selector next to the button
-  — Auto/Codex/Claude, remembered in localStorage — puts the chosen CLI first and
-  keeps the other as backup, sent as `backend` in the `/assist-runs` spec). Every piece is validated (cut-off
+  — Auto/Codex/Claude/opencode, remembered in localStorage — puts the chosen CLI first and
+  keeps the others as backup, sent as `backend` in the `/assist-runs` spec). Every piece is validated (cut-off
   checks) and saved to the run's `state.json` on the box as it lands; a piece
   gets two attempts (the second prompt names what was wrong with the first).
   Extras are also run through the importer's own parsers
@@ -994,7 +994,11 @@ Targets are constants; no settings UI.
   (`MINING_CLAUDE_MODEL` / `MINING_CLAUDE_EFFORT`; empty = CLI default), and the
   service unit tries Claude before Codex (`MINING_ASSIST_BACKENDS=claude,codex`;
   Codex runs `gpt-6-luna` at medium via `MINING_CODEX_MODEL` / `MINING_CODEX_EFFORT`; empty = `~/.codex/config.toml`) so
-  imports use less of the shared subscription quota. The page polls
+  imports use less of the shared subscription quota. A third backend, `opencode run`
+  (`run_opencode`; `MINING_OPENCODE_PATH`, `MINING_OPENCODE_MODEL` default
+  `opencode-go/claude-haiku-5-5` on the OpenCode Go plan, optional `MINING_OPENCODE_EFFORT` → `--variant`),
+  is last in the unit's order; it runs in a temp directory whose `opencode.json` defines an
+  all-permissions-denied agent, so replies are text only. The page polls
   `GET /assist-runs/{id}` and, when it reopens an import (the active job is
   remembered), re-attaches to a running run or picks up a finished one. The
   review step's "Extras with the assistant" panel is still the client-driven

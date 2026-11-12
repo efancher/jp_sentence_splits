@@ -446,6 +446,9 @@ repair tooling, research materials and future roadmap ideas remain available.
   2026-11-12: extras now use 10-sentence calls everywhere and the assistant
   defaults to Claude Haiku 5.5 at medium effort (Claude tried before Codex in the
   unit); needs the unit copied to the box and a restart, not yet run live.
+  2026-11-12: opencode (OpenCode Go plan) added as a third assistant backend and
+  "Primary" choice, last in the unit's try-order; the CLI call was checked by hand
+  on the box, the service path needs the same unit copy and restart.
 
 - **Game supply:** the 2026-10-17 production probe found only 30 qualifying Growth
   sentences (none introduced) and one introduced audio-backed Remix skeleton.

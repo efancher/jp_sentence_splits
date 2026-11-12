@@ -192,13 +192,14 @@ METRICS_UNITS = [
 ]
 
 # Text-assist (POST /assist): runs a prompt through the Codex CLI, falling
-# back to the Claude CLI, so the frontend can fill in segmentation/
+# back to the Claude CLI (and opencode, when listed), so the frontend can fill in segmentation/
 # translation without a copy/paste round trip. Paths default to PATH lookup;
 # the systemd user PATH lacks nvm, so set MINING_CODEX_PATH when installed
 # via nvm (app/assist.py also puts the binary's own dir on PATH, which is
 # where its `node` lives). MINING_ASSIST_BACKENDS is the try-order.
 CODEX_PATH = os.environ.get("MINING_CODEX_PATH") or None
 CLAUDE_PATH = os.environ.get("MINING_CLAUDE_PATH") or None
+OPENCODE_PATH = os.environ.get("MINING_OPENCODE_PATH") or None
 ASSIST_BACKENDS = [
     name.strip()
     for name in os.environ.get("MINING_ASSIST_BACKENDS", "codex,claude").split(",")
@@ -214,6 +215,11 @@ CLAUDE_ASSIST_EFFORT = os.environ.get("MINING_CLAUDE_EFFORT", "medium").strip()
 # far heavier than extras need). Empty strings defer to that config file.
 CODEX_ASSIST_MODEL = os.environ.get("MINING_CODEX_MODEL", "gpt-6-luna").strip()
 CODEX_ASSIST_EFFORT = os.environ.get("MINING_CODEX_EFFORT", "medium").strip()
+# opencode takes provider/model (see `opencode models`); the default is the OpenCode Go plan's Haiku. Effort is
+# opencode's provider-specific --variant and is left to the model's default unless set. An empty model defers
+# to opencode's own configuration.
+OPENCODE_ASSIST_MODEL = os.environ.get("MINING_OPENCODE_MODEL", "opencode-go/claude-haiku-5-5").strip()
+OPENCODE_ASSIST_EFFORT = os.environ.get("MINING_OPENCODE_EFFORT", "").strip()
 ASSIST_TIMEOUT_SECONDS = int(os.environ.get("MINING_ASSIST_TIMEOUT_SECONDS", "600"))
 # Assistant CLI calls allowed at once, across every run. Each call is a node
 # process on an 8 GB box, so keep this low; runs asking for more are clamped.

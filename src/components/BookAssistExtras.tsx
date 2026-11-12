@@ -421,9 +421,10 @@ export function BookAssistExtras({ bookId }: { bookId: string }) {
                     localStorage.setItem(ASSIST_BACKEND_KEY, next);
                   }}
                 >
-                  <option value="auto">Auto (Codex first)</option>
+                  <option value="auto">Auto</option>
                   <option value="codex">Codex</option>
                   <option value="claude">Claude</option>
+                  <option value="opencode">opencode</option>
                 </select>
               </label>
               <label className="row" style={{ gap: '0.35rem' }}>

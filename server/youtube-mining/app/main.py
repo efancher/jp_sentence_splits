@@ -124,7 +124,7 @@ async def create_job(req: CreateJobRequest):
 
 @app.post("/assist", response_model=AssistCreateResponse)
 async def create_assist(req: AssistRequest):
-    """Run a prompt through the Codex CLI (falling back to Claude) — see
+    """Run a prompt through a local LLM CLI (Codex, Claude or opencode) — see
     app/assist.py. Poll GET /assist/{id}; one run at a time, no retries."""
     if len(req.prompt) > config.ASSIST_MAX_PROMPT_CHARS:
         raise HTTPException(status_code=413, detail="Prompt is too long.")

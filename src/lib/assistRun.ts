@@ -29,7 +29,7 @@ export function readStoredConcurrency(): number {
   return clampConcurrency(Number(localStorage.getItem(ASSIST_CONCURRENCY_KEY)));
 }
 
-export type AssistBackend = 'auto' | 'codex' | 'claude';
+export type AssistBackend = 'auto' | 'codex' | 'claude' | 'opencode';
 
 export interface AssistRunSpec {
   transcript: WizardTranscriptSeg[];

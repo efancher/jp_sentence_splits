@@ -441,7 +441,7 @@ class CommitJobResponse(BaseModel):
     sentences: list[CommitSentence]
 
 
-AssistBackend = Literal["auto", "codex", "claude"]
+AssistBackend = Literal["auto", "codex", "claude", "opencode"]
 
 
 class AssistRequest(BaseModel):

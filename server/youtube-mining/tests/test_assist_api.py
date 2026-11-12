@@ -3,9 +3,11 @@ covers routing, the codex->claude fallback and the no-retry error path."""
 
 from __future__ import annotations
 
+import json
 import subprocess
 import threading
 import time
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -74,7 +76,7 @@ def test_explicit_backend_goes_first_other_is_backup(client: TestClient, monkeyp
 
     monkeypatch.setitem(assist.RUNNERS, "claude", bad)
     monkeypatch.setitem(assist.RUNNERS, "codex", lambda prompt: "from codex")
-    assert assist.backend_order("claude") == ["claude", "codex"]
+    assert assist.backend_order("claude") == ["claude", "codex", "opencode"]
     body = _wait(client, client.post("/assist", json={"prompt": "x", "backend": "claude"}).json()["assistId"])
     assert body["status"] == "done" and body["backend"] == "codex"
 
@@ -163,3 +165,34 @@ def test_codex_overrides_are_opt_in(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(assist.config, "CODEX_ASSIST_MODEL", "gpt-6-luna")
     monkeypatch.setattr(assist.config, "CODEX_ASSIST_EFFORT", "medium")
     assert assist.codex_args() == ["-m", "gpt-6-luna", "-c", 'model_reasoning_effort="medium"']
+
+
+def test_opencode_command_denies_tools_and_pins_model(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    seen: list[tuple[list[str], dict]] = []
+
+    def fake_run(cmd, prompt, binary, cwd):
+        seen.append((cmd, json.loads((Path(cwd) / "opencode.json").read_text())))
+        return subprocess.CompletedProcess(cmd, 0, "ok\n", "> assist")
+
+    fake_bin = tmp_path / "opencode"
+    fake_bin.write_text("")
+    monkeypatch.setattr(assist.config, "OPENCODE_PATH", str(fake_bin))
+    monkeypatch.setattr(assist.config, "OPENCODE_ASSIST_MODEL", "opencode-go/claude-haiku-5-5")
+    monkeypatch.setattr(assist.config, "OPENCODE_ASSIST_EFFORT", "")
+    monkeypatch.setattr(assist, "_run", fake_run)
+    assert assist.run_opencode("hi") == "ok\n"
+    cmd, project_config = seen[0]
+    assert cmd[1] == "run" and cmd[cmd.index("-m") + 1] == "opencode-go/claude-haiku-5-5"
+    assert "--variant" not in cmd
+    agent = cmd[cmd.index("--agent") + 1]
+    assert project_config["agent"][agent]["permission"] == {"*": "deny"}
+
+    monkeypatch.setattr(assist.config, "OPENCODE_ASSIST_EFFORT", "medium")
+    assist.run_opencode("hi")
+    assert seen[1][0][seen[1][0].index("--variant") + 1] == "medium"
+
+
+def test_opencode_is_a_fallback_after_the_requested_backend(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(assist, "_down_until", {})
+    assert assist.backend_order("opencode") == ["opencode", "codex", "claude"]
+    assert assist.backend_order("claude")[-1] == "opencode"
