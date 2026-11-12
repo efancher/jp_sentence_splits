@@ -987,8 +987,14 @@ Targets are constants; no settings UI.
   Activity list. The server also probes a backend with a one-word prompt 90s
   into a call; if the probe hangs (out of credits / wedged) the call is killed,
   the backend is deprioritised for 15 minutes and the other CLI takes over
-  immediately. Book extras send walkthroughs 15 sentences per call and other
-  kinds 50. The page polls
+  immediately. Every extra (quick import and book) is sent 10 sentences per call
+  (`EXTRA_RANGE_SENTENCES` / `BOOK_EXTRA_RANGE_SENTENCES`; only `targets` covers the
+  whole episode) to keep calls far below the 100k-input-token price step. The
+  Claude backend runs with `--model claude-haiku-5-5 --effort medium`
+  (`MINING_CLAUDE_MODEL` / `MINING_CLAUDE_EFFORT`; empty = CLI default), and the
+  service unit tries Claude before Codex (`MINING_ASSIST_BACKENDS=claude,codex`;
+  Codex overrides are opt-in via `MINING_CODEX_MODEL` / `MINING_CODEX_EFFORT`) so
+  imports use less of the shared subscription quota. The page polls
   `GET /assist-runs/{id}` and, when it reopens an import (the active job is
   remembered), re-attaches to a running run or picks up a finished one. The
   review step's "Extras with the assistant" panel is still the client-driven

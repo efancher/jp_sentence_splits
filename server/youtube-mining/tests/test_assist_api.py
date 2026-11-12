@@ -3,6 +3,7 @@ covers routing, the codex->claude fallback and the no-retry error path."""
 
 from __future__ import annotations
 
+import subprocess
 import threading
 import time
 
@@ -129,3 +130,36 @@ def test_concurrent_requests_are_capped_by_the_slot_count(monkeypatch: pytest.Mo
         time.sleep(0.02)
     assert [j.status for j in jobs] == ["done"] * 5
     assert state["peak"] == 2
+
+
+def test_claude_command_pins_model_and_effort(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    seen: list[list[str]] = []
+
+    def fake_run(cmd, prompt, binary, cwd):
+        seen.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0, "ok", "")
+
+    fake_bin = tmp_path / "claude"
+    fake_bin.write_text("")
+    monkeypatch.setattr(assist.config, "CLAUDE_PATH", str(fake_bin))
+    monkeypatch.setattr(assist.config, "CLAUDE_ASSIST_MODEL", "claude-haiku-5-5")
+    monkeypatch.setattr(assist.config, "CLAUDE_ASSIST_EFFORT", "medium")
+    monkeypatch.setattr(assist, "_run", fake_run)
+    assist.run_claude("hi")
+    cmd = seen[0]
+    assert cmd[cmd.index("--model") + 1] == "claude-haiku-5-5"
+    assert cmd[cmd.index("--effort") + 1] == "medium"
+
+    monkeypatch.setattr(assist.config, "CLAUDE_ASSIST_MODEL", "")
+    monkeypatch.setattr(assist.config, "CLAUDE_ASSIST_EFFORT", "")
+    assist.run_claude("hi")
+    assert "--model" not in seen[1] and "--effort" not in seen[1]
+
+
+def test_codex_overrides_are_opt_in(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(assist.config, "CODEX_ASSIST_MODEL", "")
+    monkeypatch.setattr(assist.config, "CODEX_ASSIST_EFFORT", "")
+    assert assist.codex_args() == []
+    monkeypatch.setattr(assist.config, "CODEX_ASSIST_MODEL", "gpt-6-luna")
+    monkeypatch.setattr(assist.config, "CODEX_ASSIST_EFFORT", "medium")
+    assert assist.codex_args() == ["-m", "gpt-6-luna", "-c", 'model_reasoning_effort="medium"']

@@ -204,6 +204,15 @@ ASSIST_BACKENDS = [
     for name in os.environ.get("MINING_ASSIST_BACKENDS", "codex,claude").split(",")
     if name.strip()
 ]
+# Model and reasoning effort passed to the Claude CLI for assistant calls. The
+# CLI's own default is a far bigger model than extras need, and these runs share
+# a subscription's usage with interactive coding, so default to Haiku at medium
+# effort. Set either to an empty string to fall back to the CLI's own default.
+CLAUDE_ASSIST_MODEL = os.environ.get("MINING_CLAUDE_MODEL", "claude-haiku-5-5").strip()
+CLAUDE_ASSIST_EFFORT = os.environ.get("MINING_CLAUDE_EFFORT", "medium").strip()
+# Same idea for the Codex backend, but unset by default so ~/.codex/config.toml still decides.
+CODEX_ASSIST_MODEL = os.environ.get("MINING_CODEX_MODEL", "").strip()
+CODEX_ASSIST_EFFORT = os.environ.get("MINING_CODEX_EFFORT", "").strip()
 ASSIST_TIMEOUT_SECONDS = int(os.environ.get("MINING_ASSIST_TIMEOUT_SECONDS", "600"))
 # Assistant CLI calls allowed at once, across every run. Each call is a node
 # process on an 8 GB box, so keep this low; runs asking for more are clamped.

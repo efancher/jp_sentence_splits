@@ -37,7 +37,7 @@ export interface BookAssistRunSpec {
   concurrency?: number;
 }
 
-export const BOOK_EXTRA_RANGE_SENTENCES = 50;
+export const BOOK_EXTRA_RANGE_SENTENCES = 10;
 /** Walkthroughs are far more output per sentence; 100 per call outran the assistant timeout. */
 const WALKTHROUGH_RANGE_SENTENCES = EXTRA_RANGE_SENTENCES;
 

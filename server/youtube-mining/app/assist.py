@@ -113,6 +113,24 @@ def _run(cmd: list[str], prompt: str, binary: str, cwd: str) -> subprocess.Compl
     return subprocess.CompletedProcess(cmd, proc.returncode, stdout, stderr)
 
 
+def codex_args() -> list[str]:
+    args: list[str] = []
+    if config.CODEX_ASSIST_MODEL:
+        args += ["-m", config.CODEX_ASSIST_MODEL]
+    if config.CODEX_ASSIST_EFFORT:
+        args += ["-c", f'model_reasoning_effort="{config.CODEX_ASSIST_EFFORT}"']
+    return args
+
+
+def claude_args() -> list[str]:
+    args: list[str] = []
+    if config.CLAUDE_ASSIST_MODEL:
+        args += ["--model", config.CLAUDE_ASSIST_MODEL]
+    if config.CLAUDE_ASSIST_EFFORT:
+        args += ["--effort", config.CLAUDE_ASSIST_EFFORT]
+    return args
+
+
 def run_codex(prompt: str) -> str:
     binary = _resolve(config.CODEX_PATH, "codex")
     with tempfile.TemporaryDirectory(prefix="assist-codex-") as tmp:
@@ -124,6 +142,7 @@ def run_codex(prompt: str) -> str:
                 "--skip-git-repo-check",
                 "--sandbox",
                 "read-only",
+                *codex_args(),
                 "-o",
                 str(out_file),
                 "-",
@@ -150,6 +169,7 @@ def run_claude(prompt: str) -> str:
                 "--output-format",
                 "text",
                 "--no-session-persistence",
+                *claude_args(),
                 "--tools",
                 "",
                 "--disable-slash-commands",

@@ -443,6 +443,9 @@ repair tooling, research materials and future roadmap ideas remain available.
   book extras 100→50). Not yet run live: the service needs a restart to pick up
   the new unit/cap, and the 8 GB box's memory under 2–3 concurrent CLIs is
   unmeasured.
+  2026-11-12: extras now use 10-sentence calls everywhere and the assistant
+  defaults to Claude Haiku 5.5 at medium effort (Claude tried before Codex in the
+  unit); needs the unit copied to the box and a restart, not yet run live.
 
 - **Game supply:** the 2026-10-17 production probe found only 30 qualifying Growth
   sentences (none introduced) and one introduced audio-backed Remix skeleton.

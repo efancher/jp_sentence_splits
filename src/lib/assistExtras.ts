@@ -19,7 +19,8 @@ import { EPISODE_PREPARATION_VERSION } from './episodePreparation';
 import { formatGrammarPatternList, type GrammarPatternRef } from './grammarLinkReply';
 import { describeBad, findBadHandles, jsonObject, mergeRepair, stripFences, type BadHandle } from './assistRepair';
 
-export const EXTRA_RANGE_SENTENCES = 15;
+/** Small pieces keep each call far below the 100k-input-token price step and cheap to retry. */
+export const EXTRA_RANGE_SENTENCES = 10;
 const CONTEXT_BEFORE = 3;
 const CONTEXT_AFTER = 2;
 
