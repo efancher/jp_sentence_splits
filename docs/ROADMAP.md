@@ -176,7 +176,8 @@ The items below retain unfinished work, optional refinements and future ideas.
 Unfinished work and optional extensions; completed behavior is in `AI_OVERVIEW.md`.
 
 - [ ] **Assistant model evaluation (cheaper models for extras).** Proposal in
-  [ASSIST_MODEL_EVAL_PLAN.md](ASSIST_MODEL_EVAL_PLAN.md); nothing built. M1: per-request
+  [ASSIST_MODEL_EVAL_PLAN.md](ASSIST_MODEL_EVAL_PLAN.md); M1 code written 2026-11-12
+  (override + `scripts/assist-model-eval.ts`), still to deploy and run. M1: per-request
   model override on `/assist` plus a `scripts/` harness comparing Haiku 5.5 against
   GLM-5.3 / Qwen3.8 Max / Kimi K3 and a stronger ceiling on ~30 own-book sentences
   (validator pass rate, repairs, latency, blind side-by-side review; no gold set).

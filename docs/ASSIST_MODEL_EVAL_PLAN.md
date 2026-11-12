@@ -1,6 +1,11 @@
 # Assistant model evaluation plan (proposal)
 
-Status: proposal, nothing built (2026-11-12). Origin: a critique of an external
+Status: milestone 1 code written, not yet run (2026-11-12): `/assist` accepts `model` and
+`effort` for the requested backend (not yet deployed to the box), and
+`scripts/assist-model-eval.ts` (`sample` / `run` / `report`, helpers in
+`src/lib/assistModelEval.ts`) samples 10-sentence windows from the user's books, runs them
+through the arms, scores them with `validateExtraReply`, and writes a blind review sheet.
+No results yet; milestones 2-3 are proposals. Origin: a critique of an external
 "high-accuracy, low-cost Japanese analysis engine" prompt against this codebase. Most of
 that prompt already exists here (UniDic morphology in the mining service, 10-sentence
 extras calls with context, validators and repair in `src/lib/`, a multi-backend
