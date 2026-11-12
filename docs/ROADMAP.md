@@ -175,6 +175,15 @@ The items below retain unfinished work, optional refinements and future ideas.
 
 Unfinished work and optional extensions; completed behavior is in `AI_OVERVIEW.md`.
 
+- [ ] **Assistant model evaluation (cheaper models for extras).** Proposal in
+  [ASSIST_MODEL_EVAL_PLAN.md](ASSIST_MODEL_EVAL_PLAN.md); nothing built. M1: per-request
+  model override on `/assist` plus a `scripts/` harness comparing Haiku 5.5 against
+  GLM-5.3 / Qwen3.8 Max / Kimi K3 and a stronger ceiling on ~30 own-book sentences
+  (validator pass rate, repairs, latency, blind side-by-side review; no gold set).
+  M2: UniDic facts in the prompt and claim cross-checks. M3: decision gate; verifier or
+  escalation only for error types the runs show. Open risk: whether automated
+  `opencode run` batches fit the OpenCode Go terms.
+
 - [~] **UI load-time and database performance tests, with Supabase usage budgets.**
   (2026-10-18: initial baseline harness and deterministic usage gates implemented.)
   Home/Books/Reader/Review now have repeated document, warm and offline-navigation
