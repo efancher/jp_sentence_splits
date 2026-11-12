@@ -29,10 +29,10 @@ first, then the usual recency/ease ordering.
 
 ## 2. Activity gates
 
-Default is the sentence-led flow (`sentenceLedFlow`, on): word/grammar drills
-are withheld and sentence cards are gated only by having been introduced via
-the gloss walkthrough. The vocabulary gates below apply to the legacy path
-(`sentenceLedFlow: false`) and to the planner/shadowing/games.
+The sentence-led flow is the only flow (the word/grammar drills and the
+`sentenceLedFlow` switch were removed 2026-11-12): sentence cards are gated only
+by having been introduced via the gloss walkthrough. The vocabulary gates below
+are historical for Review and still describe parts of the planner/shadowing/games.
 
 ```mermaid
 flowchart TD

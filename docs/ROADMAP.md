@@ -13,8 +13,8 @@ Original phases match `docs/UNIFIED_APP_ARCHITECTURE.md` §15.
 Phases 0–9 established the unified data model, imports, FSRS, vocabulary/kanji,
 grammar, shadowing and pronunciation feedback. The daily planner, progress
 panels, source resegmentation, podcast/NHK Easy import, read-along, pitch practice
-and short games are implemented. The default sentence-led flow pauses the older
-word/grammar card ladder; its code remains available when that setting is off.
+and short games are implemented. The older word/grammar card ladder was removed
+(2026-11-12); learning is sentence-led and old study items and reviews are kept as evidence.
 
 Completed implementation logs and superseded designs have been pruned from this
 living roadmap. See `AI_OVERVIEW.md` for current behavior, `STATUS_ARCHIVE.md`

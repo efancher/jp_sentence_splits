@@ -11,8 +11,11 @@ moved into `ROADMAP.md`.
   weakest-meaning word's phrase, and the planner drafts one tool per sentence
   per plan. Details in `STATUS.md` and the ROADMAP entry "Separate Dictation and
   Word check from the Fresh try".
-- **Decided, not started in code:** remove the older word/grammar card flow.
-  No source file has been changed for it yet.
+- **Removal done 2026-11-12 (stages 1-5 below):** settings, planner, ReviewPage,
+  dead-code sweep, tests, e2e and docs are updated. Not done: unused-export scan
+  (see stage 4), `GrammarNoticingFlowPage` / `VocabularyReviewPage` kept,
+  `PlannerStepTargetKind` values kept so old saved steps still route, and the
+  Progress velocity panel still reads `countNewVocabularyCardBacklog`.
 
 ## Removal of the word/grammar card flow
 

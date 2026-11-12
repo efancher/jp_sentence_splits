@@ -31,10 +31,11 @@ need forces the issue.
 
 ## Learning mode: sentence-led flow (default since 2026-10-02)
 
-`settings.sentenceLedFlow` (default on, `src/lib/sentenceLed.ts`) makes the
-sentence the unit of study: a finished guided walkthrough seeds one
-`reading_in_context` card; vocabulary and grammar drill cards are neither shown
-nor seeded (existing ones are kept, paused). Anything that decides "has the
+The sentence is the unit of study (`src/lib/sentenceLed.ts`; the old
+`settings.sentenceLedFlow` switch and the word/grammar drill flow were removed
+2026-11-12): a finished guided walkthrough seeds one `reading_in_context` card;
+vocabulary and grammar drill cards are no longer shown or seeded (existing rows
+and reviews are kept as evidence for word strength and progress panels). Anything that decides "has the
 learner met this?" must use the sentence-level signal
 (`getIntroducedSentenceIds`: walked through, started in a book, or has a
 sentence card), not vocabulary-card history or confirmed vocabulary, or it will
@@ -262,7 +263,7 @@ decisions worth knowing before adding one:
 
 ## Sentence-led flow & sequential study
 
-`reading_in_context` ("pick the English meaning") is the main review; guided gloss on the Analyze page is where vocabulary/grammar are learned and wrong answers are revisited. Gated by `settings.sentenceLedFlow` (default on, `src/lib/sentenceLed.ts`), which implies legacy drills paused and sentence-first planning and makes ReviewPage skip the vocabulary-proficiency defers/gates, restricting sentence candidates to *introduced* sentences.
+`reading_in_context` ("pick the English meaning") is the main review; guided gloss on the Analyze page is where vocabulary/grammar are learned and wrong answers are revisited. ReviewPage has no vocabulary-proficiency defers/gates; sentence candidates are restricted to *introduced* sentences (`src/lib/sentenceLed.ts`).
 
 - `src/lib/meaningChoices.ts` (pure): the bank is `ComprehensionCheck.options` + `extraDistractors`; `sampleMeaningQuestion` picks the correct meaning + <=3 least-used distractors, shuffled; validation/merge/removal for authoring. `Review.meaningChoice` records the shown choices and pick (synced as `reviews.meaning_choice`).
 - `src/lib/sequentialStudy.ts` (pure): `qualifyingAttempts`, `unlockProgress`, `computeSequentialStatus`. Repository glue: `getSequentialBookStatus`, `latchSequentialUnlocks` (persists to `settings.sequentialUnlockOverrides`), `getSequentialSentenceView`, `unlockSentenceManually`; `recordReview` latches after sentence reviews and `findExploreCandidates` filters to accessible sentences. UI: `SequentialStudyPanel`/`LockedSentenceNotice`.

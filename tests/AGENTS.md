@@ -10,9 +10,8 @@ this directory and colocated `src/` tests via `vite.config.ts`.
 - Use `withAppProviders` from `src/test/providers.tsx` when the component needs
   auth/sync context, plus an appropriate memory router for route behavior.
   Keep external services mocked; use the real repository for persistence tests.
-- Leave sentence-led mode enabled for default-flow tests. Tests of the legacy
-  word/grammar flow must explicitly disable `sentenceLedFlow` in settings.
-  Include introduced-sentence evidence when testing a gated activity.
+- The word/grammar drill flow no longer exists, so there is no flow switch to
+  set. Include introduced-sentence evidence when testing a gated activity.
 - Assert user-visible outcomes and stored records. Wait for observable state
   with `findBy*`/`waitFor`; await writes before a test ends. A timing failure
   warrants checking the race before raising global timeouts or adding sleeps.

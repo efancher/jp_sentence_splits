@@ -78,7 +78,6 @@
     "diagnose:clause-feedback": "tsx scripts/diagnose-clause-feedback.ts",
     "check:migrations-applied": "tsx scripts/check-migrations-applied.ts",
     "replay:pitch-drill-takes": "tsx scripts/replay-pitch-drill-takes.ts",
-    "report:new-card-backlog": "tsx scripts/report-new-card-backlog.ts",
     "questions:coverage": "tsx scripts/clause-question-coverage.ts",
     "diagnose:gloss-reference": "tsx scripts/diagnose-gloss-reference.ts",
     "diagnose:pitch-range": "tsx scripts/diagnose-pitch-range.ts",

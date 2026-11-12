@@ -219,8 +219,8 @@ have analysis chunks.
 
 > **Sentence-led flow (default):** the main card is one per introduced sentence
 > (**Reading in context** — choose the English meaning, then rate yourself).
-> Word and grammar drill cards below are paused, not deleted: they are neither
-> shown nor created unless you turn off `sentenceLedFlow`. Confirming
+> Word and grammar drill cards below were retired (2026-11-12): they are no
+> longer shown or created, and your past reviews are kept. Confirming
 > vocabulary no longer decides what appears in Review.
 
 **Review** is spaced repetition (FSRS): a self-paced queue you rate

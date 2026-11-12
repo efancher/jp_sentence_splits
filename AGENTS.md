@@ -17,10 +17,11 @@ in this file are relative to the repository root.
   changes separately. If using agents that edit, give each its own worktree.
 - Inspect existing implementations before extending them. Keep the app usable
   without Supabase or the mining/alignment services.
-- Default learning is sentence-led (`settings.sentenceLedFlow`). New eligibility
+- Learning is sentence-led; the word/grammar drill flow and its settings were
+  removed (2026-11-12; old rows and reviews are kept as evidence). New eligibility
   gates use introduced sentences (`getIntroducedSentenceIds` /
-  `filterToIntroducedSentenceIds`), not paused vocabulary/grammar-card history.
-  Preserve the optional older flow. Before changing a gate, check it against
+  `filterToIntroducedSentenceIds`), not vocabulary/grammar-card history.
+  Before changing a gate, check it against
   recently imported data using a read-only diagnostic when access is available;
   otherwise test representative fixtures and state that limitation.
 - FSRS ratings are explicit learner choices. Typed-match feedback, walkthroughs

@@ -48,9 +48,10 @@ with optional Supabase cloud sync and basic book-sharing (invite
 collaborators as editor/viewer).
 
 > **Current learning mode (read before assuming any card or gate exists).** Since
-> 2026-10-02 the app runs the **sentence-led flow** (`settings.sentenceLedFlow`,
-> default on; §4a). The description above and §4 list every activity type the
-> code supports, but by default **vocabulary and grammar cards are not shown and
+> 2026-10-02 the app runs the **sentence-led flow** (§4a; the switch
+> `settings.sentenceLedFlow` and the whole word/grammar drill flow were removed
+> 2026-11-12). The description above and §4 may still list drill activity types
+> that no longer exist; **vocabulary and grammar cards are not shown and
 > not seeded**: new sentences get one `reading_in_context` card (pick the English
 > meaning) when their guided walkthrough finishes. Older word cards (~700, all
 > from before 2026-10-02) still exist but are paused. Consequences for new work:
@@ -257,8 +258,7 @@ built out Phases 1–9):
   a real encounter, matching this app's native-media-first principle at
   the pattern level, not just the example-sentence level.
 - `AppSettings` (singleton) — theme, TTS voice/rate, `newCardsPerSessionLimit`
-  (session planner cap on new-subject introduction), `dailyNewWordQuota`
-  (new vocabulary words Review tops up per day),
+  (session planner cap on new-subject introduction),
   `graduationMinScheduledDays` (retirement threshold from the due
   rotation), `quietMode` (pauses every speak-aloud activity — see the
   session-planner section).
@@ -556,7 +556,7 @@ with no `vocabularyItem` study item yet, invisible to the due-item scan:
 retain-costed minutes plus the same count into `targetCount` and the label
 ("Review N due + introduce M new"), so a big first-review backlog no longer
 loses its minutes to glossing. `ReviewPage` also **tops up new vocabulary
-daily** (2026-09-21, `settings.dailyNewWordQuota`, default 12, `newWordQuota.ts`):
+daily** (2026-09-21, [removed 2026-11-12 with the drill flow]; sentence/audio top-ups remain in `newWordQuota.ts`):
 when it opens it seeds up to the day's quota of never-introduced words
 (`countVocabularyWordsSeededSince` counts from the database, so reopening can't
 exceed it) and appends their cards after the due ones — previously new words
@@ -2228,7 +2228,7 @@ every study item, sorted by due date.
 
 ### 4a. Sentence-led flow & sequential study
 
-Main review activity is picking the English meaning of a Japanese sentence (`reading_in_context`). Each attempt shows the correct meaning plus 3 distractors sampled from the sentence's bank (the 3 original wrong options + `extraDistractors`, target ~10), shuffled and fixed for the attempt; `Review.meaningChoice` stores what was shown and chosen. Wrong answer -> correct meaning shown + link to the Analyze (gloss) page. Sentences are introduced via the guided gloss; word/grammar drill cards are out of the default flow (flag `sentenceLedFlow`, default on) but their data is kept. Optional sequential mode (`sequentialStudyMode`) is episode-first: each chapter opens with its first sentence, learning any sentence opens the rest of that episode (any order), and the explore queue offers the most-learnt episodes first; unlocks are permanent; locked sentences hide only study tools. The bank is repaired/extended from the Analyze page's "Comprehension check" panel. Reverse English->Japanese is deliberately not implemented.
+Main review activity is picking the English meaning of a Japanese sentence (`reading_in_context`). Each attempt shows the correct meaning plus 3 distractors sampled from the sentence's bank (the 3 original wrong options + `extraDistractors`, target ~10), shuffled and fixed for the attempt; `Review.meaningChoice` stores what was shown and chosen. Wrong answer -> correct meaning shown + link to the Analyze (gloss) page. Sentences are introduced via the guided gloss; word/grammar drill cards are out of the default flow (removed 2026-11-12) but their data is kept. Optional sequential mode (`sequentialStudyMode`) is episode-first: each chapter opens with its first sentence, learning any sentence opens the rest of that episode (any order), and the explore queue offers the most-learnt episodes first; unlocks are permanent; locked sentences hide only study tools. The bank is repaired/extended from the Analyze page's "Comprehension check" panel. Reverse English->Japanese is deliberately not implemented.
 
 Review loads meaning-choice history and the latest missed readings only when their
 card becomes active (`getSentenceReviewHistory`, existing IndexedDB indexes). The
