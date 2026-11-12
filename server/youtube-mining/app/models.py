@@ -447,6 +447,10 @@ AssistBackend = Literal["auto", "codex", "claude", "opencode"]
 class AssistRequest(BaseModel):
     prompt: str = Field(min_length=1)
     backend: AssistBackend = "auto"
+    # Per-request model/effort for the requested backend only (model comparison runs); a fallback backend uses its
+    # configured default. Patterns keep a value from being read as a CLI flag.
+    model: str | None = Field(default=None, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,99}$")
+    effort: str | None = Field(default=None, pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]{0,19}$")
 
 
 class AssistCreateResponse(BaseModel):

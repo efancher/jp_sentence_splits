@@ -116,30 +116,39 @@ def _run(cmd: list[str], prompt: str, binary: str, cwd: str) -> subprocess.Compl
     return subprocess.CompletedProcess(cmd, proc.returncode, stdout, stderr)
 
 
+def _override(key: str, configured: str) -> str:
+    """The per-request model/effort for the requested backend, else the configured default."""
+    return (getattr(_ctx, "overrides", None) or {}).get(key) or configured
+
+
 def codex_args() -> list[str]:
     args: list[str] = []
-    if config.CODEX_ASSIST_MODEL:
-        args += ["-m", config.CODEX_ASSIST_MODEL]
-    if config.CODEX_ASSIST_EFFORT:
-        args += ["-c", f'model_reasoning_effort="{config.CODEX_ASSIST_EFFORT}"']
+    model, effort = _override("model", config.CODEX_ASSIST_MODEL), _override("effort", config.CODEX_ASSIST_EFFORT)
+    if model:
+        args += ["-m", model]
+    if effort:
+        args += ["-c", f'model_reasoning_effort="{effort}"']
     return args
 
 
 def claude_args() -> list[str]:
     args: list[str] = []
-    if config.CLAUDE_ASSIST_MODEL:
-        args += ["--model", config.CLAUDE_ASSIST_MODEL]
-    if config.CLAUDE_ASSIST_EFFORT:
-        args += ["--effort", config.CLAUDE_ASSIST_EFFORT]
+    model, effort = _override("model", config.CLAUDE_ASSIST_MODEL), _override("effort", config.CLAUDE_ASSIST_EFFORT)
+    if model:
+        args += ["--model", model]
+    if effort:
+        args += ["--effort", effort]
     return args
 
 
 def opencode_args() -> list[str]:
     args: list[str] = []
-    if config.OPENCODE_ASSIST_MODEL:
-        args += ["-m", config.OPENCODE_ASSIST_MODEL]
-    if config.OPENCODE_ASSIST_EFFORT:
-        args += ["--variant", config.OPENCODE_ASSIST_EFFORT]
+    model = _override("model", config.OPENCODE_ASSIST_MODEL)
+    effort = _override("effort", config.OPENCODE_ASSIST_EFFORT)
+    if model:
+        args += ["-m", model]
+    if effort:
+        args += ["--variant", effort]
     return args
 
 
@@ -259,7 +268,9 @@ def _probe(name: str, abort: threading.Event, finished: threading.Event) -> None
     abort.set()
 
 
-def _execute(job: AssistJob, backends: list[str], prompt: str) -> None:
+def _execute(
+    job: AssistJob, backends: list[str], prompt: str, overrides: dict[str, str] | None = None
+) -> None:
     with _run_slots:
         job.status = "running"
         errors: list[str] = []
@@ -268,6 +279,8 @@ def _execute(job: AssistJob, backends: list[str], prompt: str) -> None:
             job.attempt_started_at = time.time()
             abort, finished = threading.Event(), threading.Event()
             _ctx.abort, _ctx.timeout = abort, None
+            # Only the requested backend (first in the order) gets the override; a fallback runs its own default.
+            _ctx.overrides = overrides if name == backends[0] else None
             threading.Thread(target=_probe, args=(name, abort, finished), daemon=True).start()
             try:
                 job.reply = RUNNERS[name](prompt)
@@ -297,13 +310,17 @@ def _sweep() -> None:
         _jobs.pop(job_id, None)
 
 
-def submit(prompt: str, backend: str = "auto") -> AssistJob:
+def submit(
+    prompt: str, backend: str = "auto", model: str | None = None, effort: str | None = None
+) -> AssistJob:
     job = AssistJob(id=uuid.uuid4().hex)
     with _jobs_lock:
         _sweep()
         _jobs[job.id] = job
     threading.Thread(
-        target=_execute, args=(job, backend_order(backend), prompt), daemon=True
+        target=_execute,
+        args=(job, backend_order(backend), prompt, {k: v for k, v in (("model", model), ("effort", effort)) if v}),
+        daemon=True,
     ).start()
     return job
 
