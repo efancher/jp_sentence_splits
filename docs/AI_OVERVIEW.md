@@ -993,7 +993,7 @@ Targets are constants; no settings UI.
   Claude backend runs with `--model claude-haiku-5-5 --effort medium`
   (`MINING_CLAUDE_MODEL` / `MINING_CLAUDE_EFFORT`; empty = CLI default), and the
   service unit tries Claude before Codex (`MINING_ASSIST_BACKENDS=claude,codex`;
-  Codex overrides are opt-in via `MINING_CODEX_MODEL` / `MINING_CODEX_EFFORT`) so
+  Codex runs `gpt-6-luna` at medium via `MINING_CODEX_MODEL` / `MINING_CODEX_EFFORT`; empty = `~/.codex/config.toml`) so
   imports use less of the shared subscription quota. The page polls
   `GET /assist-runs/{id}` and, when it reopens an import (the active job is
   remembered), re-attaches to a running run or picks up a finished one. The
