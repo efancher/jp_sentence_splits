@@ -6,7 +6,6 @@ import {
   getDb,
   getSessionPlannerInput,
   setChapterSuspended,
-  updateSettings,
 } from '../src/db/repository';
 import { createId } from '../src/lib/ids';
 
@@ -59,7 +58,6 @@ async function seed(status: 'unstarted' | 'complete') {
 describe('suspended chapters in session-planner finders', () => {
   beforeEach(async () => {
     resetDbForTests(`chapter-finders-${createId('db')}`);
-    await updateSettings({ sentenceLedFlow: false });
   });
 
   it('explore candidates skip sentences in a suspended chapter', async () => {

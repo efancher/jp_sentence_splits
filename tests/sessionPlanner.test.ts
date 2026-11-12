@@ -18,7 +18,6 @@ import {
   type ReviewPriorityInput,
   type SessionPlannerInput,
   type ShadowCandidate,
-  type UnderstandCandidate,
 } from '../src/lib/sessionPlanner';
 import { GAME_BREAK_MINUTES, MODE_ACTIVITY_ESTIMATE_MINUTES } from '../src/lib/sessionPlannerConfig';
 
@@ -55,8 +54,6 @@ function emptyPlannerInput(overrides: Partial<SessionPlannerInput> = {}): Sessio
     retainDue: [],
     practiceDue: [],
     exploreCandidates: [],
-    understandCandidates: [],
-    grammarNoticingCandidates: [],
     shadowCandidates: [],
     ...overrides,
   };
@@ -290,7 +287,6 @@ describe('buildRecommendedSession', () => {
         sentences: Array.from({ length: 20 }, (_, i) => ({
           sentenceId: `sent_${i}`,
           preview: 'x',
-          vocabularyConfirmed: false,
         })),
       },
     ];
@@ -321,145 +317,6 @@ describe('buildRecommendedSession', () => {
     for (const step of reviewSteps) expect(step.targetCount).toBeLessThanOrEqual(5);
   });
 
-  it('a new-card backlog produces a review step even with zero due items, capped by the session limit', () => {
-    const session = buildRecommendedSession(
-      emptyPlannerInput({
-        totalMinutes: 60,
-        newCardBacklogCount: 193,
-        newCardsPerSessionLimit: 20,
-      }),
-    );
-    const reviewStep = session.steps.find((step) => step.targetKind === 'review');
-    expect(reviewStep).toBeDefined();
-    expect(reviewStep!.targetCount).toBe(20);
-    expect(reviewStep!.label).toContain('20 new');
-    expect(reviewStep!.estimatedMinutes).toBeGreaterThan(0);
-    expect(session.explanation.some((line) => line.includes('193 words'))).toBe(true);
-  });
-
-  it('names the fix (raise the per-session cap) once the backlog is many sessions away from draining', () => {
-    const farOut = buildRecommendedSession(
-      emptyPlannerInput({
-        totalMinutes: 60,
-        newCardBacklogCount: 300,
-        newCardsPerSessionLimit: 20,
-      }),
-    );
-    expect(
-      farOut.explanation.some((line) => line.includes('~15 daily sessions') && line.includes('Settings')),
-    ).toBe(true);
-
-    // 193/20 rounds up to exactly 10 sessions — at the threshold, not past
-    // it — so the shorter backlog-count line is enough on its own.
-    const atThreshold = buildRecommendedSession(
-      emptyPlannerInput({
-        totalMinutes: 60,
-        newCardBacklogCount: 193,
-        newCardsPerSessionLimit: 20,
-      }),
-    );
-    expect(atThreshold.explanation.some((line) => line.includes('daily sessions'))).toBe(false);
-  });
-
-  it('the new-card backlog reserves review minutes that would otherwise go to glossing', () => {
-    const exploreCandidates: ExploreCandidate[] = [
-      {
-        bookId: 'book_1',
-        label: 'Episode 4',
-        reason: 'Continue',
-        sentences: Array.from({ length: 20 }, (_, i) => ({
-          sentenceId: `sent_${i}`,
-          preview: 'x',
-          vocabularyConfirmed: false,
-        })),
-      },
-    ];
-    const withoutBacklog = buildRecommendedSession(emptyPlannerInput({ exploreCandidates, totalMinutes: 60 }));
-    const withBacklog = buildRecommendedSession(
-      emptyPlannerInput({
-        exploreCandidates,
-        totalMinutes: 60,
-        newCardBacklogCount: 50,
-        newCardsPerSessionLimit: 20,
-      }),
-    );
-    expect(withoutBacklog.allocation.review).toBe(0);
-    expect(withBacklog.allocation.review).toBeGreaterThan(0);
-  });
-
-  it('combines due items and new-card slots into one review step targetCount', () => {
-    const session = buildRecommendedSession(
-      emptyPlannerInput({
-        totalMinutes: 60,
-        retainDue: Array.from({ length: 5 }, (_, i) => dueCandidate({ studyItemId: `d_${i}` })),
-        newCardBacklogCount: 8,
-        newCardsPerSessionLimit: 20,
-      }),
-    );
-    const reviewStep = session.steps.find((step) => step.targetKind === 'review');
-    expect(reviewStep!.targetCount).toBe(13);
-    expect(reviewStep!.label).toContain('introduce 8 new');
-  });
-
-  it('a recently-encountered, not-yet-tracked grammar pattern surfaces as a grammar step with a reason', () => {
-    const understandCandidates: UnderstandCandidate[] = [
-      {
-        grammarPatternId: 'pattern_temo',
-        label: '～ても',
-        reason: 'Encountered 3 times, not tracked yet.',
-        sentenceId: 'sent_5',
-      },
-    ];
-    const session = buildRecommendedSession(
-      emptyPlannerInput({ understandCandidates }),
-    );
-    const step = session.steps.find((s) => s.grammarPatternId === 'pattern_temo');
-    expect(step).toBeDefined();
-    expect(step!.bucket).toBe('grammar');
-    expect(step!.reason).toContain('Encountered 3 times');
-  });
-
-  it('grammar-noticing candidates collapse into a single batched step, capped and carrying every sentenceId', () => {
-    const grammarNoticingCandidates = Array.from({ length: 7 }, (_, i) => ({
-      sentenceId: `notice_${i}`,
-      bookId: 'b1',
-      label: `sentence ${i}`,
-      reason: 'Vocabulary learned — pull out the grammar patterns worth tracking',
-    }));
-    const session = buildRecommendedSession(
-      emptyPlannerInput({
-        grammarNoticingCandidates,
-        baseline: { glossing: 0, grammar: 1, shadowing: 0, review: 0 },
-        totalMinutes: 60,
-      }),
-    );
-    const noticeSteps = session.steps.filter((s) => s.targetKind === 'grammar_noticing');
-    expect(noticeSteps).toHaveLength(1);
-    expect(noticeSteps[0]!.sentenceIds).toEqual([
-      'notice_0',
-      'notice_1',
-      'notice_2',
-      'notice_3',
-    ]);
-    expect(noticeSteps[0]!.label).toBe('Notice grammar in 4 sentences');
-  });
-
-  it('a lone grammar-noticing candidate keeps sentenceId set for coherent-chain ordering', () => {
-    const session = buildRecommendedSession(
-      emptyPlannerInput({
-        grammarNoticingCandidates: [
-          { sentenceId: 'notice_solo', bookId: 'b1', label: 'そうだよね', reason: 'r' },
-        ],
-        baseline: { glossing: 0, grammar: 1, shadowing: 0, review: 0 },
-        totalMinutes: 60,
-      }),
-    );
-    const step = session.steps.find((s) => s.targetKind === 'grammar_noticing');
-    expect(step!.sentenceId).toBe('notice_solo');
-    expect(step!.sentenceIds).toEqual(['notice_solo']);
-    expect(step!.label).toBe('Notice grammar: そうだよね');
-  });
-
   it('a small (10-minute) planning pass produces a small, sensible mix that fits within budget', () => {
     const session = buildRecommendedSession(
       emptyPlannerInput({
@@ -473,12 +330,8 @@ describe('buildRecommendedSession', () => {
             sentences: Array.from({ length: 10 }, (_, i) => ({
               sentenceId: `s${i}`,
               preview: 'x',
-              vocabularyConfirmed: false,
             })),
           },
-        ],
-        understandCandidates: [
-          { grammarPatternId: 'p1', label: '～ても', reason: 'Encountered recently' },
         ],
         shadowCandidates: [{ sentenceId: 's2', label: 'Sentence', reason: 'Not yet shadowed' }],
       }),
@@ -488,7 +341,7 @@ describe('buildRecommendedSession', () => {
     expect(total).toBeLessThanOrEqual(10 + 1);
   });
 
-  it('a large (60-minute) planning pass covers all four buckets when candidates exist for each', () => {
+  it('a large (60-minute) planning pass covers glossing, shadowing and review when candidates exist for each', () => {
     const session = buildRecommendedSession(
       emptyPlannerInput({
         totalMinutes: 60,
@@ -504,13 +357,8 @@ describe('buildRecommendedSession', () => {
             sentences: Array.from({ length: 30 }, (_, i) => ({
               sentenceId: `s${i}`,
               preview: 'x',
-              vocabularyConfirmed: false,
             })),
           },
-        ],
-        understandCandidates: [
-          { grammarPatternId: 'p1', label: '～ても', reason: 'Encountered recently' },
-          { grammarPatternId: 'p2', label: '～わけがない', reason: 'Encountered recently' },
         ],
         shadowCandidates: Array.from({ length: 10 }, (_, i) => ({
           sentenceId: `sh_${i}`,
@@ -520,7 +368,7 @@ describe('buildRecommendedSession', () => {
       }),
     );
     const bucketsPresent = new Set(session.steps.map((step) => step.bucket));
-    expect(bucketsPresent.size).toBe(4);
+    expect([...bucketsPresent].sort()).toEqual(['glossing', 'review', 'shadowing']);
     const total = session.steps.reduce((sum, step) => sum + step.estimatedMinutes, 0);
     expect(total).toBeLessThanOrEqual(60 + 1);
   });
@@ -559,15 +407,9 @@ describe('buildRecommendedSession', () => {
               sentences: Array.from({ length: 50 }, (_, i) => ({
                 sentenceId: `s${i}`,
                 preview: 'x',
-                vocabularyConfirmed: false,
               })),
             },
           ],
-          understandCandidates: Array.from({ length: 10 }, (_, i) => ({
-            grammarPatternId: `p_${i}`,
-            label: `Pattern ${i}`,
-            reason: 'Encountered recently',
-          })),
           shadowCandidates: Array.from({ length: 20 }, (_, i) => ({
             sentenceId: `sh_${i}`,
             label: `Sentence ${i}`,
@@ -648,11 +490,11 @@ describe('buildRecommendedSession', () => {
     const session = buildRecommendedSession(
       emptyPlannerInput({
         totalMinutes: 60,
-        understandCandidates: [
-          { grammarPatternId: 'p1', label: '～ても', reason: 'Encountered recently', sentenceId: 'shared_sentence' },
+        exploreCandidates: [
+          { bookId: 'b1', label: 'Book', reason: 'Continue', sentences: [{ sentenceId: 'shared_sentence', preview: 'x' }] },
         ],
         shadowCandidates: [
-          { sentenceId: 'shared_sentence', label: 'Shared sentence', reason: 'Same sentence as the grammar pattern' },
+          { sentenceId: 'shared_sentence', label: 'Shared sentence', reason: 'Same sentence as the lesson' },
           { sentenceId: 'other_sentence', label: 'Other sentence', reason: 'Unrelated' },
         ],
       }),
@@ -663,154 +505,6 @@ describe('buildRecommendedSession', () => {
     expect(session.explanation.some((line) => line.includes('same sentence'))).toBe(true);
   });
 
-  it('skips a redundant vocabulary_review step for a sentence whose vocab is already confirmed', () => {
-    const exploreCandidates: ExploreCandidate[] = [
-      {
-        bookId: 'book_1',
-        label: 'Book',
-        reason: 'Continue',
-        sentences: [
-          {
-            sentenceId: 'sent_confirmed',
-            preview: 'x',
-            vocabularyConfirmed: true,
-            vocabularyIntroduced: true,
-          },
-        ],
-      },
-    ];
-    const session = buildRecommendedSession(emptyPlannerInput({ exploreCandidates }));
-    const stepsForSentence = session.steps.filter((step) => step.sentenceId === 'sent_confirmed');
-    expect(stepsForSentence).toHaveLength(1);
-    expect(stepsForSentence[0]!.targetKind).toBe('continue_book');
-  });
-
-  it('gives a not-yet-confirmed sentence only a vocabulary_review step, never continue_book in the same pass', () => {
-    const exploreCandidates: ExploreCandidate[] = [
-      {
-        bookId: 'book_1',
-        label: 'Book',
-        reason: 'Continue',
-        sentences: [
-          {
-            sentenceId: 'sent_new',
-            preview: 'x',
-            vocabularyConfirmed: false,
-            vocabularyIntroduced: false,
-          },
-        ],
-      },
-    ];
-    const session = buildRecommendedSession(emptyPlannerInput({ exploreCandidates }));
-    const stepsForSentence = session.steps.filter((step) => step.sentenceId === 'sent_new');
-    expect(stepsForSentence).toHaveLength(1);
-    expect(stepsForSentence[0]!.targetKind).toBe('vocabulary_review');
-  });
-
-  it('gives a confirmed sentence no glossing step at all until its reading/meaning cards have been reviewed once', () => {
-    const exploreCandidates: ExploreCandidate[] = [
-      {
-        bookId: 'book_1',
-        label: 'Book',
-        reason: 'Continue',
-        sentences: [
-          {
-            sentenceId: 'sent_confirmed_unintroduced',
-            preview: 'x',
-            vocabularyConfirmed: true,
-            vocabularyIntroduced: false,
-          },
-        ],
-      },
-    ];
-    const session = buildRecommendedSession(emptyPlannerInput({ exploreCandidates }));
-    expect(session.steps.some((step) => step.sentenceId === 'sent_confirmed_unintroduced')).toBe(false);
-  });
-
-  it('vocabulary confirmations get first claim on the glossing budget, ahead of continue_book for already-confirmed sentences', () => {
-    const exploreCandidates: ExploreCandidate[] = [
-      {
-        bookId: 'book_1',
-        label: 'Book',
-        reason: 'Continue',
-        sentences: [
-          // Confirmed sentences come first in reading order — the planner
-          // still gives vocabulary confirmations first claim on the budget,
-          // so these continue_book steps shouldn't crowd out the unconfirmed
-          // sentences below.
-          { sentenceId: 'ready_1', preview: 'a', vocabularyConfirmed: true, vocabularyIntroduced: true },
-          { sentenceId: 'ready_2', preview: 'b', vocabularyConfirmed: true, vocabularyIntroduced: true },
-          ...Array.from({ length: 20 }, (_, i) => ({
-            sentenceId: `new_${i}`,
-            preview: `n${i}`,
-            vocabularyConfirmed: false,
-            vocabularyIntroduced: false,
-          })),
-        ],
-      },
-    ];
-    const session = buildRecommendedSession(emptyPlannerInput({ totalMinutes: 30, exploreCandidates }));
-    const glossing = session.steps.filter((step) => step.bucket === 'glossing');
-    expect(glossing.length).toBeGreaterThan(2);
-    // The first glossing steps drafted are confirmations, not continue_book.
-    expect(glossing[0]!.targetKind).toBe('vocabulary_review');
-    const vocabMinutes = glossing
-      .filter((step) => step.targetKind === 'vocabulary_review')
-      .reduce((sum, step) => sum + step.estimatedMinutes, 0);
-    const totalGlossingMinutes = glossing.reduce((sum, step) => sum + step.estimatedMinutes, 0);
-    expect(vocabMinutes / totalGlossingMinutes).toBeGreaterThanOrEqual(0.6);
-  });
-
-  it('leaves the whole glossing bucket to structural analysis when there is no confirmation backlog', () => {
-    const exploreCandidates: ExploreCandidate[] = [
-      {
-        bookId: 'book_1',
-        label: 'Book',
-        reason: 'Continue',
-        sentences: Array.from({ length: 10 }, (_, i) => ({
-          sentenceId: `ready_${i}`,
-          preview: `r${i}`,
-          vocabularyConfirmed: true,
-          vocabularyIntroduced: true,
-        })),
-      },
-    ];
-    const session = buildRecommendedSession(emptyPlannerInput({ totalMinutes: 30, exploreCandidates }));
-    const glossing = session.steps.filter((step) => step.bucket === 'glossing');
-    expect(glossing.length).toBeGreaterThan(0);
-    expect(glossing.every((step) => step.targetKind === 'continue_book')).toBe(true);
-  });
-
-  it('gives a continue_book step to a sentence whose vocab is confirmed and introduced even if not yet FSRS-proficient', () => {
-    const exploreCandidates: ExploreCandidate[] = [
-      {
-        bookId: 'book_1',
-        label: 'Book',
-        reason: 'Continue',
-        sentences: [
-          {
-            sentenceId: 'sent_maturing',
-            preview: 'x',
-            vocabularyConfirmed: true,
-            vocabularyIntroduced: true,
-          },
-          {
-            sentenceId: 'sent_next',
-            preview: 'y',
-            vocabularyConfirmed: false,
-            vocabularyIntroduced: false,
-          },
-        ],
-      },
-    ];
-    const session = buildRecommendedSession(emptyPlannerInput({ exploreCandidates }));
-    const maturingSteps = session.steps.filter((step) => step.sentenceId === 'sent_maturing');
-    expect(maturingSteps).toHaveLength(1);
-    expect(maturingSteps[0]!.targetKind).toBe('continue_book');
-    const nextSteps = session.steps.filter((step) => step.sentenceId === 'sent_next');
-    expect(nextSteps).toHaveLength(1);
-    expect(nextSteps[0]!.targetKind).toBe('vocabulary_review');
-  });
 });
 
 describe('game breaks', () => {
@@ -833,13 +527,8 @@ describe('game breaks', () => {
           sentences: Array.from({ length: 30 }, (_, i) => ({
             sentenceId: `s${i}`,
             preview: 'x',
-            vocabularyConfirmed: false,
           })),
         },
-      ],
-      understandCandidates: [
-        { grammarPatternId: 'p1', label: '～ても', reason: 'Encountered recently' },
-        { grammarPatternId: 'p2', label: '～わけがない', reason: 'Encountered recently' },
       ],
       shadowCandidates: Array.from({ length: 10 }, (_, i) => ({
         sentenceId: `sh_${i}`,
@@ -951,15 +640,15 @@ describe('sentence-first planning', () => {
       label: 'Book',
       reason: 'Continue',
       sentences: [
-        { sentenceId: 's_new', preview: '新しい', vocabularyConfirmed: false, vocabularyIntroduced: false },
-        { sentenceId: 's_done', preview: '済み', vocabularyConfirmed: true, vocabularyIntroduced: true },
+        { sentenceId: 's_new', preview: '新しい' },
+        { sentenceId: 's_done', preview: '済み' },
       ],
     },
   ];
 
   it('drafts sentence_learning lessons with zero confirmed vocabulary and no vocabulary steps', () => {
     const session = buildRecommendedSession(
-      emptyPlannerInput({ exploreCandidates, sentenceFirst: true, totalMinutes: 30 }),
+      emptyPlannerInput({ exploreCandidates, totalMinutes: 30 }),
     );
     const kinds = session.steps.map((step) => step.targetKind);
     expect(kinds).toContain('sentence_learning');
@@ -971,18 +660,12 @@ describe('sentence-first planning', () => {
     expect(sessionStepTargetPath({ ...lesson!, status: 'pending' })).toBe('/books/book_1/learn/s_new');
   });
 
-  it('leaves the legacy vocabulary-first behaviour unchanged when the flag is off', () => {
-    const session = buildRecommendedSession(emptyPlannerInput({ exploreCandidates, totalMinutes: 30 }));
-    expect(session.steps.some((step) => step.targetKind === 'sentence_learning')).toBe(false);
-    expect(session.steps.some((step) => step.targetKind === 'vocabulary_review')).toBe(true);
-  });
 });
 
 describe('sentence-first revisits', () => {
   it('puts a fresh-try revisit ahead of first lessons with a reason', () => {
     const session = buildRecommendedSession(
       emptyPlannerInput({
-        sentenceFirst: true,
         totalMinutes: 30,
         exploreCandidates: [
           {
@@ -990,8 +673,8 @@ describe('sentence-first revisits', () => {
             label: 'Book',
             reason: 'Continue',
             sentences: [
-              { sentenceId: 'new1', preview: 'a', vocabularyConfirmed: false, vocabularyIntroduced: false },
-              { sentenceId: 'old1', preview: 'b', vocabularyConfirmed: false, vocabularyIntroduced: false, revisit: true },
+              { sentenceId: 'new1', preview: 'a' },
+              { sentenceId: 'old1', preview: 'b', revisit: true },
             ],
           },
         ],
@@ -1017,14 +700,12 @@ describe('sentence-first planning and due-review time', () => {
           sentences: Array.from({ length: 6 }, (_, i) => ({
             sentenceId: `s${i}`,
             preview: 'x',
-            vocabularyConfirmed: false,
-            vocabularyIntroduced: false,
           })),
         },
       ],
     };
     const off = buildRecommendedSession(emptyPlannerInput(base));
-    const on = buildRecommendedSession(emptyPlannerInput({ ...base, sentenceFirst: true }));
+    const on = buildRecommendedSession(emptyPlannerInput({ ...base }));
     const minutes = (s: typeof on, kind: string) =>
       s.steps.filter((step) => step.targetKind === kind).reduce((t, step) => t + step.estimatedMinutes, 0);
     expect(minutes(on, 'review')).toBe(minutes(off, 'review'));

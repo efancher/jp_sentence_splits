@@ -7,7 +7,6 @@ import {
   getDb,
   getSessionPlannerInput,
   setBookSuspended,
-  updateSettings,
   warmPlannerReads,
 } from '../src/db/repository';
 import type { Sentence } from '../src/domain/types';
@@ -38,7 +37,6 @@ function makeSentence(japanese: string): Sentence {
 describe('planner read cache', () => {
   beforeEach(async () => {
     resetDbForTests(`planner-cache-${createId('db')}`);
-    await updateSettings({ sentenceFirstPlanning: true });
   });
 
   async function addSentences(bookId: string, texts: string[]) {

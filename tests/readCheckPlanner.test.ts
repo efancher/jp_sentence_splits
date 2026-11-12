@@ -42,7 +42,6 @@ describe('Read checks replace sentence review cards in the plan', () => {
   }
 
   async function setup() {
-    await updateSettings({ sentenceFirstPlanning: true });
     const book = await createBook({ title: 'Read Checks' });
     const due = makeSentence('今日は雨です。');
     const justWalked = makeSentence('明日は晴れです。');

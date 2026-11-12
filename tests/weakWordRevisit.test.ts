@@ -11,7 +11,6 @@ import {
   getDb,
   getSessionPlannerInput,
   resetWordStrengthCache,
-  updateSettings,
 } from '../src/db/repository';
 import type { Review, Sentence, SentenceVocabulary } from '../src/domain/types';
 import { createId } from '../src/lib/ids';
@@ -77,7 +76,6 @@ describe('weak words bring walked-through sentences back for a walkthrough', () 
   }
 
   async function setup() {
-    await updateSettings({ sentenceFirstPlanning: true });
     const book = await createBook({ title: 'Weak Revisit' });
     const db = getDb();
     const weak = makeSentence('怪我をしました。');

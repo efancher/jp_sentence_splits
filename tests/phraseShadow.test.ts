@@ -266,7 +266,6 @@ describe('logPhraseShadow and the shadowing pause', () => {
   });
 
   it('pausing sentence shadowing turns the planner shadow candidates into phrase shadows', async () => {
-    await updateSettings({ sentenceLedFlow: false });
     const book = await createBook({ title: 'Pause' });
     const { sentence } = await shadowReadySentence(book, '今日は雨です。');
     const before = await getSessionPlannerInput(60);

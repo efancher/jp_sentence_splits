@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { EarTilesGame } from '../src/components/games/EarTilesGame';
 import { ensureSettings, resetDbForTests } from '../src/db/database';
-import { getDb, updateSettings } from '../src/db/repository';
+import { getDb } from '../src/db/repository';
 import { createId } from '../src/lib/ids';
 import { withAppProviders } from '../src/test/providers';
 
@@ -68,6 +68,8 @@ async function seedSentence(id: string) {
     createdAt: T,
     updatedAt: T,
   } as never);
+  // Met by the learner: the games only serve introduced sentences.
+  await db.sentenceLearningEvents.put({ id: `${id}-walk`, visitId: 'v', sentenceId: id, action: 'walkthrough_completed', timestamp: T } as never);
   await db.sentenceAudio.add({
     id: `${id}-audio`,
     sentenceId: id,
@@ -90,8 +92,6 @@ describe('EarTilesGame', () => {
   beforeEach(async () => {
     resetDbForTests(`ear-tiles-${createId('db')}`);
     await ensureSettings();
-    // The seeded sentences are "introduced" via vocabulary-card history (flow-off rule).
-    await updateSettings({ sentenceLedFlow: false });
   });
 
   it('judges each tile on the tap, costs a point per wrong tile, and logs the round without touching FSRS', async () => {

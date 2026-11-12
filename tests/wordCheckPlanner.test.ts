@@ -10,7 +10,6 @@ import {
   getSessionPlannerInput,
   getWordMeaningCheckTarget,
   resetWordStrengthCache,
-  updateSettings,
 } from '../src/db/repository';
 import type { Sentence, VocabularySuggestion } from '../src/domain/types';
 import { createId } from '../src/lib/ids';
@@ -54,7 +53,6 @@ describe('Word checks are planned on their own, from sentence morphology', () =>
   }
 
   async function setup() {
-    await updateSettings({ sentenceFirstPlanning: true });
     const book = await createBook({ title: 'Word Checks' });
     const ready = makeSentence([['猫', 'cat'], ['が'], ['好き', 'liking'], ['です']]);
     const walkedToday = makeSentence([['犬', 'dog'], ['が'], ['走る', 'to run']]);

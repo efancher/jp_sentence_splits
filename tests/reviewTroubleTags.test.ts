@@ -16,7 +16,6 @@ import {
   recordReviewTroubleTags,
   saveAttempt,
   setBookSentenceStatus,
-  updateSettings,
 } from '../src/db/repository';
 import { normalizeTroubleTags, routeTroubleTags } from '../src/lib/reviewTroubleTags';
 import type { Sentence } from '../src/domain/types';
@@ -133,7 +132,6 @@ describe('recordReviewTroubleTags', () => {
   });
 
   it('a sound tag floats the sentence to the front of shadow candidates until it is shadowed', async () => {
-    await updateSettings({ sentenceLedFlow: false });
     const book = await createBook({ title: 'Shadow Tags' });
     const first = await shadowReadySentence(book, '彼は忙しいです。');
     const flagged = await shadowReadySentence(book, '今日は雨です。');

@@ -9,7 +9,6 @@ import {
   getWeakGrammarSentenceSignal,
   pickGrammarCheckPatternId,
   resetWordStrengthCache,
-  updateSettings,
 } from '../src/db/repository';
 import type { Sentence } from '../src/domain/types';
 import { grammarFeedbackTargetKey } from '../src/lib/grammarEvidence';
@@ -63,7 +62,6 @@ describe('weak grammar brings walked-through sentences back for a walkthrough', 
   }
 
   async function setup() {
-    await updateSettings({ sentenceFirstPlanning: true });
     const book = await createBook({ title: 'Weak Grammar' });
     const weak = makeSentence('食べてみる。');
     const solid = makeSentence('読んでみる。');

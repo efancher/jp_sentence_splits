@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { resetDbForTests } from '../src/db/database';
-import { addMinutesToTodaySession, createBook, getDb, getSessionPlannerInput, updateSettings } from '../src/db/repository';
+import { addMinutesToTodaySession, createBook, getDb, getSessionPlannerInput } from '../src/db/repository';
 import type { Sentence, VocabularySuggestion } from '../src/domain/types';
 import { createId } from '../src/lib/ids';
 import { sessionStepTargetPath } from '../src/lib/sessionPlanner';
@@ -36,7 +36,6 @@ describe('Ear tiles and Dictation steps in the plan', () => {
   });
 
   async function setup() {
-    await updateSettings({ sentenceFirstPlanning: true });
     const book = await createBook({ title: 'Listening' });
     const db = getDb();
     const now = new Date().toISOString();

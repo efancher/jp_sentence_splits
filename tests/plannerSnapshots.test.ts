@@ -14,7 +14,6 @@ import {
   getSessionPlannerInput,
   resetPlannerReadCachesForTests,
   setBookSuspended,
-  updateSettings,
 } from '../src/db/repository';
 import type { BookSentence, Sentence } from '../src/domain/types';
 import { createId } from '../src/lib/ids';
@@ -119,7 +118,6 @@ describe('planner output from snapshots matches the table scans', () => {
     resetDbForTests(`snapshots-parity-${createId('db')}`);
     setSnapshotSaveDelayForTests(0);
     resetPlannerReadCachesForTests();
-    await updateSettings({ sentenceFirstPlanning: true });
   });
 
   it('gives the same candidates whether the reads come from snapshots or from the tables', async () => {

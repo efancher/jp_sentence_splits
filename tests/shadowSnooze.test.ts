@@ -85,7 +85,6 @@ describe('snoozeShadowSentence', () => {
   }
 
   it('drops the sentence from shadow candidates until the snooze ends', async () => {
-    await updateSettings({ sentenceLedFlow: false });
     const book = await createBook({ title: 'Snooze' });
     const kept = await shadowReadySentence(book, '彼は忙しいです。');
     const snoozed = await shadowReadySentence(book, '今日は雨です。');

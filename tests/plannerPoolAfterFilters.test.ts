@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { resetDbForTests } from '../src/db/database';
-import { ensureStudyItem, getDb, getSessionPlannerInput, updateSettings } from '../src/db/repository';
+import { ensureStudyItem, getDb, getSessionPlannerInput } from '../src/db/repository';
 import { createInitialFsrsState } from '../src/lib/scheduling';
 
 beforeEach(async () => {
@@ -10,7 +10,6 @@ beforeEach(async () => {
 
 describe('planner due pool is trimmed after the paused/suspended filters', () => {
   it('keeps a live sentence card when 60+ older paused-drill items are due', async () => {
-    await updateSettings({ sentenceLedFlow: true });
     const db = getDb();
     const old = '2026-08-01T00:00:00.000Z';
     for (let i = 0; i < 70; i += 1) {

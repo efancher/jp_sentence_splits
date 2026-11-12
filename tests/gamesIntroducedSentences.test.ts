@@ -6,7 +6,6 @@ import {
   getDb,
   getRemixData,
   logSentenceLearningEvent,
-  updateSettings,
 } from '../src/db/repository';
 import type { VocabularySuggestion } from '../src/domain/types';
 
@@ -17,18 +16,12 @@ beforeEach(async () => {
 });
 
 describe('filterToIntroducedSentenceIds (the shared /play gate)', () => {
-  it('under the sentence-led flow, a walked-through sentence is introduced without any vocabulary card', async () => {
+  it('a walked-through sentence is introduced without any vocabulary card', async () => {
     await logSentenceLearningEvent({ id: 'e1', visitId: 'v', action: 'walkthrough_completed', sentenceId: 'walked' });
     const introduced = await filterToIntroducedSentenceIds(['walked', 'untouched']);
     expect([...introduced]).toEqual(['walked']);
   });
 
-  it('with the flow off it falls back to the vocabulary-review rule', async () => {
-    await updateSettings({ sentenceLedFlow: false });
-    await logSentenceLearningEvent({ id: 'e2', visitId: 'v', action: 'walkthrough_completed', sentenceId: 'walked' });
-    // No linked words → vacuously ready under the old rule, regardless of the walkthrough.
-    expect((await filterToIntroducedSentenceIds(['walked', 'untouched'])).size).toBe(2);
-  });
 });
 
 // 親鳥がひなに巣を作りました。

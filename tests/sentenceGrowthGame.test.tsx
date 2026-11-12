@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { SentenceGrowthGame } from '../src/components/games/SentenceGrowthGame';
 import { ensureSettings, resetDbForTests } from '../src/db/database';
-import { getDb, updateSettings } from '../src/db/repository';
+import { getDb } from '../src/db/repository';
 import { createId } from '../src/lib/ids';
 import { withAppProviders } from '../src/test/providers';
 
@@ -33,6 +33,8 @@ async function seedSentence(id: string) {
     translation: `Translation of ${id}`, targetVocabulary: [], vocabularySuggestions: tokens as never,
     sourceReferences: [], conflicts: [], firstOccurrenceIndex: 0, importBatchIds: [], createdAt: T, updatedAt: T,
   });
+  // Met by the learner: the games only serve introduced sentences.
+  await db.sentenceLearningEvents.put({ id: `${id}-walk`, visitId: 'v', sentenceId: id, action: 'walkthrough_completed', timestamp: T } as never);
   await db.sentenceAudio.add({
     id: `${id}-audio`, sentenceId: id, sourceId: 'src', sourceSentenceId: id, sourceTitle: 'Source',
     mimeType: 'audio/mpeg', durationMs: 3000, startMs: 0, endMs: 3000, blob: new Blob(['x']), importedAt: T,
@@ -45,8 +47,6 @@ describe('SentenceGrowthGame', () => {
   beforeEach(async () => {
     resetDbForTests(`sentence-growth-${createId('db')}`);
     await ensureSettings();
-    // Introduced via the flow-off rule (no linked words → vacuously met).
-    await updateSettings({ sentenceLedFlow: false });
   });
 
   it('asks who, what, then to whom; a wrong pick is counted; the learner self-rates; the round is logged without touching FSRS', async () => {

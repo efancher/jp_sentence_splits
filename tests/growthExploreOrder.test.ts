@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { resetDbForTests } from '../src/db/database';
-import { addMinutesToTodaySession, addSentencesToBook, createBook, getDb, updateSettings } from '../src/db/repository';
+import { addMinutesToTodaySession, addSentencesToBook, createBook, getDb } from '../src/db/repository';
 import type { Sentence, VocabularySuggestion } from '../src/domain/types';
 import { createId } from '../src/lib/ids';
 
@@ -50,7 +50,6 @@ async function lessonOrder(): Promise<string[]> {
 describe('walkthrough supply: Sentence Growth-eligible lessons float within the existing window', () => {
   beforeEach(async () => {
     resetDbForTests(`growth-order-${createId('db')}`);
-    await updateSettings({ sentenceLedFlow: false, sentenceFirstPlanning: true });
   });
 
   it('puts a qualifying sentence ahead of earlier plain ones, and keeps reading order within each group', async () => {

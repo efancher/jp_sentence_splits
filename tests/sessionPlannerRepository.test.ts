@@ -7,13 +7,11 @@ import {
   computeLearningBalance,
   confirmSentenceVocabulary,
   countAttemptsForSentences,
-  countNewVocabularyCardBacklog,
   createBook,
   deleteTodayPlannerSession,
   endPlannerSessionEarly,
   ensureStudyItem,
   getDb,
-  getPlannerSession,
   getSentenceShadowingReadiness,
   getSessionPlannerInput,
   getTodayPlannerSession,
@@ -24,7 +22,6 @@ import {
   recordReview,
   saveAttempt,
   setBookSentenceStatus,
-  setSentenceGrammarReviewStatus,
   updatePlannerSessionStep,
   requestFreshTry,
   createBookChapter,
@@ -74,8 +71,6 @@ function makeSentence(overrides: Partial<Sentence> = {}): Sentence {
 describe('Learning Orchestrator repository layer', () => {
   beforeEach(async () => {
     resetDbForTests(`session-planner-${createId('db')}`);
-    // These cover the earlier vocabulary-gated flow; the sentence-led flow (default on) has its own tests.
-    await updateSettings({ sentenceLedFlow: false });
   });
 
   it('surfaces unstarted book sentences as an Explore step, with no retain minutes when nothing is due', async () => {
@@ -158,45 +153,6 @@ describe('Learning Orchestrator repository layer', () => {
     expect(ids.indexOf(easyBook.id)).toBeLessThan(ids.indexOf(hardBook.id));
   });
 
-  it('counts confirmed-but-never-introduced words as the new-card backlog, and the planner reserves review minutes for them', async () => {
-    const db = getDb();
-    const now = new Date().toISOString();
-    const book = await createBook({ title: 'Old Book' });
-    const sentence = makeSentence();
-    await db.sentences.put(sentence);
-    await addSentencesToBook(book.id, [sentence.id]);
-
-    // Three confirmed words (surface-form-bearing links); one already has a
-    // study item, so only two are backlog.
-    for (let i = 0; i < 3; i += 1) {
-      await db.vocabularyItems.put({
-        id: `vi_${i}`,
-        expression: `語${i}`,
-        reading: `ご${i}`,
-        meaning: 'word',
-        createdAt: now,
-        updatedAt: now,
-      });
-      await db.sentenceVocabulary.put({
-        id: `sv_${i}`,
-        sentenceId: sentence.id,
-        vocabularyItemId: `vi_${i}`,
-        surfaceForm: `語${i}`,
-        createdAt: now,
-        updatedAt: now,
-      });
-    }
-    await ensureStudyItem('vocabularyItem', 'vi_0', 'reading_retrieval');
-
-    expect(await countNewVocabularyCardBacklog()).toBe(2);
-
-    const recommended = await planRecommendedSession(60);
-    const reviewStep = recommended.steps.find((step) => step.targetKind === 'review');
-    expect(reviewStep).toBeDefined();
-    expect(reviewStep!.targetCount).toBe(2);
-    expect(recommended.allocation.review).toBeGreaterThan(0);
-  });
-
   it('tracks step completion/skip explicitly, and only completes the session once every step is settled', async () => {
     const book = await createBook({ title: 'Continue Me' });
     const db = getDb();
@@ -251,60 +207,7 @@ describe('Learning Orchestrator repository layer', () => {
     expect(second.targetMinutes).toBe(40);
   });
 
-  it('a not-yet-confirmed sentence gets only its vocabulary_review step — continue_book is withheld until vocab is confirmed and proficient (2026-08-27)', async () => {
-    const book = await createBook({ title: 'Continue Me' });
-    const db = getDb();
-    const sentence = makeSentence();
-    await db.sentences.put(sentence);
-    await addSentencesToBook(book.id, [sentence.id]);
-
-    const session = await addMinutesToTodaySession(30);
-    const vocabStep = session.steps.find((step) => step.targetKind === 'vocabulary_review');
-    expect(vocabStep).toBeDefined();
-    expect(vocabStep!.sentenceId).toBe(sentence.id);
-    expect(session.steps.some((step) => step.targetKind === 'continue_book')).toBe(false);
-
-    // The gate reads the sentence's analysis status, not the session step, so
-    // confirming vocabulary (no real vocab items here → immediately "ready")
-    // unlocks the continue_book step on the next day's plan even though the
-    // vocabulary_review step itself was never explicitly settled.
-    await confirmSentenceVocabulary(sentence.id, []);
-    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
-    const nextDaySession = await addMinutesToTodaySession(30, tomorrow);
-    const continueStep = nextDaySession.steps.find((step) => step.targetKind === 'continue_book');
-    expect(continueStep).toBeDefined();
-    expect(continueStep!.sentenceId).toBe(sentence.id);
-  });
-
-  it('prefers a book that still needs vocabulary confirmed over more-recent fully-confirmed books when candidate slots are scarce (2026-08-29)', async () => {
-    const db = getDb();
-
-    // Oldest book: its next sentence still needs vocabulary confirmed.
-    const backlogBook = await createBook({ title: 'Needs Vocab' });
-    const backlogSentence = makeSentence();
-    await db.sentences.put(backlogSentence);
-    await addSentencesToBook(backlogBook.id, [backlogSentence.id]);
-    await db.books.update(backlogBook.id, { lastOpenedAt: '2026-01-01T00:00:00.000Z' });
-
-    // Six more-recent books whose next sentence is already confirmed + proficient —
-    // enough to fill every Explore candidate slot by recency alone.
-    for (let i = 0; i < 6; i += 1) {
-      const book = await createBook({ title: `Confirmed ${i}` });
-      const sentence = makeSentence();
-      await db.sentences.put(sentence);
-      await addSentencesToBook(book.id, [sentence.id]);
-      await confirmSentenceVocabulary(sentence.id, []);
-      await db.books.update(book.id, { lastOpenedAt: `2026-08-2${i}T00:00:00.000Z` });
-    }
-
-    const recommended = await planRecommendedSession(30);
-    const vocabStep = recommended.steps.find((step) => step.targetKind === 'vocabulary_review');
-    expect(vocabStep).toBeDefined();
-    expect(vocabStep!.sentenceId).toBe(backlogSentence.id);
-  });
-
   it('sentence-first planning drafts a lesson at zero vocabulary, and settling it confirms nothing', async () => {
-    await updateSettings({ sentenceFirstPlanning: true });
     const book = await createBook({ title: 'Lesson Book' });
     const db = getDb();
     const sentence = makeSentence();
@@ -329,7 +232,6 @@ describe('Learning Orchestrator repository layer', () => {
   });
 
   it('sentence-first: a sentence walked through on an earlier day comes back as a revisit, not a new lesson', async () => {
-    await updateSettings({ sentenceFirstPlanning: true });
     const book = await createBook({ title: 'Revisit Book' });
     const db = getDb();
     const walked = makeSentence();
@@ -351,7 +253,6 @@ describe('Learning Orchestrator repository layer', () => {
   });
 
   it('sentence-first: due fresh tries in a suspended episode never use up the per-book cap, and the cap lifts when no new lessons wait', async () => {
-    await updateSettings({ sentenceFirstPlanning: true });
     const book = await createBook({ title: 'Episodes' });
     const db = getDb();
     const shelved = [makeSentence(), makeSentence(), makeSentence()];
@@ -382,7 +283,6 @@ describe('Learning Orchestrator repository layer', () => {
   });
 
   it('sentence-first: a review-card fresh-try request jumps the spacing wait until an attempt is logged', async () => {
-    await updateSettings({ sentenceFirstPlanning: true });
     const book = await createBook({ title: 'Request Book' });
     const db = getDb();
     const walked = makeSentence();
@@ -536,59 +436,6 @@ describe('Learning Orchestrator repository layer', () => {
     expect(review.daysSinceLast).toBeCloseTo(1, 1);
   });
 
-  it('gives a sentence no shadow step until its vocabulary is confirmed and proficient (user request, 2026-08-27)', async () => {
-    const book = await createBook({ title: 'Shadow Me' });
-    const db = getDb();
-    const sentence = makeSentence();
-    await db.sentences.put(sentence);
-    await addSentencesToBook(book.id, [sentence.id]);
-    // findShadowCandidates only considers sentences already "in progress" —
-    // marking it unstarted-but-with-audio would exclude it from the pool
-    // for an unrelated reason and defeat this test.
-    await setBookSentenceStatus(book.id, sentence.id, 'in_progress');
-    await db.sentenceAudio.add({
-      id: 'audio-shadow-1',
-      sentenceId: sentence.id,
-      sourceId: 'source-1',
-      sourceSentenceId: 'src-sent-1',
-      sourceTitle: 'Test Source',
-      mimeType: 'audio/mp3',
-      durationMs: 1500,
-      startMs: 0,
-      endMs: 1500,
-      blob: new Blob(['fake audio bytes'], { type: 'audio/mp3' }),
-      importedAt: new Date().toISOString(),
-    });
-
-    const beforeConfirm = await planRecommendedSession(60);
-    expect(beforeConfirm.steps.some((step) => step.targetKind === 'shadow')).toBe(false);
-
-    await confirmSentenceVocabulary(sentence.id, []);
-    const afterConfirm = await planRecommendedSession(60);
-    const shadowStep = afterConfirm.steps.find((step) => step.targetKind === 'shadow');
-    expect(shadowStep).toBeDefined();
-    expect(shadowStep!.sentenceId).toBe(sentence.id);
-
-    // Quiet mode withholds every shadow candidate — the step disappears and
-    // the plan says why. Turning it back off restores it (nothing consumed).
-    await updateSettings({ quietMode: true });
-    const quiet = await planRecommendedSession(60);
-    expect(quiet.steps.some((step) => step.targetKind === 'shadow')).toBe(false);
-    expect(quiet.explanation.some((line) => line.toLowerCase().includes('quiet mode'))).toBe(true);
-
-    await updateSettings({ quietMode: false });
-    const loud = await planRecommendedSession(60);
-    expect(loud.steps.some((step) => step.targetKind === 'shadow')).toBe(true);
-
-    // Phrase shadows (drafted while sentence shadowing is paused) are spoken too, so quiet mode withholds them.
-    await updateSettings({ sentenceShadowingPaused: true });
-    const phrase = await planRecommendedSession(60);
-    expect(phrase.steps.some((step) => step.targetKind === 'shadow' && step.phrase)).toBe(true);
-    await updateSettings({ quietMode: true });
-    const phraseQuiet = await planRecommendedSession(60);
-    expect(phraseQuiet.steps.some((step) => step.targetKind === 'shadow')).toBe(false);
-  });
-
   it('does not re-offer sentences already shadowed today after the session is cleared', async () => {
     const book = await createBook({ title: 'Shadow Twice' });
     const db = getDb();
@@ -630,8 +477,8 @@ describe('Learning Orchestrator repository layer', () => {
     });
     await deleteTodayPlannerSession();
 
-    const again = await planRecommendedSession(60);
-    const order = again.steps.filter((step) => step.targetKind === 'shadow').map((step) => step.sentenceId);
+    // Candidate order, not step order: the plan groups a shadow step with its sentence's lesson.
+    const order = (await getSessionPlannerInput(60)).shadowCandidates.map((candidate) => candidate.sentenceId);
     expect(order[0]).not.toBe(done);
     expect(order).toContain(done);
   });
@@ -682,135 +529,6 @@ describe('Learning Orchestrator repository layer', () => {
     expect(loud.practiceDue.some((d) => d.studyItemId === card.id)).toBe(true);
   });
 
-  it('withholds continue_book until a confirmed word\'s reading/meaning card has been reviewed at least once — pitch-only reps do not count (user report, 2026-09-16)', async () => {
-    const book = await createBook({ title: 'Continue Me' });
-    const db = getDb();
-    const sentence = makeSentence();
-    await db.sentences.put(sentence);
-    await addSentencesToBook(book.id, [sentence.id]);
-
-    await confirmSentenceVocabulary(sentence.id, [makeSelection()]);
-    const link = await db.sentenceVocabulary.where('sentenceId').equals(sentence.id).first();
-    const vocabularyItemId = link!.vocabularyItemId;
-
-    // Confirmed but never reviewed at all (the "皆" case): withheld.
-    const beforeAnyReview = await planRecommendedSession(60);
-    expect(beforeAnyReview.steps.some((step) => step.targetKind === 'continue_book')).toBe(false);
-
-    // A pitch_accent rep alone doesn't count — pitch practice isn't reading/meaning recall.
-    const pitchItem = await ensureStudyItem('vocabularyItem', vocabularyItemId, 'pitch_accent');
-    await recordReview({ studyItemId: pitchItem.id, rating: 'good' });
-    const afterPitchOnly = await planRecommendedSession(60);
-    expect(afterPitchOnly.steps.some((step) => step.targetKind === 'continue_book')).toBe(false);
-
-    // One reading/meaning rep unlocks it, even far short of FSRS proficiency.
-    const readingItem = await ensureStudyItem('vocabularyItem', vocabularyItemId, 'reading_retrieval');
-    await recordReview({ studyItemId: readingItem.id, rating: 'good' });
-    const afterReadingRep = await planRecommendedSession(60);
-    const continueStep = afterReadingRep.steps.find((step) => step.targetKind === 'continue_book');
-    expect(continueStep).toBeDefined();
-    expect(continueStep!.sentenceId).toBe(sentence.id);
-  });
-
-  it('withholds a shadow step until a confirmed word has been seen at least once in reading/meaning — pitch proficiency is not required and full reading proficiency is not required either (both loosened 2026-09-28: shadowing is meant to build pitch accent and reading fluency, not require either mastered first)', async () => {
-    const book = await createBook({ title: 'Shadow Me' });
-    const db = getDb();
-    const sentence = makeSentence();
-    await db.sentences.put(sentence);
-    await addSentencesToBook(book.id, [sentence.id]);
-    await setBookSentenceStatus(book.id, sentence.id, 'in_progress');
-    await db.sentenceAudio.add({
-      id: 'audio-shadow-2',
-      sentenceId: sentence.id,
-      sourceId: 'source-1',
-      sourceSentenceId: 'src-sent-1',
-      sourceTitle: 'Test Source',
-      mimeType: 'audio/mp3',
-      durationMs: 1500,
-      startMs: 0,
-      endMs: 1500,
-      blob: new Blob(['fake audio bytes'], { type: 'audio/mp3' }),
-      importedAt: new Date().toISOString(),
-    });
-    await confirmSentenceVocabulary(sentence.id, [makeSelection()]);
-    const link = await db.sentenceVocabulary.where('sentenceId').equals(sentence.id).first();
-    const vocabularyItemId = link!.vocabularyItemId;
-    // Dictionary-pitch-eligible, but pitch is never touched below — proves
-    // shadowing readiness no longer keys on it at all.
-    await db.vocabularyItems.update(vocabularyItemId, { pitchAccentPositions: [1] });
-
-    // Not reviewed yet at all: withheld.
-    const beforeAnyReview = await planRecommendedSession(60);
-    expect(beforeAnyReview.steps.some((step) => step.targetKind === 'shadow')).toBe(false);
-
-    // One reading/meaning rep — even a miss — introduces the word (left FSRS
-    // 'new'), far short of full proficiency; pitch never reviewed at all:
-    // shadow is eligible immediately.
-    const readingItem = await ensureStudyItem('vocabularyItem', vocabularyItemId, 'reading_retrieval');
-    await recordReview({ studyItemId: readingItem.id, rating: 'again' });
-    const afterOneRep = await planRecommendedSession(60);
-    const shadowStep = afterOneRep.steps.find((step) => step.targetKind === 'shadow');
-    expect(shadowStep).toBeDefined();
-    expect(shadowStep!.sentenceId).toBe(sentence.id);
-  });
-
-  it('surfaces a worked-through, vocab-ready sentence as a grammar_noticing step, gated on vocab and cleared once grammar is marked reviewed', async () => {
-    const book = await createBook({ title: 'Notice Me' });
-    const db = getDb();
-    const sentence = makeSentence();
-    await db.sentences.put(sentence);
-    await addSentencesToBook(book.id, [sentence.id]);
-    await setBookSentenceStatus(book.id, sentence.id, 'complete');
-
-    // Worked through, but vocab not confirmed yet → no nudge.
-    const beforeConfirm = await planRecommendedSession(60);
-    expect(beforeConfirm.steps.some((step) => step.targetKind === 'grammar_noticing')).toBe(false);
-
-    await confirmSentenceVocabulary(sentence.id, []);
-    const afterConfirm = await planRecommendedSession(60);
-    const noticeStep = afterConfirm.steps.find((step) => step.targetKind === 'grammar_noticing');
-    expect(noticeStep).toBeDefined();
-    expect(noticeStep!.sentenceId).toBe(sentence.id);
-    expect(noticeStep!.bucket).toBe('grammar');
-
-    await setSentenceGrammarReviewStatus(sentence.id, 'confirmed');
-    const afterReview = await planRecommendedSession(60);
-    expect(afterReview.steps.some((step) => step.targetKind === 'grammar_noticing')).toBe(false);
-  });
-
-  it('batches several worked-through sentences into one grammar_noticing step, and completing it confirms every sentence still open', async () => {
-    const book = await createBook({ title: 'Notice Us' });
-    const db = getDb();
-    const sentences = [makeSentence(), makeSentence(), makeSentence()];
-    await db.sentences.bulkPut(sentences);
-    await addSentencesToBook(
-      book.id,
-      sentences.map((s) => s.id),
-    );
-    for (const sentence of sentences) {
-      await setBookSentenceStatus(book.id, sentence.id, 'complete');
-      await confirmSentenceVocabulary(sentence.id, []);
-    }
-
-    const session = await addMinutesToTodaySession(60);
-    const noticeSteps = session.steps.filter((step) => step.targetKind === 'grammar_noticing');
-    expect(noticeSteps).toHaveLength(1);
-    expect(new Set(noticeSteps[0]!.sentenceIds)).toEqual(new Set(sentences.map((s) => s.id)));
-
-    // Learner closes one sentence in the flow itself, then marks the step done.
-    await setSentenceGrammarReviewStatus(sentences[0]!.id, 'confirmed');
-    await updatePlannerSessionStep(session.id, noticeSteps[0]!.id, { status: 'completed' });
-
-    for (const sentence of sentences) {
-      expect((await db.analyses.get(sentence.id))!.grammarReviewStatus).toBe('confirmed');
-    }
-
-    // All confirmed → no noticing step re-drafted the next day.
-    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
-    const day2 = await addMinutesToTodaySession(30, tomorrow);
-    expect(day2.steps.some((step) => step.targetKind === 'grammar_noticing')).toBe(false);
-  });
-
   it('deleteTodayPlannerSession removes today\'s session entirely, letting the next Start build a fresh one (user request, 2026-08-27: "clear out a session created with the wrong split")', async () => {
     const book = await createBook({ title: 'Continue Me' });
     const db = getDb();
@@ -839,93 +557,6 @@ describe('Learning Orchestrator repository layer', () => {
     await expect(deleteTodayPlannerSession()).resolves.toBeUndefined();
   });
 
-  it('doing the work in place does not settle its session step — that is Mark complete\'s job only (2026-08-27)', async () => {
-    const book = await createBook({ title: 'Continue Me' });
-    const db = getDb();
-    const sentence = makeSentence();
-    await db.sentences.put(sentence);
-    await addSentencesToBook(book.id, [sentence.id]);
-
-    const session = await addMinutesToTodaySession(30);
-    const vocabStep = session.steps.find((step) => step.targetKind === 'vocabulary_review');
-    expect(vocabStep!.sentenceId).toBe(sentence.id);
-
-    // Confirming vocabulary records the confirmation but leaves the step alone.
-    await confirmSentenceVocabulary(sentence.id, []);
-    let updated = await getPlannerSession(session.id);
-    expect(updated!.steps.find((step) => step.id === vocabStep!.id)!.status).not.toBe('completed');
-
-    // Only an explicit Mark complete settles it.
-    await updatePlannerSessionStep(session.id, vocabStep!.id, { status: 'completed' });
-    updated = await getPlannerSession(session.id);
-    expect(updated!.steps.find((step) => step.id === vocabStep!.id)!.status).toBe('completed');
-
-    // Next day: the now-confirmed, ready sentence yields a continue_book step,
-    // and finishing the sentence likewise does not settle it on its own.
-    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
-    const nextDaySession = await addMinutesToTodaySession(30, tomorrow);
-    const continueStep = nextDaySession.steps.find((step) => step.targetKind === 'continue_book');
-    expect(continueStep!.sentenceId).toBe(sentence.id);
-
-    await setBookSentenceStatus(book.id, sentence.id, 'complete');
-    updated = await getPlannerSession(nextDaySession.id);
-    expect(updated!.steps.find((step) => step.id === continueStep!.id)!.status).not.toBe('completed');
-  });
-
-  it('completing a glossing/grammar step advances its underlying marker so the planner stops re-proposing it (user report, 2026-09-06)', async () => {
-    const book = await createBook({ title: 'Continue Me' });
-    const db = getDb();
-    const sentence = makeSentence();
-    await db.sentences.put(sentence);
-    await addSentencesToBook(book.id, [sentence.id]);
-
-    // Day 1: confirm vocab (no real items → immediately "ready") so the plan
-    // offers the continue_book (structural analysis) step.
-    await confirmSentenceVocabulary(sentence.id, []);
-    const day1 = await addMinutesToTodaySession(30);
-    const continueStep = day1.steps.find((step) => step.targetKind === 'continue_book');
-    expect(continueStep!.sentenceId).toBe(sentence.id);
-
-    // Completing it marks the book sentence complete...
-    await updatePlannerSessionStep(day1.id, continueStep!.id, { status: 'completed' });
-    const membership = await db.bookSentences
-      .where('[bookId+sentenceId]')
-      .equals([book.id, sentence.id])
-      .first();
-    expect(membership!.status).toBe('complete');
-
-    // ...so day 2 no longer re-drafts the same continue_book step. The now
-    // worked-through sentence surfaces as a grammar_noticing nudge instead.
-    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
-    const day2 = await addMinutesToTodaySession(30, tomorrow);
-    expect(day2.steps.some((step) => step.targetKind === 'continue_book')).toBe(false);
-    const noticeStep = day2.steps.find((step) => step.targetKind === 'grammar_noticing');
-    expect(noticeStep!.sentenceId).toBe(sentence.id);
-
-    // Completing the grammar-noticing step flips grammarReviewStatus, which is
-    // what drops the sentence from that nudge's pool.
-    await updatePlannerSessionStep(day2.id, noticeStep!.id, { status: 'completed' });
-    expect((await db.analyses.get(sentence.id))!.grammarReviewStatus).toBe('confirmed');
-
-    const dayAfter = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
-    const day3 = await addMinutesToTodaySession(30, dayAfter);
-    expect(day3.steps.some((step) => step.targetKind === 'grammar_noticing')).toBe(false);
-  });
-
-  it('skipping a glossing step does not advance its underlying marker', async () => {
-    const book = await createBook({ title: 'Continue Me' });
-    const db = getDb();
-    const sentence = makeSentence();
-    await db.sentences.put(sentence);
-    await addSentencesToBook(book.id, [sentence.id]);
-
-    const session = await addMinutesToTodaySession(30);
-    const vocabStep = session.steps.find((step) => step.targetKind === 'vocabulary_review');
-    await updatePlannerSessionStep(session.id, vocabStep!.id, { status: 'skipped' });
-    const analysis = await db.analyses.get(sentence.id);
-    expect(analysis?.vocabularyReviewStatus ?? 'unreviewed').not.toBe('confirmed');
-  });
-
   it('countAttemptsForSentences tallies recorded attempts so a shadow step subtitle can stay current', async () => {
     const db = getDb();
     const s1 = makeSentence();
@@ -947,8 +578,7 @@ describe('Learning Orchestrator repository layer', () => {
     expect(shadowAttemptSummary(0)).toBe('Not shadowed yet');
   });
 
-  it('under the sentence-led flow, shadowing readiness needs only the sentence being introduced — no confirmed vocabulary or vocabulary-card reviews required', async () => {
-    await updateSettings({ sentenceLedFlow: true });
+  it('shadowing readiness needs only the sentence being introduced — no confirmed vocabulary or vocabulary-card reviews required', async () => {
     const book = await createBook({ title: 'Led Shadow' });
     const db = getDb();
     const sentence = makeSentence();
@@ -966,132 +596,27 @@ describe('Learning Orchestrator repository layer', () => {
       sentenceId: sentence.id,
     });
     expect((await getSentenceShadowingReadiness([sentence.id])).get(sentence.id)).toBe(true);
-
-    // Flow off: confirmed vocabulary and the word-introduced ratio apply again.
-    await confirmSentenceVocabulary(sentence.id, [makeSelection()]);
-    await updateSettings({ sentenceLedFlow: false });
-    expect((await getSentenceShadowingReadiness([sentence.id])).get(sentence.id)).toBe(false);
   });
 
-  it('floats a sentence to the front of shadow candidates once its cloze card is missed twice in a row (cross-activity error routing)', async () => {
-    const book = await createBook({ title: 'Shadow Cross-Activity' });
-    const db = getDb();
-    const missedSentence = makeSentence({ japanese: '彼は忙しいです。' });
-    const otherSentence = makeSentence({ japanese: '猫が寝ています。' });
-    await db.sentences.bulkPut([missedSentence, otherSentence]);
-    await addSentencesToBook(book.id, [missedSentence.id, otherSentence.id]);
-    for (const sentence of [missedSentence, otherSentence]) {
-      await setBookSentenceStatus(book.id, sentence.id, 'in_progress');
-      await confirmSentenceVocabulary(sentence.id, []);
-      await db.sentenceAudio.add({
-        id: `audio-${sentence.id}`,
-        sentenceId: sentence.id,
-        sourceId: 'source-1',
-        sourceSentenceId: `src-${sentence.id}`,
-        sourceTitle: 'Test Source',
-        mimeType: 'audio/mp3',
-        durationMs: 1500,
-        startMs: 0,
-        endMs: 1500,
-        blob: new Blob(['fake audio bytes'], { type: 'audio/mp3' }),
-        importedAt: new Date().toISOString(),
-      });
-    }
-
-    const beforeMiss = await getSessionPlannerInput(60);
-    const beforeIds = beforeMiss.shadowCandidates.map((candidate) => candidate.sentenceId);
-    expect(beforeIds).toContain(missedSentence.id);
-    expect(beforeIds).toContain(otherSentence.id);
-
-    const clozeItem = await ensureStudyItem('vocabularyItem', 'vocab-cross-activity', 'cloze');
-    await recordReview({ studyItemId: clozeItem.id, rating: 'again', contextSentenceId: missedSentence.id });
-    await recordReview({ studyItemId: clozeItem.id, rating: 'hard', contextSentenceId: missedSentence.id });
-
-    // Sentence-led flow (default) pauses cards, so a stale miss must not pin a sentence to the front.
-    await updateSettings({ sentenceLedFlow: true });
-    const pausedMiss = await getSessionPlannerInput(60);
-    expect(pausedMiss.shadowCandidates.every((candidate) => !candidate.reason.startsWith('Missed in review'))).toBe(true);
-
-    await updateSettings({ sentenceLedFlow: false });
-    const afterMiss = await getSessionPlannerInput(60);
-    expect(afterMiss.shadowCandidates[0]?.sentenceId).toBe(missedSentence.id);
-    expect(afterMiss.shadowCandidates[0]?.reason).toBe('Missed in review — not shadowed yet');
-  });
-
-  it('flags a grammar_completion item with crossActivityMissBoost once its sentence\'s sentence_transformation card is missed twice (cross-activity error routing)', async () => {
-    const db = getDb();
-    const sentence = makeSentence({ japanese: 'これはテストです。' });
-    await db.sentences.put(sentence);
-
-    const vocabLinkId = createId('sv');
-    await db.sentenceVocabulary.put({
-      id: vocabLinkId,
-      sentenceId: sentence.id,
-      vocabularyItemId: createId('vocab_item'),
-      surfaceForm: 'テスト',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    });
-    const transformationItem = await ensureStudyItem(
-      'sentenceVocabulary',
-      vocabLinkId,
-      'sentence_transformation',
-    );
-    await recordReview({ studyItemId: transformationItem.id, rating: 'again', contextSentenceId: sentence.id });
-    await recordReview({ studyItemId: transformationItem.id, rating: 'again', contextSentenceId: sentence.id });
-
-    const patternId = createId('grammar_pattern');
-    await db.grammarPatterns.put({
-      id: patternId,
-      canonicalName: '～です',
-      normalizedKey: 'です',
-      aliases: [],
-      shortMeaning: 'copula',
-      provenance: 'manual',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    });
-    await db.sentenceGrammar.put({
-      id: createId('sg'),
-      sentenceId: sentence.id,
-      grammarPatternId: patternId,
-      confirmedByLearner: true,
-      source: 'manual',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    });
-    await ensureStudyItem('grammarPattern', patternId, 'grammar_completion');
-
-    const input = await getSessionPlannerInput(60);
-    const grammarInput = input.practiceDue.find((item) => item.subjectType === 'grammarPattern');
-    expect(grammarInput?.crossActivityMissBoost).toBe(true);
-  });
 });
 
-describe('pause word & grammar drills', () => {
+describe('retired word & grammar drills', () => {
   beforeEach(async () => {
     resetDbForTests(`session-planner-${createId('db')}`);
-    // These cover the earlier vocabulary-gated flow; the sentence-led flow (default on) has its own tests.
-    await updateSettings({ sentenceLedFlow: false });
   });
 
-  it('withholds vocabulary due items from the planner input and keeps sentence cards', async () => {
+  it('leaves vocabulary due items out of the planner input and keeps sentence cards', async () => {
     const vocab = await ensureStudyItem('vocabularyItem', 'v1', 'reading_retrieval');
     const sent = await ensureStudyItem('sentence', 's1', 'reading_in_context');
     const past = new Date(Date.now() - 86400000).toISOString();
     for (const item of [vocab, sent]) {
       await getDb().studyItems.update(item.id, { fsrsState: { ...item.fsrsState, due: past } });
     }
-    const ids = async () => {
-      const input = await getSessionPlannerInput(30, new Date());
-      return [...input.retainDue, ...input.practiceDue].map((item) => item.studyItemId);
-    };
-    expect(await ids()).toContain(vocab.id);
-    await updateSettings({ legacyDrillsPaused: true });
-    const paused = await ids();
-    expect(paused).not.toContain(vocab.id);
-    expect(paused).toContain(sent.id);
-    await updateSettings({ legacyDrillsPaused: false });
-    expect(await ids()).toContain(vocab.id);
+    const input = await getSessionPlannerInput(30, new Date());
+    const ids = [...input.retainDue, ...input.practiceDue].map((item) => item.studyItemId);
+    expect(ids).not.toContain(vocab.id);
+    expect(ids).toContain(sent.id);
+    // The retired card itself is untouched.
+    expect(await getDb().studyItems.get(vocab.id)).toBeTruthy();
   });
 });

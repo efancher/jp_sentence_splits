@@ -18,7 +18,6 @@ import {
   getWordDetectiveCandidates,
   logGameRound,
   recordReview,
-  updateSettings,
 } from '../src/db/repository';
 import type { GrammarPattern, Sentence, SentenceGrammar, SentenceVocabulary } from '../src/domain/types';
 import { createId } from '../src/lib/ids';
@@ -26,7 +25,9 @@ import { introduceWords } from './introduceWords';
 
 const T = '2026-09-19T00:00:00Z';
 
-async function addSentence(id: string, japanese: string, overrides: Partial<Sentence> = {}) {
+/** Adds a sentence the learner has met (walked through), unless `introduced` is false. */
+async function addSentence(id: string, japanese: string, overrides: Partial<Sentence> = {}, introduced = true) {
+  if (introduced) await markWalked(id);
   await getDb().sentences.add({
     id,
     normalizedKey: id,
@@ -44,6 +45,12 @@ async function addSentence(id: string, japanese: string, overrides: Partial<Sent
     updatedAt: T,
     ...overrides,
   });
+}
+
+async function markWalked(sentenceId: string) {
+  await getDb().sentenceLearningEvents.put({
+    id: createId('sle'), visitId: 'v', sentenceId, action: 'walkthrough_completed', timestamp: T,
+  } as never);
 }
 
 async function addLink(sentenceId: string, vocabularyItemId: string, surfaceForm?: string) {
@@ -72,8 +79,6 @@ async function addWord(id: string, expression: string, reading: string) {
 describe('game repository', () => {
   beforeEach(async () => {
     await resetDbForTests(`game-repo-${createId('db')}`);
-    // These tests seed vocabulary-card history, the pre-sentence-led notion of \"introduced\".
-    await updateSettings({ sentenceLedFlow: false });
   });
 
   it('returns only words met in 2+ confirmed sentences, with card stats', async () => {
@@ -92,15 +97,16 @@ describe('game repository', () => {
     expect(candidates[0]!.stats.hasCard).toBe(true);
   });
 
-  it('drops sentences whose words have never been reviewed', async () => {
+  it('drops sentences the learner has not met yet', async () => {
     await addWord('vi-two', '猫', 'ねこ');
-    await addSentence('s1', '猫が寝る。');
-    await addSentence('s2', '黒い猫だ。');
+    await addSentence('s1', '猫が寝る。', {}, false);
+    await addSentence('s2', '黒い猫だ。', {}, false);
     await addLink('s1', 'vi-two', '猫');
     await addLink('s2', 'vi-two', '猫');
 
     expect(await getWordDetectiveCandidates()).toEqual([]);
-    await introduceWords(['vi-two']);
+    await markWalked('s1');
+    await markWalked('s2');
     expect((await getWordDetectiveCandidates()).map((c) => c.id)).toEqual(['vi-two']);
   });
 
@@ -240,7 +246,6 @@ describe('grammar detective repository', () => {
   beforeEach(async () => {
     await resetDbForTests(`game-repo-${createId('db')}`);
     // These tests seed vocabulary-card history, the pre-sentence-led notion of \"introduced\".
-    await updateSettings({ sentenceLedFlow: false });
   });
 
   it('plays a pattern from a single tracked, translated sentence', async () => {
@@ -310,7 +315,6 @@ describe('particle puzzle repository', () => {
   beforeEach(async () => {
     await resetDbForTests(`game-repo-${createId('db')}`);
     // These tests seed vocabulary-card history, the pre-sentence-led notion of \"introduced\".
-    await updateSettings({ sentenceLedFlow: false });
   });
 
   async function addParticleSentence(id: string, status: 'confirmed' | 'unreviewed') {
@@ -386,7 +390,6 @@ describe('odd ear out repository', () => {
   beforeEach(async () => {
     await resetDbForTests(`game-repo-${createId('db')}`);
     // These tests seed vocabulary-card history, the pre-sentence-led notion of \"introduced\".
-    await updateSettings({ sentenceLedFlow: false });
   });
 
   /**
@@ -570,7 +573,6 @@ describe('speaker match repository', () => {
   beforeEach(async () => {
     await resetDbForTests(`game-repo-${createId('db')}`);
     // These tests seed vocabulary-card history, the pre-sentence-led notion of \"introduced\".
-    await updateSettings({ sentenceLedFlow: false });
   });
 
   /** One playable citation-form clip of `itemId` mined into `bookId`. */
@@ -678,7 +680,6 @@ describe('then and now repository', () => {
   beforeEach(async () => {
     await resetDbForTests(`game-repo-${createId('db')}`);
     // These tests seed vocabulary-card history, the pre-sentence-led notion of \"introduced\".
-    await updateSettings({ sentenceLedFlow: false });
   });
 
   const NOW = new Date('2026-09-27T00:00:00Z');
@@ -774,7 +775,6 @@ describe('verb lego repository', () => {
   beforeEach(async () => {
     await resetDbForTests(`game-repo-${createId('db')}`);
     // These tests seed vocabulary-card history, the pre-sentence-led notion of \"introduced\".
-    await updateSettings({ sentenceLedFlow: false });
   });
 
   /** 「事実の後、聞かれた。」 with real-style UniDic tokens (聞か[聞く] + れ[れる] + た[た]). */
@@ -847,7 +847,6 @@ describe('ear tiles repository', () => {
   beforeEach(async () => {
     await resetDbForTests(`game-repo-${createId('db')}`);
     // These tests seed vocabulary-card history, the pre-sentence-led notion of \"introduced\".
-    await updateSettings({ sentenceLedFlow: false });
   });
 
   const pieces: [string, string][] = [
@@ -971,7 +970,6 @@ describe('keystone repository', () => {
   beforeEach(async () => {
     await resetDbForTests(`game-repo-${createId('db')}`);
     // These tests seed vocabulary-card history, the pre-sentence-led notion of \"introduced\".
-    await updateSettings({ sentenceLedFlow: false });
   });
 
   async function addBook(id: string, overrides: Record<string, unknown> = {}) {

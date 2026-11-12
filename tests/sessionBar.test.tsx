@@ -11,7 +11,6 @@ import {
   createBook,
   getDb,
   getPlannerSession,
-  updateSettings,
 } from '../src/db/repository';
 import type { PlannerSession } from '../src/domain/types';
 import { createId } from '../src/lib/ids';
@@ -38,7 +37,7 @@ function makeSentence(id: string) {
   };
 }
 
-async function seedSessionWithTwoVocabSteps(): Promise<PlannerSession> {
+async function seedSessionWithTwoLessonSteps(): Promise<PlannerSession> {
   const book = await createBook({ title: 'Continue Me' });
   const db = getDb();
   const sentences = [makeSentence(createId('sent')), makeSentence(createId('sent'))];
@@ -64,12 +63,11 @@ describe('SessionBar', () => {
   beforeEach(async () => {
     resetDbForTests(`session-bar-${createId('db')}`);
     await ensureSettings();
-    await updateSettings({ sentenceLedFlow: false });
   });
 
   it('on a pending step\'s own page, names that step and "Mark complete" settles exactly it', async () => {
-    const session = await seedSessionWithTwoVocabSteps();
-    const [first, second] = session.steps.filter((s) => s.targetKind === 'vocabulary_review');
+    const session = await seedSessionWithTwoLessonSteps();
+    const [first, second] = session.steps.filter((s) => s.targetKind === 'sentence_learning');
 
     renderBarAt(sessionStepTargetPath(first!)!);
 
@@ -85,8 +83,8 @@ describe('SessionBar', () => {
   });
 
   it('on an unrelated page, offers "Resume" (navigate only) instead of "Mark complete"', async () => {
-    const session = await seedSessionWithTwoVocabSteps();
-    const [first] = session.steps.filter((s) => s.targetKind === 'vocabulary_review');
+    const session = await seedSessionWithTwoLessonSteps();
+    const [first] = session.steps.filter((s) => s.targetKind === 'sentence_learning');
 
     renderBarAt('/books');
 
@@ -99,7 +97,7 @@ describe('SessionBar', () => {
     expect(updated!.steps.every((s) => s.status === 'pending' || s.status === 'active')).toBe(true);
   });
   it('matches a step whose target path carries a query string (notice-grammar)', async () => {
-    const session = await seedSessionWithTwoVocabSteps();
+    const session = await seedSessionWithTwoLessonSteps();
     const now = new Date().toISOString();
     const noticing = {
       ...session.steps[0]!,

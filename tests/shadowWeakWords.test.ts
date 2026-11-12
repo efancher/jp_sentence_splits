@@ -12,7 +12,6 @@ import {
   getWeakWordRecallTarget,
   getWeakWordSentenceSignal,
   setBookSentenceStatus,
-  updateSettings,
 } from '../src/db/repository';
 import type { Review, Sentence, SentenceVocabulary } from '../src/domain/types';
 import { createId } from '../src/lib/ids';
@@ -91,7 +90,6 @@ describe('weak words steer shadowing candidates', () => {
   }
 
   it('puts the sentence holding a repeatedly failed word first and names the word', async () => {
-    await updateSettings({ sentenceLedFlow: false });
     const book = await createBook({ title: 'Weak words' });
     const plain = await shadowReadySentence(book, '今日は雨です。');
     const weak = await shadowReadySentence(book, '怪我をしました。');
