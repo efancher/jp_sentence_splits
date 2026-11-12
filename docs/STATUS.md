@@ -377,7 +377,8 @@ repair tooling, research materials and future roadmap ideas remain available.
   `エピソード1で` no longer yields `<unk>`; `alignerView` mirrors it
   (`numeralExpansion.ts`, shared fixture). Still `<unk>`: じゅっ- forms, 100+
   with a counter, 600, 12345. Alignments stored before this stay wrong until
-  re-aligned (not yet done); phrase shadowing's boundary snap
+  re-aligned (not yet done: `backfill-reference-alignment.ts --redo-digits`
+  dry-run 2026-11-12 lists 706 recordings; applying needs the aligner up on the box); phrase shadowing's boundary snap
   (`snapRangeToWordBoundaries`, `dropLeadingParticles`) covers the gap meanwhile.
 - **Duplicate book membership on push (2026-11-06):** two devices attaching the same
   sentence to the same chapter before syncing hit `book_sentences_book_chapter_sentence_uidx`
@@ -397,8 +398,10 @@ repair tooling, research materials and future roadmap ideas remain available.
   `scripts/data/restore-kanji-*.json`) fixed that episode's nine kana-only sentences in
   place: ids, cards and events kept, readings/suggestions regenerated, `sentence_grammar`
   offsets remapped, bundled clause questions updated. It refuses sentences with chunk
-  analyses or vocabulary selections. Other earlier imports have not been scanned for
-  kana-only text; the hotwords change was only tested on this one episode.
+  analyses or vocabulary selections. `scripts/diagnose-kana-only-sentences.ts` (read-only) scanned all imports on
+  2026-11-12: 7446 sentences, 141 kana-only at 14+ characters, all natural
+  conversational Japanese (Slow Japanese: 18, none missing kanji on inspection), so
+  no further restore was needed. The hotwords change was only tested on one episode.
 - **Imports and extras (2026-10-20):** chunk/walkthrough drafts are stored per
   chapter in `sentence_extras`. New standalone shadowing imports now get a
   chapter, a quick import that cannot save its extras says so on the book page,
