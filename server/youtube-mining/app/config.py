@@ -220,6 +220,8 @@ CODEX_ASSIST_EFFORT = os.environ.get("MINING_CODEX_EFFORT", "medium").strip()
 # to opencode's own configuration.
 OPENCODE_ASSIST_MODEL = os.environ.get("MINING_OPENCODE_MODEL", "opencode-go/claude-haiku-5-5").strip()
 OPENCODE_ASSIST_EFFORT = os.environ.get("MINING_OPENCODE_EFFORT", "").strip()
+# One JSON line per finished assistant attempt (backend, model, effort, label, outcome, seconds).
+ASSIST_CALL_LOG_PATH = os.environ.get("MINING_ASSIST_CALL_LOG") or os.path.join(JOBS_ROOT, "assist-calls.jsonl")
 ASSIST_TIMEOUT_SECONDS = int(os.environ.get("MINING_ASSIST_TIMEOUT_SECONDS", "600"))
 # Assistant CLI calls allowed at once, across every run. Each call is a node
 # process on an 8 GB box, so keep this low; runs asking for more are clamped.

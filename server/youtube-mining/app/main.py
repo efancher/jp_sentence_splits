@@ -128,7 +128,7 @@ async def create_assist(req: AssistRequest):
     app/assist.py. Poll GET /assist/{id}; one run at a time, no retries."""
     if len(req.prompt) > config.ASSIST_MAX_PROMPT_CHARS:
         raise HTTPException(status_code=413, detail="Prompt is too long.")
-    return AssistCreateResponse(assistId=assist.submit(req.prompt, req.backend, req.model, req.effort).id)
+    return AssistCreateResponse(assistId=assist.submit(req.prompt, req.backend, req.model, req.effort, req.label).id)
 
 
 @app.get("/assist/{assist_id}", response_model=AssistStatusResponse)

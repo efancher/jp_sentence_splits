@@ -18,6 +18,7 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 
 from app import config
@@ -49,6 +50,9 @@ class AssistJob:
     # Start (epoch seconds) of the attempt now running, and what each finished attempt did.
     attempt_started_at: float | None = None
     attempts: list[dict] = field(default_factory=list)
+    # Caller's short note on what was asked (e.g. "structure sentences 1-10"); only used in the call log.
+    label: str | None = None
+    prompt_chars: int = 0
 
 
 _ctx = threading.local()
@@ -150,6 +154,16 @@ def opencode_args() -> list[str]:
     if effort:
         args += ["--variant", effort]
     return args
+
+
+def _model_and_effort(name: str) -> tuple[str, str]:
+    """The model and reasoning effort `name` runs with: a per-request override, else its configured default."""
+    defaults = {
+        "codex": (config.CODEX_ASSIST_MODEL, config.CODEX_ASSIST_EFFORT),
+        "claude": (config.CLAUDE_ASSIST_MODEL, config.CLAUDE_ASSIST_EFFORT),
+        "opencode": (config.OPENCODE_ASSIST_MODEL, config.OPENCODE_ASSIST_EFFORT),
+    }[name]
+    return _override("model", defaults[0]), _override("effort", defaults[1])
 
 
 # opencode has no "no tools" flag; a project config in the (temporary) working directory defines an agent
@@ -304,9 +318,36 @@ def _execute(
 
 def _record(job: AssistJob, name: str, outcome: str, detail: str | None) -> None:
     started = job.attempt_started_at or time.time()
-    job.attempts.append(
-        {"backend": name, "outcome": outcome, "detail": detail, "seconds": round(time.time() - started)}
-    )
+    model, effort = _model_and_effort(name)
+    attempt = {
+        "backend": name,
+        "model": model or None,
+        "effort": effort or None,
+        "outcome": outcome,
+        "detail": detail,
+        "seconds": round(time.time() - started),
+    }
+    job.attempts.append(attempt)
+    _log_call(job, attempt)
+
+
+def _log_call(job: AssistJob, attempt: dict) -> None:
+    """Append one line per finished attempt to the call log, so a bad extra can be traced to the model that wrote
+    it (match on time and label). Best-effort: a log failure never fails the call."""
+    entry = {
+        "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "job": job.id,
+        "label": job.label,
+        "promptChars": job.prompt_chars,
+        **attempt,
+    }
+    try:
+        path = Path(config.ASSIST_CALL_LOG_PATH)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except OSError as exc:
+        logger.warning("could not write the assist call log: %s", exc)
 
 
 def _sweep() -> None:
@@ -316,9 +357,13 @@ def _sweep() -> None:
 
 
 def submit(
-    prompt: str, backend: str = "auto", model: str | None = None, effort: str | None = None
+    prompt: str,
+    backend: str = "auto",
+    model: str | None = None,
+    effort: str | None = None,
+    label: str | None = None,
 ) -> AssistJob:
-    job = AssistJob(id=uuid.uuid4().hex)
+    job = AssistJob(id=uuid.uuid4().hex, label=label, prompt_chars=len(prompt))
     with _jobs_lock:
         _sweep()
         _jobs[job.id] = job

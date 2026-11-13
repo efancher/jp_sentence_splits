@@ -452,7 +452,11 @@ repair tooling, research materials and future roadmap ideas remain available.
   `opencode-web` on loopback port 4096, served on the tailnet at 8445 behind a password.
   2026-11-13: a model comparison (Haiku vs Kimi K3 / K3.1 Pro, partial GLM / Qwen) found no
   quality case for switching, so Haiku stays the default; details in
-  `docs/ASSIST_MODEL_EVAL_PLAN.md`.
+  `docs/ASSIST_MODEL_EVAL_PLAN.md`. Every assistant attempt is now logged on the box (one
+  JSON line: time, job, label such as `<run>: structure sentences 1-10, attempt 1`,
+  backend, model, effort, outcome, seconds) in `assist-calls.jsonl` under the jobs root
+  (`MINING_ASSIST_CALL_LOG`), and the run log names the model, so a bad extra can be traced
+  to the model that wrote it. Saved extras themselves are not stamped.
 
 - **Game supply:** the 2026-10-17 production probe found only 30 qualifying Growth
   sentences (none introduced) and one introduced audio-backed Remix skeleton.

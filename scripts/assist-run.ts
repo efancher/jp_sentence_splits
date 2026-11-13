@@ -13,7 +13,7 @@
  * up on.
  */
 import { readFileSync, renameSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 
 import { runBookExtrasPipeline, type BookAssistRunSpec } from '../src/lib/bookAssistRun';
 import {
@@ -86,10 +86,10 @@ function reportLive(token: symbol, info: LiveInfo | null): void {
   publishLive();
 }
 
-async function runAssist(prompt: string, backend: string): Promise<{ reply: string; backend: string | null }> {
+async function runAssist(prompt: string, backend: string, label: string): Promise<{ reply: string; backend: string | null }> {
   const token = Symbol('call');
   try {
-    return await runAssistCall(prompt, backend, token);
+    return await runAssistCall(prompt, backend, label, token);
   } finally {
     reportLive(token, null);
   }
@@ -98,12 +98,13 @@ async function runAssist(prompt: string, backend: string): Promise<{ reply: stri
 async function runAssistCall(
   prompt: string,
   backend: string,
+  label: string,
   token: symbol,
 ): Promise<{ reply: string; backend: string | null }> {
   const created = await fetch(`${API_BASE}/assist`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt, backend }),
+    body: JSON.stringify({ prompt, backend, label: label.slice(0, 200) }),
   });
   if (!created.ok) throw new Error(`Failed to start assistant: ${await readError(created)}`);
   const { assistId } = (await created.json()) as { assistId: string };
@@ -124,6 +125,8 @@ async function runAssistCall(
       timeoutSeconds?: number | null;
       attempts?: {
         backend: string;
+        model?: string | null;
+        effort?: string | null;
         outcome: string;
         detail?: string | null;
         seconds: number;
@@ -133,10 +136,11 @@ async function runAssistCall(
     const attempts = status.attempts ?? [];
     if (liveState && attempts.length > loggedAttempts) {
       for (const a of attempts.slice(loggedAttempts)) {
+        const who = `${a.backend}${a.model ? ` (${a.model}${a.effort ? `, ${a.effort}` : ''})` : ''}`;
         const text =
           a.outcome === 'ok'
-            ? `${a.backend} answered in ${a.seconds}s`
-            : `${a.backend} failed after ${a.seconds}s: ${a.detail ?? 'unknown error'}`;
+            ? `${who} answered in ${a.seconds}s`
+            : `${who} failed after ${a.seconds}s: ${a.detail ?? 'unknown error'}`;
         Object.assign(liveState, logPatch(liveState, text));
       }
       loggedAttempts = attempts.length;
@@ -168,7 +172,7 @@ async function main(): Promise<void> {
   }
   liveState = state;
   try {
-    const run = (prompt: string) => runAssist(prompt, spec.backend ?? 'auto');
+    const run = (prompt: string, label?: string) => runAssist(prompt, spec.backend ?? 'auto', `${basename(dir!)}: ${label ?? 'call'}`);
     if (spec.sentences && spec.selection) {
       await runBookExtrasPipeline({
         spec: { sentences: spec.sentences, selection: spec.selection, grammarPatterns: spec.grammarPatterns },

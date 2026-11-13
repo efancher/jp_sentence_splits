@@ -451,6 +451,8 @@ class AssistRequest(BaseModel):
     # configured default. Patterns keep a value from being read as a CLI flag.
     model: str | None = Field(default=None, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,99}$")
     effort: str | None = Field(default=None, pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]{0,19}$")
+    # What the call is for, recorded in the call log only (e.g. "structure sentences 1-10").
+    label: str | None = Field(default=None, max_length=200)
 
 
 class AssistCreateResponse(BaseModel):

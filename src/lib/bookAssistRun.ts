@@ -108,7 +108,7 @@ export function mergeBookExtraReplies(
 export async function runBookExtrasPipeline(input: {
   spec: BookAssistRunSpec;
   state: AssistRunState;
-  run: (prompt: string) => Promise<{ reply: string; backend: string | null }>;
+  run: (prompt: string, label?: string) => Promise<{ reply: string; backend: string | null }>;
   save: (state: AssistRunState) => void;
   isCancelled: () => boolean;
 }): Promise<AssistRunState> {

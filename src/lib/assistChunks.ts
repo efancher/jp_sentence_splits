@@ -159,7 +159,7 @@ export async function runSegmentChunks(input: {
   chunks: WizardTranscriptSeg[][];
   /** Replies kept from an earlier run, by chunk index (null = still to do). */
   replies: (string | null)[];
-  run: (prompt: string) => Promise<{ reply: string; backend: string | null }>;
+  run: (prompt: string, label?: string) => Promise<{ reply: string; backend: string | null }>;
   onChunkDone: (index: number, reply: string) => void;
   onProgress: (progress: ChunkProgress) => void;
   /** Optional activity-log line (rejected reply, failed call, saved part). */
@@ -187,7 +187,7 @@ export async function runSegmentChunks(input: {
       }
       input.onProgress({ index, total: chunks.length, attempt, backend: null });
       try {
-        const { reply, backend } = await run(buildChunkPrompt(chunk, index, chunks.length, rejection));
+        const { reply, backend } = await run(buildChunkPrompt(chunk, index, chunks.length, rejection), `${label}, attempt ${attempt}`);
         input.onProgress({ index, total: chunks.length, attempt, backend });
         const problem = validateChunkReply(reply, chunk);
         if (problem) {

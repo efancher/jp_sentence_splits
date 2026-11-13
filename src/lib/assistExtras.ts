@@ -260,7 +260,7 @@ export async function runExtraTasks(input: {
   sentences: ExtrasSentence[];
   /** Replies kept from an earlier run, by task id. */
   replies: Readonly<Record<string, string>>;
-  run: (prompt: string) => Promise<{ reply: string; backend: string | null }>;
+  run: (prompt: string, label?: string) => Promise<{ reply: string; backend: string | null }>;
   onTaskDone: (taskId: string, reply: string) => void;
   onProgress: (progress: ExtraProgress) => void;
   /** Optional activity-log line (rejected reply, failed call, saved part). */
@@ -307,6 +307,7 @@ export async function runExtraTasks(input: {
       try {
         const { reply, backend } = await input.run(
           buildExtraPrompt(task, input.sentences, lastError ? [lastError] : [], { grammarPatterns: input.grammarPatterns }),
+          `${label}, attempt ${attempt}`,
         );
         input.onProgress({
           task,
@@ -367,7 +368,10 @@ export async function runExtraTasks(input: {
         backend: null,
       });
       try {
-        const { reply } = await input.run(buildExtraPrompt(repairTask, input.sentences, describeBad(bad), { grammarPatterns: input.grammarPatterns }));
+        const { reply } = await input.run(
+          buildExtraPrompt(repairTask, input.sentences, describeBad(bad), { grammarPatterns: input.grammarPatterns }),
+          `${label}, fix-up ${round + 1}`,
+        );
         const problem = validateExtraReply(repairTask, reply);
         if (problem) {
           input.onNote?.(

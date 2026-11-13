@@ -105,7 +105,7 @@ export function emptyAssistRunState(): AssistRunState {
 export async function runAssistPipeline(input: {
   spec: AssistRunSpec;
   state: AssistRunState;
-  run: (prompt: string) => Promise<{ reply: string; backend: string | null }>;
+  run: (prompt: string, label?: string) => Promise<{ reply: string; backend: string | null }>;
   save: (state: AssistRunState) => void;
   isCancelled: () => boolean;
 }): Promise<AssistRunState> {

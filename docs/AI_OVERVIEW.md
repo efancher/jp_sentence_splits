@@ -998,7 +998,9 @@ Targets are constants; no settings UI.
   (`run_opencode`; `MINING_OPENCODE_PATH`, `MINING_OPENCODE_MODEL` default
   `opencode-go/claude-haiku-5-5` on the OpenCode Go plan, optional `MINING_OPENCODE_EFFORT` → `--variant`),
   is last in the unit's order; it runs in a temp directory whose `opencode.json` defines an
-  all-permissions-denied agent, so replies are text only. The page polls
+  all-permissions-denied agent, so replies are text only. Each finished attempt (backend, the
+  model and effort it actually ran with, optional caller `label`, outcome, seconds) is appended to
+  `assist-calls.jsonl` in the jobs root (`MINING_ASSIST_CALL_LOG`), best-effort. The page polls
   `GET /assist-runs/{id}` and, when it reopens an import (the active job is
   remembered), re-attaches to a running run or picks up a finished one. The
   review step's "Extras with the assistant" panel is still the client-driven

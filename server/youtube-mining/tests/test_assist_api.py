@@ -16,6 +16,13 @@ from app import assist
 from app.main import app
 
 
+@pytest.fixture(autouse=True)
+def call_log(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    path = tmp_path / "assist-calls.jsonl"
+    monkeypatch.setattr(assist.config, "ASSIST_CALL_LOG_PATH", str(path))
+    return path
+
+
 @pytest.fixture()
 def client() -> TestClient:
     return TestClient(app)
@@ -231,6 +238,45 @@ def test_model_override_applies_to_the_requested_backend_only(
     assert seen["opencode"][seen["opencode"].index("-m") + 1] == "opencode-go/glm-5.3"
     assert seen["opencode"][seen["opencode"].index("--variant") + 1] == "high"
     assert "opencode-go/glm-5.3" not in seen["claude"] + seen["codex"]
+
+
+def test_call_log_records_model_effort_and_label_per_attempt(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, call_log: Path
+) -> None:
+    monkeypatch.setattr(assist, "_down_until", {})
+    monkeypatch.setattr(assist.config, "CODEX_ASSIST_MODEL", "codex-default")
+    monkeypatch.setattr(assist.config, "CODEX_ASSIST_EFFORT", "low")
+    monkeypatch.setattr(assist.config, "CLAUDE_ASSIST_MODEL", "claude-haiku-test")
+    monkeypatch.setattr(assist.config, "CLAUDE_ASSIST_EFFORT", "medium")
+
+    def failing_codex(prompt: str) -> str:
+        raise assist.AssistError("rate limited")
+
+    monkeypatch.setitem(assist.RUNNERS, "codex", failing_codex)
+    monkeypatch.setitem(assist.RUNNERS, "claude", lambda prompt: "ok")
+    body = {"prompt": "こんにちは", "backend": "codex", "label": "run1: structure sentences 1-10, attempt 1"}
+    result = _wait(client, client.post("/assist", json=body).json()["assistId"])
+
+    assert [(a["backend"], a["model"], a["effort"]) for a in result["attempts"]] == [
+        ("codex", "codex-default", "low"),
+        ("claude", "claude-haiku-test", "medium"),
+    ]
+    lines = [json.loads(line) for line in call_log.read_text(encoding="utf-8").splitlines()]
+    assert [(e["backend"], e["outcome"], e["model"]) for e in lines] == [
+        ("codex", "failed", "codex-default"),
+        ("claude", "ok", "claude-haiku-test"),
+    ]
+    assert all(e["label"] == body["label"] and e["promptChars"] == 5 for e in lines)
+
+
+def test_call_log_failure_does_not_fail_the_call(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(assist.config, "ASSIST_CALL_LOG_PATH", str(tmp_path / "file" / "log.jsonl"))
+    (tmp_path / "file").write_text("not a directory")
+    monkeypatch.setitem(assist.RUNNERS, "codex", lambda prompt: "ok")
+    result = _wait(client, client.post("/assist", json={"prompt": "hi"}).json()["assistId"])
+    assert result["status"] == "done"
 
 
 def test_model_override_rejects_flag_like_values(client: TestClient) -> None:
