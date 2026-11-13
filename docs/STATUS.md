@@ -450,6 +450,9 @@ repair tooling, research materials and future roadmap ideas remain available.
   day (unit copied, service restarted; a live `/assist` job with `backend: "opencode"`
   returned in about 4s). A browser `opencode web` console runs as the user unit
   `opencode-web` on loopback port 4096, served on the tailnet at 8445 behind a password.
+  2026-11-13: a model comparison (Haiku vs Kimi K3 / K3.1 Pro, partial GLM / Qwen) found no
+  quality case for switching, so Haiku stays the default; details in
+  `docs/ASSIST_MODEL_EVAL_PLAN.md`.
 
 - **Game supply:** the 2026-10-17 production probe found only 30 qualifying Growth
   sentences (none introduced) and one introduced audio-backed Remix skeleton.

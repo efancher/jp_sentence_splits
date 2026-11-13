@@ -1,11 +1,11 @@
 # Assistant model evaluation plan (proposal)
 
-Status: milestone 1 code written, not yet run (2026-11-12): `/assist` accepts `model` and
-`effort` for the requested backend (not yet deployed to the box), and
-`scripts/assist-model-eval.ts` (`sample` / `run` / `report`, helpers in
+Status: milestone 1 run, decision made (2026-11-13): **keep Claude Haiku 5.5 as the
+default; no switch.** `/assist` accepts `model` and `effort` for the requested backend
+(deployed), and `scripts/assist-model-eval.ts` (`sample` / `run` / `report`, helpers in
 `src/lib/assistModelEval.ts`) samples 10-sentence windows from the user's books, runs them
 through the arms, scores them with `validateExtraReply`, and writes a blind review sheet.
-No results yet; milestones 2-3 are proposals. Origin: a critique of an external
+Milestones 2-3 remain proposals. Origin: a critique of an external
 "high-accuracy, low-cost Japanese analysis engine" prompt against this codebase. Most of
 that prompt already exists here (UniDic morphology in the mining service, 10-sentence
 extras calls with context, validators and repair in `src/lib/`, a multi-backend
@@ -25,6 +25,36 @@ and without UniDic facts in the prompt. Decide from measurements, not vendor cla
 - Use the flat Go plan; no metered provider and no spend limits needed.
 - Skip a verifier or ensemble arm until the first results show a specific remaining
   error type.
+
+## Milestone 1 results (2026-11-13)
+
+3 windows (30 sentences) x 3 extras kinds (structure, particles, comprehension), one run per
+cell. Pass = the app's structural validator only.
+
+| Arm | Runs | Passed | Median seconds |
+| --- | --- | --- | --- |
+| A Haiku 5.5 (current default) | 9 | 9 | 36 |
+| B Kimi K3 | 9 | 9 | 72 |
+| E Kimi K3.1 Pro | 9 | 9 | 106 |
+| B Qwen3.8 Max (partial) | 6 | 6 | 623 |
+| B GLM-5.3 (partial) | 5 | 2 | 260 |
+
+- Blind side-by-side review: the user spot-checked some windows and saw no large
+  differences, so there is no quality case for switching. Haiku is the fastest arm.
+- Cost: the 18 Kimi calls used about 22 points of the Go weekly allowance and 11 of the
+  monthly one (one rolling window to 55%); K3.1 Pro is the heavy one. Quota is limited
+  (weekly resets in days), so repeat runs need pacing (`--pause`).
+- GLM and Qwen were cut after the first pass hit the rolling limit; their rows are partial
+  and not comparable. GLM's failures were not investigated.
+- Kimi K3 is the viable alternate backend if load ever needs to come off Claude.
+- Free OpenCode (Zen) models (`glm-5.3-flash-free`, `deepseek-v4.1-flash-free`,
+  `minimax-m3.1-flash-free`, `big-pickle`) hang through the `assist` agent: any tool
+  restriction (deny-all permissions, tools off, all-but-one off) stalls them, while an
+  unrestricted agent replies in seconds. Paid Go models are unaffected. Using them would
+  need a looser agent config (tools reachable in a temp directory), so they were dropped.
+  The four `F-*` arms remain in `DEFAULT_ARMS` for a future retry.
+- Not done: milestone 2 (UniDic hints) and the verifier arm; revisit only if extras
+  quality becomes a problem.
 
 ## Open risk
 
