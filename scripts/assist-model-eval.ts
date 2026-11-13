@@ -9,12 +9,14 @@
  *           (re-running skips finished runs) and prints a per-arm summary.
  *             npx tsx scripts/assist-model-eval.ts run --windows eval/windows.json --dir eval/run1
  *               [--kinds structure,particles] [--arms A-haiku,B-glm-5.3] [--api http://127.0.0.1:8003]
+ *               [--pause 30]   seconds to wait between calls, to stay under a rolling plan limit
+ *           Errors and fallbacks are not recorded (a later run retries them); three in a row stop the run.
  *   report  Re-prints the summary and writes <dir>/blind.md (shuffled replies to judge) and
  *           <dir>/blind-key.json (which letter was which arm; look only after judging).
  *             npx tsx scripts/assist-model-eval.ts report --dir eval/run1
  *
- * A reply that came from a fallback backend instead of the requested arm counts as a failure,
- * so a quota or outage cannot pass for a model result.
+ * A reply that came from a fallback backend instead of the requested arm is never scored, so a
+ * quota or outage cannot pass for a model result (or count against one).
  */
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -36,6 +38,7 @@ import { createScriptSupabaseClient } from './lib/scriptSupabaseClient';
 
 const POLL_MS = 2000;
 const MAX_WAIT_MS = 15 * 60 * 1000;
+const MAX_INFRA_FAILURES = 3;
 
 function flag(name: string, fallback?: string): string | undefined {
   const index = process.argv.indexOf(`--${name}`);
@@ -149,7 +152,9 @@ async function run(): Promise<void> {
   mkdirSync(dir, { recursive: true });
   const results = readResults(dir);
   const done = new Set(results.map((row) => `${row.window}|${row.kind}|${row.arm}`));
-  for (const window of windows) {
+  const pauseSeconds = Number(flag('pause', '0'));
+  let infraFailures = 0;
+  stop: for (const window of windows) {
     for (const kind of kinds) {
       const prompt = windowPrompt(window, kind);
       for (const arm of arms) {
@@ -159,7 +164,18 @@ async function run(): Promise<void> {
         const seconds = Math.round((Date.now() - started) / 1000);
         let problem = answer.error;
         if (!problem && answer.backend !== arm.backend) problem = `fell back to ${answer.backend}`;
-        if (!problem) problem = checkReply(window, kind, answer.reply ?? '');
+        // An error or fallback says nothing about the model (usually a plan limit): don't record it,
+        // so a later run retries it, and stop after a few in a row instead of burning the allowance.
+        if (problem) {
+          console.log(`SKIP ${window.id} ${kind} ${arm.id} ${seconds}s — ${problem}`);
+          if (++infraFailures >= MAX_INFRA_FAILURES) {
+            console.error(`Stopping after ${infraFailures} errors/fallbacks in a row; re-run later to resume.`);
+            break stop;
+          }
+          continue;
+        }
+        infraFailures = 0;
+        problem = checkReply(window, kind, answer.reply ?? '');
         const row: EvalResult = {
           window: window.id,
           kind,
@@ -172,6 +188,7 @@ async function run(): Promise<void> {
         appendFileSync(join(dir, 'results.jsonl'), `${JSON.stringify(row)}\n`);
         results.push(row);
         console.log(`${row.ok ? 'ok  ' : 'FAIL'} ${window.id} ${kind} ${arm.id} ${seconds}s${problem ? ` — ${problem}` : ''}`);
+        if (pauseSeconds > 0) await new Promise((resolve) => setTimeout(resolve, pauseSeconds * 1000));
       }
     }
   }
