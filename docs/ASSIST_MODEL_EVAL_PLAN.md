@@ -53,8 +53,21 @@ cell. Pass = the app's structural validator only.
   unrestricted agent replies in seconds. Paid Go models are unaffected. Using them would
   need a looser agent config (tools reachable in a temp directory), so they were dropped.
   The four `F-*` arms remain in `DEFAULT_ARMS` for a future retry.
-- Not done: milestone 2 (UniDic hints) and the verifier arm; revisit only if extras
+- Not done: the UniDic-hints prompt arm and the verifier arm; revisit only if extras
   quality becomes a problem.
+
+## Milestone 2 measurement (2026-11-13)
+
+`src/lib/extraCrossCheck.ts` checks two claims nothing else verified against UniDic tokens
+(particles CHUNK ends in a case/topic particle; a structure role label does not contradict the
+chunk's tokens; deliberately lenient about compound particles, dropped は and verb phrases ending
+in a connective). `scripts/assist-extras-crosscheck.ts` scores saved eval replies, no model calls.
+On the 38 saved replies: structure flagged 3/156 Haiku, 5/205 Kimi K3, 1/144 Kimi K3.1 Pro,
+0/52 GLM, 0/115 Qwen; particles 1/40 flagged in total (a UniDic quirk on のように, arguably
+a false positive). The flags that look real are rare (e.g. それも labelled "topic は"). Conclusion:
+with these checks, label errors are about 1-2% in every arm, so UniDic hints in the prompt have
+little room to help; the hints arm is not worth building yet. The checker could still run as a
+cheap post-validator if label errors matter.
 
 ## Open risk
 
