@@ -20,6 +20,22 @@ import type { WizardTranscriptSeg } from './miningTranscript';
 const API_BASE: string =
   import.meta.env.VITE_YOUTUBE_MINING_API_BASE || YOUTUBE_MINING_API_BASE;
 
+/** Status polls give up after this long. A bare `fetch` on a suspended iOS page can stay pending forever, which freezes the page's retry loop. */
+const POLL_TIMEOUT_MS = 15_000;
+
+async function fetchPoll(url: string): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), POLL_TIMEOUT_MS);
+  try {
+    return await fetch(url, { signal: controller.signal });
+  } catch (err) {
+    if (controller.signal.aborted) throw new Error('The mining service did not respond in time.');
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 const morphemeTokenSchema = z.object({
   surface: z.string(),
   start: z.number(),
@@ -301,7 +317,7 @@ export type MiningJobSummary = z.infer<typeof jobSummarySchema>;
  * on another.
  */
 export async function listMiningJobs(): Promise<MiningJobSummary[]> {
-  const response = await fetch(`${API_BASE}/jobs`);
+  const response = await fetchPoll(`${API_BASE}/jobs`);
   if (!response.ok) {
     throw new Error(`Failed to list mining jobs: ${await readErrorDetail(response)}`);
   }
@@ -313,7 +329,7 @@ export async function listMiningJobs(): Promise<MiningJobSummary[]> {
 export class MiningJobGoneError extends Error {}
 
 export async function getMiningJob(jobId: string): Promise<MiningJobStatus> {
-  const response = await fetch(`${API_BASE}/jobs/${jobId}`);
+  const response = await fetchPoll(`${API_BASE}/jobs/${jobId}`);
   if (response.status === 404) {
     throw new MiningJobGoneError(`Failed to fetch mining job status: ${await readErrorDetail(response)}`);
   }
@@ -753,7 +769,7 @@ export async function runAssist(
     await new Promise((resolve) => setTimeout(resolve, ASSIST_POLL_MS));
     if (options.isCancelled?.()) throw new Error('Cancelled');
     if (Date.now() - startedAt > ASSIST_MAX_WAIT_MS) throw new Error('Assistant timed out');
-    const response = await fetch(`${API_BASE}/assist/${assistId}`);
+    const response = await fetchPoll(`${API_BASE}/assist/${assistId}`);
     if (!response.ok) {
       throw new Error(`Assistant status check failed: ${await readErrorDetail(response)}`);
     }
@@ -839,7 +855,7 @@ export async function startBookExtrasRun(input: {
 
 /** The run's current state, or null when this job has no run (404). */
 export async function getAssistRun(runId: string): Promise<AssistRunStatus | null> {
-  const response = await fetch(`${API_BASE}/assist-runs/${encodeURIComponent(runId)}`);
+  const response = await fetchPoll(`${API_BASE}/assist-runs/${encodeURIComponent(runId)}`);
   if (response.status === 404) return null;
   if (!response.ok) throw new Error(`Assistant status check failed: ${await readErrorDetail(response)}`);
   return assistRunSchema.parse(await response.json());

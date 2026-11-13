@@ -154,6 +154,26 @@ describe('getMiningJob', () => {
     );
     await expect(getMiningJob('missing')).rejects.toThrow('404');
   });
+
+  it('rejects instead of hanging when the request never settles', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(
+          (_url: string, init?: RequestInit) =>
+            new Promise((_resolve, reject) => {
+              init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+            }),
+        ),
+      );
+      const result = expect(getMiningJob('abc123')).rejects.toThrow('did not respond in time');
+      await vi.advanceTimersByTimeAsync(15_000);
+      await result;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe('clipFromSource', () => {
