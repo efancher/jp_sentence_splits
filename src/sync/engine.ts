@@ -2435,7 +2435,13 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
         }),
       );
     });
-    await hydrateMissingReferenceAudio();
+    // Background: hundreds of downloads must not hold the sync cycle open
+    // (the same reason the end-of-cycle hydration isn't awaited).
+    void hydrateMissingReferenceAudio().catch((error) => {
+      syncLog('warn', 'Reference-audio hydration failed', 'AUDIO_HYDRATE', {
+        message: error instanceof Error ? error.message : String(error),
+      });
+    });
   }
 
   await updateSyncMeta({

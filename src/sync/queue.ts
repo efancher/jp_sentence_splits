@@ -19,7 +19,7 @@ export async function readSyncMeta(): Promise<SyncMetaState> {
     id: META_ID,
     clientId: 'pending',
     lastPullEventId: 0,
-    syncReferenceAudio: false,
+    syncReferenceAudio: true,
     wifiOnlyAudioDownload: true,
   };
 }
@@ -32,7 +32,7 @@ export async function ensureSyncMeta(): Promise<SyncMetaState> {
     id: META_ID,
     clientId: createId('client'),
     lastPullEventId: 0,
-    syncReferenceAudio: false,
+    syncReferenceAudio: true,
     wifiOnlyAudioDownload: true,
   };
   await db.syncMeta.put(initial);

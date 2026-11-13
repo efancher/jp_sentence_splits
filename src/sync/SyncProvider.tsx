@@ -291,7 +291,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       online,
       retryInSeconds,
       syncNow,
-      syncReferenceAudio: meta?.syncReferenceAudio ?? false,
+      syncReferenceAudio: meta?.syncReferenceAudio ?? true,
       wifiOnlyAudioDownload: meta?.wifiOnlyAudioDownload ?? true,
       setSyncReferenceAudio,
       setWifiOnlyAudioDownload,

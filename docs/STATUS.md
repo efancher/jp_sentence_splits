@@ -320,6 +320,9 @@ and possible extensions. This snapshot does not certify a live deployment.
   books or sentences now bootstraps via `replaceLocalWithCloud` (table snapshot;
   the cursor is read before the snapshot so mid-snapshot events replay). Incremental
   pull pages are 500 events instead of 100. Server-side event compaction is not done.
+  Reference-audio sync now defaults to on for new devices (`syncReferenceAudio`);
+  existing devices keep their stored choice. The bootstrap hydrates audio blobs in the
+  background rather than holding the sync cycle open.
 
 ## Test and maintenance review
 
