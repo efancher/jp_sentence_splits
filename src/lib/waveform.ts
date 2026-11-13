@@ -25,6 +25,58 @@ export const LIVE_PITCH_DISPLAY_MAX_SEMITONES = 8;
 export const LIVE_PITCH_DISPLAY_MIN_HALF_SPAN_SEMITONES = 3.5;
 
 /**
+ * Raw (unnormalized) live chart: pitch is plotted as semitones above this fixed Hz, a log-Hz axis with no
+ * per-speaker centring, so both voices sit at their true height.
+ */
+export const RAW_PITCH_REF_HZ = 100;
+/** Fewest semitones the raw chart's vertical axis will span, so a near-flat contour isn't blown up. */
+const RAW_PITCH_MIN_SPAN_SEMITONES = 8;
+/** Padding added above and below the voiced extent on the raw chart. */
+const RAW_PITCH_PAD_SEMITONES = 1.5;
+const RAW_PITCH_TICKS_HZ = [60, 70, 80, 90, 100, 120, 140, 160, 180, 200, 250, 300, 350, 400, 500];
+
+export function hzToAbsoluteSemitones(hz: number, refHz: number = RAW_PITCH_REF_HZ): number {
+  return 12 * Math.log2(hz / refHz);
+}
+
+/** Axis [min, max] (in `hzToAbsoluteSemitones` units) covering every given bucket value, padded and with a minimum span. */
+export function rawPitchRange(...series: ReadonlyArray<ReadonlyArray<number | null>>): { min: number; max: number } {
+  let min = Infinity;
+  let max = -Infinity;
+  for (const values of series) {
+    for (const value of values) {
+      if (value === null) continue;
+      min = Math.min(min, value);
+      max = Math.max(max, value);
+    }
+  }
+  if (min > max) return { min: -4, max: 12 };
+  min -= RAW_PITCH_PAD_SEMITONES;
+  max += RAW_PITCH_PAD_SEMITONES;
+  const short = RAW_PITCH_MIN_SPAN_SEMITONES - (max - min);
+  if (short > 0) {
+    min -= short / 2;
+    max += short / 2;
+  }
+  return { min, max };
+}
+
+/** Round Hz gridlines inside the range, thinned to at most `maxTicks`. */
+export function rawPitchTicks(min: number, max: number, maxTicks = 6): Array<{ hz: number; semitones: number }> {
+  const inRange = RAW_PITCH_TICKS_HZ.map((hz) => ({ hz, semitones: hzToAbsoluteSemitones(hz) })).filter(
+    (tick) => tick.semitones >= min && tick.semitones <= max,
+  );
+  const step = Math.ceil(inRange.length / maxTicks);
+  return step > 1 ? inRange.filter((_, index) => index % step === 0) : inRange;
+}
+
+/** Vertical position of a value in `pitchBucketsToRuns`'s plot area. */
+export function pitchValueY(value: number, height: number, min: number, max: number): number {
+  const span = Math.max(0.001, max - min);
+  return height - ((Math.min(max, Math.max(min, value)) - min) / span) * (height - 12) - 6;
+}
+
+/**
  * ± semitone window for the live pitch chart. A fixed ±8 drew a real 3–4 st
  * accent step (measured from a captured shadow loop) as an almost-flat line;
  * fit the window to the reference contour instead (shared by both lines, so
@@ -198,20 +250,28 @@ export function emptyLivePitchBuckets(buckets: number): Array<number | null> {
 }
 
 export function pitchFramesToBucketSemitones(
-  frames: Array<{ timeSeconds: number; voiced: boolean; relativeSemitones: number | null }>,
+  frames: Array<{ timeSeconds: number; voiced: boolean; relativeSemitones: number | null; hz?: number | null }>,
   durationSeconds: number,
   buckets: number,
+  /** When set, plot absolute pitch (semitones above this Hz) instead of semitones from the speaker's own median. */
+  absoluteRefHz?: number,
 ): Array<number | null> {
   const sums = new Float64Array(buckets);
   const counts = new Uint16Array(buckets);
   const safeDuration = Math.max(0.001, durationSeconds);
   for (const frame of frames) {
-    if (!frame.voiced || frame.relativeSemitones === null) continue;
+    const value =
+      absoluteRefHz === undefined
+        ? frame.relativeSemitones
+        : frame.hz && frame.hz > 0
+          ? hzToAbsoluteSemitones(frame.hz, absoluteRefHz)
+          : null;
+    if (!frame.voiced || value === null) continue;
     const index = Math.min(
       buckets - 1,
       Math.max(0, Math.floor((frame.timeSeconds / safeDuration) * buckets)),
     );
-    sums[index] += frame.relativeSemitones;
+    sums[index] += value;
     counts[index] += 1;
   }
   return Array.from({ length: buckets }, (_, index) =>
@@ -228,7 +288,6 @@ export function pitchBucketsToRuns(
   upToIndex?: number,
 ): string[] {
   if (values.length === 0) return [];
-  const span = Math.max(0.001, max - min);
   const last = Math.min(values.length - 1, upToIndex ?? values.length - 1);
   const runs: string[] = [];
   let current: string[] = [];
@@ -249,7 +308,7 @@ export function pitchBucketsToRuns(
     }
     const x = (index / Math.max(1, values.length - 1)) * width;
     // Pin an out-of-range reading to the chart edge rather than drawing it off-screen, where it just vanishes.
-    const y = height - ((Math.min(max, Math.max(min, value)) - min) / span) * (height - 12) - 6;
+    const y = pitchValueY(value, height, min, max);
     current.push(`${x},${y}`);
   }
   flush();

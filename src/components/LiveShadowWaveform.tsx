@@ -19,7 +19,12 @@ import {
   peakMagnitude,
   peaksToPolyline,
   pitchBucketsToRuns,
+  hzToAbsoluteSemitones,
+  RAW_PITCH_REF_HZ,
   pitchFramesToBucketSemitones,
+  pitchValueY,
+  rawPitchRange,
+  rawPitchTicks,
   sliceCanonicalAudio,
   type WavePeak,
 } from '../lib/waveform';
@@ -58,7 +63,13 @@ export function LiveShadowWaveform({
   tailMs,
   playbackRate,
   getLeadInRemainingMs,
+  pitchScale = 'normalized',
 }: {
+  /**
+   * 'normalized' (default) centres each voice on its own median; 'raw' plots both at their true absolute pitch
+   * (Hz on a log axis) with no per-speaker centring.
+   */
+  pitchScale?: 'normalized' | 'raw';
   referenceBlob: Blob;
   active: boolean;
   /** Current reference media time in seconds (shadow player clock). */
@@ -97,6 +108,15 @@ export function LiveShadowWaveform({
 }) {
   const [referencePeaks, setReferencePeaks] = useState<WavePeak[]>([]);
   const [referencePitchBuckets, setReferencePitchBuckets] = useState<Array<number | null>>([]);
+  const [referenceRawBuckets, setReferenceRawBuckets] = useState<Array<number | null>>([]);
+  /** Live voice as semitones above RAW_PITCH_REF_HZ, drawn instead of `livePitchBuckets` in raw mode. */
+  const [liveRawBuckets, setLiveRawBuckets] = useState<Array<number | null>>([]);
+  /** Lowest / highest raw live reading this loop, so the raw axis only ever widens rather than rescaling each frame. */
+  const [liveRawExtent, setLiveRawExtent] = useState<{ min: number; max: number } | null>(null);
+  const liveRawExtentRef = useRef<{ min: number; max: number } | null>(null);
+  const isRaw = pitchScale === 'raw';
+  const isRawRef = useRef(isRaw);
+  isRawRef.current = isRaw;
   const [referenceMedianHz, setReferenceMedianHz] = useState<number | null>(null);
   const [durationSeconds, setDurationSeconds] = useState(0);
   const [livePeaks, setLivePeaks] = useState<WavePeak[]>([]);
@@ -139,7 +159,16 @@ export function LiveShadowWaveform({
   );
   const paddedPeaks = useMemo(() => padBuckets(referencePeaks, win, { min: 0, max: 0 }), [referencePeaks, win]);
   const displayHalfSpan = useMemo(() => livePitchDisplayHalfSpan(referencePitchBuckets), [referencePitchBuckets]);
-  const paddedPitch = useMemo(() => padBuckets(referencePitchBuckets, win, null as number | null), [referencePitchBuckets, win]);
+  const paddedPitch = useMemo(
+    () => padBuckets(isRaw ? referenceRawBuckets : referencePitchBuckets, win, null as number | null),
+    [isRaw, referenceRawBuckets, referencePitchBuckets, win],
+  );
+  const rawRange = useMemo(
+    () => rawPitchRange(referenceRawBuckets, liveRawExtent ? [liveRawExtent.min, liveRawExtent.max] : []),
+    [referenceRawBuckets, liveRawExtent],
+  );
+  const axisMin = isRaw ? rawRange.min : -displayHalfSpan;
+  const axisMax = isRaw ? rawRange.max : displayHalfSpan;
 
   useEffect(() => {
     let cancelled = false;
@@ -162,6 +191,9 @@ export function LiveShadowWaveform({
         referenceMagnitudeRef.current = peakMagnitude(peaks);
         setReferencePitchBuckets(
           pitchFramesToBucketSemitones(pitch.frames, canonical.durationSeconds, LIVE_WAVEFORM_BUCKETS),
+        );
+        setReferenceRawBuckets(
+          pitchFramesToBucketSemitones(pitch.frames, canonical.durationSeconds, LIVE_WAVEFORM_BUCKETS, RAW_PITCH_REF_HZ),
         );
       } catch (reason) {
         if (!cancelled) {
@@ -189,6 +221,9 @@ export function LiveShadowWaveform({
     lastMediaTimeRef.current = 0;
     setLivePeaks(emptyLivePeaks(buckets));
     setLivePitchBuckets(emptyLivePitchBuckets(buckets));
+    setLiveRawBuckets(emptyLivePitchBuckets(buckets));
+    liveRawExtentRef.current = null;
+    setLiveRawExtent(null);
     setLiveMedianHz(null);
     setPlayheadIndex(0);
     frameCountRef.current = 0;
@@ -307,6 +342,25 @@ export function LiveShadowWaveform({
           return hzToRelativeSemitones(bucketHz, median);
         }),
       );
+      if (isRawRef.current) {
+        // Raw view: absolute pitch, so no median is needed and the line draws from the first voiced reading.
+        const rawBuckets = liveHzCountRef.current.map((count, bucket) =>
+          count ? hzToAbsoluteSemitones((liveHzSumRef.current[bucket] ?? 0) / count) : null,
+        );
+        setLiveRawBuckets(rawBuckets);
+        let extent = liveRawExtentRef.current;
+        for (const value of rawBuckets) {
+          if (value === null) continue;
+          if (!extent) extent = { min: value, max: value };
+          else if (value < extent.min || value > extent.max) {
+            extent = { min: Math.min(extent.min, value), max: Math.max(extent.max, value) };
+          }
+        }
+        if (extent !== liveRawExtentRef.current) {
+          liveRawExtentRef.current = extent;
+          setLiveRawExtent(extent);
+        }
+      }
       rafRef.current = requestAnimationFrame(tick);
     };
 
@@ -352,11 +406,12 @@ export function LiveShadowWaveform({
         values.slice(from, to),
         rowWidth,
         pitchHeight,
-        -displayHalfSpan,
-        displayHalfSpan,
+        axisMin,
+        axisMax,
         upTo === undefined ? undefined : upTo - from,
       );
-    const liveUpTo = active ? playheadIndex : livePitchBuckets.length - 1;
+    const liveValues = isRaw ? liveRawBuckets : livePitchBuckets;
+    const liveUpTo = active ? playheadIndex : liveValues.length - 1;
     const playhead =
       active && playheadIndex >= from && playheadIndex < to
         ? ((playheadIndex - from) / Math.max(1, to - from - 1)) * rowWidth
@@ -371,10 +426,12 @@ export function LiveShadowWaveform({
       nativeEndX: markerX(win.before + win.native),
       referenceRuns: line(paddedPitch),
       // Rows after the playhead stay empty so a rep redraws top-to-bottom.
-      liveRuns: liveUpTo >= from ? line(livePitchBuckets, liveUpTo) : [],
+      liveRuns: liveUpTo >= from ? line(liveValues, liveUpTo) : [],
       playhead,
     };
   });
+
+  const hzTicks = isRaw ? rawPitchTicks(axisMin, axisMax) : [];
 
   if (error) return <p className="muted">{error}</p>;
   if (referencePeaks.length === 0) {
@@ -411,7 +468,7 @@ export function LiveShadowWaveform({
       ) : null}
 
       <div className="stack">
-        <span className="muted">Live shadow pitch (speaker-normalized)</span>
+        <span className="muted">Live shadow pitch ({isRaw ? 'raw Hz, not normalized' : 'speaker-normalized'})</span>
         {pitchRows.map((row, index) => (
           <svg
             key={index}
@@ -424,6 +481,17 @@ export function LiveShadowWaveform({
             }
             style={{ width: `${row.widthFrac * 100}%`, height: pitchHeight, color: 'var(--text-muted)' }}
           >
+            {hzTicks.map((tick) => {
+              const y = pitchValueY(tick.semitones, pitchHeight, axisMin, axisMax);
+              return (
+                <g key={`t${tick.hz}`}>
+                  <line x1="0" x2={row.rowWidth} y1={y} y2={y} stroke="currentColor" strokeOpacity="0.2" strokeDasharray="2 4" />
+                  <text x="2" y={y - 2} fontSize="9" fill="currentColor" fillOpacity="0.7">
+                    {tick.hz} Hz
+                  </text>
+                </g>
+              );
+            })}
             {row.referenceRuns.map((points, runIndex) => (
               <polyline
                 key={`r${runIndex}`}
@@ -474,8 +542,9 @@ export function LiveShadowWaveform({
           </svg>
         ))}
         <p className="muted">
-          Gold is your live voice vs the reference contour — each is centred on its
-          own median pitch, so match the shape, not the height
+          {isRaw
+            ? 'Gold is your live voice vs the reference contour at true pitch — absolute Hz, nothing centred or scaled, so your line sits at your own height'
+            : 'Gold is your live voice vs the reference contour — each is centred on its own median pitch, so match the shape, not the height'}
           {referenceMedianHz ? ` (ref ${Math.round(referenceMedianHz)} Hz` : ''}
           {referenceMedianHz && liveMedianHz ? `, you ${Math.round(liveMedianHz)} Hz` : ''}
           {referenceMedianHz ? ')' : ''}

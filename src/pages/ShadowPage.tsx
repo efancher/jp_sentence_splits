@@ -57,6 +57,11 @@ const SHADOW_LAYOUT_KEY = 'satori-glossbook:shadow-layout';
 const CONTOUR_WRAP_KEY = 'satori-glossbook:shadow-contour-wrap';
 const CONTOUR_WRAP_OPTIONS = [2, 3, 4, 5, 6, 8] as const;
 const DEFAULT_CONTOUR_WRAP_SECONDS = 5;
+const CONTOUR_SCALE_KEY = 'satori-glossbook:shadow-contour-scale';
+
+function readContourScale(): 'normalized' | 'raw' {
+  try { return localStorage.getItem(CONTOUR_SCALE_KEY) === 'raw' ? 'raw' : 'normalized'; } catch { return 'normalized'; }
+}
 /** Pause between loop reps (ms), device-local and shared across sentences. */
 const LOOP_GAP_KEY = 'satori-glossbook:shadow-loop-gap-ms';
 const LOOP_LEAD_IN_KEY = 'satori-glossbook:shadow-loop-lead-in-ms';
@@ -176,6 +181,11 @@ export function ShadowWorkspace({
   function changeWrapSeconds(seconds: number | undefined) {
     setWrapSeconds(seconds);
     writeContourWrap(sentenceId, seconds);
+  }
+  const [contourScale, setContourScale] = useState<'normalized' | 'raw'>(readContourScale);
+  function changeContourScale(scale: 'normalized' | 'raw') {
+    setContourScale(scale);
+    try { localStorage.setItem(CONTOUR_SCALE_KEY, scale); } catch { /* storage unavailable */ }
   }
   const [showMeaningInstead, setShowMeaningInstead] = useState(false);
   const [draftNotes, setDraftNotes] = useState('');
@@ -861,6 +871,15 @@ export function ShadowWorkspace({
           </select>
         </label>
       ) : null}
+      {referenceAudio ? (
+        <label className="muted" style={{ fontSize: '0.85rem' }}>
+          Pitch scale{' '}
+          <select value={contourScale} onChange={(event) => changeContourScale(event.target.value === 'raw' ? 'raw' : 'normalized')}>
+            <option value="normalized">Speaker-normalized</option>
+            <option value="raw">Raw Hz (unaltered)</option>
+          </select>
+        </label>
+      ) : null}
       {isLoopingReps && loopLeadInMs > 0 ? (
         <LeadInCountdown getRemainingMs={shadowing.getShadowLeadInRemainingMs} />
       ) : null}
@@ -879,6 +898,7 @@ export function ShadowWorkspace({
           analyser={shadowing.getShadowAnalyser()}
           sampleRate={shadowing.getShadowSampleRate()}
           showWaveform={false}
+          pitchScale={contourScale}
           wrapSeconds={wrapSeconds}
           leadInMs={loopLeadInMs}
           tailMs={loopGapMs}

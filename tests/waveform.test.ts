@@ -10,12 +10,16 @@ import {
   emptyLivePitchBuckets,
   energyEnvelope,
   gentleLiveGain,
+  hzToAbsoluteSemitones,
   livePeaksFromAmplitudes,
   livePitchDisplayHalfSpan,
   peakMagnitude,
   peaksToPolyline,
   pitchBucketsToRuns,
   pitchFramesToBucketSemitones,
+  pitchValueY,
+  rawPitchRange,
+  rawPitchTicks,
   trimmedSampleRange,
 } from '../src/lib/waveform';
 
@@ -320,5 +324,41 @@ describe('livePitchDisplayHalfSpan', () => {
     expect(livePitchDisplayHalfSpan([0.2, -0.3])).toBe(3.5);
     expect(livePitchDisplayHalfSpan([])).toBe(3.5);
     expect(livePitchDisplayHalfSpan([-20, 20])).toBe(8);
+  });
+});
+
+describe('raw (unnormalized) pitch helpers', () => {
+  it('buckets absolute pitch from Hz, ignoring the per-speaker relative value', () => {
+    const frames = [
+      { timeSeconds: 0, voiced: true, relativeSemitones: 0, hz: 200 },
+      { timeSeconds: 0.9, voiced: true, relativeSemitones: 0, hz: 100 },
+      { timeSeconds: 0.5, voiced: true, relativeSemitones: 3, hz: null },
+    ];
+    const buckets = pitchFramesToBucketSemitones(frames, 1, 2, 100);
+    expect(buckets[0]).toBeCloseTo(12); // 200 Hz is an octave over the 100 Hz reference
+    expect(buckets[1]).toBeCloseTo(0);
+  });
+
+  it('spans every series, padded, with a minimum height', () => {
+    const range = rawPitchRange([hzToAbsoluteSemitones(200), null], [hzToAbsoluteSemitones(110)]);
+    expect(range.min).toBeLessThan(hzToAbsoluteSemitones(110));
+    expect(range.max).toBeGreaterThan(hzToAbsoluteSemitones(200));
+    expect(rawPitchRange([5, 5.2]).max - rawPitchRange([5, 5.2]).min).toBeGreaterThanOrEqual(8);
+    expect(rawPitchRange([], [null])).toEqual({ min: -4, max: 12 });
+  });
+
+  it('offers round Hz gridlines inside the range, at most six', () => {
+    const ticks = rawPitchTicks(hzToAbsoluteSemitones(90), hzToAbsoluteSemitones(260));
+    expect(ticks.length).toBeGreaterThan(0);
+    expect(ticks.length).toBeLessThanOrEqual(6);
+    for (const tick of ticks) {
+      expect(tick.hz).toBeGreaterThanOrEqual(90);
+      expect(tick.hz).toBeLessThanOrEqual(260);
+    }
+  });
+
+  it('places higher values nearer the top and clamps out-of-range values to the edge', () => {
+    expect(pitchValueY(10, 100, 0, 10)).toBeLessThan(pitchValueY(0, 100, 0, 10));
+    expect(pitchValueY(99, 100, 0, 10)).toBe(pitchValueY(10, 100, 0, 10));
   });
 });

@@ -97,3 +97,38 @@ describe('LiveShadowWaveform lead-in and pause window', () => {
     expect(readChart(container).markers).toEqual([]);
   });
 });
+
+describe('LiveShadowWaveform raw pitch scale', () => {
+  it('draws your voice at once on a Hz-labelled axis, with no median warm-up', async () => {
+    const { container } = render(
+      <LiveShadowWaveform
+        referenceBlob={new Blob(['ref'])}
+        active
+        analyser={fakeAnalyser()}
+        sampleRate={SAMPLE_RATE}
+        showWaveform={false}
+        pitchScale="raw"
+        getMediaTime={() => 0.5}
+      />,
+    );
+    await waitFor(() => expect(container.querySelector('polyline[stroke="var(--accent)"]')).not.toBeNull(), { timeout: 4000 });
+    expect(container.textContent).toContain('raw Hz, not normalized');
+    expect(container.textContent).toMatch(/\d+ Hz/);
+  });
+
+  it('keeps the normalized chart, without Hz gridlines, by default', async () => {
+    const { container } = render(
+      <LiveShadowWaveform
+        referenceBlob={new Blob(['ref'])}
+        active
+        analyser={fakeAnalyser()}
+        sampleRate={SAMPLE_RATE}
+        showWaveform={false}
+        getMediaTime={() => 0.5}
+      />,
+    );
+    await waitFor(() => expect(container.querySelector('svg[aria-label="Reference and live pitch contour"]')).not.toBeNull());
+    expect(container.textContent).toContain('speaker-normalized');
+    expect(container.querySelector('svg text')).toBeNull();
+  });
+});
