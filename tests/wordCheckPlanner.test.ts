@@ -87,6 +87,13 @@ describe('Word checks are planned on their own, from sentence morphology', () =>
     expect(target).toMatchObject({ vocabularyItemId: '', surface: '猫', meaning: 'cat', start: 0 });
   });
 
+  it('does not ask about the pieces of a fixed phrase such as について', async () => {
+    const sentence = makeSentence([['行事', 'event'], ['に'], ['つい', 'to attach'], ['て'], ['話します', 'to talk']]);
+    expect(await getWordMeaningCheckTarget(sentence)).toMatchObject({ surface: '行事' });
+    const only = makeSentence([['に'], ['つい', 'to attach'], ['て']]);
+    expect(await getWordMeaningCheckTarget(only)).toBeUndefined();
+  });
+
   it('lists walked sentences with a checkable word, struggling first, and skips too-recent ones', async () => {
     const { ready, walkedToday, checkedYesterday, noMeanings, struggling } = await setup();
     const candidates = (await getSessionPlannerInput(60)).wordCheckCandidates ?? [];

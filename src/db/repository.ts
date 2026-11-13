@@ -3,6 +3,7 @@ import type { Table } from 'dexie';
 import { openContentReports, type OpenContentReport } from '../lib/contentReports';
 import { isReadingAnswerCorrect, surfaceReadingFromInline } from '../lib/readingAnswer';
 import { buildWordEvidence, MEANING_CHECK_KEY_PREFIX, strugglingWordIds } from '../lib/wordEvidence';
+import { findSetExpressions } from '../lib/setExpressions';
 import { stepTimer } from '../lib/pageTiming';
 import { FREQUENCY_WAIT_MS, loadWordFrequency, lookupWordBand } from '../lib/wordFrequency';
 import { grammarPatternStrengths } from '../lib/grammarEvidence';
@@ -12374,7 +12375,12 @@ function meaningCheckWordsFor(
   const sentenceLinks = (linksBySentence.get(sentence.id) ?? []).filter((link) => vocabById.has(link.vocabularyItemId));
   const seen = new Set<string>();
   const words: Array<{ word: MeaningCheckWord; readingStrength: number }> = [];
-  for (const suggestion of [...sentence.vocabularySuggestions].sort((a, b) => a.start - b.start)) {
+  const ordered = [...sentence.vocabularySuggestions].sort((a, b) => a.start - b.start);
+  // Pieces of a fixed phrase (つい of について) gloss misleadingly alone; the phrase is a grammar check, not a word check.
+  const inSetExpression = new Set<number>();
+  for (const { first, last } of findSetExpressions(ordered)) for (let i = first; i <= last; i += 1) inSetExpression.add(i);
+  for (const [index, suggestion] of ordered.entries()) {
+    if (inSetExpression.has(index)) continue;
     if (!suggestion.selectedByDefault || !suggestion.expression || seen.has(suggestion.expression)) continue;
     if (!suggestion.surface || !sentence.japanese.includes(suggestion.surface)) continue;
     seen.add(suggestion.expression);
