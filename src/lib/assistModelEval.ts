@@ -24,6 +24,11 @@ export const DEFAULT_ARMS: EvalArm[] = [
   { id: 'B-qwen3.8-max', backend: 'opencode', model: 'opencode-go/qwen3.8-max' },
   { id: 'B-kimi-k3', backend: 'opencode', model: 'opencode-go/kimi-k3' },
   { id: 'E-kimi-k3.1-pro', backend: 'opencode', model: 'opencode-go/kimi-k3.1-pro' },
+  // Free OpenCode (Zen) models for a limited time; the first three do not retain or train on prompts.
+  { id: 'F-glm-5.3-flash', backend: 'opencode', model: 'opencode/glm-5.3-flash-free' },
+  { id: 'F-deepseek-v4.1-flash', backend: 'opencode', model: 'opencode/deepseek-v4.1-flash-free' },
+  { id: 'F-minimax-m3.1-flash', backend: 'opencode', model: 'opencode/minimax-m3.1-flash-free' },
+  { id: 'F-big-pickle', backend: 'opencode', model: 'opencode/big-pickle' },
 ];
 
 /** Constructions worth stress-testing; a window's score is how many distinct ones it contains. */
