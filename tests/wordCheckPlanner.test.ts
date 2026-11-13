@@ -90,6 +90,8 @@ describe('Word checks are planned on their own, from sentence morphology', () =>
   it('does not ask about the pieces of a fixed phrase such as について', async () => {
     const sentence = makeSentence([['行事', 'event'], ['に'], ['つい', 'to attach'], ['て'], ['話します', 'to talk']]);
     expect(await getWordMeaningCheckTarget(sentence)).toMatchObject({ surface: '行事' });
+    const quoting = makeSentence([['って'], ['いう', 'to say']]);
+    expect(await getWordMeaningCheckTarget(quoting)).toBeUndefined();
     const only = makeSentence([['に'], ['つい', 'to attach'], ['て']]);
     expect(await getWordMeaningCheckTarget(only)).toBeUndefined();
   });
