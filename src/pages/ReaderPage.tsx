@@ -501,11 +501,10 @@ export function ReaderPage() {
     setToolNotice(undefined);
     if (kind === 'dictate' || kind === 'tiles') {
       let hasAudio = knownHasAudio;
-      if (hasAudio === undefined && loadedAudioRows) {
-        hasAudio = loadedAudioRows.some((audio) => audio.sentenceId === sentence.id);
-      }
+      if (hasAudio === undefined && loadedAudioRows?.some((audio) => audio.sentenceId === sentence.id)) hasAudio = true;
       if (hasAudio === undefined) {
-        // Clips are still loading: count them directly rather than wrongly reporting none.
+        // Not in the loaded clips: they may still be loading, or belong to the previous chapter after a route
+        // change (a stale list would wrongly report none), so count them directly.
         void getDb()
           .sentenceAudio.where('sentenceId')
           .equals(sentence.id)
