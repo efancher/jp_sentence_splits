@@ -1,5 +1,6 @@
 import type { EntityTable } from 'dexie';
 
+import { hasLocalStudyData } from './migration';
 import { getDb } from '../db/database';
 import {
   bumpQueueRetry,
@@ -66,7 +67,7 @@ import {
 } from './progress';
 import type { SyncEntity, SyncQueueItem } from './types';
 
-const PULL_PAGE_SIZE = 100;
+const PULL_PAGE_SIZE = 500;
 /** Cap on `SyncMetaState.deferredPullEventIds` — past this, something is
  *  badly wrong and "Re-download everything from cloud" (Settings) is the
  *  real fix, so keep only the most recent ids rather than growing forever. */
@@ -1411,6 +1412,23 @@ export async function repairMissingBookMemberships(force = false): Promise<numbe
   return repaired;
 }
 
+/**
+ * True only when this device has never pulled and holds nothing that a
+ * snapshot replace could destroy: no cursor, no queued writes, no tracked
+ * records and no local study data. Exported for tests.
+ */
+export async function isFreshDevice(meta: { lastPullEventId: number }): Promise<boolean> {
+  if (meta.lastPullEventId !== 0) return false;
+  const db = getDb();
+  const [queued, tracked, conflicts] = await Promise.all([
+    db.syncQueue.count(),
+    db.syncRecordMeta.count(),
+    db.syncConflicts.count(),
+  ]);
+  if (queued > 0 || tracked > 0 || conflicts > 0) return false;
+  return !(await hasLocalStudyData());
+}
+
 async function pullChanges(): Promise<void> {
   const supabase = getSupabase();
   if (!supabase) return;
@@ -1421,7 +1439,16 @@ async function pullChanges(): Promise<void> {
   const userId = session?.user?.id;
   if (!userId) return;
 
-  const meta = await ensureSyncMeta();
+  let meta = await ensureSyncMeta();
+  if (await isFreshDevice(meta)) {
+    // The event log is append-only (~4 events per live row), so replaying it
+    // from 0 costs thousands of round-trips for what a table snapshot fetches
+    // in a few dozen pages. replaceLocalWithCloud also moves the cursor to
+    // the newest event, taking over from the incremental pull below.
+    syncLog('info', 'Fresh device: bootstrapping from cloud tables', 'PULL_BOOTSTRAP');
+    await replaceLocalWithCloud(userId);
+    meta = await ensureSyncMeta();
+  }
   const deferred = new Set<number>(meta.deferredPullEventIds ?? []);
   syncLog('debug', `Pull start: session+meta ${Date.now() - t0}ms, ${deferred.size} deferred, cursor ${meta.lastPullEventId}`, 'PULL_TIMING');
 
@@ -2199,6 +2226,17 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
   if (!supabase) throw new Error('Supabase not configured');
   const db = getDb();
 
+  // Read the cursor before the snapshot: events written while the tables page
+  // in are then replayed by the next pull (idempotent) instead of being
+  // skipped by a cursor taken afterwards.
+  const { data: maxEvent } = await supabase
+    .from('sync_events')
+    .select('id')
+    .eq('owner_id', userId)
+    .order('id', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
   await db.transaction(
     'rw',
     [
@@ -2399,14 +2437,6 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
     });
     await hydrateMissingReferenceAudio();
   }
-
-  const { data: maxEvent } = await supabase
-    .from('sync_events')
-    .select('id')
-    .eq('owner_id', userId)
-    .order('id', { ascending: false })
-    .limit(1)
-    .maybeSingle();
 
   await updateSyncMeta({
     userId,

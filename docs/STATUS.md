@@ -314,6 +314,12 @@ and possible extensions. This snapshot does not certify a live deployment.
   child's queue row, and a once-per-session sweep queues never-acknowledged local
   books/sentences. Still post-commit (`notifySync`): the ~90 single-row writes,
   which have a much smaller window; the sweep covers parents but not children.
+- Fresh-device sync (2026-11-13): the cloud `sync_events` log is append-only
+  (~148k events for ~35k live rows), so replaying it from 0 took ~1,100+ pages
+  (15+ min). A device with cursor 0, no queue/record-meta/conflicts and no local
+  books or sentences now bootstraps via `replaceLocalWithCloud` (table snapshot;
+  the cursor is read before the snapshot so mid-snapshot events replay). Incremental
+  pull pages are 500 events instead of 100. Server-side event compaction is not done.
 
 ## Test and maintenance review
 
