@@ -243,12 +243,15 @@ RUNNERS = {"codex": run_codex, "claude": run_claude, "opencode": run_opencode}
 
 
 def backend_order(requested: str) -> list[str]:
-    order = [name for name in config.ASSIST_BACKENDS if name in RUNNERS]
-    if requested in RUNNERS:
-        order = [requested] + [name for name in RUNNERS if name != requested]
     now = time.time()
     # A backend that just failed its probe goes last, so the rest of a long run is not spent waiting on it.
-    return sorted(order, key=lambda name: _down_until.get(name, 0) > now)
+    def by_health(names: list[str]) -> list[str]:
+        return sorted(names, key=lambda name: _down_until.get(name, 0) > now)
+
+    if requested in RUNNERS:
+        # An explicitly requested backend stays first even when marked down: the caller asked for it.
+        return [requested] + by_health([name for name in RUNNERS if name != requested])
+    return by_health([name for name in config.ASSIST_BACKENDS if name in RUNNERS])
 
 
 def _probe(name: str, abort: threading.Event, finished: threading.Event) -> None:
@@ -281,7 +284,9 @@ def _execute(
             _ctx.abort, _ctx.timeout = abort, None
             # Only the requested backend (first in the order) gets the override; a fallback runs its own default.
             _ctx.overrides = overrides if name == backends[0] else None
-            threading.Thread(target=_probe, args=(name, abort, finished), daemon=True).start()
+            # A model override means a deliberate (often slow) run; the health probe would cut it off.
+            if not _ctx.overrides:
+                threading.Thread(target=_probe, args=(name, abort, finished), daemon=True).start()
             try:
                 job.reply = RUNNERS[name](prompt)
                 job.status = "done"

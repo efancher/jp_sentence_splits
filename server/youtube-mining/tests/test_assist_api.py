@@ -198,6 +198,12 @@ def test_opencode_is_a_fallback_after_the_requested_backend(monkeypatch: pytest.
     assert assist.backend_order("claude")[-1] == "opencode"
 
 
+def test_requested_backend_stays_first_even_when_marked_down(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(assist, "_down_until", {"opencode": time.time() + 600})
+    assert assist.backend_order("opencode")[0] == "opencode"
+    assert assist.backend_order("claude")[-1] == "opencode"
+
+
 def test_model_override_applies_to_the_requested_backend_only(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -212,14 +218,19 @@ def test_model_override_applies_to_the_requested_backend_only(
         seen["claude"] = assist.claude_args()
         return "ok"
 
+    def failing_codex(prompt: str) -> str:
+        seen["codex"] = assist.codex_args()
+        raise assist.AssistError("nope")
+
     monkeypatch.setitem(assist.RUNNERS, "opencode", failing_opencode)
+    monkeypatch.setitem(assist.RUNNERS, "codex", failing_codex)
     monkeypatch.setitem(assist.RUNNERS, "claude", claude)
     body = {"prompt": "hi", "backend": "opencode", "model": "opencode-go/glm-5.3", "effort": "high"}
     result = _wait(client, client.post("/assist", json=body).json()["assistId"])
     assert result["status"] == "done" and result["backend"] == "claude"
     assert seen["opencode"][seen["opencode"].index("-m") + 1] == "opencode-go/glm-5.3"
     assert seen["opencode"][seen["opencode"].index("--variant") + 1] == "high"
-    assert "opencode-go/glm-5.3" not in seen["claude"]
+    assert "opencode-go/glm-5.3" not in seen["claude"] + seen["codex"]
 
 
 def test_model_override_rejects_flag_like_values(client: TestClient) -> None:
