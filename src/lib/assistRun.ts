@@ -7,14 +7,8 @@
  * finished piece, so a stopped/failed/interrupted run resumes without
  * repeating work.
  */
-import {
-  chunkTranscript,
-  clampConcurrency,
-  describeStop,
-  mergeChunkReplies,
-  otherFailures,
-  runSegmentChunks,
-} from './assistChunks';
+import { chunkTranscript, clampConcurrency, describeStop, mergeChunkReplies, otherFailures, runSegmentChunks } from './assistChunks';
+import { applyCorrections, runCorrectionChunks, type AppliedCorrection } from './assistCorrection';
 import { mergeExtraReplies, planExtraTasks, runExtraTasks, type ExtrasSentence } from './assistExtras';
 import { splitCombinedReply, type CombinedPromptOptions, type CombinedReplySections } from './combinedImportPrompt';
 import { parseAiCombinedReply } from './miningQuickImport';
@@ -47,12 +41,16 @@ export function parallelProgress(label: string, done: number, total: number, run
 
 export interface AssistRunState {
   status: AssistRunStatus;
-  phase: 'sentences' | 'extras' | null;
+  phase: 'corrections' | 'sentences' | 'extras' | null;
   /** Human-readable line for the UI, e.g. "Part 2 of 5 — codex". */
   progress: string;
   failure: string | null;
   /** Finished segment parts by chunk index (null = still to do). */
   segmentReplies: (string | null)[];
+  /** Finished recognition-fix parts by chunk index (null = still to do). */
+  correctionReplies: (string | null)[];
+  /** Minimal diffs actually applied to the transcript — the audit trail. */
+  corrections: AppliedCorrection[];
   /** Finished extra pieces by task id. */
   extraReplies: Record<string, string>;
   /** Merged `=== SENTENCES ===` reply, set once every segment part is done. */
@@ -93,6 +91,8 @@ export function emptyAssistRunState(): AssistRunState {
     progress: 'Starting…',
     failure: null,
     segmentReplies: [],
+    correctionReplies: [],
+    corrections: [],
     extraReplies: {},
     sentencesReply: null,
     extras: null,
@@ -122,15 +122,53 @@ export async function runAssistPipeline(input: {
   if (state.segmentReplies.length !== chunks.length) {
     update({
       segmentReplies: chunks.map(() => null),
+      correctionReplies: chunks.map(() => null),
+      corrections: [],
       sentencesReply: null,
       extras: null,
     });
   }
   update({ status: 'running', phase: 'sentences', failure: null });
 
+  let workingChunks = chunks;
   if (!state.sentencesReply) {
-    const result = await runSegmentChunks({
+    const correctionsFit = Array.isArray(state.correctionReplies) && state.correctionReplies.length === chunks.length;
+    if (!correctionsFit) {
+      update({ correctionReplies: chunks.map(() => null), corrections: [] });
+    }
+    update({ phase: 'corrections' });
+    const corrResult = await runCorrectionChunks({
       chunks,
+      replies: correctionsFit ? state.correctionReplies : [],
+      run,
+      onChunkDone: (index, reply) => {
+        const correctionReplies = [...(state.correctionReplies ?? [])];
+        correctionReplies[index] = reply;
+        update({ correctionReplies });
+      },
+      onProgress: (index, total, backend) =>
+        update({ progress: `Corrections: part ${index + 1} of ${total}${via(backend)}` }),
+      onNote: (text) => update(logPatch(state, text)),
+      isCancelled: input.isCancelled,
+      concurrency,
+    });
+    if (corrResult.cancelled) {
+      update({ status: 'cancelled', progress: 'Stopped.' });
+      return state;
+    }
+    const { segs: correctedTranscript, applied } = applyCorrections(
+      spec.transcript,
+      corrResult.corrections.flat(),
+    );
+    if (applied.length > 0) {
+      workingChunks = chunkTranscript(correctedTranscript);
+      update({ corrections: applied });
+      update(logPatch(state, `Recognition fixes: ${applied.length} applied and logged.`));
+    }
+
+    update({ status: 'running', phase: 'sentences', failure: null });
+    const result = await runSegmentChunks({
+      chunks: workingChunks,
       replies: state.segmentReplies,
       run,
       onChunkDone: (index, reply) => {

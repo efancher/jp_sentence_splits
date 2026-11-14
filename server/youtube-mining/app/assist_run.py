@@ -144,6 +144,8 @@ def start(run_id: str, spec: dict[str, Any]) -> None:
                     "progress": "Starting…",
                     "failure": None,
                     "segmentReplies": [],
+                    "correctionReplies": [],
+                    "corrections": [],
                     "extraReplies": {},
                     "sentencesReply": None,
                     "extras": None,

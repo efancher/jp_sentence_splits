@@ -800,6 +800,19 @@ const assistRunSchema = z.object({
     .nullable()
     .optional(),
   extraReplies: z.record(z.string(), z.string()).nullable().optional(),
+  /** Minimal ASR fixes the run's correction pass applied to the transcript (audit trail). */
+  corrections: z
+    .array(
+      z.object({
+        seg: z.number(),
+        startMs: z.number(),
+        original: z.string(),
+        replacement: z.string(),
+        reason: z.string().default(''),
+        confidence: z.enum(['high', 'med', 'low']).default('med'),
+      }),
+    )
+    .optional(),
   selection: z.record(z.string(), z.array(z.number())).nullable().optional(),
   sentenceCount: z.number().nullable().optional(),
   bookSentences: z.array(z.object({ handle: z.number(), japanese: z.string(), translation: z.string().default('') })).nullable().optional(),

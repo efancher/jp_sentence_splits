@@ -47,7 +47,7 @@ const SENTENCE_RULES_HEAD = [
   'PART 1 — SENTENCES. Segment the transcript into clean sentences AND translate each one.',
   'For each sentence:',
   '@@PUNCTUATION@@',
-  '- Fix obvious mis-recognitions, but keep the Japanese wording faithful — do not paraphrase it.',
+  '@@CORRECTIONS@@',
   '- Never drop or add spoken words. In particular, when a clause ends in a connective such as',
   '  が, けど, けれど, から, ので, のに, し or ても, keep that word: do not turn "…始めましたが、今は…"',
   '  into "…始めました。今は…". Prefer keeping such a clause joined to the one after it (within the',
@@ -87,11 +87,23 @@ const PUNCTUATION_LINES = {
   },
 };
 
-/** The PART 1 rules; the punctuation wording depends on whether the transcript already has punctuation. */
-function sentenceRules(punctuated: boolean): string[] {
+/** The PART 1 rules; punctuation wording depends on the track, correction wording on whether a fix pass already ran. */
+function sentenceRules(punctuated: boolean, precorrected = false): string[] {
   const lines = PUNCTUATION_LINES[punctuated ? 'punctuated' : 'unpunctuated'];
+  const corrections = precorrected
+    ? [
+        '- Recognition errors have already been found, fixed and logged; treat the wording as final:',
+        '  copy words exactly — do not re-spell, substitute or "improve" any of them.',
+      ]
+    : ['- Fix obvious mis-recognitions, but keep the Japanese wording faithful — do not paraphrase it.'];
   return SENTENCE_RULES_HEAD.flatMap((line) =>
-    line === '@@INTRO@@' ? lines.intro : line === '@@PUNCTUATION@@' ? lines.rule : [line],
+    line === '@@INTRO@@'
+      ? lines.intro
+      : line === '@@PUNCTUATION@@'
+        ? lines.rule
+        : line === '@@CORRECTIONS@@'
+          ? corrections
+          : [line],
   );
 }
 
@@ -246,13 +258,13 @@ export function singleExtraBlock(kind: ExtraKind): { heading: string; lines: str
 export function formatCombinedPromptForAI(
   segs: WizardTranscriptSeg[],
   options: CombinedPromptOptions = {},
-  /** `inline`: the reply is read from the assistant's message by a program, so don't ask for an attachment; `note` is shown just above the transcript. */
-  mode: { inline?: boolean; note?: string } = {},
+  /** `inline`: the reply is read from the assistant's message by a program, so don't ask for an attachment; `note` is shown just above the transcript; `precorrected`: a logged fix pass already ran, so PART 1 copies wording verbatim. */
+  mode: { inline?: boolean; note?: string; precorrected?: boolean } = {},
 ): string {
   const blocks = extraBlocks(withDefaults(options));
   const headings = ['SENTENCES', ...blocks.map((block) => block.heading)];
   const body = segs.map((seg) => `[${formatWizardTimestamp(seg.startMs)}] ${seg.text.trim()}`).join('\n');
-  const out: string[] = [...sentenceRules(looksPunctuated(segs))];
+  const out: string[] = [...sentenceRules(looksPunctuated(segs), mode.precorrected === true)];
   blocks.forEach((block, index) => {
     out.push('', `PART ${index + 2} — ${block.heading}.`, ...block.lines);
   });

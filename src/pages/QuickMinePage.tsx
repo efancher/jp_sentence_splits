@@ -51,7 +51,8 @@ import {
 import { mergeExtraReplies, planExtraTasks, runExtraTasks } from '../lib/assistExtras';
 import { MAX_ATTEMPTS_PER_CHUNK, NO_EXTRAS } from '../lib/assistChunks';
 import { parseAiCombinedReply } from '../lib/miningQuickImport';
-import type { WizardTranscriptSeg } from '../lib/miningTranscript';
+import { formatWizardTimestamp, type WizardTranscriptSeg } from '../lib/miningTranscript';
+import { applyCorrectionsToTranscript, type AppliedCorrection } from '../lib/assistCorrection';
 import { downloadTextFile } from '../lib/particleChecks';
 import { applyQuickImportExtras, hasQuickImportExtras, writeImportExtrasNotice } from '../lib/quickImportExtras';
 import { extractYouTubeId } from '../lib/youtubeUrl';
@@ -243,6 +244,7 @@ export function QuickMinePage() {
   });
   const [extras, setExtras] = useState<CombinedReplySections | null>(null);
   const [replyWarnings, setReplyWarnings] = useState<string[]>([]);
+  const [recognitionFixes, setRecognitionFixes] = useState<AppliedCorrection[]>([]);
   const [assistRunning, setAssistRunning] = useState(false);
   const [assistBackend, setAssistBackend] = useState<AssistBackend>(() => {
     const saved = localStorage.getItem(ASSIST_BACKEND_KEY);
@@ -795,7 +797,16 @@ export function QuickMinePage() {
   /** Review what the box produced so far: the sentences, plus whichever extras finished. */
   function reviewAssistRun(run: AssistRunStatus) {
     if (!run.sentencesReply) return;
-    const applied = applyReply(run.sentencesReply, NO_EXTRAS);
+    // The run's fix pass edited its own copy of the transcript; fold the same
+    // logged diffs into ours so the review warnings check the right baseline
+    // and the edits are visible where they were made.
+    const baseTranscript = run.corrections?.length
+      ? applyCorrectionsToTranscript(transcript, run.corrections)
+      : transcript;
+    if (run.corrections?.length) setTranscript(baseTranscript);
+    const applied = applyReply(run.sentencesReply, NO_EXTRAS, baseTranscript);
+    // applyReply clears the panel; a run-sourced review owns it again here.
+    if (applied && run.corrections?.length) setRecognitionFixes(run.corrections);
     if (applied && run.extras && hasQuickImportExtras(run.extras)) setExtras(run.extras);
   }
 
@@ -914,8 +925,9 @@ export function QuickMinePage() {
   function applyReply(
     reply: string,
     options: Required<CombinedPromptOptions> = promptOptions,
+    baseTranscript: WizardTranscriptSeg[] = transcript,
   ): QuickRow[] | null {
-    const fallbackEndMs = transcript.at(-1)?.endMs ?? 0;
+    const fallbackEndMs = baseTranscript.at(-1)?.endMs ?? 0;
     const sections = splitCombinedReply(reply);
     const parsed = parseAiCombinedReply(sections.sentences, fallbackEndMs);
     if (parsed.length === 0) {
@@ -925,13 +937,14 @@ export function QuickMinePage() {
       return null;
     }
     setReplyWarnings(
-      checkCombinedReply({ reply, sections, rows: parsed, transcript, options }),
+      checkCombinedReply({ reply, sections, rows: parsed, transcript: baseTranscript, options }),
     );
     const numbered = parsed.map((row, index) => ({ ...row, handle: index + 1 }));
     setRows(numbered);
     setExtras(hasQuickImportExtras(sections) ? sections : null);
     setPasteStatus('');
     setPasted('');
+    setRecognitionFixes([]);
     setStage('review');
     return numbered;
   }
@@ -1538,6 +1551,24 @@ export function QuickMinePage() {
           ))}
           <span className="muted" style={{ fontSize: '0.9em' }}>
             You can still import it as-is, or go back and ask the assistant to continue.
+          </span>
+        </section>
+      ) : null}
+
+      {stage === 'review' && recognitionFixes.length > 0 ? (
+        <section className="panel stack" style={{ gap: '0.35rem' }}>
+          <strong>
+            {recognitionFixes.length} recognition {recognitionFixes.length === 1 ? 'fix was' : 'fixes were'} applied
+            before the sentences pass
+          </strong>
+          {recognitionFixes.map((fix, index) => (
+            <span key={`${fix.seg}-${index}`} className="muted" style={{ fontSize: '0.9em' }}>
+              [{formatWizardTimestamp(fix.startMs)}] {fix.original} → {fix.replacement}
+              {fix.reason ? ` — ${fix.reason}` : ''}
+            </span>
+          ))}
+          <span className="muted" style={{ fontSize: '0.9em' }}>
+            A listening check, not a guarantee — if one looks wrong, edit the transcript line (or the sentence above).
           </span>
         </section>
       ) : null}

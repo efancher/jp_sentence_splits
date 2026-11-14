@@ -28,7 +28,8 @@ describe('runAssistPipeline', () => {
     expect(state.status).toBe('done');
     expect(state.sentencesReply).toContain('[0:00] あ。 || Ah.');
     expect(state.extras).toBeNull();
-    expect(run).toHaveBeenCalledTimes(1);
+    // one recognition-fix call, then the sentences call
+    expect(run).toHaveBeenCalledTimes(2);
   });
 
   it('chains the ticked extras after the sentences and merges them', async () => {
@@ -81,6 +82,60 @@ describe('runAssistPipeline', () => {
     expect(second.status).toBe('done');
     expect(second.failure).toBeNull();
     expect(run.mock.calls.length - callsAfterFirst).toBe(1);
+  });
+
+  it('applies logged recognition fixes before segmentation and tells PART 1 the text is final', async () => {
+    const segs = [
+      { ...seg(0), text: 'タウンワークって電話帳あるじゃん' },
+      { ...seg(6), text: 'うん' },
+    ];
+    const calls: string[] = [];
+    const run = vi.fn(async (prompt: string) => {
+      calls.push(prompt);
+      if (prompt.includes('CORRECTIONS ONLY')) {
+        return {
+          reply: '[{"seg":0,"original":"タウンワーク","replacement":"タウンページ","reason":"brand name","confidence":"high"}]',
+          backend: 'claude',
+        };
+      }
+      return {
+        reply:
+          '=== SENTENCES ===\n[0:00] タウンページって電話帳あるじゃん。 || There is the TownPages phone book.\n[0:06] うん。 || Yeah.\n=== END ===',
+        backend: 'claude',
+      };
+    });
+    const state = await runAssistPipeline({
+      spec: { transcript: segs, options: {} },
+      state: emptyAssistRunState(),
+      run,
+      save: () => {},
+      isCancelled: () => false,
+    });
+    expect(state.status).toBe('done');
+    expect(state.corrections).toHaveLength(1);
+    expect(state.corrections[0]).toMatchObject({ seg: 0, replacement: 'タウンページ', startMs: 0 });
+    const sentencesPrompt = calls[calls.length - 1]!;
+    expect(sentencesPrompt).toContain('タウンページって電話帳あるじゃん');
+    expect(sentencesPrompt).toContain('fixed and logged');
+    expect(sentencesPrompt).not.toContain('Fix obvious mis-recognitions');
+    expect(state.log?.some((entry) => entry.text.includes('Recognition fixes: 1 applied'))).toBe(true);
+  });
+
+  it('a failing or nonsense correction reply never stops the run', async () => {
+    const run = vi.fn(async (prompt: string) => {
+      if (prompt.includes('CORRECTIONS ONLY')) throw new Error('backend down');
+      return { reply: sentencesReply, backend: 'codex' };
+    });
+    const state = await runAssistPipeline({
+      spec: base,
+      state: emptyAssistRunState(),
+      run,
+      save: () => {},
+      isCancelled: () => false,
+    });
+    expect(state.status).toBe('done');
+    expect(state.corrections).toEqual([]);
+    expect(state.log?.some((entry) => entry.text.includes('corrections part 1'))).toBe(true);
   });
 
   it('reports cancelled when asked to stop', async () => {

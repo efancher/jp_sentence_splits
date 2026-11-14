@@ -110,6 +110,7 @@ export function buildChunkPrompt(
   ].filter((note): note is string => note !== null);
   return formatCombinedPromptForAI(chunk, NO_EXTRAS, {
     inline: true,
+    precorrected: true,
     note: notes.length > 0 ? notes.join('\n\n') : undefined,
   });
 }
