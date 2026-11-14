@@ -472,8 +472,11 @@ repair tooling, research materials and future roadmap ideas remain available.
    audit trail (`state.corrections`, listed at review, folded into the truncation-check
    baseline); PART 1 no longer asks for inline mis-recognition fixes on that path.
    Fail-open — a broken fix reply leaves the chunk as transcribed and never stops the
-   run. Local checks only (unit/integration tests, typecheck, lint); not yet deployed
-   or exercised in a live box run. This follows a manual experiment on a real
+      run. Deployed to the box and exercised live on 2026-11-14 (a 40-segment
+   `smoke-asr-fix` run applied 5 logged fixes in the right global positions and the
+   corrected wording flowed through into the sentence reply). Browser review-panel
+   checks on phone/desktop layouts remain unverified.
+ This follows a manual experiment on a real
    40-minute episode transcript where haiku and luna independently proposed a mostly
    overlapping ~13-item set of genuine kanji/name fixes that the raw ASR confidence
    scores had almost never flagged (2 of 231 segments); a fable-high pass proposed a
