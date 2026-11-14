@@ -482,6 +482,11 @@ repair tooling, research materials and future roadmap ideas remain available.
    scores had almost never flagged (2 of 231 segments); a fable-high pass proposed a
    few more (mostly the hard tail: names/fillers) for little marginal gain, so the
    pass stays on the default haiku backend.
+   2026-11-14: word glosses no longer use the removed `vocab-assist` Edge Function; the
+   Reader (focused sentence, once per page load), `VocabularyReviewPage` and the picker's
+   "Suggest (AI)" button call the box assistant (`src/lib/assistGlosses.ts`), fail-open when
+   it is unreachable. The `vocab-assist` function was deleted from the repo but may still be
+   deployed on Supabase (`supabase functions delete vocab-assist`).
 
 
 - **Game supply:** the 2026-10-17 production probe found only 30 qualifying Growth

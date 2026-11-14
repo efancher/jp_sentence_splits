@@ -1240,10 +1240,10 @@ kept here so the thinking isn't lost:
   on-ramp for brand-new material." Needs a new `PlannerStepTargetKind` and
   budget-slice plumbing in `buildExploreSteps`/`sessionPlanner.ts` — a
   real lift, not a config tweak like the density threshold was.
-- **Precompute `vocab-assist` (and sentence translation, for the
+- **Precompute word glosses via the box assistant (the `vocab-assist` Edge Function was removed 2026-11-14; and sentence translation, for the
   sentences that don't have one yet) at mining/import commit time** via
-  Anthropic's Message Batches API (50% off Haiku), instead of live-firing
-  on first `VocabularyReviewPage` visit. Since both write to the shared
+  a batch `/assist` pass over a book (modelled on `assistCorrection.ts`), instead of live-firing
+  on first `VocabularyReviewPage`/Reader visit. Since both write to the shared
   `Sentence` row (not per-user), the cost is paid once per sentence ever
   mined, and it removes the "translation isn't ready yet" gap the
   translation quick-win above can still hit on a freshly-imported,
@@ -1251,8 +1251,8 @@ kept here so the thinking isn't lost:
 - **Port the offline POS-disambiguated JMDict lookup (`scripts/lib/
   jmdict.ts`) into a runtime the browser/edge function can query**, as a
   free first pass before any Haiku call — closes the gap where
-  `KaraokeSentenceText`'s tap gloss shows nothing until `vocab-assist` has
-  fired for that sentence, and could eliminate most Haiku calls outright
+  `KaraokeSentenceText`'s tap gloss shows nothing until a gloss has
+  been filled for that sentence, and could eliminate most Haiku calls outright
   (the ambiguity guard already filters down to the cases that actually
   need AI).
 - **Per-chunk masking of unconfirmed words in `AnalyzePage`'s chunk

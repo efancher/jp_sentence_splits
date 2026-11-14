@@ -65,7 +65,7 @@ export interface VocabularyPickerProps {
   saveState?: SaveState;
   /**
    * Optional per-word AI meaning suggestion (VocabularyReviewPage wires this to
-   * the `vocab-assist` edge function). When omitted, the "Suggest (AI)" button
+   * the box assistant). When omitted, the "Suggest (AI)" button
    * is hidden — keeps this a self-contained controlled component with no
    * network dependency of its own.
    */
@@ -347,7 +347,7 @@ function SelectedCard({
     } catch {
       setSuggestState({
         status: 'error',
-        reason: 'Vocabulary AI is unavailable right now.',
+        reason: 'The assistant is unavailable right now.',
       });
     }
   }

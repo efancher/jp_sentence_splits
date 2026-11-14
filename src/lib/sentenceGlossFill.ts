@@ -1,6 +1,6 @@
 import type { VocabularySuggestion } from '../domain/types';
 import { updateSentenceVocabularySuggestions } from '../db/repository';
-import { glossVocabulary } from './vocabAssist';
+import { glossWordsViaAssist } from './assistGlosses';
 
 /**
  * Just-in-time glosses for the Reader's word help. The tokenizer never gives a
@@ -36,7 +36,7 @@ export function applyGlosses(
 const attempted = new Set<string>();
 
 /**
- * Gloss the sentence's unglossed content words in context via `vocab-assist` and
+ * Gloss the sentence's unglossed content words in context via the box assistant and
  * persist them on the sentence. Tries each sentence once per page load; signed
  * out, offline or AI failure just leaves the words unglossed. Returns whether
  * any gloss was saved.
@@ -50,12 +50,12 @@ export async function fillSentenceGlosses(sentence: {
   const needing = suggestionsNeedingGloss(sentence.vocabularySuggestions, savedMeanings);
   if (needing.length === 0) return false;
   attempted.add(sentence.id);
-  const result = await glossVocabulary({
-    sentence: sentence.japanese,
-    words: needing.map((item) => ({ expression: item.expression, reading: item.reading, surface: item.surface })),
-  });
-  if (!result.ok) return false;
-  const next = applyGlosses(sentence.vocabularySuggestions, result.data.glosses);
+  const glosses = await glossWordsViaAssist(
+    sentence.japanese,
+    needing.map((item) => ({ expression: item.expression, reading: item.reading, surface: item.surface })),
+  );
+  if (glosses.length === 0) return false;
+  const next = applyGlosses(sentence.vocabularySuggestions, glosses);
   if (next.every((item, index) => item === sentence.vocabularySuggestions[index])) return false;
   await updateSentenceVocabularySuggestions(sentence.id, next);
   return true;

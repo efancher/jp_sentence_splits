@@ -1200,7 +1200,7 @@ object/verb/particle/etc. — see `ROLE_PRESETS` in `appConfig.ts` and
 lookup by exact role string) and a "literal English" gloss (sticky/
 word-for-word, not fluent translation — a local heuristic, never machine
 translation; every Claude Edge Function this app calls (`grammar-assist`,
-`chunk-why-assist`, `vocab-assist`) only ever pre-fills *editable* fields,
+`chunk-why-assist`) only ever pre-fills *editable* fields,
 never the chunk/sentence sticky English). Supports synthetic zero-が chunks for
 Japanese's frequent implicit subject. `ChunkPuzzleStrip` renders clause-tinted
 blocks with predicate emphasis and an active-chunk highlight. The older
@@ -1244,7 +1244,7 @@ rateable skill). A new `chunk-why-assist` Edge Function (mirrors
 flow — the first time the walkthrough reaches a chunk whose role is one of
 the classic Cure-Dolly confusions (`CHUNK_WHY_AUTO_ROLES`: topic は, zero-が,
 Aが) with no existing note; still only pre-fills the same editable `notes`
-field. Unlike `vocab-assist`/`grammar-assist`'s fully-silent degrade, a
+field. Unlike `grammar-assist`'s fully-silent degrade, a
 failed draft here shows a small inline note rather than hiding the failure
 — deliberate for this feature only.
 
@@ -1307,8 +1307,9 @@ words, not just once analysis begins on `AnalyzePage`.
 **Vocabulary meaning glossing.** The fugashi/UniDic tokenizer gives every
 suggestion a surface/lemma/reading/POS but never an English gloss, so
 YouTube-mined vocabulary arrives with the "Meaning (optional)" field blank.
-Two things fill it: (1) `VocabularyReviewPage` fires one `vocab-assist` Edge
-Function call (Claude Haiku, `src/lib/vocabAssist.ts`) the first time it
+Two things fill it: (1) `VocabularyReviewPage` fires one box-assistant call
+(`glossWordsViaAssist` in `src/lib/assistGlosses.ts`, via `/assist`; the old
+`vocab-assist` Edge Function was removed 2026-11-14) the first time it
 opens a sentence whose content words have no meaning yet — glossing them
 *in sentence context* (which resolves homophones/senses JMDict can't:
 する, 先), persisting the result onto the sentence's suggestions
@@ -1318,7 +1319,7 @@ one-off fills; (3) since 2026-11-14 the Reader does the same once per page
 load for the focused sentence (`src/lib/sentenceGlossFill.ts`), because its
 word help drops any content word with no stored gloss or saved meaning and
 the sentence-led flow never visits `VocabularyReviewPage`. These only pre-fill the still-editable field and degrade
-silently offline/signed-out. Offline, the deterministic path is the
+silently when the assistant is unreachable. Offline, the deterministic path is the
 `backfill:vocabulary-suggestion-glosses` / `backfill:vocabulary-meanings`
 scripts — POS-aware JMDict lookup (`scripts/lib/jmdict.ts` takes the
 tokenizer POS to disambiguate homophone clusters) with a JMnedict
@@ -3092,31 +3093,29 @@ sessions.
   coexist, unused going forward). Entirely optional — the app is fully
   functional local-only without it. Also hosts `supabase/functions/
   invite-book-member/`, `supabase/functions/grammar-assist/`,
-  `supabase/functions/chunk-why-assist/`, and `supabase/functions/
-  vocab-assist/` — Deno Edge Functions, one of two kinds of server-side
+  and `supabase/functions/chunk-why-assist/` — Deno Edge Functions, one of two kinds of server-side
   (non-browser, non-Dexie) code in this app (the other is
   `server/youtube-mining/`, below).
 - **Anthropic API** (via `supabase/functions/grammar-assist/`,
-  `supabase/functions/chunk-why-assist/`, and `supabase/functions/
-  vocab-assist/`) — the LLM/AI integrations in this codebase. Called
+  and `supabase/functions/chunk-why-assist/`) — the LLM/AI integrations in this codebase. Called
   server-side only, from the Edge Functions, using `claude-haiku-4-5` with
   forced structured tool output (`strict: true`); the API key is an Edge
   Function secret (`ANTHROPIC_API_KEY`), never shipped to the browser.
   Deliberately not routed through `shadowing-analysis-api` below — a
   different kind of workload on an already memory-constrained host.
   Entirely optional and additive: every AI-assisted surface
-  (`src/lib/grammarAssist.ts`, `src/lib/chunkWhyAssist.ts`,
-  `src/lib/vocabAssist.ts`) degrades gracefully if the function isn't
+  (`src/lib/grammarAssist.ts`, `src/lib/chunkWhyAssist.ts`) degrades gracefully if the function isn't
   deployed, the key isn't configured, or the network is unreachable —
-  `grammar-assist`/`vocab-assist` degrade to an inline "unavailable"
-  message / silently leave a field blank; `chunk-why-assist` shows a small
+  `grammar-assist` degrades to an inline "unavailable"
+  message; `chunk-why-assist` shows a small
   explicit inline failure note instead (deliberate for that one feature).
   `grammar-assist` suggests/explains grammar patterns; `chunk-why-assist`
   auto-drafts a sentence-specific "why this role" explanation for a small
   set of commonly-confused chunk roles during AnalyzePage's guided
-  walkthrough; `vocab-assist` glosses vocabulary meanings in sentence
-  context (both a just-in-time pass on `VocabularyReviewPage` and a
-  per-word "Suggest (AI)" button).
+  walkthrough; vocabulary meanings in sentence context are glossed by the
+  box assistant instead (`src/lib/assistGlosses.ts`: JIT passes on
+  `VocabularyReviewPage` and the Reader, plus the per-word "Suggest (AI)"
+  button).
 - **`~/projects/shadowing-analysis-api`** — a self-hosted forced-alignment/
   ASR service (separate sibling git repo, not part of this codebase),
   running under `systemd --user` on the user's Hetzner box, exposed only

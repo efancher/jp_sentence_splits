@@ -14,7 +14,6 @@
 | `migrations/20260921000000_pitch_drill_takes.sql` | pitch_drill_takes table + private drill-takes bucket (the learner's drill recordings, alignment, pitch, labels) |
 | `functions/invite-book-member/` | Edge Function for email invites |
 | `functions/grammar-assist/` | Edge Function: AI-assisted grammar-pattern suggestion/explanation (Claude Haiku via the Anthropic API; requires `ANTHROPIC_API_KEY` function secret) |
-| `functions/vocab-assist/` | Edge Function: AI-assisted vocabulary meaning glossing in sentence context (Claude Haiku; same `ANTHROPIC_API_KEY` secret) |
 | `tests/rls_expectations.md` | Multi-user RLS verification outline |
 
 The Supabase GitHub integration ("Deploy to production", branch `main`) was enabled 2026-09-21 and should apply new migrations on push — **unproven until the next new migration** (`pitch_drill_takes` was applied by hand). After any migration push, run `npm run check:migrations-applied`. Fallbacks: the manual `apply-migrations.yml` workflow (`supabase db push`; needs repo secrets `SUPABASE_ACCESS_TOKEN` + `SUPABASE_DB_PASSWORD`), the Dashboard SQL Editor, or `supabase db push`. A migration applied by hand must also be inserted into `supabase_migrations.schema_migrations` (history was baselined with the 24 earlier ones on 2026-09-21), or the integration will try to run it again. `npm run check:migrations-applied` (read-only) reports any table/column the migrations create that prod lacks.

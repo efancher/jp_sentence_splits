@@ -199,17 +199,16 @@ audio sync separately.
 
 ## 15b. Deploy the AI Edge Functions (optional)
 
-`grammar-assist` and `vocab-assist` call Claude Haiku for editable
-suggestions (grammar patterns; vocabulary meanings glossed in context).
-Both are optional — the app degrades to "unavailable" / a blank field
-without them.
+`grammar-assist` calls Claude Haiku for editable grammar-pattern
+suggestions. It is optional — the app degrades to "unavailable" without it.
+(Vocabulary glossing no longer uses an Edge Function; it goes through the
+box assistant, see AI_OVERVIEW.)
 
 ```bash
 # one-time: set the shared secret
 npx supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
 
 npx supabase functions deploy grammar-assist
-npx supabase functions deploy vocab-assist
 ```
 
 ## 16. Diagnose common errors

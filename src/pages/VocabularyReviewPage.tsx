@@ -17,7 +17,7 @@ import type {
   VocabularySelection,
   VocabularySuggestion,
 } from '../domain/types';
-import { glossVocabulary } from '../lib/vocabAssist';
+import { glossWordsViaAssist } from '../lib/assistGlosses';
 import {
   defaultSelectionsFromSuggestions,
   isContentPos,
@@ -91,8 +91,8 @@ export function VocabularyReviewPage() {
 
   // Just-in-time AI glossing: when this sentence's content words have no
   // English meaning yet (every word mined from YouTube starts blank — fugashi
-  // gives no gloss), fill them in context via `vocab-assist`, once per
-  // sentence. Degrades silently — offline / signed-out just leaves the fields
+  // gives no gloss), fill them in context via the box assistant, once per
+  // sentence. Degrades silently — assistant unreachable just leaves the fields
   // blank, exactly as before.
   const [glossState, setGlossState] = useState<'idle' | 'loading' | 'error'>('idle');
   const glossAttempted = useRef<Set<string>>(new Set());
@@ -112,25 +112,21 @@ export function VocabularyReviewPage() {
     let cancelled = false;
     setGlossState('loading');
     void (async () => {
-      const result = await glossVocabulary({
-        sentence: japanese,
-        words: needing.map((item) => ({
+      const glosses = await glossWordsViaAssist(
+        japanese,
+        needing.map((item) => ({
           expression: item.expression,
           reading: item.reading,
           surface: item.surface,
         })),
-      });
+      );
       if (cancelled) return;
-      if (!result.ok) {
+      if (glosses.length === 0) {
         setGlossState('error');
         return;
       }
       setGlossState('idle');
-      const byExpression = new Map(
-        result.data.glosses
-          .filter((gloss) => gloss.meaning?.trim())
-          .map((gloss) => [gloss.expression, gloss]),
-      );
+      const byExpression = new Map(glosses.map((gloss) => [gloss.expression, gloss]));
       if (byExpression.size === 0) return;
 
       const nextSuggestions: VocabularySuggestion[] = suggestions.map((item) =>
@@ -147,7 +143,6 @@ export function VocabularyReviewPage() {
           return {
             ...selection,
             english: gloss.meaning,
-            pos: selection.pos || gloss.partOfSpeech,
           };
         }),
       );
@@ -162,15 +157,8 @@ export function VocabularyReviewPage() {
   const handleSuggestMeaning = useCallback(
     async (word: { expression: string; reading: string }) => {
       if (!japanese) return null;
-      const result = await glossVocabulary({
-        sentence: japanese,
-        words: [{ expression: word.expression, reading: word.reading }],
-      });
-      if (!result.ok) return null;
-      const gloss = result.data.glosses.find((item) => item.meaning?.trim());
-      return gloss
-        ? { meaning: gloss.meaning, partOfSpeech: gloss.partOfSpeech }
-        : null;
+      const [gloss] = await glossWordsViaAssist(japanese, [{ expression: word.expression, reading: word.reading }]);
+      return gloss ? { meaning: gloss.meaning } : null;
     },
     [japanese],
   );
