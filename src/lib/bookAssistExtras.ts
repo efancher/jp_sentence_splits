@@ -7,7 +7,7 @@
  * unless the learner explicitly approved replacing that sentence.
  */
 import { getDb } from '../db/database';
-import { saveSentenceExtras } from '../db/repository';
+import { readRowsByKeys, saveSentenceExtras } from '../db/repository';
 import { getBookWithExtras } from '../db/sentenceExtras';
 import { CONTEXT_WALKTHROUGH_VERSION, mergeChapterWalkthroughs, sentencesNeedingWalkthrough, validWalkthroughFor } from './contextWalkthrough';
 import { chunksMatchSource } from './chunking';
@@ -75,7 +75,7 @@ export async function planBookAssistExtras(bookId: string): Promise<BookExtrasPl
   });
   const [analyses, grammarRows, extraRows] = await Promise.all([
     db.analyses.bulkGet(sentences.map((s) => s.id)),
-    db.sentenceGrammar.where('sentenceId').anyOf(sentences.map((s) => s.id)).toArray(),
+    readRowsByKeys(db.sentenceGrammar, 'sentenceId', sentences.map((s) => s.id)),
     db.sentenceExtras.bulkGet(sentences.map((s) => s.id)),
   ]);
   const grammarCounts = new Map<string, number>();
