@@ -462,10 +462,24 @@ repair tooling, research materials and future roadmap ideas remain available.
   2026-11-13: a model comparison (Haiku vs Kimi K3 / K3.1 Pro, partial GLM / Qwen) found no
   quality case for switching, so Haiku stays the default; details in
   `docs/ASSIST_MODEL_EVAL_PLAN.md`. Every assistant attempt is now logged on the box (one
-  JSON line: time, job, label such as `<run>: structure sentences 1-10, attempt 1`,
-  backend, model, effort, outcome, seconds) in `assist-calls.jsonl` under the jobs root
-  (`MINING_ASSIST_CALL_LOG`), and the run log names the model, so a bad extra can be traced
-  to the model that wrote it. Saved extras themselves are not stamped.
+   JSON line: time, job, label such as `<run>: structure sentences 1-10, attempt 1`,
+   backend, model, effort, outcome, seconds) in `assist-calls.jsonl` under the jobs root
+   (`MINING_ASSIST_CALL_LOG`), and the run log names the model, so a bad extra can be traced
+   to the model that wrote it. Saved extras themselves are not stamped.
+   2026-11-14: assistant runs gained a dedicated **recognition-fix phase** before
+   segmentation (`src/lib/assistCorrection.ts`): one haiku call per chunk proposing
+   substring-validated minimal JSON diffs, applied in code and kept as a timestamped
+   audit trail (`state.corrections`, listed at review, folded into the truncation-check
+   baseline); PART 1 no longer asks for inline mis-recognition fixes on that path.
+   Fail-open — a broken fix reply leaves the chunk as transcribed and never stops the
+   run. Local checks only (unit/integration tests, typecheck, lint); not yet deployed
+   or exercised in a live box run. This follows a manual experiment on a real
+   40-minute episode transcript where haiku and luna independently proposed a mostly
+   overlapping ~13-item set of genuine kanji/name fixes that the raw ASR confidence
+   scores had almost never flagged (2 of 231 segments); a fable-high pass proposed a
+   few more (mostly the hard tail: names/fillers) for little marginal gain, so the
+   pass stays on the default haiku backend.
+
 
 - **Game supply:** the 2026-10-17 production probe found only 30 qualifying Growth
   sentences (none introduced) and one introduced audio-backed Remix skeleton.

@@ -964,11 +964,23 @@ Targets are constants; no settings UI.
   episode's mining job prefetched one ahead). Instead of copy/paste, a
   **"Send to assistant"** button runs the whole job on the mining box as one
   resumable run (`POST /assist-runs`, `server/youtube-mining/app/assist_run.py`
-  spawning `scripts/assist-run.ts`; run id = the mining job id), so the page can
-  close: segment+translate in 20-fragment parts (`src/lib/assistChunks.ts`),
-  then the ticked extras in ~15-sentence ranges with 3 sentences of context
-  before and 2 after, focus targets in one whole-episode call
-  (`src/lib/assistExtras.ts`), orchestrated by `src/lib/assistRun.ts`. Each
+   spawning `scripts/assist-run.ts`; run id = the mining job id), so the page can
+   close: a per-chunk **recognition-fix pass** (`src/lib/assistCorrection.ts`,
+   `phase: 'corrections'`) runs first — one haiku call per 20-fragment part asking
+   only for minimal JSON diffs (`[{"seg","original","replacement","reason","confidence"}]`)
+   against the ASR text, each validated mechanically (`seg` in range, `original` a real
+   substring, an actual change) and applied in code, never trusted free-form. It is
+   fail-open: a bad/failed/nonsense reply just leaves the chunk as transcribed and can't
+   stop the run (distinct from the segment parts' two-attempt cap). The applied fixes
+   become `state.corrections` — the audit trail shown at review — and PART 1 of the
+   segment prompt then says the wording is already final (`precorrected` mode in
+   `combinedImportPrompt.ts`) instead of asking the assistant to silently fix
+   mis-recognitions inline, splitting correction out of the segment+translate job.
+   Then segment+translate in those (fixed) 20-fragment parts (`src/lib/assistChunks.ts`),
+   then the ticked extras in ~15-sentence ranges with 3 sentences of context
+   before and 2 after, focus targets in one whole-episode call
+   (`src/lib/assistExtras.ts`), orchestrated by `src/lib/assistRun.ts`. Each
+
   prompt goes to the box's `POST /assist` (the `codex` CLI, then `claude -p` as
   backup, tailnet-only; up to `MINING_ASSIST_MAX_CONCURRENCY` (default 3) calls run at once and an "Agents" 1–5 selector (localStorage `quickmine.assistConcurrency`, sent as `concurrency`, clamped by the box) sets how many of a run's parts are in flight — a failed part lets in-flight ones finish and be saved; a "Primary" selector next to the button
   — Auto/Codex/Claude/opencode, remembered in localStorage — puts the chosen CLI first and
@@ -1005,8 +1017,13 @@ Targets are constants; no settings UI.
   remembered), re-attaches to a running run or picks up a finished one. The
   review step's "Extras with the assistant" panel is still the client-driven
   per-piece path (localStorage) for regenerating after edits. Replies that are
-  pasted manually are checked for truncation (`checkCombinedReply`, `=== END ===`
-  marker) and shown as warnings.
+   pasted manually are checked for truncation (`checkCombinedReply`, `=== END ===`
+   marker) and shown as warnings. On a box run's review, `state.corrections` is
+   folded back into the browser's transcript baseline (`applyCorrectionsToTranscript`)
+   so truncation warnings check the fixed text, and a "recognition fixes applied"
+   panel lists each `[m:ss] original → replacement — reason` with a listen-check
+   caveat (the fixes are a model's guess, not a guarantee).
+
 - **Book-page "Generate extras with the assistant"** (`BookAssistExtras.tsx`,
   `bookAssistExtras.ts`, `bookAssistRun.ts`) — the same box-side runner for an
   EXISTING book: walkthroughs, meaning checks (+ contextual reading check),

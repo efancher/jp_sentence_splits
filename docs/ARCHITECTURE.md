@@ -300,6 +300,17 @@ the AI supplies handles and text only; `saveEpisodePackReply` resolves ids,
 fills only empty translations, and reuses the preparation merge. It replaces the
 need for a server-side AI call for these two jobs.
 
+**Recognition-fix pass (2026-11-14):** assistant runs correct ASR mis-recognitions in a
+dedicated phase (`src/lib/assistCorrection.ts`) *before* segment+translate, not inline
+inside it. Two invariants drive this: every deviation from the raw ASR text must be an
+auditable diff (`state.corrections`: global segment index + exact substring + change,
+validated mechanically, listed at review), and each assistant call does one job. The pass
+is fail-open — its reply is a *suggestion source* under the same trust boundary as the
+episode pack: a rejected or missing fix leaves the transcript untouched and never halts a
+run, and the reviewer, not the model, is authoritative. The manual copy/paste combined
+prompt keeps the old inline-fix instruction (no audit trail is possible there), so the
+verbatim-wording PART 1 rule applies only in `precorrected` mode.
+
 **Progressive glossing (2026-10-01):** `GlossDecision` rows (Dexie `glossDecisions`, synced append-only `gloss_decisions`, migration `20261001000000`) are observations of structural decisions (skill, level shown, first response, correctness where the reference is settled, hints, blocker, outcome). Learner support level per skill is never stored: `inferSkillState` (src/lib/glossSkill.ts) recomputes it from the log. References come from the chunker heuristic and are only graded when the stored role equals the freshly computed one. Phase 2 (migration `20261001010000`) adds `felt`/`self_report` rows, the `attachment` skill, `parkedDecisionKeys`/`parkedSentenceIds` (planner revisit via `findExploreCandidates`), `glossReadinessTier` (advisory) and `summariseGloss` (Progress panel). Routing-evidence links (migration `20261019000000`, all optional and absent on earlier rows): `retryOfId` (the parked decision a return visit retries), `helpSequence` + `helpBeforeFirstResponse` (help requests in order, and how many preceded the first answer), `contentRevision` (`chunkRevision` fingerprint of the analysis shown) and `firstResponseMs`. Offered-versus-used help (migration `20261019010000`, same optionality): `helpOffered` (snapshot when the check appears: `word_glosses` if glosses weren't already showing, `try_unaided`, `hints`; empty for a worked example), `unaidedChosen`, `glossesAutoOpened` (thin readiness opened glosses unasked). Used help is `helpSequence`/`hintMaxStep`/`vocabHelped`/`unaidedChosen`. Observations only; nothing reads them for support level or scheduling yet (see ADAPTIVE_SCHEDULING_RESEARCH). Separate from `SentenceLearningEvent` (self-assessed lesson events) and never a Review.
 
 **Contextual walkthrough content (2026-10-05):** `Chapter.contextWalkthroughs` (jsonb with the book, no migration) holds per-sentence `ContextWalkthrough` drafts, separate from `structureDrafts`/`constructionDrafts` because steps must cross chunk boundaries and carry explicit connections. Same trust boundary as the episode pack: the AI supplies handles and quoted text; `parseWalkthroughs` computes offsets, drops bad steps/connections individually, and `validWalkthroughFor` re-validates against the live sentence text at read time (a stale entry degrades to the chunk walkthrough). Generation paths: pack part (surrounding sentences included), Quick Import combined prompt, per-sentence panel (`WalkthroughContentImport`); all save via `saveEpisodePackReply`.
