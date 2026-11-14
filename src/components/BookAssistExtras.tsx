@@ -69,7 +69,10 @@ export function BookAssistExtras({ bookId }: { bookId: string }) {
   const [replace, setReplace] = useState<Record<BookExtraKind, Set<number>>>(() => emptyReplace());
   const [reviewing, setReviewing] = useState<BookExtraKind | null>(null);
   const [concurrency, setConcurrency] = useState(readStoredConcurrency);
-  const [backend, setBackend] = useState<AssistBackend>(() => (localStorage.getItem(ASSIST_BACKEND_KEY) as AssistBackend | null) ?? 'auto');
+  const [backend, setBackend] = useState<AssistBackend>(() => {
+    const saved = localStorage.getItem(ASSIST_BACKEND_KEY);
+    return saved === 'claude' || saved === 'opencode' ? saved : 'auto';
+  });
   const [run, setRun] = useState<AssistRunStatus | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -422,7 +425,6 @@ export function BookAssistExtras({ bookId }: { bookId: string }) {
                   }}
                 >
                   <option value="auto">Auto</option>
-                  <option value="codex">Codex</option>
                   <option value="claude">Claude</option>
                   <option value="opencode">opencode</option>
                 </select>

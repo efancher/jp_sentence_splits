@@ -248,7 +248,7 @@ export function QuickMinePage() {
   const [assistRunning, setAssistRunning] = useState(false);
   const [assistBackend, setAssistBackend] = useState<AssistBackend>(() => {
     const saved = localStorage.getItem(ASSIST_BACKEND_KEY);
-    return saved === 'codex' || saved === 'claude' || saved === 'opencode' ? saved : 'auto';
+    return saved === 'claude' || saved === 'opencode' ? saved : 'auto';
   });
   const [assistConcurrency, setAssistConcurrency] = useState(readStoredConcurrency);
   const [assistProgress, setAssistProgress] = useState('');
@@ -1449,7 +1449,6 @@ export function QuickMinePage() {
                   }}
                 >
                   <option value="auto">Auto</option>
-                  <option value="codex">Codex</option>
                   <option value="claude">Claude</option>
                   <option value="opencode">opencode</option>
                 </select>

@@ -1004,7 +1004,7 @@ Targets are constants; no settings UI.
   whole episode) to keep calls far below the 100k-input-token price step. The
   Claude backend runs with `--model claude-haiku-5-5 --effort medium`
   (`MINING_CLAUDE_MODEL` / `MINING_CLAUDE_EFFORT`; empty = CLI default), and the
-  service unit tries Claude before Codex (`MINING_ASSIST_BACKENDS=claude,codex`;
+  service unit runs `MINING_ASSIST_BACKENDS=claude,opencode` (Codex dropped 2026-11-14 with the ChatGPT plan; the runner and the options below still exist, but the Primary selectors no longer offer it;
   Codex runs `gpt-6-luna` at medium via `MINING_CODEX_MODEL` / `MINING_CODEX_EFFORT`; empty = `~/.codex/config.toml`) so
   imports use less of the shared subscription quota. A third backend, `opencode run`
   (`run_opencode`; `MINING_OPENCODE_PATH`, `MINING_OPENCODE_MODEL` default
