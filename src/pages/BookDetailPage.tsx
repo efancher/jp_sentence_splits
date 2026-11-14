@@ -28,6 +28,7 @@ import { BookChunkingBatch } from '../components/BookChunkingBatch';
 import { BookWalkthroughBatch } from '../components/BookWalkthroughBatch';
 import { BookParticleCheckBatch } from '../components/BookParticleCheckBatch';
 import { BookAssistExtras } from '../components/BookAssistExtras';
+import { BookWordGlosses } from '../components/BookWordGlosses';
 import {
   autoGenerateMeaningChecks,
   findMeaningBankCandidates,
@@ -794,6 +795,7 @@ export function BookDetailPage() {
           <BookSharingPanel bookId={bookId} />
         </section>
         <BookAssistExtras bookId={bookId} />
+        <BookWordGlosses bookId={bookId} />
         <BookComprehensionCheckBatch
           bookId={bookId}
           chapters={(data.book.chapters ?? [])

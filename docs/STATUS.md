@@ -485,7 +485,10 @@ repair tooling, research materials and future roadmap ideas remain available.
    2026-11-14: word glosses no longer use the removed `vocab-assist` Edge Function; the
    Reader (focused sentence, once per page load), `VocabularyReviewPage` and the picker's
    "Suggest (AI)" button call the box assistant (`src/lib/assistGlosses.ts`), fail-open when
-   it is unreachable. The `vocab-assist` function was deleted from the repo but may still be
+   it is unreachable. The book page also has a **Word glosses** panel (`BookWordGlosses`,
+   `fillBookGlosses` in `src/lib/sentenceGlossFill.ts`) that glosses every sentence still
+   lacking glosses, one assistant call per sentence at the saved Agents concurrency, saving as
+   it goes (Stop keeps the work; rerun resumes). The `vocab-assist` function was deleted from the repo but may still be
    deployed on Supabase (`supabase functions delete vocab-assist`).
 
 

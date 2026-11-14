@@ -716,6 +716,19 @@ export async function updateSentenceText(
   return updated;
 }
 
+/** A book's sentences (in reading order) with the saved vocabulary meanings for their content words; feeds the book-wide gloss pass. */
+export async function getBookSentencesForGlossing(
+  bookId: string,
+): Promise<{ sentences: Sentence[]; savedMeanings: Map<string, string> }> {
+  const db = getDb();
+  const memberships = await db.bookSentences.where('bookId').equals(bookId).sortBy('position');
+  const rows = await db.sentences.bulkGet(memberships.map((member) => member.sentenceId));
+  const sentences = rows.filter((row): row is Sentence => Boolean(row));
+  const expressions = [...new Set(sentences.flatMap((sentence) => sentence.vocabularySuggestions.map((item) => item.expression)))];
+  const { savedMeanings } = await getSavedWordStatus(expressions, { skipStrength: true });
+  return { sentences, savedMeanings };
+}
+
 /**
  * Replace a sentence's tokenizer-derived `vocabularySuggestions` wholesale.
  * Used by the just-in-time AI glossing on VocabularyReviewPage to persist the

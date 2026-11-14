@@ -1,5 +1,6 @@
 import type { VocabularySuggestion } from '../domain/types';
-import { updateSentenceVocabularySuggestions } from '../db/repository';
+import { getBookSentencesForGlossing, updateSentenceVocabularySuggestions } from '../db/repository';
+import { runPool } from './assistChunks';
 import { glossWordsViaAssist } from './assistGlosses';
 
 /**
@@ -33,23 +34,16 @@ export function applyGlosses(
   );
 }
 
-const attempted = new Set<string>();
-
-/**
- * Gloss the sentence's unglossed content words in context via the box assistant and
- * persist them on the sentence. Tries each sentence once per page load; signed
- * out, offline or AI failure just leaves the words unglossed. Returns whether
- * any gloss was saved.
- */
-export async function fillSentenceGlosses(sentence: {
+type GlossableSentence = {
   id: string;
   japanese: string;
   vocabularySuggestions: readonly VocabularySuggestion[];
-}, savedMeanings: ReadonlyMap<string, string> = new Map()): Promise<boolean> {
-  if (attempted.has(sentence.id)) return false;
+};
+
+/** Ask the assistant for the sentence's missing glosses and persist them; true when any were saved. */
+async function glossSentence(sentence: GlossableSentence, savedMeanings: ReadonlyMap<string, string>): Promise<boolean> {
   const needing = suggestionsNeedingGloss(sentence.vocabularySuggestions, savedMeanings);
   if (needing.length === 0) return false;
-  attempted.add(sentence.id);
   const glosses = await glossWordsViaAssist(
     sentence.japanese,
     needing.map((item) => ({ expression: item.expression, reading: item.reading, surface: item.surface })),
@@ -59,4 +53,75 @@ export async function fillSentenceGlosses(sentence: {
   if (next.every((item, index) => item === sentence.vocabularySuggestions[index])) return false;
   await updateSentenceVocabularySuggestions(sentence.id, next);
   return true;
+}
+
+const attempted = new Set<string>();
+
+/**
+ * Gloss the sentence's unglossed content words in context via the box assistant and
+ * persist them on the sentence. Tries each sentence once per page load; assistant
+ * unreachable or failing just leaves the words unglossed. Returns whether any gloss
+ * was saved.
+ */
+export async function fillSentenceGlosses(
+  sentence: GlossableSentence,
+  savedMeanings: ReadonlyMap<string, string> = new Map(),
+): Promise<boolean> {
+  if (attempted.has(sentence.id)) return false;
+  if (suggestionsNeedingGloss(sentence.vocabularySuggestions, savedMeanings).length === 0) return false;
+  attempted.add(sentence.id);
+  return glossSentence(sentence, savedMeanings);
+}
+
+/** Sentences in the book that still have content words word help would drop. */
+export async function countBookSentencesNeedingGloss(bookId: string): Promise<number> {
+  const { sentences, savedMeanings } = await getBookSentencesForGlossing(bookId);
+  return sentences.filter((sentence) => suggestionsNeedingGloss(sentence.vocabularySuggestions, savedMeanings).length > 0).length;
+}
+
+export interface BookGlossResult {
+  /** Sentences that had missing glosses at the start. */
+  total: number;
+  /** Sentences that gained at least one gloss. */
+  filled: number;
+  /** Sentences the assistant returned nothing usable for (or that errored). */
+  empty: number;
+  cancelled: boolean;
+}
+
+/**
+ * Gloss every sentence of a book that lacks glosses, one assistant call each, with
+ * `concurrency` calls in flight. Each sentence is saved as it finishes, so a stop or
+ * a failure keeps the work done and a rerun resumes with what is left.
+ */
+export async function fillBookGlosses(
+  bookId: string,
+  options: {
+    concurrency?: number;
+    isCancelled?: () => boolean;
+    onProgress?: (done: number, total: number) => void;
+  } = {},
+): Promise<BookGlossResult> {
+  const { sentences, savedMeanings } = await getBookSentencesForGlossing(bookId);
+  const pending = sentences.filter((sentence) => suggestionsNeedingGloss(sentence.vocabularySuggestions, savedMeanings).length > 0);
+  const result: BookGlossResult = { total: pending.length, filled: 0, empty: 0, cancelled: false };
+  const isCancelled = options.isCancelled ?? (() => false);
+  let done = 0;
+  await runPool(
+    pending,
+    options.concurrency ?? 1,
+    async (sentence) => {
+      try {
+        if (await glossSentence(sentence, savedMeanings)) result.filled += 1;
+        else result.empty += 1;
+      } catch {
+        result.empty += 1;
+      }
+      done += 1;
+      options.onProgress?.(done, pending.length);
+    },
+    isCancelled,
+  );
+  result.cancelled = isCancelled() && done < pending.length;
+  return result;
 }
