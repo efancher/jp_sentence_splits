@@ -1314,7 +1314,10 @@ opens a sentence whose content words have no meaning yet — glossing them
 する, 先), persisting the result onto the sentence's suggestions
 (`updateSentenceVocabularySuggestions`) and any blank selections; (2) a
 per-word **"Suggest (AI)"** button in the `VocabularyPicker` edit view for
-one-off fills. Both only pre-fill the still-editable field and degrade
+one-off fills; (3) since 2026-11-14 the Reader does the same once per page
+load for the focused sentence (`src/lib/sentenceGlossFill.ts`), because its
+word help drops any content word with no stored gloss or saved meaning and
+the sentence-led flow never visits `VocabularyReviewPage`. These only pre-fill the still-editable field and degrade
 silently offline/signed-out. Offline, the deterministic path is the
 `backfill:vocabulary-suggestion-glosses` / `backfill:vocabulary-meanings`
 scripts — POS-aware JMDict lookup (`scripts/lib/jmdict.ts` takes the

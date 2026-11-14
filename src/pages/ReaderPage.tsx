@@ -33,6 +33,7 @@ import {
 } from '../lib/earTiles';
 import { readExtrasForSentences, withChapterExtras } from '../db/sentenceExtras';
 import { createId } from '../lib/ids';
+import { fillSentenceGlosses } from '../lib/sentenceGlossFill';
 import { shadowTargetKey } from '../lib/pronunciationOutcome';
 import { earTilesOutcome, earTilesTargetKey } from '../lib/listeningEvidence';
 import { chooseFollowUp, FOLLOW_UP_ASPECT, type FollowUpChoice, type FollowUpTool } from '../lib/followUpOffer';
@@ -322,6 +323,14 @@ export function ReaderPage() {
     if (!loadedData || !strengthKnown || strengthKnown.size === 0) return loadedData;
     return { ...loadedData, knownExpressions: new Set([...loadedData.knownExpressions, ...strengthKnown]) };
   }, [loadedData, strengthKnown]);
+
+  // Words with no stored gloss or saved meaning are dropped from word help, so gloss the focused sentence's
+  // in context once (the live query above picks up the saved result). Offline or signed out leaves it as is.
+  useEffect(() => {
+    if (!selectedId || !loadedData) return;
+    const row = loadedData.rows.find((item) => item.sentence.id === selectedId);
+    if (row) void fillSentenceGlosses(row.sentence, loadedData.savedMeanings);
+  }, [selectedId, loadedData]);
 
   // Clip blobs are the heaviest read on this page, so they load on their own: the text renders
   // without waiting for them, and an audio change doesn't re-run the whole data query.
