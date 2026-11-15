@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseInlineReadings } from '../src/lib/parseInlineReadings';
+import { parseInlineReadings, splitOkurigana } from '../src/lib/parseInlineReadings';
 
 describe('parseInlineReadings', () => {
   it('parses simple kanji readings', () => {
@@ -110,5 +110,26 @@ describe('parseInlineReadings', () => {
     );
     expect(segments).toContainEqual({ kind: 'text', base: 'でもう' });
     expect(segments).toContainEqual({ kind: 'ruby', base: '1ヶ月', reading: 'いっかげつ' });
+  });
+});
+
+describe('splitOkurigana', () => {
+  it('keeps trailing okurigana out of the ruby span', () => {
+    expect(splitOkurigana(parseInlineReadings('難しい[むずかしい]'))).toEqual([
+      { kind: 'ruby', base: '難', reading: 'むずか' },
+      { kind: 'text', base: 'しい' },
+    ]);
+    expect(splitOkurigana(parseInlineReadings('歩い[あるい]て'))).toEqual([
+      { kind: 'ruby', base: '歩', reading: 'ある' },
+      { kind: 'text', base: 'い' },
+      { kind: 'text', base: 'て' },
+    ]);
+  });
+
+  it('leaves interior kana and mismatched readings alone', () => {
+    const inner = parseInlineReadings('焼き鳥[やきとり]');
+    expect(splitOkurigana(inner)).toEqual(inner);
+    const mismatch = parseInlineReadings('今日は[きょうわ]');
+    expect(splitOkurigana(mismatch)).toEqual(mismatch);
   });
 });

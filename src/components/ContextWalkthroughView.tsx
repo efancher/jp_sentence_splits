@@ -4,14 +4,14 @@ import { getEpisodePreparationContext, saveEpisodePackReply } from '../db/reposi
 import type { ContextWalkthroughStep, WalkthroughCheck, WalkthroughParticipant, WalkthroughRelation, WalkthroughWord } from '../domain/types';
 import type { ClauseMapEntry } from '../lib/clauseMap';
 import { highlightSegments } from '../lib/contextWalkthrough';
-import { parseInlineReadings } from '../lib/parseInlineReadings';
+import { parseInlineReadings, splitOkurigana } from '../lib/parseInlineReadings';
 import { buildEpisodePackPrompts } from '../lib/episodePack';
 
 /** The whole sentence, always visible, with the explained span highlighted and the span it connects to underlined. */
 /** Renders japanese[from, from+text.length) with ruby where inlineReading's base lies wholly inside the slice. */
 function rubySlice(japanese: string, inlineReading: string | undefined, from: number, text: string): ReactNode {
   if (!inlineReading) return text;
-  const segments = parseInlineReadings(inlineReading);
+  const segments = splitOkurigana(parseInlineReadings(inlineReading));
   if (segments.map((segment) => segment.base).join('') !== japanese) return text;
   const to = from + text.length;
   const out: ReactNode[] = [];

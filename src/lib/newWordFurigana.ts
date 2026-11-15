@@ -1,4 +1,4 @@
-import { parseInlineReadings, type RubySegment } from './parseInlineReadings';
+import { parseInlineReadings, splitOkurigana, type RubySegment } from './parseInlineReadings';
 
 export interface PositionedSegment extends RubySegment {
   start: number;
@@ -23,7 +23,7 @@ export function newWordSegments(
   knownExpressions: ReadonlySet<string>,
 ): PositionedSegment[] | null {
   if (!inlineReading) return null;
-  const parsed = parseInlineReadings(inlineReading);
+  const parsed = splitOkurigana(parseInlineReadings(inlineReading));
   if (parsed.map((segment) => segment.base).join('') !== japanese) return null;
   const known = spans.filter((span) => knownExpressions.has(span.expression));
   let cursor = 0;

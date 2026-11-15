@@ -107,3 +107,36 @@ export function parseInlineReadings(input: string): RubySegment[] {
 
   return segments;
 }
+
+const HIRAGANA_TAIL_RE = /[ぁ-ゖ]+$/;
+
+/**
+ * Display-only: move trailing okurigana out of a ruby span so the furigana
+ * sits over the kanji alone — 難しい[むずかしい] renders むずか over 難 and
+ * leaves しい plain, instead of repeating しい over the kana. Only applies when
+ * the reading ends with the same kana and something remains for the kanji.
+ * Consumers that need the whole-word reading (mora, answer checking) keep
+ * using `parseInlineReadings` directly.
+ */
+export function splitOkurigana(segments: RubySegment[]): RubySegment[] {
+  return segments.flatMap((segment): RubySegment[] => {
+    if (segment.kind !== 'ruby' || !segment.reading) return [segment];
+    const tail = HIRAGANA_TAIL_RE.exec(segment.base)?.[0];
+    if (
+      !tail ||
+      tail.length >= segment.base.length ||
+      !segment.reading.endsWith(tail) ||
+      segment.reading.length <= tail.length
+    ) {
+      return [segment];
+    }
+    return [
+      {
+        kind: 'ruby',
+        base: segment.base.slice(0, -tail.length),
+        reading: segment.reading.slice(0, -tail.length),
+      },
+      { kind: 'text', base: tail },
+    ];
+  });
+}

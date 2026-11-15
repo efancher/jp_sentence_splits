@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-import { parseInlineReadings } from './parseInlineReadings';
+import { parseInlineReadings, splitOkurigana } from './parseInlineReadings';
 
 export function FuriganaText({
   text,
@@ -9,7 +9,7 @@ export function FuriganaText({
   text: string;
   className?: string;
 }): ReactNode {
-  const segments = parseInlineReadings(text);
+  const segments = splitOkurigana(parseInlineReadings(text));
   return (
     <span className={className} lang="ja">
       {segments.map((segment, index) => {
