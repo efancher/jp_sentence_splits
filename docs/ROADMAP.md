@@ -1170,6 +1170,36 @@ control).
   *Open:* how many separate steps a day is tolerable (the plan's time budget
   bounds it today), and whether the typed dictation match should count toward
   `/progress` (see the writing-ladder note above).
+- [~] **Reading and meaning recall (2026-11-15 ideas).** Gaps they target: meaning
+  gets little real recall evidence (Word checks mostly come back "needed help"),
+  a familiar sentence can carry a word's meaning (the masked signal under "Review
+  trouble tags"), the Reading tag goes unused (0 uses, against Kanji 22), and
+  reading evidence in the reader is mostly self-judged. Ratings stay explicit and
+  every check below is evidence only, as elsewhere.
+  - *Shipped:* Word checks move to an unstudied sentence holding the same word
+    (2026-11-15, STATUS), and a typed Reading check runs in the reader for words
+    marked as missed (`readingMissSteps.ts`, 2026-11-15).
+  1. **Route trouble tags to the matching check.** Meaning → a Word check on the
+     sentence's weakest word, Reading/Kanji → a typed Reading check on the problem
+     word (tapped, once word-level tags exist), instead of a full Fresh try. Shorter,
+     and aimed at the gap. Overlaps the "Not done" item in "Separate Dictation and
+     Word check" above.
+  2. **Furigana peeks as evidence.** Furigana is already hidden on solid words.
+     Tapping to reveal it could count as a mild reading miss, and reading past it
+     as weak exposure, so every Read check feeds the reading facet with no new step.
+     Needs care so plain reading does not turn into a test: keep the weight low and
+     check against `wordStrength.ts` how far it moves words.
+  3. **Kanji families.** After a reading miss, show one or two words already met
+     that share the kanji, with their readings (出発 / 発音), and point out where
+     the reading differs. Short, in context, and gives the Kanji tag something to do.
+  4. **Typed meaning-to-word cloze.** Blank the weak word in the sentence text, show
+     the translation, and the learner types the word (romaji folded as in
+     `readingAnswer.ts`). Builds the meaning→form link the other way. Real source
+     sentences only; check the translation does not name the word outright.
+  5. **Measure first.** Extend the follow-up offer panel (direction 5 above): the
+     next Read check and next Word check after a standalone Word check, a moved
+     Word check or a Reading check, against none. Run alongside whichever idea is
+     built, before tuning weights.
 
 ## Possibilities (analytics & cross-activity coherence)
 
