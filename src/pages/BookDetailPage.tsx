@@ -64,6 +64,7 @@ import {
   transferBookSentences,
   updateBook,
   updateBookChapter,
+  sortBookChaptersByEpisodeNumber,
   filterToIntroducedSentenceIds,
 } from '../db/repository';
 import { suggestMergedJapanese, suggestMergedTranslation } from '../lib/mergeSentences';
@@ -1530,6 +1531,13 @@ export function BookDetailPage() {
             aria-label="New chapter title"
           />
           <button type="submit">Add chapter</button>
+          <button
+            type="button"
+            title="Reorder chapters by the episode number in their titles"
+            onClick={() => void sortBookChaptersByEpisodeNumber(bookId)}
+          >
+            Sort by episode #
+          </button>
         </form>
         {(data.book.chapters ?? [])
           .slice()

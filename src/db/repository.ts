@@ -5,6 +5,7 @@ import { isReadingAnswerCorrect, surfaceReadingFromInline } from '../lib/reading
 import { buildWordEvidence, MEANING_CHECK_KEY_PREFIX, strugglingWordIds } from '../lib/wordEvidence';
 import { findSetExpressions } from '../lib/setExpressions';
 import { stepTimer } from '../lib/pageTiming';
+import { chapterIdsByEpisodeNumber } from '../lib/chapterEpisodeOrder';
 import { FREQUENCY_WAIT_MS, loadWordFrequency, lookupWordBand } from '../lib/wordFrequency';
 import { grammarPatternStrengths } from '../lib/grammarEvidence';
 import {
@@ -2264,6 +2265,23 @@ export async function ensureDefaultBookChapter(bookId: string): Promise<string |
   const chapter = await createBookChapter(bookId, 'Whole book');
   await assignBookSentencesToChapter(bookId, memberships.map((item) => item.sentenceId), chapter.id);
   return chapter.id;
+}
+
+/** Reorders a book's chapters by the episode number in their titles. Returns how many chapters changed position. */
+export async function sortBookChaptersByEpisodeNumber(bookId: string): Promise<number> {
+  const db = getDb();
+  const book = await db.books.get(bookId);
+  if (!book) throw new Error('Book not found');
+  const chapters = book.chapters ?? [];
+  const orderedIds = chapterIdsByEpisodeNumber(chapters);
+  const byId = new Map(chapters.map((chapter) => [chapter.id, chapter]));
+  const reordered = orderedIds.map((id, position) => ({ ...byId.get(id)!, position }));
+  const changed = reordered.filter((chapter) => byId.get(chapter.id)!.position !== chapter.position).length;
+  if (changed === 0) return 0;
+  await db.books.put({ ...book, chapters: reordered, updatedAt: nowIso() });
+  const updated = await db.books.get(bookId);
+  if (updated) notifySync('books', updated.id, updated);
+  return changed;
 }
 
 export async function updateBookChapter(
