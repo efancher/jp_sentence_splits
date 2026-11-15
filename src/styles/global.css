@@ -458,6 +458,12 @@ strong.jp {
   letter-spacing: 0.02em;
 }
 
+/* The phrase being shadowed, marked in the sentence's H/L strip and its text. */
+.pa-marked {
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+  border-radius: 3px;
+}
+
 .pa-hl[data-c='h'] {
   color: var(--accent);
 }

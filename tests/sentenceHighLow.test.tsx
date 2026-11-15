@@ -13,6 +13,7 @@ const row = (overrides: Partial<PhraseRow>): PhraseRow => ({
   learnerContour: null,
   learnerVoicedMorae: null,
   phraseIndex: 0,
+  moraSpansMs: [],
   ...overrides,
 });
 
@@ -42,6 +43,21 @@ describe('SentenceHighLow', () => {
     const order = [...container.querySelectorAll('.pa-kana')].map((n) => n.textContent).join('');
     expect(order).toBe('わたしはねおんが');
     expect(screen.getByTitle('Not measured')).toBeInTheDocument();
+  });
+
+  it('marks the morae of the phrase being shadowed, and nothing else', () => {
+    const spans = (starts: number[]) => starts.map((startMs) => ({ startMs, endMs: startMs + 100 }));
+    const { container } = render(
+      <SentenceHighLow
+        highlight={{ startMs: 200, endMs: 400 }}
+        result={result({
+          rows: [row({ text: '音楽', kana: ['お', 'ん', 'が', 'く'], nativeLevels: [0, 1, 1, 0], moraSpansMs: spans([0, 100, 200, 300]) })],
+        })}
+      />,
+    );
+    const marked = [...container.querySelectorAll('.pa-kana.pa-marked')].map((n) => n.textContent);
+    expect(marked).toEqual(['が', 'く']);
+    expect(container.querySelectorAll('.pa-hl.pa-marked')).toHaveLength(2);
   });
 
   it('renders nothing when phrase pitch is unavailable', () => {

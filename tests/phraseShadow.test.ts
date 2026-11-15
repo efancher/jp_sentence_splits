@@ -20,6 +20,7 @@ import {
   phraseShadowTargetKey,
   phraseShadowWordIds,
   phraseShadowsBySentence,
+  phraseCharRange,
   phraseTextFromAlignment,
   dropLeadingParticles,
   snapRangeToWordBoundaries,
@@ -36,6 +37,20 @@ const words = [
 ];
 
 describe('phrase shadow helpers', () => {
+  it('locates the marked span in the sentence by token offsets, not the first matching text', () => {
+    // 猫が寝て猫が: the second 猫が must be marked, not the first.
+    const repeated = [
+      { text: '猫', start: 0, end: 0.4 },
+      { text: 'が', start: 0.4, end: 0.5 },
+      { text: '寝て', start: 0.5, end: 1.0 },
+      { text: '猫', start: 1.0, end: 1.4 },
+      { text: 'が', start: 1.4, end: 1.5 },
+    ];
+    expect(phraseCharRange(repeated, '猫が寝て猫が', { startMs: 1000, endMs: 1500 })).toEqual({ start: 4, end: 6 });
+    expect(phraseCharRange(words, '猫が寝ています。', { startMs: 450, endMs: 1650 })).toEqual({ start: 2, end: 7 });
+    expect(phraseCharRange(words, '猫が寝ています。', { startMs: 5000, endMs: 6000 })).toBeNull();
+  });
+
   it('accepts a real sub-span and rejects slivers and the whole clip', () => {
     expect(isPhraseRange({ startMs: 500, endMs: 1600 }, 2000)).toBe(true);
     expect(isPhraseRange({ startMs: 500, endMs: 650 }, 2000)).toBe(false);

@@ -110,6 +110,8 @@ export interface PhraseRow {
   learnerVoicedMorae: number | null;
   /** Position in the sentence's full phrase list (rows skip phrases that could not be measured, so this can jump). */
   phraseIndex: number;
+  /** Each mora's native start/end in ms from the clip start, so a marked span can be matched to the morae it covers. */
+  moraSpansMs: { startMs: number; endMs: number }[];
 }
 
 export type UnmeasuredReason = 'phones' | 'short' | 'unvoiced' | 'outside';
@@ -119,6 +121,9 @@ export interface UnmeasuredPhrase {
   phraseIndex: number;
   text: string;
   reason: UnmeasuredReason;
+  /** The phrase's native span in ms from the clip start. */
+  startMs?: number;
+  endMs?: number;
 }
 
 export interface PhrasePitchResult {
@@ -305,7 +310,13 @@ export function buildPhrasePitch({
 
   for (const [phraseIndex, group] of groups.entries()) {
     const skip = (reason: UnmeasuredReason) =>
-      unmeasured.push({ phraseIndex, text: group.map((t) => refTokens[t]!.text).join(''), reason });
+      unmeasured.push({
+        phraseIndex,
+        text: group.map((t) => refTokens[t]!.text).join(''),
+        reason,
+        startMs: Math.round(refTokens[group[0]!]!.start * 1000),
+        endMs: Math.round(refTokens[group[group.length - 1]!]!.end * 1000),
+      });
     // A token whose phones don't parse hides its morae, so the whole phrase is skipped rather than guessed.
     const timings = group.map((t) => refTimings[t]);
     if (timings.some((timing) => timing === null)) {
@@ -363,6 +374,7 @@ export function buildPhrasePitch({
       learnerContour,
       learnerVoicedMorae: learnerMeans ? learnerMeans.filter((m) => m !== null).length : null,
       phraseIndex,
+      moraSpansMs: nativeIntervals.map((iv) => ({ startMs: Math.round(iv.start * 1000), endMs: Math.round(iv.end * 1000) })),
     });
   }
 

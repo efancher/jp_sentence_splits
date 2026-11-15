@@ -11,7 +11,8 @@ import { NativePitchPractice } from '../components/NativePitchPractice';
 import { ChunkChainPanel } from '../components/ChunkChainPanel';
 import { PhraseShadowRating } from '../components/PhraseShadowRating';
 import { ZoomedRangeEditor } from '../components/ZoomedRangeEditor';
-import { isPhraseRange } from '../lib/phraseShadow';
+import { ALIGNMENT_VERSION } from '../lib/analysisApi';
+import { isPhraseRange, phraseCharRange } from '../lib/phraseShadow';
 import { AttemptPitchGrid } from '../components/AttemptPitchGrid';
 import { attemptsNeedingPhraseSnapshot, backfillPhraseSnapshots } from '../lib/backfillPhraseSnapshots';
 import { ChapterReader } from '../components/ChapterReader';
@@ -426,9 +427,26 @@ export function ShadowWorkspace({
   const suggestionDurationMs = data?.referenceAudio?.durationMs ?? 0;
   // The pane computes and caches the alignment itself (pitch chart / synced text), usually after this first runs:
   // watching the cache row lets the suggestion appear as soon as it lands instead of on the next visit.
-  const alignmentComputedAt = useLiveQuery(
-    async () => (suggestionAudioId ? (await getDb().referenceAlignments.get(suggestionAudioId))?.computedAt ?? null : null),
+  const referenceAlignment = useLiveQuery(
+    async () => (suggestionAudioId ? (await getDb().referenceAlignments.get(suggestionAudioId)) ?? null : null),
     [suggestionAudioId],
+  );
+  const alignmentComputedAt = referenceAlignment?.computedAt ?? null;
+  /** The phrase being shadowed (the marked span), shown highlighted in the sentence and the H/L strip. */
+  const highlightRange = phraseRange && isPhraseRange(phraseRange, suggestionDurationMs) ? phraseRange : null;
+  const highlightStartMs = highlightRange?.startMs;
+  const highlightEndMs = highlightRange?.endMs;
+  const sentenceJapanese = data?.sentence?.japanese;
+  const highlightChars = useMemo(
+    () =>
+      highlightStartMs !== undefined &&
+      highlightEndMs !== undefined &&
+      referenceAlignment &&
+      referenceAlignment.alignmentVersion === ALIGNMENT_VERSION &&
+      sentenceJapanese
+        ? phraseCharRange(referenceAlignment.result.words, sentenceJapanese, { startMs: highlightStartMs, endMs: highlightEndMs })
+        : null,
+    [highlightStartMs, highlightEndMs, referenceAlignment, sentenceJapanese],
   );
   useEffect(() => {
     setSuggestedPhrase(null);
@@ -885,7 +903,19 @@ export function ShadowWorkspace({
       ) : null}
       {isLoopingReps && !hideTranscript ? (
         <div className="jp jp-lg" aria-label="Sentence being shadowed">
-          {showMeaningInstead && sentence.translation ? sentence.translation : sentence.japanese}
+          {showMeaningInstead && sentence.translation ? (
+            sentence.translation
+          ) : highlightChars ? (
+            <>
+              {sentence.japanese.slice(0, highlightChars.start)}
+              <span className="pa-marked" data-testid="phrase-highlight">
+                {sentence.japanese.slice(highlightChars.start, highlightChars.end)}
+              </span>
+              {sentence.japanese.slice(highlightChars.end)}
+            </>
+          ) : (
+            sentence.japanese
+          )}
         </div>
       ) : null}
       {referenceAudio && isLoopingReps && shadowing.shadowActive ? (
@@ -911,6 +941,7 @@ export function ShadowWorkspace({
           referenceAudioId={referenceAudio.id}
           referenceBlob={referenceAudio.blob}
           transcript={sentence.japanese}
+          highlight={highlightRange}
         />
       ) : null}
       {isLoopingReps && shadowing.error ? <p className="muted">{shadowing.error}</p> : null}

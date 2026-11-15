@@ -102,6 +102,38 @@ export function phraseTextFromAlignment(
 }
 
 /**
+ * Where a marked span sits in the displayed sentence, as [start, end) indices into `japanese`, so the
+ * sentence can be highlighted where the phrase is. Uses the aligned tokens' exact character offsets
+ * when they spell the sentence up to the phrase (so a phrase that also occurs earlier is not mistaken
+ * for that earlier occurrence); otherwise the first occurrence of `phraseTextFromAlignment`'s text.
+ * Null when the span holds no words or cannot be found.
+ */
+export function phraseCharRange(
+  words: readonly Pick<WordAlignment, 'start' | 'end' | 'text'>[],
+  japanese: string,
+  range: { startMs: number; endMs: number },
+): { start: number; end: number } | null {
+  const start = range.startMs / 1000;
+  const end = range.endMs / 1000;
+  const spoken = words.filter((word) => word.text && !word.text.startsWith('<') && word.end > word.start);
+  const inside = (word: { start: number; end: number }) =>
+    Math.min(word.end, end) - Math.max(word.start, start) > (word.end - word.start) / 2;
+  const first = spoken.findIndex(inside);
+  if (first >= 0) {
+    const last = lastIndexWhere(spoken, inside);
+    const from = verifiedTokenCharRange(spoken, japanese, first);
+    const to = verifiedTokenCharRange(spoken, japanese, last);
+    if (from && to) {
+      const raw = alignerRangeToRawIndices(japanese, from.start, to.end);
+      if (raw.end > raw.start) return raw;
+    }
+  }
+  const text = phraseTextFromAlignment(words, range, japanese);
+  const at = text ? japanese.indexOf(text) : -1;
+  return at >= 0 ? { start: at, end: at + text.length } : null;
+}
+
+/**
  * Plain-English help for a marked phrase, as "word = meaning" pieces. It is not a translation of the
  * fragment: a phrase is usually mid-clause, so each word inside it is glossed on its own. Prefers the
  * sentence's contextual walkthrough (per-word glosses, particles included), then the linked
