@@ -582,7 +582,7 @@ export const plannerSessionStepSchema = z.object({
   // Additive (2026-11-01): only set on `sentence_learning` Read check steps.
   readCheck: z.boolean().optional(),
   // Additive (2026-11-04): only set on `sentence_learning` Ear tiles / Dictation steps.
-  readerTool: z.enum(['tiles', 'dictate']).optional(),
+  readerTool: z.enum(['tiles', 'dictate', 'reading']).optional(),
   // Additive (2026-11-04): only set on `shadow` steps drafted as phrase shadows.
   phrase: z.boolean().optional(),
 });

@@ -8,6 +8,8 @@ import { KaraokeSentenceText } from '../components/KaraokeSentenceText';
 import {
   DictationBlankLine,
   DictationBlankPanel,
+  ReadingCheckLine,
+  ReadingCheckPanel,
   PatternFeedbackPanel,
   ReadCheckPanel,
   ShadowSelfRating,
@@ -30,6 +32,7 @@ import {
   tileToolUnavailableReason,
   type EarTilesProgress,
   type EarTilesPuzzle,
+  type TileDictation,
 } from '../lib/earTiles';
 import { readExtrasForSentences, withChapterExtras } from '../db/sentenceExtras';
 import { createId } from '../lib/ids';
@@ -38,13 +41,14 @@ import { shadowTargetKey } from '../lib/pronunciationOutcome';
 import { earTilesOutcome, earTilesTargetKey } from '../lib/listeningEvidence';
 import { chooseFollowUp, FOLLOW_UP_ASPECT, type FollowUpChoice, type FollowUpTool } from '../lib/followUpOffer';
 import { stepTimer } from '../lib/pageTiming';
+import { readingCheckTargetKey } from '../lib/readingMissSteps';
 import { meaningCheckTargetKey, readingFeedbackTargetKey } from '../lib/wordEvidence';
 import { grammarFeedbackTargetKey } from '../lib/grammarEvidence';
 import { SentenceWalkthrough, walkthroughChunks } from '../components/SentenceWalkthrough';
 import { glossesFromWords } from '../lib/chunkGlosses';
 import { mergeChapterConstructionDrafts, mergeChapterWalkthroughs } from '../lib/contextWalkthrough';
 import { WordGlossList, type CompareAids } from '../components/TargetLessonCard';
-import { ensureDefaultBookChapter, getDb, getEpisodeFocus, getSavedWordStatus, getReaderEvidenceLevels, getStrengthKnownExpressions, listGlossDecisions, readRowsByKeys, readSentenceAudioForSentences, listSentenceLearningEvents, logGlossDecision, logSentenceLearningEvent, resetSentenceWalkthrough, ensureVocabularyItem, getWordMeaningCheckTarget, READER_STRENGTH_CACHE_MS, readSettings, updateSettings, withoutUnseenAiLinks } from '../db/repository';
+import { ensureDefaultBookChapter, getDb, getEpisodeFocus, getSavedWordStatus, getReaderEvidenceLevels, getStrengthKnownExpressions, listGlossDecisions, readRowsByKeys, readSentenceAudioForSentences, listSentenceLearningEvents, logGlossDecision, logSentenceLearningEvent, resetSentenceWalkthrough, ensureVocabularyItem, getWordMeaningCheckTarget, getReadingCheckTarget, READER_STRENGTH_CACHE_MS, readSettings, updateSettings, withoutUnseenAiLinks } from '../db/repository';
 import { registerReportContext } from '../lib/reportContext';
 import type { BookSentence, Sentence, SentenceAudio, StructureDraftChunk, TextDisplayMode } from '../domain/types';
 import { useNativeAudio } from '../hooks/useNativeAudio';
@@ -106,6 +110,8 @@ export function ReaderPage() {
   // /tiles/:sentenceId and /dictate/:sentenceId (planner Ear tiles / Dictation steps) open that tool on the sentence.
   const isTilesRoute = pathname.includes('/tiles/');
   const isDictateRoute = pathname.includes('/dictate/');
+  // /reading/:sentenceId (planner Reading check on a word missed in the reader) opens the typed-reading check.
+  const isReadingRoute = pathname.includes('/reading/');
   // /books/:bookId/learn/:sentenceId (planner lesson step) shows the sentence's own chapter.
   const lessonChapterId = useLiveQuery(
     async () =>
@@ -148,6 +154,7 @@ export function ReaderPage() {
   const [readerTool, setReaderTool] = useState<
     { sentenceId: string; kind: 'dictate'; tile: number; visitId: string } |
     { sentenceId: string; kind: 'meaning'; visitId: string } |
+    { sentenceId: string; kind: 'reading'; visitId: string; wordId: string; surface: string; tile: TileDictation } |
     { sentenceId: string; kind: 'grammar'; visitId: string } |
     { sentenceId: string; kind: 'recall'; visitId: string; revealed: boolean; offer?: FollowUpChoice } |
     { sentenceId: string; kind: 'shadow'; visitId: string; focusSurface?: string } |
@@ -362,6 +369,7 @@ export function ReaderPage() {
     else if (isReadCheckRoute) setReaderTool({ sentenceId: lessonSentenceId, kind: 'recall', visitId: createId('visit'), revealed: false });
     else if (isGrammarCheckRoute) setReaderTool({ sentenceId: lessonSentenceId, kind: 'grammar', visitId: createId('visit') });
     else if (isWordCheckRoute) setReaderTool({ sentenceId: lessonSentenceId, kind: 'meaning', visitId: createId('visit') });
+    else if (isReadingRoute) toggleReaderTool(data.rows[index]!.sentence, 'reading');
     else if (isTilesRoute || isDictateRoute) toggleReaderTool(data.rows[index]!.sentence, isTilesRoute ? 'tiles' : 'dictate');
     else setWalkthroughId(lessonSentenceId);
     setSelectedId(lessonSentenceId);
@@ -498,7 +506,7 @@ export function ReaderPage() {
 
   function toggleReaderTool(
     sentence: Sentence,
-    kind: 'dictate' | 'meaning' | 'tiles' | 'recall' | 'shadow',
+    kind: 'dictate' | 'meaning' | 'tiles' | 'recall' | 'shadow' | 'reading',
     knownHasAudio?: boolean,
     /** A follow-up opened from a Read check offer shares that check's visit, so its events group with the offer. */
     sharedVisitId?: string,
@@ -508,6 +516,14 @@ export function ReaderPage() {
       return;
     }
     setToolNotice(undefined);
+    if (kind === 'reading') {
+      const readingVisitId = sharedVisitId ?? createId('visit');
+      void getReadingCheckTarget(sentence).then((target) => {
+        if (target) setReaderTool({ sentenceId: sentence.id, kind, visitId: readingVisitId, ...target });
+        else setToolNotice({ sentenceId: sentence.id, text: 'No missed reading left to check in this sentence.' });
+      });
+      return;
+    }
     if (kind === 'dictate' || kind === 'tiles') {
       let hasAudio = knownHasAudio;
       if (hasAudio === undefined && loadedAudioRows?.some((audio) => audio.sentenceId === sentence.id)) hasAudio = true;
@@ -708,7 +724,7 @@ export function ReaderPage() {
   /** Whether a tool that would give a word away is open on the sentence (taps are then ignored). */
   function wordTapsBlocked(sentenceId: string): boolean {
     const tool = readerTool?.sentenceId === sentenceId ? readerTool : undefined;
-    return tool?.kind === 'meaning' || tool?.kind === 'grammar' || tool?.kind === 'tiles' || tool?.kind === 'dictate' || (tool?.kind === 'recall' && !tool.revealed);
+    return tool?.kind === 'meaning' || tool?.kind === 'reading' || tool?.kind === 'grammar' || tool?.kind === 'tiles' || tool?.kind === 'dictate' || (tool?.kind === 'recall' && !tool.revealed);
   }
 
   /** The tap-a-word feedback panel for a sentence, or null. */
@@ -1278,6 +1294,9 @@ export function ReaderPage() {
                     if (readerTool?.kind === 'recall' && !readerTool.revealed && readerTool.sentenceId === row.sentence.id) {
                       return <div className="jp jp-lg" lang="ja">{row.sentence.japanese}</div>;
                     }
+                    if (readerTool?.kind === 'reading' && readerTool.sentenceId === row.sentence.id) {
+                      return <ReadingCheckLine tile={readerTool.tile} />;
+                    }
                     const dictating = readerTool?.kind === 'dictate' && readerTool.sentenceId === row.sentence.id;
                     const tile = dictating ? buildTileDictation(row.sentence, readerTool.tile) : null;
                     return tile ? <DictationBlankLine tile={tile} /> : sentenceLine(row.sentence, isActive, audio);
@@ -1310,6 +1329,35 @@ export function ReaderPage() {
                               outcome,
                             )
                           }
+                          onClose={() => setReaderTool(undefined)}
+                        />
+                      );
+                    }
+                    if (readerTool.kind === 'reading') {
+                      const tool = readerTool;
+                      return (
+                        <ReadingCheckPanel
+                          key={tool.visitId}
+                          tile={tool.tile}
+                          surface={tool.surface}
+                          hasAudio={Boolean(audio)}
+                          playing={isSequencePlaying && singleIndexRef.current === index}
+                          onPlay={() => toggleSentencePlay(index)}
+                          onRecord={(outcome) => {
+                            // Word evidence first (recall: the reading was hidden), then the marker that spaces the next check.
+                            recordReaderTool(
+                              row.sentence.id,
+                              tool.visitId,
+                              { kind: 'vocabulary', key: readingFeedbackTargetKey(tool.wordId), label: tool.surface },
+                              outcome,
+                            );
+                            recordReaderTool(
+                              row.sentence.id,
+                              tool.visitId,
+                              { kind: 'expression', key: readingCheckTargetKey(row.sentence.id), label: tool.tile.text },
+                              outcome,
+                            );
+                          }}
                           onClose={() => setReaderTool(undefined)}
                         />
                       );

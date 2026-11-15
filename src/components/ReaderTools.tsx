@@ -103,6 +103,100 @@ export function DictationBlankPanel({
   );
 }
 
+/** The sentence with the phrase being read-checked marked, no furigana and no help. */
+export function ReadingCheckLine({ tile }: { tile: TileDictation }) {
+  return (
+    <div className="jp jp-lg" lang="ja">
+      {tile.before}
+      <span className="pa-marked" data-testid="reading-check-phrase">{tile.text}</span>
+      {tile.after}
+    </div>
+  );
+}
+
+/**
+ * Reading check: the learner couldn't read a word in the reader. The phrase holding it is marked in the plain
+ * sentence; they type its reading (kana or romaji, graded against the reading only, so typing the kanji doesn't
+ * count), see the answer, optionally hear the clip, and judge it themselves. The typed match is feedback only.
+ */
+export function ReadingCheckPanel({
+  tile,
+  surface,
+  hasAudio,
+  playing,
+  onPlay,
+  onRecord,
+  onClose,
+}: {
+  tile: TileDictation;
+  /** The word they missed, named so the marked phrase is not mistaken for the whole task. */
+  surface: string;
+  hasAudio: boolean;
+  playing: boolean;
+  onPlay: () => void;
+  onRecord: (outcome: ReaderToolOutcome) => void;
+  onClose: () => void;
+}) {
+  const [typed, setTyped] = useState('');
+  const [shown, setShown] = useState(false);
+  const [recorded, setRecorded] = useState(false);
+  const grade = shown && typed.trim() ? gradeDictation(typed, tile.reading) : null;
+  const asKana = typedAsKana(typed);
+
+  return (
+    <div className="stack" style={{ gap: '0.35rem' }} role="group" aria-label="Reading check">
+      <p className="muted" style={{ margin: 0 }}>
+        You couldn't read <span className="jp">{surface}</span>. Type how the marked phrase is read (kana or romaji).
+      </p>
+      {!shown ? (
+        <form
+          className="row"
+          style={{ gap: '0.4rem', flexWrap: 'wrap', alignItems: 'flex-end' }}
+          onSubmit={(event) => {
+            event.preventDefault();
+            setShown(true);
+          }}
+        >
+          <label>
+            Reading
+            <input type="text" value={typed} autoComplete="off" onChange={(event) => setTyped(event.target.value)} />
+          </label>
+          <button type="submit">{typed.trim() ? 'Check' : "Can't read it"}</button>
+          <button type="button" onClick={onClose}>Close</button>
+        </form>
+      ) : (
+        <div className="stack" style={{ gap: '0.25rem' }}>
+          {grade ? <p style={{ margin: 0, fontWeight: 600 }}>{grade.correct ? '✓ Matches' : '✗ Not quite'}</p> : null}
+          <p style={{ margin: 0 }}>
+            Reading: <span className="jp">{tile.reading}</span>
+          </p>
+          {grade && !grade.correct ? (
+            <p className="muted" style={{ margin: 0 }}>
+              You typed: <span className="jp">{typed.trim()}</span>
+              {asKana ? <> → <span className="jp">{asKana}</span></> : null}
+            </p>
+          ) : null}
+          {hasAudio ? (
+            <div><button type="button" onClick={onPlay}>{playing ? 'Stop' : 'Hear it'}</button></div>
+          ) : null}
+          {!recorded ? (
+            <div className="row" style={{ gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <span className="muted">Could you read it?</span>
+              <button type="button" onClick={() => { onRecord('got_it'); setRecorded(true); }}>Got it</button>
+              <button type="button" onClick={() => { onRecord('needed_help'); setRecorded(true); }}>Needed help</button>
+            </div>
+          ) : (
+            <div className="row" style={{ gap: '0.4rem', alignItems: 'center' }}>
+              <span className="muted">Recorded.</span>
+              <button type="button" onClick={onClose}>Close</button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
  * Read check: the sentence is shown plain (no furigana, word help or translation), the learner reads
  * it, optionally listens, then reveals the help and judges how it went. Their call is evidence only.

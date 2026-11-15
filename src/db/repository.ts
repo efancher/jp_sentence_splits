@@ -276,8 +276,9 @@ import {
   HOMOPHONE_HUNT_GAME_ID,
   type HomophoneHistoryEntry,
 } from '../lib/homophoneHunt';
-import { earTilesRejection, tileToolUnavailableReason } from '../lib/earTiles';
+import { earTilesRejection, tileToolUnavailableReason, type TileDictation } from '../lib/earTiles';
 import { dueListeningTools } from '../lib/listeningTools';
+import { readingCheckTile, recentReadingMisses } from '../lib/readingMissSteps';
 import { dueWordChecks } from '../lib/wordCheckSteps';
 import {
   buildRemixNounPool,
@@ -11634,6 +11635,61 @@ export async function findListeningToolCandidates(
   }));
 }
 
+/**
+ * Sentences due for a typed-reading check (`readingMissSteps.ts`): the learner said in the reader they couldn't read a
+ * word recently, in a sentence of an active book whose phrase around that word can be shown with a known reading. Not
+ * gated on the sentence being introduced: the miss itself is the evidence that they met it. Evidence only.
+ */
+export async function findReadingCheckCandidates(
+  limit: number,
+  excluded: ReadonlySet<string> = new Set(),
+  now: Date = new Date(),
+): Promise<ListeningToolCandidate[]> {
+  const misses = recentReadingMisses(await readAllLearningEventsForPass(), now.getTime()).filter(
+    (miss) => !excluded.has(miss.sentenceId),
+  );
+  if (misses.length === 0) return [];
+  const db = getDb();
+  const ids = misses.map((miss) => miss.sentenceId);
+  const [rows, books, suspendedIndex, memberships] = await Promise.all([
+    db.sentences.bulkGet(ids),
+    db.books.toArray(),
+    loadSuspendedBookIndex(),
+    bookSentencesForSentences(ids),
+  ]);
+  const activeBooks = new Set(books.filter(isBookInStudyRotation).map((book) => book.id));
+  const membershipBySentence = new Map<string, BookSentence>();
+  for (const membership of memberships) {
+    if (!activeBooks.has(membership.bookId)) continue;
+    if (suspendedIndex && membershipIsShelved(membership, suspendedIndex)) continue;
+    if (!membershipBySentence.has(membership.sentenceId)) membershipBySentence.set(membership.sentenceId, membership);
+  }
+  const out: ListeningToolCandidate[] = [];
+  for (const [index, miss] of misses.entries()) {
+    const sentence = rows[index];
+    const membership = membershipBySentence.get(miss.sentenceId);
+    if (!sentence || !membership || !readingCheckTile(sentence, miss.surface)) continue;
+    out.push({
+      bookId: membership.bookId,
+      sentenceId: sentence.id,
+      preview: sentence.japanese.slice(0, 24),
+      reason: `You couldn't read ${miss.surface} — type its reading`,
+      tool: 'reading',
+    });
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+/** The missed word's phrase for a Reading check opened on `sentence`, or null when it has no recent miss left to check. */
+export async function getReadingCheckTarget(
+  sentence: Pick<Sentence, 'id' | 'japanese' | 'vocabularySuggestions'>,
+): Promise<{ wordId: string; surface: string; tile: TileDictation } | null> {
+  const miss = recentReadingMisses(await readAllLearningEventsForPass(), Date.now()).find((m) => m.sentenceId === sentence.id);
+  const found = miss ? readingCheckTile(sentence, miss.surface) : null;
+  return miss && found ? { wordId: miss.wordId, surface: miss.surface, tile: found.tile } : null;
+}
+
 /** i+1 ordering inputs shared by every book: one global rank and each sentence's not-yet-met words. */
 interface IPlusOneContext {
   /** Position in the i+1 order over every not-yet-introduced book sentence (lower = sooner). */
@@ -13261,9 +13317,12 @@ async function gatherSessionPlannerInput(
     timer.time('findReadCheckCandidates', () =>
       findReadCheckCandidates(READ_CHECK_CANDIDATE_LIMIT, exclude.sentenceIds, now),
     ),
-    timer.time('findListeningToolCandidates', () =>
-      findListeningToolCandidates(LISTENING_TOOL_CANDIDATE_LIMIT, exclude.sentenceIds, now),
-    ),
+    // Reading checks on words just missed in the reader come first, ahead of the listening rounds.
+    timer.time('findListeningToolCandidates', async () => {
+      const reading = await findReadingCheckCandidates(LISTENING_TOOL_CANDIDATE_LIMIT, exclude.sentenceIds, now);
+      const taken = new Set([...exclude.sentenceIds, ...reading.map((candidate) => candidate.sentenceId)]);
+      return [...reading, ...(await findListeningToolCandidates(LISTENING_TOOL_CANDIDATE_LIMIT, taken, now))];
+    }),
     timer.time('findWordCheckCandidates', () =>
       findWordCheckCandidates(WORD_CHECK_CANDIDATE_LIMIT, exclude.sentenceIds, now),
     ),

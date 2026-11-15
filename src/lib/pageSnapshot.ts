@@ -19,6 +19,7 @@ const SENTENCE_ROUTES = [
   '/books/:bookId/speak/:sentenceId',
   '/books/:bookId/tiles/:sentenceId',
   '/books/:bookId/dictate/:sentenceId',
+  '/books/:bookId/reading/:sentenceId',
   '/books/:bookId/shadow/:sentenceId',
   '/sentences/:sentenceId/deep-dive',
 ];

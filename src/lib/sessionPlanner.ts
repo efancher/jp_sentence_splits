@@ -399,7 +399,8 @@ export interface ListeningToolCandidate {
   sentenceId: string;
   preview: string;
   reason: string;
-  tool: 'tiles' | 'dictate';
+  /** `reading` is the typed-reading check on a word the learner missed in the reader (`readingMissSteps.ts`), not a listening tool. */
+  tool: 'tiles' | 'dictate' | 'reading';
 }
 
 /** A walked-through sentence due for a Word check in the reader (see src/lib/wordCheckSteps.ts). */
@@ -530,7 +531,7 @@ export interface PlannerStepDraft {
   /** A Read check in the reader (see PlannerSessionStep.readCheck), not a walkthrough. */
   readCheck?: boolean;
   /** An Ear tiles or Dictation round in the reader (see PlannerSessionStep.readerTool). */
-  readerTool?: 'tiles' | 'dictate';
+  readerTool?: 'tiles' | 'dictate' | 'reading';
   /** A phrase shadow (see PlannerSessionStep.phrase). */
   phrase?: boolean;
 }
@@ -645,7 +646,9 @@ function buildReadCheckSteps(candidates: readonly ReadCheckCandidate[], budgetMi
   return steps;
 }
 
-/** Ear tiles / Dictation steps for the sentences due, within the review budget left after the Read checks. */
+const READER_TOOL_LABEL = { tiles: 'Ear tiles', dictate: 'Dictation', reading: 'Reading check' } as const;
+
+/** Ear tiles / Dictation / Reading check steps for the sentences due, within the review budget left after the Read checks. */
 function buildListeningToolSteps(candidates: readonly ListeningToolCandidate[], budgetMinutes: number): PlannerStepDraft[] {
   const steps: PlannerStepDraft[] = [];
   let remaining = budgetMinutes;
@@ -658,7 +661,7 @@ function buildListeningToolSteps(candidates: readonly ListeningToolCandidate[], 
       targetKind: 'sentence_learning',
       bookId: candidate.bookId,
       sentenceId: candidate.sentenceId,
-      label: `${candidate.tool === 'tiles' ? 'Ear tiles' : 'Dictation'}: ${candidate.preview}`,
+      label: `${READER_TOOL_LABEL[candidate.tool]}: ${candidate.preview}`,
       estimatedMinutes: LISTENING_TOOL_STEP_MINUTES,
       reason: candidate.reason,
       status: 'pending',
