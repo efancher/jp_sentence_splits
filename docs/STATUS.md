@@ -28,7 +28,11 @@ and possible extensions. This snapshot does not certify a live deployment.
   book, so a good sentence in any book is offered ahead of a worse one in the
   most recently opened book (each book keeps its own order, Sentence Growth
   floating included; the planner merges books by next rank). The lesson's reason
-  line names the new words ("new here: 空"). Episode momentum (2026-11-08):
+  line names the new words ("new here: 空"). Reinforcement (2026-11-15): a ready
+  sentence carrying a word the learner has met but not yet settled (seen in one
+  introduced sentence, or shaky again; `partlyMetLemmas`) is offered ahead of
+  other ready sentences, so a new word comes back soon; the unlock value orders
+  within each group. Episode momentum (2026-11-08):
   sentences from an episode (book + chapter) with many already-started
   sentences are favoured, up to +50% on the unlock value at 10 started
   (`episodeMomentumBoost`) and as a tie-break in the ready and stretch tiers, so

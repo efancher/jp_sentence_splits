@@ -48,7 +48,7 @@ import {
   iPlusOneStretchEvery,
   isSequentialStudyMode,
 } from '../lib/sentenceLed';
-import { buildKnownLemmaSet, lemmaKey, unknownLemmasForSentence, WORD_MIN_EXPOSURES } from '../lib/unknownLemmas';
+import { buildKnownLemmaSet, lemmaKey, partlyMetLemmas, unknownLemmasForSentence, WORD_MIN_EXPOSURES } from '../lib/unknownLemmas';
 import { sessionStepCategory } from '../lib/sessionStepCategory';
 import { sentencesDueForFreshTry } from '../lib/sentenceJourney';
 import { emptyStageCounts, sentenceStage, type StageCounts } from '../lib/sentenceStages';
@@ -11735,7 +11735,12 @@ async function loadIPlusOneContext(stretchEvery: number): Promise<IPlusOneContex
   const sentenceIds = [...new Set(memberships.map((row) => row.sentenceId))];
   const introduced = await getIntroducedSentenceIds(sentenceIds);
   const rows = await getDb().sentences.bulkGet(sentenceIds);
-  const known = await loadKnownLemmaSet(rows.filter((row) => row && introduced.has(row.id)));
+  const introducedRows = rows.filter((row) => row && introduced.has(row.id));
+  const known = await loadKnownLemmaSet(introducedRows);
+  const reinforce = partlyMetLemmas(
+    introducedRows.map((row) => row?.vocabularySuggestions),
+    known,
+  );
   const grammar = await loadCuratedGrammar(introduced, rows);
   // Sentences already started per episode (book + chapter): new lessons lean toward episodes the learner is into.
   const startedByEpisode = new Map<string, number>();
@@ -11770,6 +11775,7 @@ async function loadIPlusOneContext(stretchEvery: number): Promise<IPlusOneContex
     stretchEvery,
     knownGrammar: grammar.known,
     grammarCost: grammar.cost,
+    reinforce,
   });
   return { rank: new Map(order.map((id, index) => [id, index])), newWords };
 }

@@ -80,6 +80,22 @@ describe('walkthrough supply: i+1 ordering (settings.iPlusOneOrdering)', () => {
     expect(await lessonOrder()).toEqual(['i1', 'easy', 'hard']);
   });
 
+  it('offers a sentence reusing a word met only once ahead of an equally close sentence with a brand-new word', async () => {
+    const book = await createBook({ title: 'Reinforce' });
+    const rows = [
+      sentenceOf('done', ['猫', '犬']),
+      sentenceOf('done2', ['猫', '空']),
+      sentenceOf('fresh', ['猫', '海']),
+      sentenceOf('again', ['猫', '空']),
+    ];
+    await getDb().sentences.bulkPut(rows);
+    await addSentencesToBook(book.id, rows.map((row) => row.id));
+    await setBookSentenceStatus(book.id, 'done', 'complete');
+    await setBookSentenceStatus(book.id, 'done2', 'complete');
+    // 空 has one sighting (not yet known), 海 none; both sentences are one new word away, 'fresh' is earlier in the book.
+    expect(await lessonOrder()).toEqual(['again', 'fresh']);
+  });
+
   it('does nothing in sequential study mode, which keeps its strict episode order', async () => {
     await seed();
     await updateSettings({ iPlusOneOrdering: true, sequentialStudyMode: true });

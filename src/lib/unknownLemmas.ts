@@ -52,6 +52,21 @@ export function buildKnownLemmaSet(
 }
 
 /**
+ * Lemmas the learner has met in an introduced sentence but that are not known yet (seen too few times, or shaky
+ * again): the words a second sighting would settle. i+1 offers sentences carrying them first, to reinforce.
+ */
+export function partlyMetLemmas(
+  introducedSentences: Iterable<readonly LemmaSource[] | undefined>,
+  known: ReadonlySet<string>,
+): Set<string> {
+  const partly = new Set<string>();
+  for (const suggestions of introducedSentences) {
+    for (const key of sentenceContentLemmas(suggestions)) if (!known.has(key)) partly.add(key);
+  }
+  return partly;
+}
+
+/**
  * Introduced sentences a lemma must appear in before i+1 counts it as met (the planner passes this; extra keys such
  * as reviewed-card words are trusted regardless). Mirrors `GRAMMAR_MIN_EXPOSURES`.
  */

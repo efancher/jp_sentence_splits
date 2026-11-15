@@ -32,7 +32,9 @@ export function episodeMomentumBoost(started: number | undefined): number {
  *
  * Tiers, in the order they are served:
  * 1. i+1: 1-2 unknown pieces (content lemmas plus, when `knownGrammar` is
- *    given, unmet curated grammar entries), those whose unknown words unlock the
+ *    given, unmet curated grammar entries). Sentences carrying a word the
+ *    learner has met but not yet settled (`reinforce`) come first, so a new
+ *    word is revisited soon; within each group, those whose unknown words unlock the
  *    most other sentences first (`unlockValueByLemma`, with fillers, discourse
  *    markers and names down-weighted by `lemmaWeight`), then fewer unknowns,
  *    then episodes with more already-started sentences, then reading order. The
@@ -56,6 +58,8 @@ export function orderByIPlusOne(
     knownGrammar?: ReadonlySet<string>;
     /** Weight of an unmet grammar entry (default 1); see `grammarLevelCosts`. */
     grammarCost?: ReadonlyMap<string, number>;
+    /** Lemmas already met but not yet known (`partlyMetLemmas`): ready sentences carrying one are offered first, to reinforce. */
+    reinforce?: ReadonlySet<string>;
   } = {},
 ): string[] {
   const maxUnknown = options.maxUnknown ?? I_PLUS_ONE_MAX_UNKNOWN;
@@ -77,6 +81,7 @@ export function orderByIPlusOne(
       scorable: score.scorable,
       unknown,
       count: unknown.length + grammarUnknown,
+      reinforces: options.reinforce ? unknown.some((key) => options.reinforce!.has(key)) : false,
       momentum: item.momentum ?? 0,
     };
   });
@@ -108,7 +113,9 @@ export function orderByIPlusOne(
   }
   const lift = (entry: (typeof scored)[number]) => unlock(entry) * episodeMomentumBoost(entry.momentum);
   ready.sort(
-    (a, b) => lift(b) - lift(a) || a.count - b.count || b.momentum - a.momentum || a.position - b.position,
+    (a, b) =>
+      Number(b.reinforces) - Number(a.reinforces) ||
+      lift(b) - lift(a) || a.count - b.count || b.momentum - a.momentum || a.position - b.position,
   );
   stretch.sort((a, b) => a.count - b.count || b.momentum - a.momentum || a.position - b.position);
 
