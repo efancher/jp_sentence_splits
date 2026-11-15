@@ -74,6 +74,8 @@ const PULL_PAGE_SIZE = 500;
 const MAX_DEFERRED_PULL_EVENTS = 2000;
 /** Chunk size for the `.in('id', …)` re-fetch of deferred events. */
 const DEFERRED_FETCH_CHUNK = 200;
+/** Ids per `.in(idCol, …)` request when fetching a pulled page's rows. */
+const PULL_FETCH_CHUNK = 100;
 
 let syncInFlight: Promise<void> | null = null;
 
@@ -1754,13 +1756,18 @@ export async function applyRemoteEventsBatch(
   for (const [entity, items] of byEntity) {
     const idCol = idColumnForEntity(entity);
     const recordIds = [...new Set(items.map((item) => item.recordId))];
-    const { data: rows, error } = await supabase
-      .from(entity)
-      .select('*')
-      .in(idCol, recordIds);
-    if (error) throw new Error(error.message);
+    // Chunked: 500 ids in one `.in()` overflows PostgREST's URL limit → 400.
+    const rows: Array<Record<string, unknown>> = [];
+    for (let i = 0; i < recordIds.length; i += PULL_FETCH_CHUNK) {
+      const { data, error } = await supabase
+        .from(entity)
+        .select('*')
+        .in(idCol, recordIds.slice(i, i + PULL_FETCH_CHUNK));
+      if (error) throw new Error(error.message);
+      rows.push(...((data ?? []) as Array<Record<string, unknown>>));
+    }
     const byRecordId = new Map(
-      (rows ?? []).map((row) => [
+      rows.map((row) => [
         String((row as Record<string, unknown>)[idCol]),
         row as Record<string, unknown>,
       ]),
