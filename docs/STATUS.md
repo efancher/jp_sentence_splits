@@ -488,7 +488,7 @@ repair tooling, research materials and future roadmap ideas remain available.
    it is unreachable. The book page also has a **Word glosses** panel (`BookWordGlosses`,
    `fillBookGlosses` in `src/lib/sentenceGlossFill.ts`) that glosses every sentence still
    lacking glosses, one assistant call per sentence at the saved Agents concurrency, saving as
-   it goes (Stop keeps the work; rerun resumes). The `vocab-assist` function was deleted from the repo but may still be
+   it goes (Stop keeps the work; rerun resumes). The same pass also starts in the background after every mined/podcast/NHK import commit (`ShadowingPreviewCard`), fail-open. The `vocab-assist` function was deleted from the repo but may still be
    deployed on Supabase (`supabase functions delete vocab-assist`).
 
 

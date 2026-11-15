@@ -1319,7 +1319,7 @@ one-off fills; (3) since 2026-11-14 the Reader does the same once per page
 load for the focused sentence (`src/lib/sentenceGlossFill.ts`), because its
 word help drops any content word with no stored gloss or saved meaning and
 the sentence-led flow never visits `VocabularyReviewPage`. (4) the book page's **Word glosses** panel (`BookWordGlosses`) runs the same call over every
-sentence of the book still lacking glosses (`fillBookGlosses`). These only pre-fill the still-editable field and degrade
+sentence of the book still lacking glosses (`fillBookGlosses`), and starts automatically in the background after each mined/podcast/NHK import commit (`ShadowingPreviewCard`). These only pre-fill the still-editable field and degrade
 silently when the assistant is unreachable. Offline, the deterministic path is the
 `backfill:vocabulary-suggestion-glosses` / `backfill:vocabulary-meanings`
 scripts — POS-aware JMDict lookup (`scripts/lib/jmdict.ts` takes the

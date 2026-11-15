@@ -1,6 +1,8 @@
 import { useState, type ReactNode } from 'react';
 
 import { commitShadowingPackageImport } from '../db/repository';
+import { readStoredConcurrency } from '../lib/assistRun';
+import { fillBookGlosses } from '../lib/sentenceGlossFill';
 import type { ShadowingImportPreview } from '../lib/shadowingImport';
 
 const BYTES_PER_MEBIBYTE = 1024 * 1024;
@@ -127,6 +129,9 @@ export function ShadowingPreviewCard({
             setError('');
             try {
               const result = await (onCommit ?? commitShadowingPackageImport)(preview);
+              // Background word glosses for the new sentences (fail-open; the book page's
+              // Word glosses panel retries whatever the assistant couldn't do).
+              void fillBookGlosses(result.bookId, { concurrency: readStoredConcurrency() }).catch(() => undefined);
               onImported(result);
             } catch (err) {
               setError(

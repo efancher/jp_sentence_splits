@@ -1240,7 +1240,7 @@ kept here so the thinking isn't lost:
   on-ramp for brand-new material." Needs a new `PlannerStepTargetKind` and
   budget-slice plumbing in `buildExploreSteps`/`sessionPlanner.ts` — a
   real lift, not a config tweak like the density threshold was.
-- **(Book-wide pass shipped 2026-11-14 as the book page's Word glosses panel; remaining idea: run it automatically at import/commit time.) Precompute word glosses via the box assistant (the `vocab-assist` Edge Function was removed 2026-11-14; and sentence translation, for the
+- **(Book-wide pass shipped 2026-11-14 as the book page's Word glosses panel; also runs automatically after mining/podcast/NHK import commits since 2026-11-15.) Precompute word glosses via the box assistant (the `vocab-assist` Edge Function was removed 2026-11-14; and sentence translation, for the
   sentences that don't have one yet) at mining/import commit time** via
   a batch `/assist` pass over a book (modelled on `assistCorrection.ts`), instead of live-firing
   on first `VocabularyReviewPage`/Reader visit. Since both write to the shared
