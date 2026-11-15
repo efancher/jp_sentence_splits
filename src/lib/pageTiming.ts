@@ -89,12 +89,17 @@ export function trackPageLoad(options: {
   let last = performance.now();
   let maxStall = 0;
   let clearStreak = 0;
+  // A backgrounded page is suspended (iOS), so the gap after returning is not a stall.
+  let wasHidden = false;
+  const onVisibility = () => { wasHidden = true; };
+  document.addEventListener('visibilitychange', onVisibility);
   // Sync state as the page started loading is what matters, not after it settled.
   const startSync = syncState();
   let idbProbeMs: number | undefined;
   probeIdb?.().then((ms) => { idbProbeMs = ms; }, () => undefined);
   const finish = (timedOut: boolean) => {
     window.clearInterval(timer);
+    document.removeEventListener('visibilitychange', onVisibility);
     record({
       path,
       ms: Math.round(performance.now() - startedAt),
@@ -109,7 +114,8 @@ export function trackPageLoad(options: {
   };
   const timer = window.setInterval(() => {
     const now = performance.now();
-    maxStall = Math.max(maxStall, now - last - POLL_MS);
+    if (!wasHidden && !document.hidden) maxStall = Math.max(maxStall, now - last - POLL_MS);
+    wasHidden = false;
     last = now;
     // Two clear polls in a row: lazy routes swap the Suspense fallback for the
     // page, which then shows its own placeholder a tick later.
@@ -117,7 +123,10 @@ export function trackPageLoad(options: {
     if (clearStreak >= 2) finish(false);
     else if (now - startedAt > GIVE_UP_MS) finish(true);
   }, POLL_MS);
-  return () => window.clearInterval(timer);
+  return () => {
+    window.clearInterval(timer);
+    document.removeEventListener('visibilitychange', onVisibility);
+  };
 }
 
 /** Compact summary for report snapshots. */

@@ -65,7 +65,7 @@ import {
   updateBook,
   updateBookChapter,
   sortBookChaptersByEpisodeNumber,
-  filterToIntroducedSentenceIds,
+  countIntroducedBookSentences,
 } from '../db/repository';
 import { suggestMergedJapanese, suggestMergedTranslation } from '../lib/mergeSentences';
 import {
@@ -513,8 +513,8 @@ export function BookDetailPage() {
   // carrying a card).
   const introducedCount = useLiveQuery(async () => {
     if (ids.length === 0) return null;
-    return (await filterToIntroducedSentenceIds(ids)).size;
-  }, [ids]);
+    return countIntroducedBookSentences(bookId);
+  }, [ids, bookId]);
 
   // TEMPORARY diagnostics: time suspend/resume clicks (write, then each live
   // query catching up, then first paint) and show the result in the snack bar.

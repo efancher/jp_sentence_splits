@@ -5523,6 +5523,35 @@ export async function filterToIntroducedSentenceIds(sentenceIds: string[]): Prom
 }
 
 /**
+ * How many of one book's sentences the learner has met, for the book page's progress panel. Same rule as
+ * `getIntroducedSentenceIds`, but every read is an index range scoped to this book (or the sentence-card
+ * subject type) instead of a whole-table pass: the page's live query re-runs on every write, and on a phone
+ * mid-sync the whole-table reads (events, memberships, every study item) never finished (2026-11-15 report).
+ * Walkthrough events are matched by the book they were logged in, so a sentence reused in another book is
+ * counted here only by its membership or card.
+ */
+export async function countIntroducedBookSentences(bookId: string): Promise<number> {
+  const db = getDb();
+  const [memberships, events, items] = await Promise.all([
+    db.bookSentences.where('bookId').equals(bookId).toArray(),
+    db.sentenceLearningEvents.where('bookId').equals(bookId).toArray(),
+    db.studyItems.where('subjectType').equals('sentence').toArray(),
+  ]);
+  const inBook = new Set(memberships.map((membership) => membership.sentenceId));
+  const introduced = new Set<string>();
+  for (const membership of memberships) {
+    if (membership.status !== 'unstarted') introduced.add(membership.sentenceId);
+  }
+  for (const event of withoutResetWalkthroughs(events)) {
+    if (event.action === 'walkthrough_completed' && inBook.has(event.sentenceId)) introduced.add(event.sentenceId);
+  }
+  for (const item of items) {
+    if (inBook.has(item.subjectId)) introduced.add(item.subjectId);
+  }
+  return introduced.size;
+}
+
+/**
  * Shadowing readiness: a sentence can be shadowed once the learner has met it
  * (walked through, started in a book, or already carrying a card), the same
  * rule as the review queue. There is no vocabulary or pitch-accent requirement:

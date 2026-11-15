@@ -2,10 +2,12 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { resetDbForTests } from '../src/db/database';
 import {
+  countIntroducedBookSentences,
   filterToIntroducedSentenceIds,
   getDb,
   getRemixData,
   logSentenceLearningEvent,
+  resetSentenceWalkthrough,
 } from '../src/db/repository';
 import type { VocabularySuggestion } from '../src/domain/types';
 
@@ -22,6 +24,33 @@ describe('filterToIntroducedSentenceIds (the shared /play gate)', () => {
     expect([...introduced]).toEqual(['walked']);
   });
 
+});
+
+describe('countIntroducedBookSentences (book page progress)', () => {
+  it('counts started, walked-through and carded sentences in the book, once each', async () => {
+    const db = getDb();
+    const member = (id: string, status: 'unstarted' | 'learning', bookId = 'b1') =>
+      db.bookSentences.put({ id: `${bookId}_${id}`, bookId, sentenceId: id, position: 0, status, addedAt: T });
+    await member('started', 'learning');
+    await member('walked', 'unstarted');
+    await member('carded', 'unstarted');
+    await member('untouched', 'unstarted');
+    await member('elsewhere', 'learning', 'b2');
+    await logSentenceLearningEvent({ id: 'e1', visitId: 'v', bookId: 'b1', action: 'walkthrough_completed', sentenceId: 'walked' });
+    await logSentenceLearningEvent({ id: 'e2', visitId: 'v', bookId: 'b1', action: 'walkthrough_completed', sentenceId: 'started' });
+    await db.studyItems.put({ id: 'si1', subjectType: 'sentence', subjectId: 'carded' } as never);
+    await db.studyItems.put({ id: 'si2', subjectType: 'sentence', subjectId: 'elsewhere' } as never);
+    expect(await countIntroducedBookSentences('b1')).toBe(3);
+  });
+
+  it('a reset walkthrough no longer introduces the sentence', async () => {
+    await getDb().bookSentences.put({ id: 'b1_s', bookId: 'b1', sentenceId: 's', position: 0, status: 'unstarted', addedAt: T });
+    await logSentenceLearningEvent({ id: 'e1', visitId: 'v', bookId: 'b1', action: 'walkthrough_completed', sentenceId: 's', timestamp: '2026-10-10T00:00:01.000Z' });
+    expect(await countIntroducedBookSentences('b1')).toBe(1);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await resetSentenceWalkthrough({ sentenceId: 's', bookId: 'b1' });
+    expect(await countIntroducedBookSentences('b1')).toBe(0);
+  });
 });
 
 // 親鳥がひなに巣を作りました。
