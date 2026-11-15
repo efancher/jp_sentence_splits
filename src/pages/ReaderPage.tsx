@@ -60,6 +60,7 @@ import { isPreparationStale } from '../lib/episodePreparation';
 import { SentenceJourneyDetails } from '../components/SentenceJourneyDetails';
 import { buildSentenceJourney, sentencesReadyToRevisit } from '../lib/sentenceJourney';
 import { describeSentenceProgress, glossableWords, sentenceWordHelp, summariseSentenceProgress } from '../lib/sentenceLearning';
+import { isGlossOnlySuggestion } from '../lib/vocabularySuggestions';
 import { PLAYBACK_SPEEDS } from '../lib/recording';
 import { SentenceAudioAdjuster } from '../components/SentenceAudioAdjuster';
 import { ReloadSentenceAudioButton } from '../components/ReloadSentenceAudioButton';
@@ -268,7 +269,8 @@ export function ReaderPage() {
         const words: ReaderWord[] = [];
         const sentenceLinks = links.filter((link) => link.sentenceId === row.sentence.id);
         for (const suggestion of [...row.sentence.vocabularySuggestions].sort((a, b) => a.start - b.start)) {
-          if (!suggestion.selectedByDefault || !suggestion.expression || seen.has(suggestion.expression)) continue;
+          // Gloss-only words (numerals and counters like 30回, pronouns) are tappable too: the learner can still say whether they knew them.
+          if ((!suggestion.selectedByDefault && !isGlossOnlySuggestion(suggestion)) || !suggestion.expression || seen.has(suggestion.expression)) continue;
           seen.add(suggestion.expression);
           const linked = sentenceLinks.find((link) => link.surfaceForm === suggestion.surface && itemById.get(link.vocabularyItemId)?.expression === suggestion.expression);
           const item = (linked ? itemById.get(linked.vocabularyItemId) : undefined)
