@@ -823,7 +823,7 @@ export interface AppSettings {
    */
   sequentialStudyMode?: boolean;
   /**
-   * i+1 sentence order (opt-in, local to this device): a book's new sentences
+   * i+1 sentence order (on by default; `false` opts out; local to this device): a book's new sentences
    * are offered by how much of them is already known — 1-2 unknown content
    * words first, with a harder sentence every few — instead of reading order.
    * Order only; nothing is gated or dropped. Ignored in sequential study mode

@@ -43,9 +43,9 @@ export function isSequentialStudyMode(settings: Partial<FlowSettings> | undefine
   return settings?.sequentialStudyMode ?? false;
 }
 
-/** Opt-in: offer a book's new sentences by known-word coverage (i+1) instead of reading order. */
+/** On by default (2026-11-15): offer a book's new sentences by known-word coverage (i+1) instead of reading order. An explicit `false` opts out. */
 export function isIPlusOneOrdering(settings: Partial<FlowSettings> | undefined): boolean {
-  return settings?.iPlusOneOrdering ?? false;
+  return settings?.iPlusOneOrdering ?? true;
 }
 
 /** Every Nth i+1 slot is a harder sentence; 0 = never. Falls back to the default for anything that isn't a whole number >= 0. */

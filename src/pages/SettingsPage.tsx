@@ -16,7 +16,7 @@ import {
 } from '../db/database';
 import { useJapaneseSpeech } from '../hooks/useJapaneseSpeech';
 import { filterJapaneseVoices } from '../lib/speech';
-import { iPlusOneStretchEvery } from '../lib/sentenceLed';
+import { iPlusOneStretchEvery, isIPlusOneOrdering } from '../lib/sentenceLed';
 import {
   exportFullBackup,
   refreshVocabularySuggestionDefaults,
@@ -339,7 +339,7 @@ export function SettingsPage() {
         <label className="row">
           <input
             type="checkbox"
-            checked={settings.iPlusOneOrdering ?? false}
+            checked={isIPlusOneOrdering(settings)}
             onChange={(event) => {
               void updateSettings({ iPlusOneOrdering: event.target.checked });
             }}
@@ -358,7 +358,7 @@ export function SettingsPage() {
           Harder sentence
           <select
             value={iPlusOneStretchEvery(settings)}
-            disabled={!settings.iPlusOneOrdering}
+            disabled={!isIPlusOneOrdering(settings)}
             onChange={(event) => {
               void updateSettings({ iPlusOneStretchEvery: Number(event.target.value) });
             }}

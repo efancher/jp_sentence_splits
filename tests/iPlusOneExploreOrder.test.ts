@@ -63,9 +63,15 @@ describe('walkthrough supply: i+1 ordering (settings.iPlusOneOrdering)', () => {
     resetDbForTests(`i-plus-one-${createId('db')}`);
   });
 
-  it('keeps reading order while the setting is off', async () => {
+  it('keeps reading order when the setting is explicitly off', async () => {
     await seed();
+    await updateSettings({ iPlusOneOrdering: false });
     expect(await lessonOrder()).toEqual(['hard', 'i1', 'easy']);
+  });
+
+  it('orders by i+1 when the setting was never touched (on by default)', async () => {
+    await seed();
+    expect((await lessonOrder())[0]).toBe('i1');
   });
 
   it('offers the almost-known sentence first when on, without dropping anything', async () => {

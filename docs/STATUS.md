@@ -16,7 +16,7 @@ and possible extensions. This snapshot does not certify a live deployment.
   still feed word strength, i+1 known words and the progress panels; pitch-accent
   cards stay, paused by default). Introduction gates
   use sentence learning events, started book membership or a sentence card.
-- i+1 sentence order (opt-in, `settings.iPlusOneOrdering`, local to the device,
+- i+1 sentence order (on by default since 2026-11-15, `settings.iPlusOneOrdering`, local to the device,
   2026-11-07): new lessons are ordered by known-word coverage instead of
   reading order (`orderByIPlusOne`, `loadIPlusOneContext`/`findExploreCandidates`).
   Known = content lemmas (default-checked `vocabularySuggestions`) of introduced
