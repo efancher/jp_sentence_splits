@@ -500,10 +500,13 @@ type MeaningTarget = Awaited<ReturnType<typeof getWordMeaningCheckTarget>>;
 
 export function WordMeaningPanel({
   sentence,
+  expression,
   onRecord,
   onClose,
 }: {
   sentence: Pick<Sentence, 'id' | 'japanese' | 'vocabularySuggestions'>;
+  /** Ask about this word (dictionary form) instead of the weakest one, when the sentence has it. */
+  expression?: string;
   onRecord: (outcome: ReaderToolOutcome, target: NonNullable<MeaningTarget>) => void;
   onClose: () => void;
 }) {
@@ -514,7 +517,7 @@ export function WordMeaningPanel({
   useEffect(() => {
     let cancelled = false;
     // A snapshot per open: the word must not change while the learner is thinking of its meaning.
-    void getWordMeaningCheckTarget(sentence).then(
+    void getWordMeaningCheckTarget(sentence, 0, expression).then(
       (found) => { if (!cancelled) setTarget(found); },
       () => { if (!cancelled) setTarget(undefined); },
     );

@@ -26,7 +26,7 @@ export interface WordCheckSentence {
   /** Last completed walkthrough (ms). */
   lastWalkedAt: number;
   /** The word the reader's Word check would ask about (its weakest by meaning), when it has one. */
-  word?: { label: string; meaningStrength: number };
+  word?: { label: string; meaningStrength: number; expression?: string };
   /** Latest meaning check logged on this sentence, any word. */
   lastCheck?: { at: number; gotIt: boolean };
   /** Latest Read check on this sentence. */
@@ -36,6 +36,8 @@ export interface WordCheckSentence {
 export interface WordCheckDue {
   sentenceId: string;
   word: string;
+  /** Dictionary form of `word`, used to find it in other sentences. */
+  expression?: string;
   reason: string;
   /** The last Read check was "needed help" and no meaning check has followed it. */
   struggling: boolean;
@@ -57,6 +59,7 @@ export function dueWordChecks(input: { sentences: readonly WordCheckSentence[]; 
     due.push({
       sentenceId: sentence.sentenceId,
       word: word.label,
+      expression: word.expression,
       struggling,
       reason: wordCheckReason(word.label, struggling, recent, lastCheck),
       recent,
@@ -73,7 +76,35 @@ export function dueWordChecks(input: { sentences: readonly WordCheckSentence[]; 
       a.lastCheckAt - b.lastCheckAt ||
       a.sentenceId.localeCompare(b.sentenceId),
   );
-  return due.map(({ sentenceId, word, reason, struggling }) => ({ sentenceId, word, reason, struggling }));
+  return due.map(({ sentenceId, word, expression, reason, struggling }) => ({ sentenceId, word, expression, reason, struggling }));
+}
+
+/**
+ * A sentence the learner has not studied that also holds the word, so the Word check tests the word and not the
+ * memory of a familiar sentence (on a sentence read many times, the whole line can carry a word's meaning; see
+ * docs/ROADMAP.md, "Masked signal"). Callers offer only not-yet-introduced sentences in active books where the word is
+ * checkable. The pick has the fewest other words whose meaning is not solid, so the word is the one gap; ties go to the
+ * shorter sentence, then id. `taken` holds sentences already used by another check or step.
+ */
+export interface TransferSentenceOption {
+  sentenceId: string;
+  /** Checkable words in it, other than the asked word, whose meaning is below the reader's "known" line. */
+  otherWeakWords: number;
+  length: number;
+}
+
+export function pickTransferSentence(
+  options: readonly TransferSentenceOption[],
+  taken: ReadonlySet<string> = new Set(),
+): TransferSentenceOption | undefined {
+  return options
+    .filter((option) => !taken.has(option.sentenceId))
+    .sort((a, b) => a.otherWeakWords - b.otherWeakWords || a.length - b.length || a.sentenceId.localeCompare(b.sentenceId))[0];
+}
+
+/** Why a Word check is on a sentence the learner hasn't studied: the reason line names the word and where it was met. */
+export function transferWordCheckReason(word: string): string {
+  return `Recall what ${word} means in a sentence you haven't studied (you met it in a walked sentence, which can carry the meaning for you); you judge how it went`;
 }
 
 function wordCheckReason(

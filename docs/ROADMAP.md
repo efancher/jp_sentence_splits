@@ -1160,7 +1160,11 @@ control).
   else Ear tiles/Dictation). Not done: a Word check triggered directly by a
   Meaning/Kanji/Reading trouble tag (tags still queue a Fresh try), decoupling the
   Grammar check from its revisit the same way, and direction 5 (compare the next Read
-  check after a standalone Word check or Dictation). Check after a week of use: how
+  check after a standalone Word check or Dictation).
+  *Progress (2026-11-15):* Word checks now move to an unstudied sentence holding the same
+  word (STATUS), against the masked signal above. Check after a week: whether "needed help"
+  on moved checks differs from the old 67 of 76, and whether moved sentences are too hard to
+  read (if so, require more of their other words to be solid). Check after a week of use: how
   often the 2-per-plan cap is reached, and whether "needed help" stays near the 67 of
   76 seen in meaning events so far.
   *Open:* how many separate steps a day is tolerable (the plan's time budget

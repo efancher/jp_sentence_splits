@@ -365,6 +365,22 @@ describe('reader study tools', () => {
     expect(screen.queryByRole('region', { name: 'Sentence walkthrough' })).not.toBeInTheDocument();
   });
 
+  it('asks about the word named in a moved Word check step, not the weakest one', async () => {
+    Element.prototype.scrollIntoView = vi.fn();
+    render(
+      withAppProviders(
+        <MemoryRouter initialEntries={[`/books/book-1/check/sent-1/${encodeURIComponent('魚')}`]}>
+          <Routes>
+            <Route path="books/:bookId/check/:sentenceId/:word" element={<ReaderPage />} />
+          </Routes>
+        </MemoryRouter>,
+      ),
+    );
+    const group = await screen.findByRole('group', { name: 'Word meaning check' });
+    expect(await within(group).findByText('魚')).toBeInTheDocument();
+    expect(within(group).queryByText('猫')).not.toBeInTheDocument();
+  });
+
   it.each([
     ['tiles', 'Ear tiles'],
     ['dictate', 'Dictation'],

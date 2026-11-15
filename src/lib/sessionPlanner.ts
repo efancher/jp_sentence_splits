@@ -409,6 +409,13 @@ export interface WordCheckCandidate {
   sentenceId: string;
   preview: string;
   reason: string;
+  /**
+   * Set when the check moved to a sentence the learner hasn't studied (`pickTransferSentence`): the word to ask
+   * about there, by dictionary form. Unset, the reader asks for the sentence's weakest word.
+   */
+  word?: string;
+  /** The walked sentence the word came from, used instead when the other sentence is taken by another step. */
+  source?: { bookId: string; sentenceId: string; preview: string; reason: string };
 }
 
 export interface ExploreCandidate {
@@ -690,6 +697,7 @@ function buildWordCheckSteps(candidates: readonly WordCheckCandidate[], budgetMi
       reason: candidate.reason,
       status: 'pending',
       wordCheck: true,
+      ...(candidate.word ? { wordCheckWord: candidate.word } : {}),
     });
     remaining -= WORD_CHECK_STEP_MINUTES;
   }
@@ -1051,9 +1059,13 @@ export function sessionStepTargetPath(step: PlannerSessionStep): string | null {
       if (step.readCheck) return `/books/${step.bookId}/recall/${step.sentenceId}`;
       if (step.readerTool) return `/books/${step.bookId}/${step.readerTool}/${step.sentenceId}`;
       if (step.grammarCheck) return `/books/${step.bookId}/grammar-check/${step.sentenceId}`;
-      return step.wordCheck
-        ? `/books/${step.bookId}/check/${step.sentenceId}`
-        : `/books/${step.bookId}/learn/${step.sentenceId}`;
+      if (step.wordCheck) {
+        // A check moved to another sentence names its word in the path (still query-free).
+        return step.wordCheckWord
+          ? `/books/${step.bookId}/check/${step.sentenceId}/${encodeURIComponent(step.wordCheckWord)}`
+          : `/books/${step.bookId}/check/${step.sentenceId}`;
+      }
+      return `/books/${step.bookId}/learn/${step.sentenceId}`;
     case 'game':
       // Query-free on purpose: useActiveSession matches a step's page by exact pathname.
       return step.gameId ? `/play/${step.gameId}/auto` : null;
@@ -1121,7 +1133,12 @@ export function buildRecommendedSession(input: SessionPlannerInput): Recommended
     (candidates ?? []).filter((candidate) => !taken.has(candidate.sentenceId));
   const spent = (steps: readonly PlannerStepDraft[]) => steps.reduce((sum, step) => sum + step.estimatedMinutes, 0);
   let reviewLeft = allocation.review - spent(reviewBatchSteps);
-  const wordCheckSteps = buildWordCheckSteps(untaken(input.wordCheckCandidates), reviewLeft);
+  // A check moved to an unstudied sentence falls back to its walked source when that sentence is a new lesson here.
+  const wordCheckCandidates = (input.wordCheckCandidates ?? []).flatMap((candidate): WordCheckCandidate[] => {
+    if (!taken.has(candidate.sentenceId)) return [candidate];
+    return candidate.source && !taken.has(candidate.source.sentenceId) ? [candidate.source] : [];
+  });
+  const wordCheckSteps = buildWordCheckSteps(wordCheckCandidates, reviewLeft);
   reviewLeft -= spent(wordCheckSteps);
   for (const step of wordCheckSteps) taken.add(step.sentenceId);
   const readCheckSteps = buildReadCheckSteps(untaken(input.readCheckCandidates), reviewLeft);

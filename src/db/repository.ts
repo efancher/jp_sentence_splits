@@ -279,7 +279,7 @@ import {
 import { earTilesRejection, tileToolUnavailableReason, type TileDictation } from '../lib/earTiles';
 import { dueListeningTools } from '../lib/listeningTools';
 import { readingCheckTile, recentReadingMisses } from '../lib/readingMissSteps';
-import { dueWordChecks } from '../lib/wordCheckSteps';
+import { dueWordChecks, pickTransferSentence, transferWordCheckReason, type TransferSentenceOption } from '../lib/wordCheckSteps';
 import {
   buildRemixNounPool,
   buildRemixPuzzle,
@@ -12436,8 +12436,11 @@ export async function getWeakWordRecallTarget(
 export async function getWordMeaningCheckTarget(
   sentence: Pick<Sentence, 'id' | 'japanese' | 'vocabularySuggestions'>,
   maxAgeMs = 0,
+  /** Ask about this word (dictionary form) when the sentence has it, as a check moved to an unstudied sentence does. */
+  expression?: string,
 ): Promise<MeaningCheckWord | undefined> {
-  return meaningCheckWordsFor(sentence, await loadWordReadingStrengths(maxAgeMs))[0];
+  const words = meaningCheckWordsFor(sentence, await loadWordReadingStrengths(maxAgeMs));
+  return (expression ? words.find((word) => word.expression === expression) : undefined) ?? words[0];
 }
 
 /** A content word of a sentence the Word check can ask about. `vocabularyItemId` is '' until the word has an item. */
@@ -12525,6 +12528,7 @@ export async function findWordCheckCandidates(
   const lastWalk = new Map<string, number>();
   const lastCheck = new Map<string, { at: number; gotIt: boolean }>();
   const lastReadCheck = new Map<string, { at: number; gotIt: boolean }>();
+  const lastCheckByWord = new Map<string, { at: number; gotIt: boolean }>();
   const keepLatest = (map: Map<string, { at: number; gotIt: boolean }>, event: SentenceLearningEvent, at: number) => {
     if (!event.outcome || at <= (map.get(event.sentenceId)?.at ?? 0)) return;
     map.set(event.sentenceId, { at, gotIt: event.outcome === 'got_it' });
@@ -12538,6 +12542,10 @@ export async function findWordCheckCandidates(
       keepLatest(lastReadCheck, event, at);
     } else if (event.action === 'target_practice' && event.target?.key.startsWith(MEANING_CHECK_KEY_PREFIX)) {
       keepLatest(lastCheck, event, at);
+      const wordId = event.target.key.slice(MEANING_CHECK_KEY_PREFIX.length);
+      if (event.outcome && at > (lastCheckByWord.get(wordId)?.at ?? 0)) {
+        lastCheckByWord.set(wordId, { at, gotIt: event.outcome === 'got_it' });
+      }
     }
   }
   const walked = [...lastWalk.keys()].filter((id) => !excluded.has(id));
@@ -12556,29 +12564,98 @@ export async function findWordCheckCandidates(
     loadWordReadingStrengths(PLANNER_STRENGTH_CACHE_MS),
   ]);
   const sentenceById = new Map(rows.flatMap((row) => (row ? [[row.id, row] as const] : [])));
+  const later = (a?: { at: number; gotIt: boolean }, b?: { at: number; gotIt: boolean }) =>
+    !a ? b : !b ? a : b.at > a.at ? b : a;
   const due = dueWordChecks({
     sentences: reachable.flatMap((sentenceId) => {
       const sentence = sentenceById.get(sentenceId);
       if (!sentence) return [];
       const word = meaningCheckWordsFor(sentence, strengths)[0];
+      // A check on the word in another sentence (a moved check) spaces this one too.
+      const wordCheck = word?.vocabularyItemId ? lastCheckByWord.get(word.vocabularyItemId) : undefined;
       return [
         {
           sentenceId,
           lastWalkedAt: lastWalk.get(sentenceId)!,
-          word: word ? { label: word.surface, meaningStrength: word.meaningStrength } : undefined,
-          lastCheck: lastCheck.get(sentenceId),
+          word: word ? { label: word.surface, meaningStrength: word.meaningStrength, expression: word.expression } : undefined,
+          lastCheck: later(lastCheck.get(sentenceId), wordCheck),
           lastReadCheck: lastReadCheck.get(sentenceId),
         },
       ];
     }),
     now: now.getTime(),
   }).slice(0, limit);
-  return due.map((entry) => ({
+  if (due.length === 0) return [];
+  const sourceCandidate = (entry: (typeof due)[number]): WordCheckCandidate => ({
     bookId: membershipBySentence.get(entry.sentenceId)!.bookId,
     sentenceId: entry.sentenceId,
     preview: sentenceById.get(entry.sentenceId)!.japanese.slice(0, 24),
     reason: entry.reason,
-  }));
+  });
+  // A struggling sentence keeps its check (it is about that sentence); the rest move to an unstudied sentence with the
+  // same word when there is one, so a familiar line can't answer for the word.
+  const wanted = new Set(due.filter((entry) => !entry.struggling && entry.expression).map((entry) => entry.expression!));
+  const transfers = wanted.size
+    ? await findTransferSentences(wanted, new Set([...excluded, ...lastWalk.keys()]), strengths)
+    : new Map<string, Array<TransferSentenceOption & { bookId: string; sentence: Sentence }>>();
+  const taken = new Set<string>();
+  return due.map((entry) => {
+    const source = sourceCandidate(entry);
+    const options = !entry.struggling && entry.expression ? transfers.get(entry.expression) : undefined;
+    const pick = options ? pickTransferSentence(options, taken) : undefined;
+    if (!pick) return source;
+    taken.add(pick.sentenceId);
+    const transfer = options!.find((option) => option.sentenceId === pick.sentenceId)!;
+    return {
+      bookId: transfer.bookId,
+      sentenceId: transfer.sentenceId,
+      preview: transfer.sentence.japanese.slice(0, 24),
+      reason: transferWordCheckReason(entry.word),
+      word: entry.expression,
+      source,
+    };
+  });
+}
+
+/**
+ * Not-yet-introduced sentences in active books where each wanted word (dictionary form) is a checkable word, for
+ * moving a Word check off a familiar sentence (`pickTransferSentence`). `skip` holds walked or otherwise taken ids.
+ */
+async function findTransferSentences(
+  expressions: ReadonlySet<string>,
+  skip: ReadonlySet<string>,
+  strengths: WordReadingStrengths,
+): Promise<Map<string, Array<TransferSentenceOption & { bookId: string; sentence: Sentence }>>> {
+  const db = getDb();
+  const [memberships, books, suspendedIndex] = await Promise.all([
+    readAllBookSentencesForPass(),
+    db.books.toArray(),
+    loadSuspendedBookIndex(),
+  ]);
+  const activeBooks = new Set(books.filter(isBookInStudyRotation).map((book) => book.id));
+  const bookOf = new Map<string, string>();
+  for (const membership of memberships) {
+    if (membership.status !== 'unstarted' || skip.has(membership.sentenceId) || !activeBooks.has(membership.bookId)) continue;
+    if (suspendedIndex && membershipIsShelved(membership, suspendedIndex)) continue;
+    if (!bookOf.has(membership.sentenceId)) bookOf.set(membership.sentenceId, membership.bookId);
+  }
+  const result = new Map<string, Array<TransferSentenceOption & { bookId: string; sentence: Sentence }>>();
+  if (bookOf.size === 0) return result;
+  const ids = [...bookOf.keys()];
+  const introduced = await getIntroducedSentenceIds(ids);
+  const rows = await db.sentences.bulkGet(ids.filter((id) => !introduced.has(id)));
+  for (const sentence of rows) {
+    if (!sentence?.vocabularySuggestions.some((suggestion) => suggestion.expression && expressions.has(suggestion.expression))) continue;
+    const words = meaningCheckWordsFor(sentence, strengths);
+    for (const word of words) {
+      if (!expressions.has(word.expression)) continue;
+      const otherWeakWords = words.filter((other) => other !== word && other.meaningStrength < READER_KNOWN_STRENGTH).length;
+      const list = result.get(word.expression) ?? [];
+      list.push({ sentenceId: sentence.id, otherWeakWords, length: sentence.japanese.length, bookId: bookOf.get(sentence.id)!, sentence });
+      result.set(word.expression, list);
+    }
+  }
+  return result;
 }
 
 /**

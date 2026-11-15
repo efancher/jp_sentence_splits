@@ -131,4 +131,58 @@ describe('Word checks are planned on their own, from sentence morphology', () =>
     }
     expect([...perSentence.values()].every((count) => count === 1)).toBe(true);
   });
+
+  describe('moving the check off a familiar sentence', () => {
+    async function setupWithTransfer() {
+      const fixture = await setup();
+      // Unstudied sentences holding 猫 (the ready sentence's weakest word): the one with fewer other weak words wins.
+      const busy = makeSentence([['猫', 'cat'], ['が'], ['魚', 'fish'], ['を'], ['盗む', 'to steal']]);
+      const plain = makeSentence([['猫', 'cat'], ['が'], ['寝る', 'to sleep']]);
+      // Holds the struggling sentence's word; that check must stay on its own sentence.
+      const struggleTransfer = makeSentence([['水', 'water'], ['が'], ['冷たい', 'cold']]);
+      await getDb().sentences.bulkPut([busy, plain, struggleTransfer]);
+      await addSentencesToBook(fixture.book.id, [busy.id, plain.id, struggleTransfer.id]);
+      return { ...fixture, busy, plain, struggleTransfer };
+    }
+
+    it('asks about the word in an unstudied sentence, keeping the walked one as the fallback', async () => {
+      const { ready, plain, struggling, struggleTransfer } = await setupWithTransfer();
+      const candidates = (await getSessionPlannerInput(60)).wordCheckCandidates ?? [];
+      const moved = candidates.find((candidate) => candidate.source?.sentenceId === ready.id);
+      expect(moved).toMatchObject({ sentenceId: plain.id, word: '猫' });
+      expect(moved!.reason).toContain("haven't studied");
+      const stays = candidates.find((candidate) => candidate.sentenceId === struggling.id);
+      expect(stays).toBeDefined();
+      expect(stays!.word).toBeUndefined();
+      expect(candidates.map((candidate) => candidate.sentenceId)).not.toContain(struggleTransfer.id);
+    });
+
+    it('opens the moved check on its word, by path', async () => {
+      const { plain } = await setupWithTransfer();
+      const session = await addMinutesToTodaySession(60);
+      const moved = session.steps.filter((step) => step.wordCheck && step.wordCheckWord);
+      for (const step of moved) {
+        expect(sessionStepTargetPath(step)).toBe(
+          `/books/${step.bookId}/check/${step.sentenceId}/${encodeURIComponent(step.wordCheckWord!)}`,
+        );
+      }
+      // The reader asks about the named word even when another is weaker, and falls back to the weakest otherwise.
+      expect(await getWordMeaningCheckTarget(plain, 0, '寝る')).toMatchObject({ surface: '寝る' });
+      const weakest = await getWordMeaningCheckTarget(plain);
+      expect(await getWordMeaningCheckTarget(plain, 0, '無い')).toMatchObject({ surface: weakest!.surface });
+    });
+
+    it('a check on the word in another sentence spaces the walked sentence too', async () => {
+      const { book, ready, plain } = await setupWithTransfer();
+      const cat = await ensureVocabularyItem('猫', '猫', { meaning: 'cat' });
+      await log(plain, book.id, 1, {
+        // "Needed help" keeps 猫 the weakest word (a "got it" would move the check to the next-weakest one).
+        action: 'target_practice', outcome: 'needed_help', support: 'target_masked',
+        target: { kind: 'vocabulary', key: meaningCheckTargetKey(cat.id), label: '猫' },
+      });
+      resetWordStrengthCache();
+      const candidates = (await getSessionPlannerInput(60)).wordCheckCandidates ?? [];
+      expect(candidates.map((candidate) => candidate.source?.sentenceId ?? candidate.sentenceId)).not.toContain(ready.id);
+    });
+  });
 });

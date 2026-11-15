@@ -187,6 +187,14 @@ and possible extensions. This snapshot does not certify a live deployment.
   check gets no Read check or Ear tiles/Dictation step that day. Reader Dictation now blanks
   the phrase holding the sentence's weakest-meaning word first. Jsdom tests and the Chromium
   `reader-tools` spec pass; not yet used on a phone. Grammar checks still ride on their revisit.
+  Moved Word checks (2026-11-15): a walked sentence can answer for a word it holds (the
+  "masked signal" in ROADMAP), so a due check on a sentence that is not "struggling" moves to
+  an unstudied sentence in an active book holding the same word, the one with the fewest other
+  not-solid words (`pickTransferSentence`), and asks about that word
+  (`/books/:bookId/check/:sentenceId/:word`, `wordCheckWord` on the step). When the planner
+  drafts that sentence as a new lesson the check falls back to the walked sentence. A meaning
+  check on the word anywhere now spaces every sentence whose weakest word it is. Evidence only,
+  self-judged as before. Jsdom tests only; not yet used in a browser or on a phone.
   Grammar (2026-11-08): the same revisits also cover weak grammar patterns
   (`getWeakGrammarSentenceSignal`, from the reader's grammar taps; a pattern is
   weak by its weakest tapped facet, untapped is unseen not weak). Weak words

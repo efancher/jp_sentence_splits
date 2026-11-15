@@ -577,6 +577,8 @@ export const plannerSessionStepSchema = z.object({
   revisit: z.boolean().optional(),
   // Additive (2026-11-01): only set on `sentence_learning` Word check steps.
   wordCheck: z.boolean().optional(),
+  // Additive (2026-11-15): only set on Word check steps moved to a sentence not yet studied.
+  wordCheckWord: z.string().optional(),
   // Additive (2026-11-08): only set on `sentence_learning` Grammar check steps.
   grammarCheck: z.boolean().optional(),
   // Additive (2026-11-01): only set on `sentence_learning` Read check steps.

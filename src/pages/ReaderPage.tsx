@@ -98,7 +98,8 @@ function storedTextMode(): ReaderTextMode | undefined {
 const NO_AUDIO_ROWS: SentenceAudio[] = [];
 
 export function ReaderPage() {
-  const { bookId = '', sentenceId: lessonSentenceId } = useParams();
+  // `word` is set on a Word check moved to a sentence the learner hasn't studied (/check/:sentenceId/:word).
+  const { bookId = '', sentenceId: lessonSentenceId, word: checkWord } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   // /books/:bookId/check/:sentenceId (planner Word check step) and /recall/:sentenceId (Read check step) open that
@@ -154,7 +155,7 @@ export function ReaderPage() {
   /** The in-place study tool open on a sentence: a dictation blank (with its tile), a word-meaning check or an Ear Tiles round. */
   const [readerTool, setReaderTool] = useState<
     { sentenceId: string; kind: 'dictate'; tile: number; visitId: string } |
-    { sentenceId: string; kind: 'meaning'; visitId: string } |
+    { sentenceId: string; kind: 'meaning'; visitId: string; expression?: string } |
     { sentenceId: string; kind: 'reading'; visitId: string; wordId: string; surface: string; tile: TileDictation } |
     { sentenceId: string; kind: 'grammar'; visitId: string } |
     { sentenceId: string; kind: 'recall'; visitId: string; revealed: boolean; offer?: FollowUpChoice } |
@@ -370,7 +371,7 @@ export function ReaderPage() {
     if (isShadowRoute) setReaderTool({ sentenceId: lessonSentenceId, kind: 'shadow', visitId: createId('visit') });
     else if (isReadCheckRoute) setReaderTool({ sentenceId: lessonSentenceId, kind: 'recall', visitId: createId('visit'), revealed: false });
     else if (isGrammarCheckRoute) setReaderTool({ sentenceId: lessonSentenceId, kind: 'grammar', visitId: createId('visit') });
-    else if (isWordCheckRoute) setReaderTool({ sentenceId: lessonSentenceId, kind: 'meaning', visitId: createId('visit') });
+    else if (isWordCheckRoute) setReaderTool({ sentenceId: lessonSentenceId, kind: 'meaning', visitId: createId('visit'), expression: checkWord });
     else if (isReadingRoute) toggleReaderTool(data.rows[index]!.sentence, 'reading');
     else if (isTilesRoute || isDictateRoute) toggleReaderTool(data.rows[index]!.sentence, isTilesRoute ? 'tiles' : 'dictate');
     else setWalkthroughId(lessonSentenceId);
@@ -1463,6 +1464,7 @@ export function ReaderPage() {
                       <WordMeaningPanel
                         key={tool.visitId}
                         sentence={row.sentence}
+                        expression={tool.expression}
                         onRecord={(outcome, word) => {
                           // Evidence is keyed by vocabulary item; make just that item (no link, no card) when the word has none yet.
                           void (async () => {

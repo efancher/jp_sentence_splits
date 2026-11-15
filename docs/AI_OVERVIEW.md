@@ -428,7 +428,16 @@ Read checks), `targetKind: sentence_learning` with the additive `wordCheck: true
 gives a sentence one tool per plan: no Word check, Read check or listening step on a sentence
 drafted a Fresh try, and no Read check or listening step on one given a Word check. Its page is
 `/books/:bookId/check/:sentenceId`, which renders the reader with that sentence's Word check
-already open, and it settles only by "Mark complete" like every other step. It counts as
+already open, and it settles only by "Mark complete" like every other step. Since 2026-11-15 a
+due check that is not "struggling" moves off the walked sentence (whose memory can carry the
+word's meaning) to a not-yet-introduced sentence in an active book with the same word
+(`findTransferSentences` → `pickTransferSentence`: fewest other words below the known line,
+then shortest). The candidate carries `word` (dictionary form) and its walked `source`; the step
+gets `wordCheckWord` and the path `/books/:bookId/check/:sentenceId/:word`, where
+`getWordMeaningCheckTarget(sentence, 0, expression)` asks about that word. If the moved sentence
+is drafted as a new lesson in the same plan, `buildRecommendedSession` uses the source instead.
+Spacing also reads the latest `vocab:<id>` event for the word itself, so a check in one sentence
+spaces the others. It counts as
 `vocabulary` in step categories and is excluded from the sentence-lesson report. The
 meaning facet gets its evidence from the checks the learner actually does
 (`meaningCheckTargetKey`), not from the planner.
