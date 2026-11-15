@@ -40,12 +40,14 @@ export interface OfferView {
 }
 
 const TOOLS = new Set<string>(Object.keys(FOLLOW_UP_ASPECT));
+/** Random draws first (the baseline), then the rule, then offers matching a cause the learner named. */
+const SOURCE_ORDER: Record<FollowUpSource, number> = { random: 0, rule: 1, learner: 2 };
 
-/** Parses a `follow_up_offer` event's `followup:<tool>:<rule|random>` key; null for anything else. */
+/** Parses a `follow_up_offer` event's `followup:<tool>:<rule|random|learner>` key; null for anything else. */
 export function parseOffer(event: Pick<SentenceLearningEvent, 'id' | 'sentenceId' | 'visitId' | 'timestamp' | 'action' | 'target'>): OfferView | null {
   if (event.action !== 'follow_up_offer') return null;
   const [prefix, tool, source] = (event.target?.key ?? '').split(':');
-  if (prefix !== 'followup' || !tool || !TOOLS.has(tool) || (source !== 'rule' && source !== 'random')) return null;
+  if (prefix !== 'followup' || !tool || !TOOLS.has(tool) || (source !== 'rule' && source !== 'random' && source !== 'learner')) return null;
   const at = Date.parse(event.timestamp);
   if (Number.isNaN(at)) return null;
   return { eventId: event.id, sentenceId: event.sentenceId, visitId: event.visitId, at, tool: tool as FollowUpTool, source };
@@ -164,7 +166,7 @@ export function buildFollowUpEffect(input: { events: readonly EventLike[]; liste
   }
 
   const sorted = [...rows.values()].sort(
-    (a, b) => (a.source === b.source ? 0 : a.source === 'random' ? -1 : 1) || a.label.localeCompare(b.label),
+    (a, b) => SOURCE_ORDER[a.source] - SOURCE_ORDER[b.source] || a.label.localeCompare(b.label),
   );
   return { hasData: offers.length > 0, rows: sorted, totalOffers: offers.length };
 }

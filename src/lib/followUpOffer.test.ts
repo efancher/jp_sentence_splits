@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chooseFollowUp, FOLLOW_UP_ASPECT, FOLLOW_UP_RANDOM_RATE } from './followUpOffer';
+import { chooseFollowUp, chooseFollowUpForCause, FOLLOW_UP_ASPECT, FOLLOW_UP_RANDOM_RATE } from './followUpOffer';
 
 const ALL = ['meaning', 'tiles', 'dictate', 'shadow'] as const;
 
@@ -27,6 +27,21 @@ describe('chooseFollowUp', () => {
   });
 
   it('maps every tool to the aspect it supports', () => {
-    expect(FOLLOW_UP_ASPECT).toEqual({ tiles: 'listening', dictate: 'listening', meaning: 'meaning', shadow: 'pronunciation' });
+    expect(FOLLOW_UP_ASPECT).toEqual({ tiles: 'listening', dictate: 'listening', meaning: 'meaning', shadow: 'pronunciation', reading: 'reading' });
+  });
+});
+
+describe('chooseFollowUpForCause', () => {
+  it('offers the tool that answers the named cause, labelled as the learner\'s', () => {
+    const all = [...ALL, 'reading'] as const;
+    expect(chooseFollowUpForCause({ available: all, cause: 'reading' })).toEqual({ tool: 'reading', source: 'learner' });
+    expect(chooseFollowUpForCause({ available: all, cause: 'meaning' })).toEqual({ tool: 'meaning', source: 'learner' });
+    expect(chooseFollowUpForCause({ available: all, cause: 'listening' })).toEqual({ tool: 'dictate', source: 'learner' });
+    expect(chooseFollowUpForCause({ available: ['tiles', 'meaning'], cause: 'listening' })).toEqual({ tool: 'tiles', source: 'learner' });
+  });
+
+  it('returns null when nothing can answer it, so the caller falls back to the rule', () => {
+    expect(chooseFollowUpForCause({ available: ALL, cause: 'reading' })).toBeNull();
+    expect(chooseFollowUpForCause({ available: ['meaning'], cause: 'listening' })).toBeNull();
   });
 });

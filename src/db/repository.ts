@@ -11684,10 +11684,44 @@ export async function findReadingCheckCandidates(
 /** The missed word's phrase for a Reading check opened on `sentence`, or null when it has no recent miss left to check. */
 export async function getReadingCheckTarget(
   sentence: Pick<Sentence, 'id' | 'japanese' | 'vocabularySuggestions'>,
-): Promise<{ wordId: string; surface: string; tile: TileDictation } | null> {
+  /** No recent miss on the sentence: ask about its weakest-reading kanji word instead (the learner said reading was hard). */
+  options: { orWeakest?: boolean } = {},
+): Promise<ReadingCheckTarget | null> {
   const miss = recentReadingMisses(await readAllLearningEventsForPass(), Date.now()).find((m) => m.sentenceId === sentence.id);
   const found = miss ? readingCheckTile(sentence, miss.surface) : null;
-  return miss && found ? { wordId: miss.wordId, surface: miss.surface, tile: found.tile } : null;
+  if (miss && found) return { wordId: miss.wordId, surface: miss.surface, tile: found.tile };
+  return options.orWeakest ? weakestReadingTarget(sentence, await loadWordReadingStrengths(READER_STRENGTH_CACHE_MS)) : null;
+}
+
+/** A Reading check's word. `wordId` is '' when the word has no vocabulary item yet; the caller makes one from `word` when the learner answers. */
+export interface ReadingCheckTarget {
+  wordId: string;
+  surface: string;
+  tile: TileDictation;
+  word?: { expression: string; reading: string; meaning: string };
+}
+
+/** The sentence's content word with kanji whose reading is weakest (unseen counts as weakest), when its phrase has a reading to type. */
+function weakestReadingTarget(
+  sentence: Pick<Sentence, 'id' | 'japanese' | 'vocabularySuggestions'>,
+  strengths: WordReadingStrengths,
+): ReadingCheckTarget | null {
+  const words = meaningCheckWordsFor(sentence, strengths)
+    .filter((word) => /\p{Script=Han}/u.test(word.surface))
+    .map((word) => ({ word, strength: (word.vocabularyItemId && strengths.strengthByWord.get(word.vocabularyItemId)) || 0 }))
+    .sort((a, b) => a.strength - b.strength || a.word.start - b.word.start);
+  for (const { word } of words) {
+    const found = readingCheckTile(sentence, word.surface);
+    if (found) {
+      return {
+        wordId: word.vocabularyItemId,
+        surface: word.surface,
+        tile: found.tile,
+        word: { expression: word.expression, reading: word.reading, meaning: word.meaning },
+      };
+    }
+  }
+  return null;
 }
 
 /** i+1 ordering inputs shared by every book: one global rank and each sentence's not-yet-met words. */

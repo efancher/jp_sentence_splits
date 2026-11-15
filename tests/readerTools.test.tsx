@@ -242,6 +242,7 @@ describe('reader study tools', () => {
     expect(await screen.findByText('I ate the cat’s fish.')).toBeInTheDocument();
     expect(await getDb().sentenceLearningEvents.count()).toBe(0);
     await user.click(screen.getByRole('button', { name: 'Needed help' }));
+    await user.click(await screen.findByRole('button', { name: 'Not sure' }));
 
     await waitFor(async () => {
       const events = await getDb().sentenceLearningEvents.toArray();
@@ -260,8 +261,9 @@ describe('reader study tools', () => {
       renderReader();
       await user.click(await screen.findByRole('button', { name: 'Read check' }));
       await user.click(await screen.findByRole('button', { name: 'Show help and meaning' }));
-      // "Got it" offers nothing.
+      // "Got it" offers nothing. "Not sure" leaves the choice to the rule.
       await user.click(screen.getByRole('button', { name: 'Needed help' }));
+      await user.click(await screen.findByRole('button', { name: 'Not sure' }));
 
       expect(await screen.findByText(/Try Word check on it\?/)).toBeInTheDocument();
       const events = await getDb().sentenceLearningEvents.toArray();
@@ -273,6 +275,55 @@ describe('reader study tools', () => {
       await user.click(screen.getByRole('button', { name: 'Try it' }));
       expect(await screen.findByRole('group', { name: /word check|meaning/i })).toBeInTheDocument();
       expect(await getDb().reviews.count()).toBe(0);
+    } finally {
+      random.mockRestore();
+    }
+  });
+
+  it('matches the follow-up to the cause the learner names, with no random draw', async () => {
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0); // would be a random draw without a named cause
+    try {
+      const user = userEvent.setup();
+      renderReader();
+      await user.click(await screen.findByRole('button', { name: 'Read check' }));
+      await user.click(await screen.findByRole('button', { name: 'Show help and meaning' }));
+      await user.click(screen.getByRole('button', { name: 'Needed help' }));
+      const causes = await screen.findByRole('group', { name: 'What was hard' });
+      expect(within(causes).getByRole('button', { name: 'Hearing it' })).toBeInTheDocument();
+      await user.click(within(causes).getByRole('button', { name: 'Reading a word' }));
+
+      expect(await screen.findByText(/Try Reading check on it\?/)).toBeInTheDocument();
+      const offer = (await getDb().sentenceLearningEvents.toArray()).find((event) => event.action === 'follow_up_offer')!;
+      expect(offer.target).toMatchObject({ key: 'followup:reading:learner', label: 'reading' });
+
+      await user.click(screen.getByRole('button', { name: 'Try it' }));
+      const check = await screen.findByRole('group', { name: 'Reading check' });
+      expect(within(check).getByText(/Your weakest-read word here/)).toBeInTheDocument();
+      await user.type(within(check).getByLabelText('Reading'), 'neko');
+      await user.click(within(check).getByRole('button', { name: 'Check' }));
+      await user.click(within(check).getByRole('button', { name: 'Got it' }));
+      await waitFor(async () => {
+        const keys = (await getDb().sentenceLearningEvents.toArray()).map((event) => event.target?.key);
+        expect(keys).toContain('vocab-read:v-cat');
+      });
+      expect(await getDb().reviews.count()).toBe(0);
+    } finally {
+      random.mockRestore();
+    }
+  });
+
+  it('offers a Word check when the learner says a word\u2019s meaning was hard', async () => {
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0);
+    try {
+      const user = userEvent.setup();
+      renderReader();
+      await user.click(await screen.findByRole('button', { name: 'Read check' }));
+      await user.click(await screen.findByRole('button', { name: 'Show help and meaning' }));
+      await user.click(screen.getByRole('button', { name: 'Needed help' }));
+      await user.click(await screen.findByRole('button', { name: "A word's meaning" }));
+      expect(await screen.findByText(/Try Word check on it\?/)).toBeInTheDocument();
+      const offer = (await getDb().sentenceLearningEvents.toArray()).find((event) => event.action === 'follow_up_offer')!;
+      expect(offer.target?.key).toBe('followup:meaning:learner');
     } finally {
       random.mockRestore();
     }

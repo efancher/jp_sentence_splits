@@ -1089,8 +1089,10 @@ control).
   a slips-graded result). The step 3 panel
   (`/progress` → "After a follow-up offer") shows reading, listening, meaning (next Word check) and pronunciation (self-rated
   Good / Not good shadow, 2026-11-04) outcomes. Still to build: grammar evidence and a
-  grammar column, and the aspect-specific cause picking (the rule today only
-  knows "weak word → Word check, else listening, else sound"). Offers log no
+  grammar column. Aspect-specific cause picking shipped 2026-11-15 as learner-named
+  causes after "needed help" (STATUS); the rule for "Not sure" still only knows "weak
+  word → Word check, else listening, else sound". No reading column yet: add "next
+  Reading check" to the panel once there are `reading` offers. Offers log no
   outcome; "taken" means the tool wrote events under the same `visitId`.
   *Open (pronunciation, noted 2026-11-04):* the pronunciation column mixes a
   whole-sentence Good / Not good with phrase shadows (Got it / Close / Not yet), which are
@@ -1179,11 +1181,12 @@ control).
   - *Shipped:* Word checks move to an unstudied sentence holding the same word
     (2026-11-15, STATUS), and a typed Reading check runs in the reader for words
     marked as missed (`readingMissSteps.ts`, 2026-11-15).
-  1. **Route trouble tags to the matching check.** Meaning → a Word check on the
-     sentence's weakest word, Reading/Kanji → a typed Reading check on the problem
-     word (tapped, once word-level tags exist), instead of a full Fresh try. Shorter,
-     and aimed at the gap. Overlaps the "Not done" item in "Separate Dictation and
-     Word check" above.
+  1. **Route trouble tags to the matching check.** *Reader form shipped 2026-11-15:*
+     the Read check's "What was hard?" causes route to a Reading check, Word check or
+     Dictation (STATUS). The review-card tags still queue a Fresh try; not worth
+     changing while review cards go unused (last review 2026-11-01 in the cloud copy,
+     no `review_trouble_logs` rows there). If review cards come back: Meaning → a
+     Word check, Reading/Kanji → a typed Reading check, instead of a full Fresh try.
   2. **Furigana peeks as evidence.** Furigana is already hidden on solid words.
      Tapping to reveal it could count as a mild reading miss, and reading past it
      as weak exposure, so every Read check feeds the reading facet with no new step.

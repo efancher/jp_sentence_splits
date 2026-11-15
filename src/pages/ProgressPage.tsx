@@ -820,7 +820,7 @@ export function ProgressPage() {
             {followUpEffect.rows.map((row) => (
               <StatRow
                 key={`${row.tool}:${row.source}`}
-                label={`${row.label} (${row.aspect}) — ${row.source === 'random' ? 'random draw' : 'by rule'}`}
+                label={`${row.label} (${row.aspect}) — ${row.source === 'random' ? 'random draw' : row.source === 'learner' ? 'you named the cause' : 'by rule'}`}
                 value={`${row.offers} offer${row.offers === 1 ? '' : 's'}`}
                 hint={[
                   `${row.taken} opened`,

@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { getWordMeaningCheckTarget, pickGrammarCheckPatternId } from '../db/repository';
 import type { Sentence } from '../domain/types';
 import { gradeDictation, typedAsKana } from '../lib/dictationAnswer';
-import { FOLLOW_UP_LABEL, FOLLOW_UP_PURPOSE, type FollowUpTool } from '../lib/followUpOffer';
+import { FOLLOW_UP_CAUSE_LABEL, FOLLOW_UP_LABEL, FOLLOW_UP_PURPOSE, type FollowUpCause, type FollowUpTool } from '../lib/followUpOffer';
 import type { TileDictation } from '../lib/earTiles';
 
 /**
@@ -122,6 +122,7 @@ export function ReadingCheckLine({ tile }: { tile: TileDictation }) {
 export function ReadingCheckPanel({
   tile,
   surface,
+  picked = false,
   hasAudio,
   playing,
   onPlay,
@@ -131,6 +132,8 @@ export function ReadingCheckPanel({
   tile: TileDictation;
   /** The word they missed, named so the marked phrase is not mistaken for the whole task. */
   surface: string;
+  /** The word was picked as the sentence's weakest reading, not one the learner marked as missed. */
+  picked?: boolean;
   hasAudio: boolean;
   playing: boolean;
   onPlay: () => void;
@@ -146,7 +149,8 @@ export function ReadingCheckPanel({
   return (
     <div className="stack" style={{ gap: '0.35rem' }} role="group" aria-label="Reading check">
       <p className="muted" style={{ margin: 0 }}>
-        You couldn't read <span className="jp">{surface}</span>. Type how the marked phrase is read (kana or romaji).
+        {picked ? <>Your weakest-read word here: <span className="jp">{surface}</span>.</> : <>You couldn't read <span className="jp">{surface}</span>.</>}{' '}
+        Type how the marked phrase is read (kana or romaji).
       </p>
       {!shown ? (
         <form
@@ -208,6 +212,8 @@ export function ReadCheckPanel({
   onPlay,
   onReveal,
   onRecord,
+  causes = [],
+  onCause,
   offer,
   onTakeOffer,
   onClose,
@@ -219,6 +225,12 @@ export function ReadCheckPanel({
   onPlay: () => void;
   onReveal: () => void;
   onRecord: (outcome: ReaderToolOutcome) => void;
+  /**
+   * After "Needed help", the learner may say what was hard (one of `causes`) or that they are not sure
+   * (`undefined`); the caller then picks the follow-up. Without `onCause` the panel goes straight to the offer.
+   */
+  causes?: readonly FollowUpCause[];
+  onCause?: (cause: FollowUpCause | undefined) => void;
   /** The follow-up suggested once "Needed help" is recorded; taking it opens that tool on this sentence. */
   offer?: FollowUpTool;
   onTakeOffer?: () => void;
@@ -226,7 +238,8 @@ export function ReadCheckPanel({
   /** Present when the sentence counts as walked through: lets the learner say it was not really walked. */
   onResetWalked?: () => void;
 }) {
-  const [recorded, setRecorded] = useState(false);
+  const [recorded, setRecorded] = useState<ReaderToolOutcome | undefined>();
+  const [causeAnswered, setCauseAnswered] = useState(false);
   return (
     <div className="stack" style={{ gap: '0.35rem' }} role="group" aria-label="Read check">
       {!revealed ? (
@@ -247,8 +260,18 @@ export function ReadCheckPanel({
       ) : !recorded ? (
         <div className="row" style={{ gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}>
           <span className="muted">Did you understand it before the reveal?</span>
-          <button type="button" onClick={() => { onRecord('got_it'); setRecorded(true); }}>Got it</button>
-          <button type="button" onClick={() => { onRecord('needed_help'); setRecorded(true); }}>Needed help</button>
+          <button type="button" onClick={() => { onRecord('got_it'); setRecorded('got_it'); }}>Got it</button>
+          <button type="button" onClick={() => { onRecord('needed_help'); setRecorded('needed_help'); }}>Needed help</button>
+        </div>
+      ) : recorded === 'needed_help' && onCause && !causeAnswered ? (
+        <div className="row" style={{ gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }} role="group" aria-label="What was hard">
+          <span className="muted">What was hard?</span>
+          {causes.map((cause) => (
+            <button key={cause} type="button" onClick={() => { setCauseAnswered(true); onCause(cause); }}>
+              {FOLLOW_UP_CAUSE_LABEL[cause]}
+            </button>
+          ))}
+          <button type="button" onClick={() => { setCauseAnswered(true); onCause(undefined); }}>Not sure</button>
         </div>
       ) : (
         <div className="row" style={{ gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}>

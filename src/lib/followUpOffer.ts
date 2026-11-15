@@ -9,9 +9,10 @@
  * otherwise look worse than it is. Each offer records its `source`.
  */
 
-export type FollowUpTool = 'tiles' | 'dictate' | 'meaning' | 'shadow';
+export type FollowUpTool = 'tiles' | 'dictate' | 'meaning' | 'shadow' | 'reading';
 export type LearningAspect = 'reading' | 'meaning' | 'listening' | 'pronunciation' | 'grammar';
-export type FollowUpSource = 'rule' | 'random';
+/** `learner`: the learner named what was hard (`FollowUpCause`) and the offer matches it; no random draw. */
+export type FollowUpSource = 'rule' | 'random' | 'learner';
 
 /** The aspect each follow-up is meant to support, for grouping offers in the after-effect view. */
 export const FOLLOW_UP_ASPECT: Record<FollowUpTool, LearningAspect> = {
@@ -19,6 +20,7 @@ export const FOLLOW_UP_ASPECT: Record<FollowUpTool, LearningAspect> = {
   dictate: 'listening',
   meaning: 'meaning',
   shadow: 'pronunciation',
+  reading: 'reading',
 };
 
 export const FOLLOW_UP_LABEL: Record<FollowUpTool, string> = {
@@ -26,6 +28,7 @@ export const FOLLOW_UP_LABEL: Record<FollowUpTool, string> = {
   dictate: 'Dictation',
   meaning: 'Word check',
   shadow: 'Shadowing',
+  reading: 'Reading check',
 };
 
 /** What the offer line says the tool is for. */
@@ -34,12 +37,17 @@ export const FOLLOW_UP_PURPOSE: Record<FollowUpTool, string> = {
   dictate: 'type one phrase from what you hear',
   meaning: 'recall a word in it',
   shadow: 'say it along with the clip',
+  reading: 'type how a word in it is read',
 };
 
 /** Share of offers drawn uniformly from the available tools instead of by the rule. */
 export const FOLLOW_UP_RANDOM_RATE = 0.4;
 
-/** Rule order when nothing says otherwise: a weak word first, then the listening pair (Dictation before the easier Ear tiles, 2026-11-08), then sound. */
+/**
+ * Rule order when nothing says otherwise: a weak word first, then the listening pair (Dictation before the easier
+ * Ear tiles, 2026-11-08), then sound. The Reading check is offered only for a named cause, so the rule and random
+ * rows stay comparable with the offers logged before it existed.
+ */
 const RULE_ORDER: readonly FollowUpTool[] = ['meaning', 'dictate', 'tiles', 'shadow'];
 
 export interface FollowUpChoice {
@@ -66,4 +74,30 @@ export function chooseFollowUp(input: {
   }
   const ruled = input.weakWord ? available : available.filter((tool) => tool !== 'meaning');
   return { tool: (ruled[0] ?? available[0])!, source: 'rule' };
+}
+
+/** What the learner says made the sentence hard, picked after "needed help". */
+export type FollowUpCause = 'reading' | 'meaning' | 'listening';
+
+export const FOLLOW_UP_CAUSE_LABEL: Record<FollowUpCause, string> = {
+  reading: 'Reading a word',
+  meaning: "A word's meaning",
+  listening: 'Hearing it',
+};
+
+/** The tools that answer each cause, in order of preference. */
+const CAUSE_TOOLS: Record<FollowUpCause, readonly FollowUpTool[]> = {
+  reading: ['reading'],
+  meaning: ['meaning'],
+  listening: ['dictate', 'tiles'],
+};
+
+/**
+ * The follow-up for a cause the learner named: the first available tool that answers it, with source `learner`.
+ * Null when none can open (the caller then falls back to `chooseFollowUp`). No random draw: the learner said what
+ * was wrong, and a baseline offer of something else would ignore them.
+ */
+export function chooseFollowUpForCause(input: { available: readonly FollowUpTool[]; cause: FollowUpCause }): FollowUpChoice | null {
+  const tool = CAUSE_TOOLS[input.cause].find((candidate) => input.available.includes(candidate));
+  return tool ? { tool, source: 'learner' } : null;
 }

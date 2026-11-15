@@ -21,6 +21,7 @@ describe('parseOffer', () => {
     expect(parseOffer(offer('tiles', 'random', T0))).toMatchObject({ tool: 'tiles', source: 'random', sentenceId: 's1' });
     expect(parseOffer(offer('piano', 'random', T0))).toBeNull();
     expect(parseOffer(offer('tiles', 'coin', T0))).toBeNull();
+    expect(parseOffer(offer('reading', 'learner', T0))).toMatchObject({ tool: 'reading', source: 'learner' });
     expect(parseOffer(event({ action: 'gist_check', timestamp: iso(T0) }))).toBeNull();
   });
 });

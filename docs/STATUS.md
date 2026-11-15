@@ -266,7 +266,15 @@ and possible extensions. This snapshot does not certify a live deployment.
   `chooseFollowUp` in `src/lib/followUpOffer.ts`): Word check when the sentence has a content word
   not yet known by strength, otherwise Dictation, Ear tiles (2026-11-08: Dictation first) or Shadowing, whichever can open. About
   40% of offers are drawn at random among the available tools as a baseline for comparing
-  activities. An unrevealed Read check on a walked sentence also shows "I haven't walked this"
+  activities. Since 2026-11-15 "Needed help" first asks "What was hard?" (Reading a word / A word's
+  meaning / Hearing it, the last only with audio / Not sure; `chooseFollowUpForCause`). A named
+  cause gets its matching tool with no random draw, logged as source `learner`
+  (`followup:<tool>:learner`): Reading → a typed Reading check on the sentence's weakest-read
+  kanji word when no miss is recorded (`getReadingCheckTarget(…, { orWeakest: true })`; a word
+  with no vocabulary item gets one when answered), Meaning → Word check, Hearing → Dictation,
+  else Ear tiles. "Not sure", or a cause nothing can answer, keeps the rule and random draw.
+  The offer is now logged after this choice, so closing at the question logs no offer. Jsdom
+  tests and the Chromium `reader-tools` spec (390px, 1280px) pass; not yet used on a phone. An unrevealed Read check on a walked sentence also shows "I haven't walked this"
   (2026-11-08): it logs a synced `walkthrough_reset` event (migration `20261108000000`), and
   `withoutResetWalkthroughs` then ignores that sentence's earlier `walkthrough_completed` events
   wherever walked status is read (progress line, Read check pool, `requestFreshTry`). History is

@@ -39,7 +39,7 @@ import { createId } from '../lib/ids';
 import { fillSentenceGlosses } from '../lib/sentenceGlossFill';
 import { shadowTargetKey } from '../lib/pronunciationOutcome';
 import { earTilesOutcome, earTilesTargetKey } from '../lib/listeningEvidence';
-import { chooseFollowUp, FOLLOW_UP_ASPECT, type FollowUpChoice, type FollowUpTool } from '../lib/followUpOffer';
+import { chooseFollowUp, chooseFollowUpForCause, FOLLOW_UP_ASPECT, type FollowUpCause, type FollowUpChoice, type FollowUpTool } from '../lib/followUpOffer';
 import { stepTimer } from '../lib/pageTiming';
 import { readingCheckTargetKey } from '../lib/readingMissSteps';
 import { meaningCheckTargetKey, readingFeedbackTargetKey } from '../lib/wordEvidence';
@@ -156,7 +156,7 @@ export function ReaderPage() {
   const [readerTool, setReaderTool] = useState<
     { sentenceId: string; kind: 'dictate'; tile: number; visitId: string } |
     { sentenceId: string; kind: 'meaning'; visitId: string; expression?: string } |
-    { sentenceId: string; kind: 'reading'; visitId: string; wordId: string; surface: string; tile: TileDictation } |
+    { sentenceId: string; kind: 'reading'; visitId: string; wordId: string; surface: string; tile: TileDictation; word?: { expression: string; reading: string; meaning: string } } |
     { sentenceId: string; kind: 'grammar'; visitId: string } |
     { sentenceId: string; kind: 'recall'; visitId: string; revealed: boolean; offer?: FollowUpChoice } |
     { sentenceId: string; kind: 'shadow'; visitId: string; focusSurface?: string } |
@@ -521,7 +521,9 @@ export function ReaderPage() {
     setToolNotice(undefined);
     if (kind === 'reading') {
       const readingVisitId = sharedVisitId ?? createId('visit');
-      void getReadingCheckTarget(sentence).then((target) => {
+      // From a Read check's follow-up (the learner said reading was hard) any weak kanji word will do; the planner
+      // step only re-checks a word actually missed.
+      void getReadingCheckTarget(sentence, { orWeakest: Boolean(sharedVisitId) }).then((target) => {
         if (target) setReaderTool({ sentenceId: sentence.id, kind, visitId: readingVisitId, ...target });
         else setToolNotice({ sentenceId: sentence.id, text: 'No missed reading left to check in this sentence.' });
       });
@@ -780,14 +782,18 @@ export function ReaderPage() {
    * After a Read check ends in "needed help", pick one follow-up that can open on this sentence and log
    * that it was offered (a random share are baseline draws, see `followUpOffer.ts`). Null when none can.
    */
-  function offerFollowUp(sentence: Sentence, hasAudio: boolean, visitId: string): FollowUpChoice | null {
+  async function offerFollowUp(sentence: Sentence, hasAudio: boolean, visitId: string, cause?: FollowUpCause): Promise<FollowUpChoice | null> {
     const available: FollowUpTool[] = ['meaning'];
     if (tileToolUnavailableReason(sentence, 'tiles', hasAudio) === null) available.push('tiles');
     if (tileToolUnavailableReason(sentence, 'dictate', hasAudio) === null) available.push('dictate');
     if (hasAudio) available.push('shadow');
+    if (cause === 'reading' && (await getReadingCheckTarget(sentence, { orWeakest: true }).catch(() => null))) available.push('reading');
     // A content word that is not yet known by strength is the weak-word signal that puts Word check first.
     const weakWord = (data?.wordsBySentence.get(sentence.id) ?? []).some((word) => !data?.knownExpressions.has(word.expression));
-    const choice = chooseFollowUp({ available, weakWord, draw: Math.random(), pick: Math.random() });
+    // A named cause decides the tool; when nothing can answer it (or no cause), the rule and random draw apply as before.
+    const choice =
+      (cause ? chooseFollowUpForCause({ available, cause }) : null) ??
+      chooseFollowUp({ available: available.filter((tool) => tool !== 'reading'), weakWord, draw: Math.random(), pick: Math.random() });
     if (!choice) return null;
     void logSentenceLearningEvent({
       id: createId('sl_event'),
@@ -1343,17 +1349,25 @@ export function ReaderPage() {
                           key={tool.visitId}
                           tile={tool.tile}
                           surface={tool.surface}
+                          picked={Boolean(tool.word)}
                           hasAudio={Boolean(audio)}
                           playing={isSequencePlaying && singleIndexRef.current === index}
                           onPlay={() => toggleSentencePlay(index)}
                           onRecord={(outcome) => {
                             // Word evidence first (recall: the reading was hidden), then the marker that spaces the next check.
-                            recordReaderTool(
-                              row.sentence.id,
-                              tool.visitId,
-                              { kind: 'vocabulary', key: readingFeedbackTargetKey(tool.wordId), label: tool.surface },
-                              outcome,
-                            );
+                            // A word picked as the weakest may have no vocabulary item yet; make just that item (no link, no card).
+                            void (async () => {
+                              const wordId =
+                                tool.wordId ||
+                                (tool.word ? (await ensureVocabularyItem(tool.word.expression, tool.word.reading, { meaning: tool.word.meaning })).id : '');
+                              if (!wordId) return;
+                              recordReaderTool(
+                                row.sentence.id,
+                                tool.visitId,
+                                { kind: 'vocabulary', key: readingFeedbackTargetKey(wordId), label: tool.surface },
+                                outcome,
+                              );
+                            })();
                             recordReaderTool(
                               row.sentence.id,
                               tool.visitId,
@@ -1428,12 +1442,12 @@ export function ReaderPage() {
                           playing={isSequencePlaying && singleIndexRef.current === index}
                           onPlay={() => toggleSentencePlay(index)}
                           onReveal={() => setReaderTool({ ...tool, revealed: true })}
-                          onRecord={(outcome) => {
-                            recordReadCheck(row.sentence.id, tool.visitId, outcome);
-                            if (outcome === 'needed_help') {
-                              const offer = offerFollowUp(row.sentence, Boolean(audio), tool.visitId);
-                              if (offer) setReaderTool({ ...tool, offer });
-                            }
+                          onRecord={(outcome) => recordReadCheck(row.sentence.id, tool.visitId, outcome)}
+                          causes={audio ? ['reading', 'meaning', 'listening'] : ['reading', 'meaning']}
+                          onCause={(cause) => {
+                            void offerFollowUp(row.sentence, Boolean(audio), tool.visitId, cause).then((offer) => {
+                              if (offer) setReaderTool((current) => (current?.visitId === tool.visitId ? { ...tool, offer } : current));
+                            });
                           }}
                           offer={tool.offer?.tool}
                           onTakeOffer={tool.offer ? () => toggleReaderTool(row.sentence, tool.offer!.tool, undefined, tool.visitId) : undefined}

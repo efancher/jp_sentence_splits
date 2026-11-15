@@ -232,6 +232,33 @@ test('a planner Read check step shows the plain sentence, then logs your own cal
   expect(stored.studyItems).toBe(0);
 });
 
+for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 }]) {
+  test(`after a Read check needs help, naming the cause picks the follow-up at ${viewport.width}px`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await seed(page);
+    await page.goto('/#/books/book/recall/s-0');
+    await page.getByRole('button', { name: 'Show help and meaning' }).click();
+    await page.getByRole('button', { name: 'Needed help' }).click();
+    const causes = page.getByRole('group', { name: 'What was hard' });
+    await expect(causes).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.screenshot({ path: test.info().outputPath(`read-check-causes-${viewport.width}.png`), fullPage: true });
+    await causes.getByRole('button', { name: 'Reading a word' }).click();
+
+    await expect(page.getByText(/Try Reading check on it\?/)).toBeVisible();
+    await page.getByRole('button', { name: 'Try it' }).click();
+    const reading = page.getByRole('group', { name: 'Reading check' });
+    await expect(reading).toContainText('Your weakest-read word here');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+    const stored = await storedCounts(page);
+    const offer = stored.events.find((event) => event.action === 'follow_up_offer')!;
+    expect(offer.target!.key).toBe('followup:reading:learner');
+    expect(stored.reviews).toBe(0);
+    expect(stored.studyItems).toBe(0);
+  });
+}
+
 test('a planner shadowing step opens the docked shadowing panel in the reader', async ({ page }) => {
   await seed(page);
   await page.goto('/#/books/book/speak/s-0');
