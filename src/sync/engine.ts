@@ -1,4 +1,4 @@
-import type { EntityTable } from 'dexie';
+import type { EntityTable, Table } from 'dexie';
 
 import { hasLocalStudyData } from './migration';
 import { getDb } from '../db/database';
@@ -66,7 +66,7 @@ import {
   setPushPlan,
   setSyncStage,
 } from './progress';
-import type { SyncEntity, SyncQueueItem } from './types';
+import type { SyncEntity, SyncQueueItem, SyncRecordMeta } from './types';
 
 const PULL_PAGE_SIZE = 500;
 /** Cap on `SyncMetaState.deferredPullEventIds` — past this, something is
@@ -1538,6 +1538,44 @@ export async function shouldApplyRemoteEvent(
   return (await classifyRemoteEvent(entity, recordId, op, version, pending)) === 'apply';
 }
 
+/** Record-meta and row-presence for a whole page, read with bulkGet. */
+type PagePrefetch = {
+  meta: Map<string, SyncRecordMeta | undefined>;
+  present: Set<string>;
+};
+
+async function prefetchPage(
+  events: Array<{ entity: string; record_id: unknown }>,
+): Promise<PagePrefetch> {
+  const db = getDb();
+  const keys = [
+    ...new Set(events.map((e) => recordMetaKey(e.entity as SyncEntity, String(e.record_id)))),
+  ];
+  const metas = await db.syncRecordMeta.bulkGet(keys);
+  const meta = new Map<string, SyncRecordMeta | undefined>();
+  keys.forEach((key, i) => meta.set(key, metas[i]));
+  const byEntity = new Map<SyncEntity, string[]>();
+  for (const m of metas) {
+    if (!m) continue;
+    const ids = byEntity.get(m.entity);
+    if (ids) ids.push(m.recordId);
+    else byEntity.set(m.entity, [m.recordId]);
+  }
+  const present = new Set<string>();
+  for (const [entity, ids] of byEntity) {
+    const table = entityTable(entity);
+    if (!table) {
+      for (const id of ids) present.add(`${entity}:${id}`);
+      continue;
+    }
+    const rows = await table.bulkGet(ids);
+    ids.forEach((id, i) => {
+      if (rows[i] != null) present.add(`${entity}:${id}`);
+    });
+  }
+  return { meta, present };
+}
+
 /** 'defer' = transient skip worth retrying later (local pending write / open
  *  conflict); 'have' = already applied locally, nothing to retry. */
 async function classifyRemoteEvent(
@@ -1547,6 +1585,7 @@ async function classifyRemoteEvent(
   version: number,
   pending?: SyncQueueItem[],
   blocked?: Set<string>,
+  prefetched?: PagePrefetch,
 ): Promise<'apply' | 'defer' | 'have'> {
   if (blocked) {
     // Page path: pending writes and open conflicts were read once up front.
@@ -1562,86 +1601,97 @@ async function classifyRemoteEvent(
     if (await hasOpenConflict(entity, recordId)) return 'defer';
   }
 
-  const localMeta = await getRecordMeta(entity, recordId);
+  const localMeta = prefetched
+    ? prefetched.meta.get(recordMetaKey(entity, recordId))
+    : await getRecordMeta(entity, recordId);
   if (localMeta && localMeta.version >= version && op !== 'delete') {
     // Trust "already have this version" only if the row is actually present.
     // Stale record-meta (row dropped locally by a partial clear / failed
     // write, meta kept) otherwise makes every future event for it skip
     // forever — the permanent-missing-row bug this guards against.
-    if (await localRecordExists(entity, recordId)) return 'have';
+    const present = prefetched
+      ? prefetched.present.has(`${entity}:${recordId}`)
+      : await localRecordExists(entity, recordId);
+    if (present) return 'have';
   }
   return 'apply';
 }
 
 /** Whether the Dexie row for a synced record is present locally. Mirrors
  *  applyRemoteDelete's entity→table switch. */
-async function localRecordExists(entity: SyncEntity, recordId: string): Promise<boolean> {
+function entityTable(entity: SyncEntity): Table<unknown, string> | undefined {
   const db = getDb();
   switch (entity) {
     case 'books':
-      return (await db.books.get(recordId)) != null;
+      return db.books;
     case 'sentences':
-      return (await db.sentences.get(recordId)) != null;
+      return db.sentences;
     case 'book_sentences':
-      return (await db.bookSentences.get(recordId)) != null;
+      return db.bookSentences;
     case 'analyses':
-      return (await db.analyses.get(recordId)) != null;
+      return db.analyses;
     case 'import_batches':
-      return (await db.importBatches.get(recordId)) != null;
+      return db.importBatches;
     case 'inbox':
-      return (await db.inbox.get(recordId)) != null;
+      return db.inbox;
     case 'reference_audio':
-      return (await db.sentenceAudio.get(recordId)) != null;
+      return db.sentenceAudio;
     case 'study_items':
-      return (await db.studyItems.get(recordId)) != null;
+      return db.studyItems;
     case 'reviews':
-      return (await db.reviews.get(recordId)) != null;
+      return db.reviews;
     case 'vocabulary_items':
-      return (await db.vocabularyItems.get(recordId)) != null;
+      return db.vocabularyItems;
     case 'sentence_vocabulary':
-      return (await db.sentenceVocabulary.get(recordId)) != null;
+      return db.sentenceVocabulary;
     case 'kanji':
-      return (await db.kanji.get(recordId)) != null;
+      return db.kanji;
     case 'vocabulary_kanji':
-      return (await db.vocabularyKanji.get(recordId)) != null;
+      return db.vocabularyKanji;
     case 'vocabulary_confusions':
-      return (await db.vocabularyConfusions.get(recordId)) != null;
+      return db.vocabularyConfusions;
     case 'card_issue_reports':
-      return (await db.cardIssueReports.get(recordId)) != null;
+      return db.cardIssueReports;
     case 'grammar_patterns':
-      return (await db.grammarPatterns.get(recordId)) != null;
+      return db.grammarPatterns;
     case 'sentence_grammar':
-      return (await db.sentenceGrammar.get(recordId)) != null;
+      return db.sentenceGrammar;
     case 'grammar_relationships':
-      return (await db.grammarRelationships.get(recordId)) != null;
+      return db.grammarRelationships;
     case 'planner_sessions':
-      return (await db.plannerSessions.get(recordId)) != null;
+      return db.plannerSessions;
     case 'sync_issue_reports':
-      return (await db.syncIssueReports.get(recordId)) != null;
+      return db.syncIssueReports;
     case 'chunk_issue_reports':
-      return (await db.chunkIssueReports.get(recordId)) != null;
+      return db.chunkIssueReports;
     case 'pitch_drill_attempts':
-      return (await db.pitchDrillAttempts.get(recordId)) != null;
+      return db.pitchDrillAttempts;
     case 'review_trouble_logs':
-      return (await db.reviewTroubleLogs.get(recordId)) != null;
+      return db.reviewTroubleLogs;
     case 'game_rounds':
-      return (await db.gameRounds.get(recordId)) != null;
+      return db.gameRounds;
     case 'sentence_learning_events':
-      return (await db.sentenceLearningEvents.get(recordId)) != null;
+      return db.sentenceLearningEvents;
     case 'gloss_decisions':
-      return (await db.glossDecisions.get(recordId)) != null;
+      return db.glossDecisions;
     case 'clause_question_feedback':
-      return (await db.clauseQuestionFeedback.get(recordId)) != null;
+      return db.clauseQuestionFeedback;
     case 'named_podcast_feeds':
-      return (await db.namedPodcastFeeds.get(recordId)) != null;
+      return db.namedPodcastFeeds;
     case 'mining_imports':
-      return (await db.miningImports.get(recordId)) != null;
+      return db.miningImports;
     case 'sentence_extras':
-      return (await db.sentenceExtras.get(recordId)) != null;
+      return db.sentenceExtras;
     default:
-      // Unknown entity — assume present so we don't loop re-fetching it.
-      return true;
+      return undefined;
   }
+}
+
+async function localRecordExists(entity: SyncEntity, recordId: string): Promise<boolean> {
+  const table = entityTable(entity);
+  // Unknown entity — assume present so we don't loop re-fetching it.
+  if (!table) return true;
+  return (await table.get(recordId)) != null;
 }
 
 /**
@@ -1713,6 +1763,8 @@ export async function applyRemoteEventsBatch(
   const blocked = new Set<string>(pending.map((p) => `${p.entity}:${p.recordId}`));
   for (const c of await listOpenConflicts()) blocked.add(`${c.entity}:${c.recordId}`);
 
+  const prefetched = await prefetchPage(events);
+
   type PendingFetch = { entity: SyncEntity; recordId: string; version: number };
   const toFetch: PendingFetch[] = [];
   const skipped: number[] = [];
@@ -1723,7 +1775,7 @@ export async function applyRemoteEventsBatch(
     const recordId = String(event.record_id);
     const op = String(event.op);
     const version = Number(event.version);
-    const verdict = await classifyRemoteEvent(entity, recordId, op, version, pending, blocked);
+    const verdict = await classifyRemoteEvent(entity, recordId, op, version, pending, blocked, prefetched);
     verdicts[verdict] += 1;
     entityCounts[entity] = (entityCounts[entity] ?? 0) + 1;
     if (verdict === 'apply') toFetch.push({ entity, recordId, version });
