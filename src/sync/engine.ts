@@ -16,6 +16,7 @@ import {
   updateSyncMeta,
   getRecordMeta,
   hasOpenConflict,
+  listOpenConflicts,
   sweepNoopConflicts,
 } from './queue';
 import {
@@ -1545,13 +1546,21 @@ async function classifyRemoteEvent(
   op: string,
   version: number,
   pending?: SyncQueueItem[],
+  blocked?: Set<string>,
 ): Promise<'apply' | 'defer' | 'have'> {
-  const pendingItems = pending ?? (await listPendingMutations());
-  const hasLocalPending = pendingItems.some(
-    (p) => p.entity === entity && p.recordId === recordId,
-  );
-  if (hasLocalPending) return 'defer';
-  if (await hasOpenConflict(entity, recordId)) return 'defer';
+  if (blocked) {
+    // Page path: pending writes and open conflicts were read once up front.
+    // Re-reading the conflicts table per event made a 500-event page cost
+    // 500 full table scans.
+    if (blocked.has(`${entity}:${recordId}`)) return 'defer';
+  } else {
+    const pendingItems = pending ?? (await listPendingMutations());
+    const hasLocalPending = pendingItems.some(
+      (p) => p.entity === entity && p.recordId === recordId,
+    );
+    if (hasLocalPending) return 'defer';
+    if (await hasOpenConflict(entity, recordId)) return 'defer';
+  }
 
   const localMeta = await getRecordMeta(entity, recordId);
   if (localMeta && localMeta.version >= version && op !== 'delete') {
@@ -1701,6 +1710,8 @@ export async function applyRemoteEventsBatch(
   }>,
 ): Promise<{ skipped: number[] }> {
   const pending = await listPendingMutations();
+  const blocked = new Set<string>(pending.map((p) => `${p.entity}:${p.recordId}`));
+  for (const c of await listOpenConflicts()) blocked.add(`${c.entity}:${c.recordId}`);
 
   type PendingFetch = { entity: SyncEntity; recordId: string; version: number };
   const toFetch: PendingFetch[] = [];
@@ -1712,7 +1723,7 @@ export async function applyRemoteEventsBatch(
     const recordId = String(event.record_id);
     const op = String(event.op);
     const version = Number(event.version);
-    const verdict = await classifyRemoteEvent(entity, recordId, op, version, pending);
+    const verdict = await classifyRemoteEvent(entity, recordId, op, version, pending, blocked);
     verdicts[verdict] += 1;
     entityCounts[entity] = (entityCounts[entity] ?? 0) + 1;
     if (verdict === 'apply') toFetch.push({ entity, recordId, version });
