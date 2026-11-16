@@ -1,4 +1,4 @@
-import type { Sentence, AnalysisChunk, VocabularyReviewStatus, VocabularySelection, GrammarReviewStatus, SentenceAnalysis } from '../../domain/types';
+import type { Sentence, AnalysisChunk, VocabularyReviewStatus, VocabularySelection, GrammarReviewStatus, SentenceAnalysis, StudyStatus } from '../../domain/types';
 import { getDb } from '../database';
 import { nowIso } from '../../lib/normalize';
 import { notifySync } from '../syncNotify';
@@ -79,4 +79,27 @@ export async function saveAnalysis(
   await db.analyses.put(analysis);
   notifySync('analyses', analysis.sentenceId, analysis);
   return analysis;
+}
+
+
+export async function setBookSentenceStatus(
+  bookId: string,
+  sentenceId: string,
+  status: StudyStatus,
+): Promise<void> {
+  const db = getDb();
+  const item = await db.bookSentences
+    .where('[bookId+sentenceId]')
+    .equals([bookId, sentenceId])
+    .first();
+  if (!item) return;
+  await db.bookSentences.put({
+    ...item,
+    status,
+    lastStudiedAt: nowIso(),
+  });
+  const updated = await db.bookSentences.get(item.id);
+  if (updated) notifySync('book_sentences', updated.id, updated);
+  // Intentionally does not touch session steps — see confirmSentenceVocabulary
+  // for why settlement is explicit-only (2026-08-27).
 }
