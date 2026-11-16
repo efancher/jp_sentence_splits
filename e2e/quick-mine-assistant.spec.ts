@@ -66,6 +66,9 @@ for (const size of WIDTHS) {
     test('a running assistant locks the controls, then a finished run lands in review', async ({ page }) => {
       let started = 0;
       let polls = 0;
+      // The run stays "running" until the test has checked the locked state, so a slow
+      // browser can't poll straight through the window the assertions look at.
+      let finish = false;
       await page.route('**/youtube-mining/assist-runs', async (route) => {
         started += 1;
         await route.fulfill({ json: run({}) });
@@ -73,9 +76,9 @@ for (const size of WIDTHS) {
       await page.route('**/youtube-mining/assist-runs/job-1', async (route) => {
         if (route.request().method() !== 'GET') { await route.fulfill({ status: 204 }); return; }
         polls += 1;
-        // First check (page load) finds no run; later polls see it running, then done.
+        // First check (page load) finds no run; later polls see it running until released, then done.
         if (polls === 1) { await route.fulfill({ status: 404, json: { detail: 'no run' } }); return; }
-        if (polls <= 3) {
+        if (!finish) {
           await route.fulfill({ json: run({ progress: 'Translating part 1 of 1…', live: { backend: 'codex', startedAt: Date.now() - 4000, timeoutSeconds: 300 } }) });
           return;
         }
@@ -90,6 +93,7 @@ for (const size of WIDTHS) {
       await expect(page.getByText(/codex/).first()).toBeVisible();
       await expectNoHorizontalOverflow(page);
 
+      finish = true;
       await expect(page.getByText(/3 sentences — give them a skim/)).toBeVisible({ timeout: 20_000 });
       expect(started).toBe(1);
       await expectNoHorizontalOverflow(page);
