@@ -15,11 +15,12 @@ import openJlptGrammar from '../src/data/openJlptGrammar.json';
 import type { VocabularySuggestion } from '../src/domain/types';
 import { buildGrammarDetector, buildReferenceIndex, curatedGrammarByPattern, wordSpansForDetection } from '../src/lib/grammarReference';
 import { grammarPatternStrengths } from '../src/lib/grammarEvidence';
-import { grammarLevelCosts, knownGrammarEntries } from '../src/lib/iPlusOne';
+import { grammarLevelCosts, knownGrammarEntries, orderByStrictIPlusOne } from '../src/lib/iPlusOne';
 import {
   buildKnownLemmaSet,
   lemmaKey,
   lemmaWeight,
+  partlyMetLemmas,
   scoreSentence,
   sentenceContentLemmas,
   unknownCountHistogram,
@@ -231,6 +232,40 @@ async function main(): Promise<void> {
   for (const [lemma, score] of [...value.entries()].sort((a, b) => b[1] - a[1]).slice(0, top)) {
     console.log(`  ${score.toFixed(1)}\t${lemma}`);
   }
+
+  // Strict i+1 (settings.iPlusOneStrict, the default): replay the order and show when each new piece arrives.
+  // Episode momentum is left out here, so ties inside a run fall back to reading order across books.
+  const japaneseOf = new Map(sentences.map((s) => [s.id as string, (s.japanese ?? '') as string]));
+  const reinforce = partlyMetLemmas([...introduced].map((id) => suggestionsBySentence.get(id)), known);
+  const strictOrder = orderByStrictIPlusOne(
+    candidates.map((id) => ({ sentenceId: id, suggestions: suggestionsBySentence.get(id), grammar: [...(entriesBySentence.get(id) ?? [])] })),
+    known,
+    { knownGrammar, grammarCost: cost, reinforce },
+  );
+  const list = new Set<string>([...known].map((key) => `w:${key}`).concat([...knownGrammar].map((id) => `g:${id}`)));
+  const pieceLabel = (piece: string) => (piece.startsWith('w:') ? piece.slice(2).split('|')[0]! : `[${nameOf.get(piece.slice(2))}]`);
+  let firstNew = -1;
+  let shown = 0;
+  let run = 0;
+  console.log(`\nstrict i+1 order (${strictOrder.length} sentences): new pieces as they arrive, with the run of nothing-new sentences before each`);
+  strictOrder.forEach((id, index) => {
+    const pieces = [
+      ...sentenceContentLemmas(suggestionsBySentence.get(id)).map((key) => `w:${key}`),
+      ...[...(entriesBySentence.get(id) ?? [])].map((entry) => `g:${entry}`),
+    ].filter((piece) => !list.has(piece));
+    if (pieces.length === 0) {
+      run += 1;
+      return;
+    }
+    if (firstNew < 0) firstNew = index;
+    if (shown < top * 2) {
+      console.log(`  #${index}\t(after ${run} nothing-new)\t+${pieces.map(pieceLabel).join(' +')}\t${japaneseOf.get(id)?.slice(0, 30)}`);
+      shown += 1;
+    }
+    run = 0;
+    for (const piece of pieces) list.add(piece);
+  });
+  console.log(`  first new piece at position ${firstNew} (that many nothing-new sentences come first)`);
 }
 
 main().catch((error) => {
