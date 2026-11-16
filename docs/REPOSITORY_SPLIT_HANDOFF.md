@@ -48,7 +48,17 @@ Nothing here needed a migration or a deploy.
 
 ## Next: split the rest of `repository.ts`
 
-Approach that worked for the first slice: move whole sections into
+Slice 2 done (`caad3e3`): the planner pass-read layer moved to
+`src/db/repo/passReads.ts` (407 lines); `repository.ts` is now 11,176 lines.
+It owns `plannerShared`, `plannerPassMemo`/`plannerWarming` (single
+instances, imported — never copied — via `plannerPassActive()`,
+`plannerWarmingActive()`, `beginPlannerWarming()`/`endPlannerWarming()` and
+`endPlannerPass()`), `createPlannerTimer`, the timing/trace plumbing and all
+`read*ForPass` / key-batch readers. `warmPlannerReads` and
+`getRecentActivityEvents` stayed in `repository.ts` (they reach into core and
+FSRS helpers above this layer).
+
+Approach that worked for the slices so far: move whole sections into
 `src/db/repo/<area>.ts`, export every moved declaration, `export *` them from
 `repository.ts`, prune imports, then `npm run check`. Keep module imports
 acyclic: an extracted module must not import from `repository.ts`. The
@@ -56,8 +66,8 @@ throwaway scripts used for slice one (dependency analysis, extraction,
 import pruning) lived in `/tmp` and are gone; they were ~100 lines of
 TypeScript-compiler-API code each and are quick to rewrite.
 
-Current sections (line numbers as of `73b6bdf`) and what each needs from the
-others:
+Current sections (line numbers shifted slightly by slice two; as of `73b6bdf`
+they were) and what each needs from the others:
 
 | Section | Lines | Depends on |
 | --- | ---: | --- |
@@ -72,20 +82,11 @@ others:
 
 Suggested order:
 
-1. **Extract the planner pass-read layer first** (`plannerShared`,
-   `plannerPassMemo`, `traceStep`, `rowCount`, `readAll*ForPass`,
-   `readRowsByKeys`, `bookSentencesForSentences`, `allAudioSentenceIds`,
-   `readTileEligibilityForPass`, `ANY_OF_SCAN_THRESHOLD`, the cross-tap cache
-   and `resetPlannerReadCachesForTests`) into e.g. `src/db/repo/passReads.ts`.
-   It sits in the planner section but every other section uses it; moving it
-   to the bottom layer removes most of the cycles. Watch the module-level
-   mutable state (`plannerPassMemo`, caches): it must stay a single instance,
-   so other modules import it rather than copy it.
-2. Then the small leaves: evidence foundation, explainability (after moving
+1. The small leaves: evidence foundation, explainability (after moving
    the two context-diversity helpers it needs), cached alignments.
-3. Then FSRS/proficiency and grammar, then sentence-led, then the planner,
+2. Then FSRS/proficiency and grammar, then sentence-led, then the planner,
    leaving core in `repository.ts` (or `repo/core.ts`) last.
-4. Where two sections genuinely call each other (FSRS ↔ grammar ↔
+3. Where two sections genuinely call each other (FSRS ↔ grammar ↔
    sentence-led each have one or two such calls), move the shared helper down
    rather than importing upward.
 
