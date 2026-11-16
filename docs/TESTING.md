@@ -50,6 +50,15 @@ application-source metric; the backend and SQL checks above are separate.
 | Pages | 51.08% | 46.61% |
 | Sync | 43.65% | 47.80% |
 
+2026-11-16 follow-up before splitting `repository.ts`: `repository.ts` plus
+`src/db/repo/*` measured 90.1% lines / 74.3% branches, then 93.4% / 76.7% after
+`tests/backupRestore.test.ts` (full/book export, replace/merge restore, JSON
+round trip) and `tests/bookMaintenance.test.ts` (delete/duplicate book, batch
+and feed edits, resume sentence, mining package input, curated vocabulary,
+report triage, planner-step progress). Remaining thin spots are mostly planner
+candidate finders (`buildReviewPriorityInputs`, `findReadingCheckCandidates`,
+`getGateFunnelSnapshot`) and `sortSentences` branches.
+
 Previously, the default coverage calculation only counted imported modules, so
 its higher percentage was not directly comparable. Coverage is reported as a
 baseline; no arbitrary global percentage threshold was added. Use the generated
