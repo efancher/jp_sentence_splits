@@ -52,7 +52,7 @@ review or proficiency record is created. This view needs no learner recording.
 
 ```
 UI (pages/, components/)
-  → src/db/repository.ts (all CRUD/business logic funnels through here)
+  → src/db/repository.ts (all CRUD/business logic funnels through here; self-contained areas live in src/db/repo/* and are re-exported from it)
     → Dexie (src/db/database.ts) — source of truth, works offline
       ↔ src/sync/ (optional, async, background) ↔ Supabase Postgres
 ```
