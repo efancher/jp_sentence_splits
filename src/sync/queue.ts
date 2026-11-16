@@ -315,6 +315,18 @@ function isSatisfiedDeleteConflict(conflict: SyncConflict): boolean {
  * already tombstoned — e.g. the server's sentence cascade trigger got there
  * first (see `pushOne`).
  */
+/**
+ * Entities whose cloud table only has insert/select RLS policies: a row is
+ * written once and never edited. A push that finds the id already in the cloud
+ * (a retried or overlapping push whose first attempt landed) must adopt it — an
+ * update is silently filtered to 0 rows by RLS and would surface as a
+ * `version_conflict` with nothing to decide (reported 2026-11-16,
+ * sentence_learning_events).
+ */
+export const APPEND_ONLY_ENTITIES: ReadonlySet<SyncEntity> = new Set<SyncEntity>([
+  'sentence_learning_events',
+]);
+
 export async function sweepNoopConflicts(): Promise<number> {
   const open = await listOpenConflicts();
   let swept = 0;
@@ -325,11 +337,19 @@ export async function sweepNoopConflicts(): Promise<number> {
         conflict.remotePayload,
         conflict.entity,
       ) ||
-      isSatisfiedDeleteConflict(conflict)
+      isSatisfiedDeleteConflict(conflict) ||
+      isDeliveredAppendOnlyConflict(conflict)
     ) {
       await resolveConflictLocally(conflict.id, 'auto_noop');
       swept += 1;
     }
   }
   return swept;
+}
+
+/** An append-only row's cloud copy is live, so the queued insert was already delivered. */
+function isDeliveredAppendOnlyConflict(conflict: SyncConflict): boolean {
+  if (!APPEND_ONLY_ENTITIES.has(conflict.entity)) return false;
+  const remote = conflict.remotePayload as { deleted_at?: string | null } | null;
+  return remote != null && remote.deleted_at == null;
 }

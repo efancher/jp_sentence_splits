@@ -18,6 +18,7 @@ import {
   hasOpenConflict,
   listOpenConflicts,
   sweepNoopConflicts,
+  APPEND_ONLY_ENTITIES,
 } from './queue';
 import {
   idColumnForEntity,
@@ -577,6 +578,13 @@ async function pushOne(item: SyncQueueItem, userId: string): Promise<void> {
     (existing as { deleted_at?: string | null }).deleted_at == null
   ) {
     if (await adoptSameIdRemote(getOrCreate, item.recordId)) return;
+  }
+
+  // Append-only rows have no update policy: the cloud already holds this event
+  // (an earlier push of it landed), so adopt its version instead of updating.
+  if (APPEND_ONLY_ENTITIES.has(item.entity)) {
+    await acknowledgeSyncedVersion(item.entity, item.recordId, Number(existing.version));
+    return;
   }
 
   if (
