@@ -74,9 +74,7 @@ import { ALIGNMENT_VERSION } from '../lib/analysisApi';
 import { ANALYSIS_SUMMARY_VERSION } from '../lib/pronunciationHistory';
 import {
   buildPronunciationProfile,
-  buildShadowingWeakWords,
   type PronunciationProfile,
-  type ShadowingWeakWord,
 } from '../lib/pronunciationProfile';
 import { buildProgressReport, type ProgressReport } from '../lib/progressReport';
 import { buildBlindSpots, vocabularyKey, type BlindSpots } from '../lib/blindSpots';
@@ -114,7 +112,6 @@ import {
   membershipIsShelved,
   sentenceIsSuspendedOnly,
   studyItemIsHeldBackBySuspension,
-  type SuspendedBookIndex,
 } from '../lib/suspendedBooks';
 import { startOfLocalDayIso } from '../lib/dailyPractice';
 import { isolatedWordSpans, type IsolatedWordSpans } from '../lib/isolatedWordRange';
@@ -223,6 +220,7 @@ export * from './repo/shadowingAttempts';
 export * from './repo/vocabularyKanji';
 export * from './repo/cardIssueReports';
 export * from './repo/syncIssueReports';
+export * from './repo/suspendedIndex';
 export * from './repo/passReads';
 export * from './repo/alignmentCaches';
 export * from './repo/contextDiversity';
@@ -234,6 +232,8 @@ export * from './repo/contextSentences';
 export * from './repo/reviewScheduling';
 export * from './repo/grammarPatterns';
 import { confirmSentenceVocabulary, setSentenceGrammarReviewStatus } from './repo/vocabularyKanji';
+import { getShadowingWeakWords } from './repo/shadowingAttempts';
+import { loadSuspendedBookIndex } from './repo/suspendedIndex';
 import {
   ANY_OF_SCAN_THRESHOLD,
   allAudioSentenceIds,
@@ -244,7 +244,6 @@ import {
   endPlannerWarming,
   learningEventsForSentences,
   plannerPassActive,
-  plannerShared,
   readAllBookSentencesForPass,
   readAllGlossDecisionsForPass,
   readAllLearningEventsForPass,
@@ -496,63 +495,6 @@ async function rescheduleResumedItems(sentenceIds: Set<string>, now: Date): Prom
       payload: item,
     })),
   );
-}
-
-/**
- * Builds the index the global review queue and the session planner use to hold
- * back a suspended book's or chapter's exclusive cards. Returns `null` when
- * nothing is suspended — the overwhelmingly common case — so callers pay
- * nothing. When something *is* suspended it reads the whole `bookSentences` +
- * `sentenceVocabulary` tables (a few times per review-init / plan); acceptable
- * at this scale.
- */
-export function loadSuspendedBookIndex(): Promise<SuspendedBookIndex | null> {
-  // A planning pass asks for this from five places; each ask re-reads two whole tables.
-  return plannerShared('suspendedBookIndex', ['books', 'bookSentences', 'sentenceVocabulary'], loadSuspendedBookIndexUncached);
-}
-
-async function loadSuspendedBookIndexUncached(): Promise<SuspendedBookIndex | null> {
-  const db = getDb();
-  const books = await db.books.toArray();
-  const suspendedBookIds = new Set(
-    books.filter((book) => book.suspendedAt).map((book) => book.id),
-  );
-  const suspendedChapterIds = new Set(
-    books.flatMap((book) =>
-      (book.chapters ?? []).filter((chapter) => chapter.suspendedAt).map((chapter) => chapter.id),
-    ),
-  );
-  if (suspendedBookIds.size === 0 && suspendedChapterIds.size === 0) return null;
-
-  const [memberships, links] = await Promise.all([
-    readAllBookSentencesForPass(),
-    readAllSentenceVocabularyForPass(),
-  ]);
-
-  const membershipsBySentenceId = new Map<string, Array<{ bookId: string; chapterId?: string }>>();
-  for (const membership of memberships) {
-    const entry = { bookId: membership.bookId, chapterId: membership.chapterId };
-    const list = membershipsBySentenceId.get(membership.sentenceId);
-    if (list) list.push(entry);
-    else membershipsBySentenceId.set(membership.sentenceId, [entry]);
-  }
-
-  const sentenceIdsByVocabularyItemId = new Map<string, string[]>();
-  const sentenceIdByLinkId = new Map<string, string>();
-  for (const link of links) {
-    sentenceIdByLinkId.set(link.id, link.sentenceId);
-    const list = sentenceIdsByVocabularyItemId.get(link.vocabularyItemId);
-    if (list) list.push(link.sentenceId);
-    else sentenceIdsByVocabularyItemId.set(link.vocabularyItemId, [link.sentenceId]);
-  }
-
-  return {
-    suspendedBookIds,
-    suspendedChapterIds,
-    membershipsBySentenceId,
-    sentenceIdsByVocabularyItemId,
-    sentenceIdByLinkId,
-  };
 }
 
 
@@ -3924,25 +3866,6 @@ export async function getProgressReport(
       pitchTrend: pronunciation.pitchTrend,
     },
   });
-}
-
-/**
- * Cross-attempt "weak words" (`buildShadowingWeakWords`) — surface forms
- * flagged with a per-word pitch-accent mismatch in more than one analyzed
- * shadowing attempt. Read-only; feeds the `/progress` "What to work on"
- * pronunciation block. Version-filtered like `getPronunciationProfile`.
- */
-export async function getShadowingWeakWords(
-  options: { minAttempts?: number } = {},
-): Promise<ShadowingWeakWord[]> {
-  const db = getDb();
-  const rows = (await db.attemptAnalysisSummaries.toArray()).filter(
-    (row) => row.analysisSummaryVersion === ANALYSIS_SUMMARY_VERSION,
-  );
-  return buildShadowingWeakWords(
-    rows.map((row) => ({ createdAt: row.createdAt, wordIssues: row.wordIssues })),
-    options,
-  );
 }
 
 /**

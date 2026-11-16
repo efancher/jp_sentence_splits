@@ -2,6 +2,8 @@ import type { Attempt, AttemptRating } from '../../domain/types';
 import { getDb } from '../database';
 import { createId } from '../../lib/ids';
 import { nowIso } from '../../lib/normalize';
+import { ANALYSIS_SUMMARY_VERSION } from '../../lib/pronunciationHistory';
+import { buildShadowingWeakWords, type ShadowingWeakWord } from '../../lib/pronunciationProfile';
 
 // ---------------------------------------------------------------------------
 // Shadowing attempts (docs/UNIFIED_APP_ARCHITECTURE.md §12, Phase 3) —
@@ -88,4 +90,24 @@ export async function setAttemptFavorite(
   const attempt = await db.attempts.get(attemptId);
   if (!attempt) throw new Error('Attempt not found');
   return attempt;
+}
+
+
+/**
+ * Cross-attempt "weak words" (`buildShadowingWeakWords`) — surface forms
+ * flagged with a per-word pitch-accent mismatch in more than one analyzed
+ * shadowing attempt. Read-only; feeds the `/progress` "What to work on"
+ * pronunciation block. Version-filtered like `getPronunciationProfile`.
+ */
+export async function getShadowingWeakWords(
+  options: { minAttempts?: number } = {},
+): Promise<ShadowingWeakWord[]> {
+  const db = getDb();
+  const rows = (await db.attemptAnalysisSummaries.toArray()).filter(
+    (row) => row.analysisSummaryVersion === ANALYSIS_SUMMARY_VERSION,
+  );
+  return buildShadowingWeakWords(
+    rows.map((row) => ({ createdAt: row.createdAt, wordIssues: row.wordIssues })),
+    options,
+  );
 }
