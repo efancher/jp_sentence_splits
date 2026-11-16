@@ -40,6 +40,7 @@ import {
   listGrammarPatternSummaries,
   listGrammarRelationshipsForPattern,
   listSentenceGrammarForPattern,
+  listStudyItemSummaries,
   getVocabularyTargetCandidates,
   listAttemptsForSentence,
   loadSuspendedBookIndex,
@@ -3021,6 +3022,73 @@ describe('getStudyItemDebugInfo (Phase 7.10)', () => {
         distinctSourceCount: 0,
       });
     }
+  });
+});
+
+describe('listStudyItemSummaries (Phase 7.10a)', () => {
+  beforeEach(() => {
+    resetDbForTests(`data-summaries-${createId('db')}`);
+  });
+
+  it('is empty for an empty database', async () => {
+    expect(await listStudyItemSummaries()).toEqual([]);
+  });
+
+  it('labels each subject type via batched reads and falls back to the raw id when the subject is missing', async () => {
+    await getDb().sentences.add(stubSentence('sent-1'));
+    const sentenceItem = await ensureStudyItem('sentence', 'sent-1', 'comprehension');
+    const missingSentenceItem = await ensureStudyItem('sentence', 'sent-gone', 'comprehension');
+    const itemA = await ensureVocabularyItem('表す', 'あらわす');
+    const vocabularyStudyItem = await ensureStudyItem('vocabularyItem', itemA.id, 'reading_retrieval');
+    const missingVocabularyItem = await ensureStudyItem('vocabularyItem', 'word-gone', 'reading_retrieval');
+    const pattern = await ensureGrammarPattern('〜わけがない');
+    const grammarItem = await ensureGrammarStudyItem(pattern.id, 'grammar_comprehension');
+    const missingGrammarItem = await ensureStudyItem('grammarPattern', 'pattern-gone', 'grammar_comprehension');
+    // No labelling branch exists for sentenceVocabulary subjects (the `/study-items`
+    // list shows the raw subject id) — pinned so a future branch is a deliberate change.
+    const linkItem = await ensureStudyItem('sentenceVocabulary', 'link-1', 'reading_retrieval');
+
+    const summaries = await listStudyItemSummaries();
+    const byId = new Map(summaries.map((summary) => [summary.studyItem.id, summary]));
+    expect(byId.size).toBe(summaries.length);
+    expect(byId.get(sentenceItem.id)?.studyItem.id).toBe(sentenceItem.id);
+    expect(byId.get(sentenceItem.id)?.subjectLabel).toBe('sent-1-japanese');
+    expect(byId.get(missingSentenceItem.id)?.subjectLabel).toBe('sent-gone');
+    expect(byId.get(vocabularyStudyItem.id)?.subjectLabel).toBe('表す (あらわす)');
+    expect(byId.get(missingVocabularyItem.id)?.subjectLabel).toBe('word-gone');
+    expect(byId.get(grammarItem.id)?.subjectLabel).toBe('〜わけがない');
+    expect(byId.get(missingGrammarItem.id)?.subjectLabel).toBe('pattern-gone');
+    expect(byId.get(linkItem.id)?.subjectLabel).toBe('link-1');
+  });
+
+  it('names a confusion pair by both member expressions only when each member has its own vocabularyItem study item', async () => {
+    const itemA = await ensureVocabularyItem('開く', 'あく');
+    const itemB = await ensureVocabularyItem('開ける', 'あける');
+    const confusion = await ensureVocabularyConfusion(itemA.id, itemB.id, 'transitivity');
+    const orphanConfusionItem = await ensureStudyItem('vocabularyConfusion', confusion.id, 'contrastive');
+    // Member order follows the stored canonical pair (ids are random), so compare both sides as a set.
+    expect((await listStudyItemSummaries())[0]?.subjectLabel).toBe(
+      `${confusion.itemAId} vs ${confusion.itemBId}`,
+    );
+
+    await ensureStudyItem('vocabularyItem', itemA.id, 'reading_retrieval');
+    expect(
+      (await listStudyItemSummaries())
+        .find((s) => s.studyItem.id === orphanConfusionItem.id)
+        ?.subjectLabel.split(' vs ').sort(),
+    ).toEqual(['開く', itemB.id].sort());
+
+    await ensureStudyItem('vocabularyItem', itemB.id, 'reading_retrieval');
+    expect(
+      (await listStudyItemSummaries())
+        .find((s) => s.studyItem.id === orphanConfusionItem.id)
+        ?.subjectLabel.split(' vs ').sort(),
+    ).toEqual(['開く', '開ける']);
+
+    const missingConfusionItem = await ensureStudyItem('vocabularyConfusion', 'confusion-gone', 'contrastive');
+    expect((await listStudyItemSummaries()).find((s) => s.studyItem.id === missingConfusionItem.id)?.subjectLabel).toBe(
+      'confusion-gone',
+    );
   });
 });
 
