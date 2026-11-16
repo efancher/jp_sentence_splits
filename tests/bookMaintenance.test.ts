@@ -69,6 +69,24 @@ beforeEach(() => {
   tracked.length = 0;
 });
 
+describe('addSentencesToBook', () => {
+  it('appends new members in source order whatever order they were picked in, and skips ones already there', async () => {
+    const preview = parseSatoriCsvText(littleBirds, 'little-birds.csv');
+    const ids = preview.drafts.map((item) => item.proposedId);
+    await commitImport({ preview, selectedIds: ids, destination: 'inbox' });
+    const sentences = await getDb().sentences.bulkGet(ids);
+    const bySource = [...sentences].sort((a, b) => a!.firstOccurrenceIndex - b!.firstOccurrenceIndex).map((s) => s!.id);
+    const book = await createBook({ title: 'Picked' });
+
+    await addSentencesToBook(book.id, [bySource[2]!]);
+    await addSentencesToBook(book.id, [bySource[1]!, bySource[2]!, bySource[0]!]);
+    const members = await getDb().bookSentences.where('bookId').equals(book.id).sortBy('position');
+    expect(members.map((m) => m.sentenceId)).toEqual([bySource[2], bySource[0], bySource[1]]);
+    expect(members.map((m) => m.position)).toEqual([0, 1, 2]);
+    expect(await getDb().inbox.count()).toBe(0);
+  });
+});
+
 describe('deleteBook', () => {
   it('removes the book and its memberships but keeps the shared sentences, and queues tombstones', async () => {
     const { ids, book } = await seedBook();

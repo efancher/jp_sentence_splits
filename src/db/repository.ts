@@ -92,7 +92,6 @@ import type {
   GrammarRelationship,
   GrammarRelationshipType,
   ImportBatch,
-  InitialOrderMode,
   PitchDrillAttempt,
   PlannerSession,
   PlannerSessionStep,
@@ -382,33 +381,9 @@ import { countAttemptsForSentences } from './repo/shadowingAttempts';
 import { mintGetOrCreateId, ensureVocabularyItem, confirmSentenceVocabulary, setSentenceGrammarReviewStatus } from './repo/vocabularyKanji';
 
 
-function sortSentences(
-  sentences: Sentence[],
-  mode: InitialOrderMode,
-): Sentence[] {
-  const copy = [...sentences];
-  switch (mode) {
-    case 'earliest_created':
-      return copy.sort((a, b) =>
-        (a.earliestCreatedAt ?? '').localeCompare(b.earliestCreatedAt ?? ''),
-      );
-    case 'latest_created':
-      return copy.sort((a, b) =>
-        (b.latestCreatedAt ?? '').localeCompare(a.latestCreatedAt ?? ''),
-      );
-    case 'japanese':
-      return copy.sort((a, b) => a.japanese.localeCompare(b.japanese, 'ja'));
-    case 'english':
-      return copy.sort((a, b) =>
-        a.translation.localeCompare(b.translation, 'en'),
-      );
-    case 'manual':
-    case 'first_occurrence':
-    default:
-      return copy.sort(
-        (a, b) => a.firstOccurrenceIndex - b.firstOccurrenceIndex,
-      );
-  }
+/** New book members go in source order: the position each sentence first appeared at in its import. */
+function sortByFirstOccurrence(sentences: Sentence[]): Sentence[] {
+  return [...sentences].sort((a, b) => a.firstOccurrenceIndex - b.firstOccurrenceIndex);
 }
 
 export async function createBook(input: {
@@ -2464,7 +2439,6 @@ export async function touchBookOpened(bookId: string): Promise<void> {
 export async function addSentencesToBook(
   bookId: string,
   sentenceIds: string[],
-  orderMode: InitialOrderMode = 'first_occurrence',
 ): Promise<void> {
   const db = getDb();
   const existing = await db.bookSentences.where('bookId').equals(bookId).toArray();
@@ -2473,10 +2447,7 @@ export async function addSentencesToBook(
   if (!toAddIds.length) return;
 
   const sentences = await db.sentences.bulkGet(toAddIds);
-  const ordered = sortSentences(
-    sentences.filter((item): item is Sentence => Boolean(item)),
-    orderMode,
-  );
+  const ordered = sortByFirstOccurrence(sentences.filter((item): item is Sentence => Boolean(item)));
   const maxPosition = existing.reduce(
     (max, item) => Math.max(max, item.position),
     -1,
@@ -3170,7 +3141,6 @@ export async function commitImport(options: {
   destination: 'inbox' | 'new_book' | 'existing_book';
   bookId?: string;
   newBookTitle?: string;
-  orderMode?: InitialOrderMode;
   /** Assign imported sentences to this existing chapter on the target book. */
   chapterId?: string;
   /** Create a chapter with this title on the target book, then assign. */
@@ -3282,13 +3252,11 @@ export async function commitImport(options: {
     await addSentencesToBook(
       book.id,
       sentenceIds,
-      options.orderMode ?? 'first_occurrence',
     );
   } else if (options.destination === 'existing_book' && bookId) {
     await addSentencesToBook(
       bookId,
       sentenceIds,
-      options.orderMode ?? 'first_occurrence',
     );
   }
 
@@ -3336,7 +3304,6 @@ export async function commitShadowingPackageImport(
     destination: existingBook ? 'existing_book' : 'new_book',
     bookId: existingBook?.id,
     newBookTitle: preview.source.title,
-    orderMode: 'first_occurrence',
     // A new book gets one chapter: per-sentence AI extras (chunking, walkthroughs) are
     // stored per chapter, so a chapterless book silently drops them.
     ...(existingBook ? {} : { newChapterTitle: preview.source.title }),
@@ -3521,7 +3488,6 @@ export async function commitSeriesEpisodeImport(options: {
     destination: existingBook ? 'existing_book' : 'new_book',
     bookId: existingBook?.id,
     newBookTitle: options.seriesTitle ?? '',
-    orderMode: 'first_occurrence',
     ...(existingChapter
       ? { chapterId: existingChapter.id }
       : { newChapterTitle: options.episodeTitle }),

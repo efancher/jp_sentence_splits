@@ -3,14 +3,6 @@ export type AnalysisStatus = 'empty' | 'in_progress' | 'complete';
 export type ThemePreference = 'system' | 'light' | 'dark';
 export type ImportDestination = 'inbox' | 'new_book' | 'existing_book';
 export type TextDisplayMode = 'plain' | 'furigana' | 'reading';
-export type InitialOrderMode =
-  | 'first_occurrence'
-  | 'earliest_created'
-  | 'latest_created'
-  | 'japanese'
-  | 'english'
-  | 'manual';
-
 export interface TargetVocabulary {
   expression: string;
   reading: string;

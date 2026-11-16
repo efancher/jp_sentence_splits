@@ -52,7 +52,7 @@ export function ImportBatchPage() {
       bookId = book.id;
     }
     if (!bookId || !selected.size) return;
-    await addSentencesToBook(bookId, [...selected], 'first_occurrence');
+    await addSentencesToBook(bookId, [...selected]);
     setMessage(`Added ${selected.size} batch sentence(s) to a book.`);
     setSelected(new Set());
   }

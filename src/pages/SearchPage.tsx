@@ -94,7 +94,7 @@ export function SearchPage() {
       bookId = book.id;
     }
     if (!bookId) return;
-    await addSentencesToBook(bookId, [...selected], 'first_occurrence');
+    await addSentencesToBook(bookId, [...selected]);
     setMessage(`Added ${selected.size} result(s) to a book.`);
     setSelected(new Set());
     setNewBookTitle('');
