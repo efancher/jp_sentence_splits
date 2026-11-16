@@ -403,7 +403,7 @@ test('the focused sentence names its unchecked grammar, and a tap clears it from
   await expect(hint).not.toContainText('〜ました');
 });
 
-test('a planner Grammar check hides the pattern, then logs your own call on what it does', async ({ page }) => {
+test('a planner Grammar check hides the pattern, logs your own call, and shows another example after a miss', async ({ page }) => {
   await seed(page);
   await page.evaluate(async () => {
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
@@ -412,11 +412,17 @@ test('a planner Grammar check hides the pattern, then logs your own call on what
       request.onerror = () => reject(request.error);
     });
     const now = new Date().toISOString();
-    const tx = db.transaction(['grammarPatterns', 'sentenceGrammar'], 'readwrite');
+    const tx = db.transaction(['grammarPatterns', 'sentenceGrammar', 'sentences'], 'readwrite');
     tx.objectStore('grammarPatterns').put({ id: 'g-mashita', canonicalName: '〜ました', normalizedKey: 'mashita', aliases: [],
       shortMeaning: 'polite past', provenance: 'manual', createdAt: now, updatedAt: now });
     tx.objectStore('sentenceGrammar').put({ id: 'sg-1', sentenceId: 's-0', grammarPatternId: 'g-mashita', surfaceForm: '食べました',
       start: 6, end: 11, confirmedByLearner: true, source: 'manual', createdAt: now, updatedAt: now });
+    // The same pattern in a sentence outside the book: the example shown after "Needed help".
+    tx.objectStore('sentences').put({ id: 's-other', normalizedKey: 's-other', japanese: '犬が来ました。', readingOnly: '', inlineReading: '',
+      translation: 'A dog came.', targetVocabulary: [], vocabularySuggestions: [], sourceReferences: [], conflicts: [],
+      firstOccurrenceIndex: 0, importBatchIds: [], createdAt: now, updatedAt: now });
+    tx.objectStore('sentenceGrammar').put({ id: 'sg-2', sentenceId: 's-other', grammarPatternId: 'g-mashita', surfaceForm: '来ました',
+      start: 2, end: 6, confirmedByLearner: true, source: 'manual', createdAt: now, updatedAt: now });
     await new Promise<void>((resolve, reject) => { tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error); });
     db.close();
   });
@@ -428,8 +434,13 @@ test('a planner Grammar check hides the pattern, then logs your own call on what
   await panel.getByRole('button', { name: 'Show the pattern' }).click();
   await expect(panel).toContainText('You wrote: past tense');
   await expect(panel).toContainText('polite past');
+  await expect(panel.getByRole('group', { name: 'Another example' })).toHaveCount(0);
   await panel.getByRole('button', { name: 'Needed help' }).click();
   await expect(panel).toContainText('Recorded.');
+  const example = panel.getByRole('group', { name: 'Another example' });
+  await expect(example).toContainText('犬が来ました。');
+  await expect(example).toContainText('A dog came.');
+  await expect(example.locator('mark')).toHaveText('来ました');
 
   await expect.poll(async () => (await storedCounts(page)).events.filter((event) => event.target?.key.startsWith('grammar-')).length).toBe(1);
   const stored = await storedCounts(page);

@@ -8,6 +8,7 @@ import { stepTimer } from '../lib/pageTiming';
 import { chapterIdsByEpisodeNumber } from '../lib/chapterEpisodeOrder';
 import { FREQUENCY_WAIT_MS, loadWordFrequency, lookupWordBand } from '../lib/wordFrequency';
 import { grammarPatternStrengths } from '../lib/grammarEvidence';
+import { pickAnotherExample, type ExampleParts } from '../lib/grammarExamples';
 import {
   evidenceLevel,
   type EvidenceLevel,
@@ -11458,6 +11459,36 @@ export async function pickGrammarCheckPatternId(patternIds: string[]): Promise<s
   const withEvidence = patternIds.filter((id) => strengthByPattern.has(id));
   if (withEvidence.length === 0) return patternIds[0];
   return withEvidence.reduce((weakest, id) => (strengthByPattern.get(id)! < strengthByPattern.get(weakest)! ? id : weakest));
+}
+
+export interface GrammarCheckExample {
+  sentenceId: string;
+  parts: ExampleParts;
+  translation?: string;
+  /** What the construction does in that sentence, when its link records it. */
+  occurrenceExplanation?: string;
+}
+
+/**
+ * A second sentence from the learner's books with the pattern, shown after a Grammar check they needed help on
+ * (`pickAnotherExample`: an introduced sentence first, then the simplest). Teaching only: nothing is logged or
+ * credited for it. Undefined when the pattern has no other usable sentence.
+ */
+export async function getGrammarCheckExample(
+  grammarPatternId: string,
+  checked: { id: string; japanese: string },
+): Promise<GrammarCheckExample | undefined> {
+  const encounters = await listSentenceGrammarForPattern(grammarPatternId);
+  if (encounters.length === 0) return undefined;
+  const introduced = await getIntroducedSentenceIds([...new Set(encounters.map((item) => item.sentence.id))]);
+  const example = pickAnotherExample(encounters, checked, introduced);
+  if (!example) return undefined;
+  return {
+    sentenceId: example.item.sentence.id,
+    parts: example.parts,
+    translation: example.item.sentence.translation || undefined,
+    occurrenceExplanation: example.item.sentenceGrammar.occurrenceExplanation || undefined,
+  };
 }
 
 /**

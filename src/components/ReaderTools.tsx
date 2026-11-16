@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-import { getWordMeaningCheckTarget, pickGrammarCheckPatternId } from '../db/repository';
+import { getGrammarCheckExample, getWordMeaningCheckTarget, pickGrammarCheckPatternId, type GrammarCheckExample } from '../db/repository';
 import type { Sentence } from '../domain/types';
 import { gradeDictation, typedAsKana } from '../lib/dictationAnswer';
 import { FOLLOW_UP_CAUSE_LABEL, FOLLOW_UP_LABEL, FOLLOW_UP_PURPOSE, type FollowUpCause, type FollowUpTool } from '../lib/followUpOffer';
@@ -442,18 +442,21 @@ export function PatternFeedbackPanel({
  * recall. Evidence only (the `use` facet); it grades no card.
  */
 export function GrammarCheckPanel({
+  sentence,
   patterns,
   onRecord,
   onClose,
 }: {
+  sentence: { id: string; japanese: string };
   patterns: ReaderPattern[];
   onRecord: (outcome: ReaderToolOutcome, pattern: ReaderPattern) => void;
   onClose: () => void;
 }) {
   const [target, setTarget] = useState<ReaderPattern | undefined | 'loading'>('loading');
   const [revealed, setRevealed] = useState(false);
-  const [recorded, setRecorded] = useState(false);
+  const [recorded, setRecorded] = useState<ReaderToolOutcome | undefined>();
   const [guess, setGuess] = useState('');
+  const [example, setExample] = useState<GrammarCheckExample | undefined | 'loading'>();
 
   useEffect(() => {
     let cancelled = false;
@@ -504,14 +507,38 @@ export function GrammarCheckPanel({
           {!recorded ? (
             <div className="row" style={{ gap: '0.4rem', alignItems: 'center' }}>
               <span className="muted">Did you have it?</span>
-              <button type="button" onClick={() => { onRecord('got_it', target); setRecorded(true); }}>Got it</button>
-              <button type="button" onClick={() => { onRecord('needed_help', target); setRecorded(true); }}>Needed help</button>
+              <button type="button" onClick={() => { onRecord('got_it', target); setRecorded('got_it'); }}>Got it</button>
+              <button
+                type="button"
+                onClick={() => {
+                  onRecord('needed_help', target);
+                  setRecorded('needed_help');
+                  setExample('loading');
+                  void getGrammarCheckExample(target.patternId, sentence).then(setExample, () => setExample(undefined));
+                }}
+              >
+                Needed help
+              </button>
             </div>
           ) : (
-            <div className="row" style={{ gap: '0.4rem', alignItems: 'center' }}>
-              <span className="muted">Recorded.</span>
-              <button type="button" onClick={onClose}>Close</button>
-            </div>
+            <>
+              {recorded === 'needed_help' && example && example !== 'loading' ? (
+                <div className="stack" style={{ gap: '0.1rem' }} role="group" aria-label="Another example">
+                  <span className="muted">The same pattern in another of your sentences:</span>
+                  <div className="jp">
+                    {example.parts.before}<mark>{example.parts.match}</mark>{example.parts.after}
+                  </div>
+                  {example.translation ? <div className="muted">{example.translation}</div> : null}
+                  {example.occurrenceExplanation ? (
+                    <div className="muted" style={{ fontSize: '0.85rem' }}>{example.occurrenceExplanation}</div>
+                  ) : null}
+                </div>
+              ) : null}
+              <div className="row" style={{ gap: '0.4rem', alignItems: 'center' }}>
+                <span className="muted">Recorded.</span>
+                <button type="button" onClick={onClose}>Close</button>
+              </div>
+            </>
           )}
         </div>
       )}

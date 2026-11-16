@@ -936,11 +936,20 @@ reader (solid words stay plain); /progress has a "Grammar strength" panel
 patterns). Manual test: type a guess in a Grammar check and see it after the reveal;
 give a pattern a few "I knew it" taps and see it turn green; open /progress and
 check the counts move. Left over: any grammar study surface.
-**Reminder, revisit on or after 2026-11-15:** decide whether grammar needs its own
-study surface. First look at a week of Grammar check use (the /progress "Grammar
-strength" panel: solid/shaky/unchecked counts, weakest tapped patterns, and whether
-the weak-grammar revisits are being finished). Only design a surface if patterns pile
-up shaky or unchecked despite the check; it is the user's design call.
+**Grammar check use, first read 2026-11-16 (cloud copy, read-only):** 14 grammar calls
+over 12 patterns in 11 sentences since 2026-11-01 (each tap writes a spot and a use
+row), against ~277 word calls; 12 of the 14 were "needed help" (only ～について and
+～ですか？ got it). Grammar is checked ~20x less than words because the check only rides
+on weak-grammar revisits, and it nearly always fails, so it confirms a gap more than it
+closes one. Learner's call the same day: add grammar to the Read check's "What was
+hard?" causes and show a second example after a miss (both shipped 2026-11-16, STATUS).
+Not chosen for now (still open): standalone Grammar checks with their own candidate list
+(like `findWordCheckCandidates`), moved Grammar checks on an unstudied sentence holding
+the pattern (like moved Word checks; the text detector finds them), and a grammar
+Dictation that blanks the pattern's phrase. All 12 checked patterns had 2-108 linked
+sentences, so the example rarely has nothing to show. Re-read after a week: how often
+the grammar cause is picked, and whether the next Grammar check on a pattern shown an
+example does better.
 Ambiguous `（note）` senses (2026-11-08): only 7 curated forms share their text
 (`npm run diagnose:grammar-ambiguous`). A shared form is now detected when every
 owner has a guard: ながら（while）/（も） and くらい/ぐらい（approximately）/（extent）
@@ -1125,8 +1134,8 @@ control).
     (2026-11-15, STATUS), and a typed Reading check runs in the reader for words
     marked as missed (`readingMissSteps.ts`, 2026-11-15).
   1. **Route trouble tags to the matching check.** *Reader form shipped 2026-11-15:*
-     the Read check's "What was hard?" causes route to a Reading check, Word check or
-     Dictation (STATUS). The review-card tags still queue a Fresh try; not worth
+     the Read check's "What was hard?" causes route to a Reading check, Word check,
+     Dictation or (2026-11-16) Grammar check (STATUS). The review-card tags still queue a Fresh try; not worth
      changing while review cards go unused (last review 2026-11-01 in the cloud copy,
      no `review_trouble_logs` rows there). If review cards come back: Meaning → a
      Word check, Reading/Kanji → a typed Reading check, instead of a full Fresh try.

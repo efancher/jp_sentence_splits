@@ -27,15 +27,28 @@ describe('chooseFollowUp', () => {
   });
 
   it('maps every tool to the aspect it supports', () => {
-    expect(FOLLOW_UP_ASPECT).toEqual({ tiles: 'listening', dictate: 'listening', meaning: 'meaning', shadow: 'pronunciation', reading: 'reading' });
+    expect(FOLLOW_UP_ASPECT).toEqual({
+      tiles: 'listening', dictate: 'listening', meaning: 'meaning', shadow: 'pronunciation', reading: 'reading', grammar: 'grammar',
+    });
+  });
+
+  it('never offers the cause-only checks (Reading, Grammar) by rule or random draw', () => {
+    const withCauseOnly = [...ALL, 'reading', 'grammar'] as const;
+    for (const draw of [0, FOLLOW_UP_RANDOM_RATE + 0.01]) {
+      for (const pick of [0, 0.5, 0.99]) {
+        expect(['reading', 'grammar']).not.toContain(chooseFollowUp({ available: withCauseOnly, draw, pick })!.tool);
+      }
+    }
+    expect(chooseFollowUp({ available: ['grammar'], draw: 0.9, pick: 0 })).toBeNull();
   });
 });
 
 describe('chooseFollowUpForCause', () => {
   it('offers the tool that answers the named cause, labelled as the learner\'s', () => {
-    const all = [...ALL, 'reading'] as const;
+    const all = [...ALL, 'reading', 'grammar'] as const;
     expect(chooseFollowUpForCause({ available: all, cause: 'reading' })).toEqual({ tool: 'reading', source: 'learner' });
     expect(chooseFollowUpForCause({ available: all, cause: 'meaning' })).toEqual({ tool: 'meaning', source: 'learner' });
+    expect(chooseFollowUpForCause({ available: all, cause: 'grammar' })).toEqual({ tool: 'grammar', source: 'learner' });
     expect(chooseFollowUpForCause({ available: all, cause: 'listening' })).toEqual({ tool: 'dictate', source: 'learner' });
     expect(chooseFollowUpForCause({ available: ['tiles', 'meaning'], cause: 'listening' })).toEqual({ tool: 'tiles', source: 'learner' });
   });
@@ -43,5 +56,6 @@ describe('chooseFollowUpForCause', () => {
   it('returns null when nothing can answer it, so the caller falls back to the rule', () => {
     expect(chooseFollowUpForCause({ available: ALL, cause: 'reading' })).toBeNull();
     expect(chooseFollowUpForCause({ available: ['meaning'], cause: 'listening' })).toBeNull();
+    expect(chooseFollowUpForCause({ available: ALL, cause: 'grammar' })).toBeNull();
   });
 });

@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 
 import { PatternExamples } from '../src/components/PatternExamples';
 import type { GrammarEncounter } from '../src/db/repository';
-import { formsSeen, lineUpExamples, splitAtSpan } from '../src/lib/grammarExamples';
+import { formsSeen, lineUpExamples, pickAnotherExample, splitAtSpan } from '../src/lib/grammarExamples';
 
 const encounter = (
   id: string,
@@ -62,6 +62,20 @@ describe('lineUpExamples and formsSeen', () => {
       { form: '開いている', count: 2 },
       { form: '読んでいる', count: 1 },
     ]);
+  });
+});
+
+describe('pickAnotherExample', () => {
+  const checked = { id: 's1', japanese: '窓が開いている。' };
+
+  it('never returns the checked sentence or a copy of its text, and prefers a studied sentence over a simpler one', () => {
+    const copy = encounter('s1-copy', '窓が開いている。', { surfaceForm: '開いている', start: 2, end: 7 });
+    expect(pickAnotherExample([SHORT, copy, SAME_FORM, LONG], checked, new Set())?.item.sentence.id).toBe('s3');
+    expect(pickAnotherExample([SHORT, copy, SAME_FORM, LONG], checked, new Set(['s2']))?.item.sentence.id).toBe('s2');
+  });
+
+  it('gives nothing when the checked sentence is the only one with a span', () => {
+    expect(pickAnotherExample([SHORT, encounter('s4', '短い。', {})], checked, new Set(['s4']))).toBeNull();
   });
 });
 

@@ -209,7 +209,11 @@ and possible extensions. This snapshot does not certify a live deployment.
   and does, then you judge your recall (evidence on the `use` facet only).
   The pattern asked about is the weakest tapped one, else an unchecked one
   (`pickGrammarCheckPatternId`). An optional typed answer before the reveal is shown
-  back after it (not stored or graded). /progress "Grammar strength" shows pattern
+  back after it (not stored or graded). After "Needed help" (2026-11-16) the panel shows one more
+  sentence from the learner's books with the same pattern, highlighted, with its translation and
+  note (`getGrammarCheckExample` / `pickAnotherExample`: never the checked sentence or a copy of its
+  text, an introduced sentence first, then the shortest); teaching only, it logs and credits nothing,
+  and it waits until the call is given. /progress "Grammar strength" shows pattern
   counts by level and the weakest ones (`getGrammarStrengthReport`). Counts as a
   grammar step in the session.
   Missing evidence is shown in the reader (2026-11-08): on the focused sentence
@@ -271,12 +275,16 @@ and possible extensions. This snapshot does not certify a live deployment.
   not yet known by strength, otherwise Dictation, Ear tiles (2026-11-08: Dictation first) or Shadowing, whichever can open. About
   40% of offers are drawn at random among the available tools as a baseline for comparing
   activities. Since 2026-11-15 "Needed help" first asks "What was hard?" (Reading a word / A word's
-  meaning / Hearing it, the last only with audio / Not sure; `chooseFollowUpForCause`). A named
+  meaning / Hearing it, the last only with audio / How the grammar fits, only when the sentence has a
+  grammar pattern the reader can show, 2026-11-16 / Not sure; `chooseFollowUpForCause`). A named
   cause gets its matching tool with no random draw, logged as source `learner`
   (`followup:<tool>:learner`): Reading → a typed Reading check on the sentence's weakest-read
   kanji word when no miss is recorded (`getReadingCheckTarget(…, { orWeakest: true })`; a word
   with no vocabulary item gets one when answered), Meaning → Word check, Hearing → Dictation,
-  else Ear tiles. "Not sure", or a cause nothing can answer, keeps the rule and random draw.
+  else Ear tiles, Grammar → the Grammar check on that sentence under the Read check's visit (like the
+  Reading check, never in the rule or random pool). "Not sure", or a cause nothing can answer, keeps
+  the rule and random draw. The grammar cause has jsdom tests only; the browser spec covers the
+  Grammar check's example.
   The offer is now logged after this choice, so closing at the question logs no offer. Jsdom
   tests and the Chromium `reader-tools` spec (390px, 1280px) pass; not yet used on a phone. An unrevealed Read check on a walked sentence also shows "I haven't walked this"
   (2026-11-08): it logs a synced `walkthrough_reset` event (migration `20261108000000`), and

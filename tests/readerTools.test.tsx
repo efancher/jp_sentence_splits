@@ -79,6 +79,21 @@ async function seed() {
   }
 }
 
+/** 〜ました on the book's sentence and on a second sentence outside the book (the example shown after a miss). */
+async function seedMashita(now: string) {
+  const db = getDb();
+  await db.grammarPatterns.add({
+    id: 'g-mashita', canonicalName: '〜ました', normalizedKey: 'mashita', aliases: [], shortMeaning: 'polite past', provenance: 'manual', createdAt: now, updatedAt: now,
+  });
+  await db.sentences.add({ ...sentenceRow(now), id: 'sent-2', normalizedKey: 'sent-2', japanese: '犬が来ました。', translation: 'A dog came.', vocabularySuggestions: [] });
+  for (const [id, sentenceId, surfaceForm, start] of [['sg-1', 'sent-1', '食べました', 6], ['sg-2', 'sent-2', '来ました', 2]] as const) {
+    await db.sentenceGrammar.add({
+      id, sentenceId, grammarPatternId: 'g-mashita', surfaceForm, start, end: start + surfaceForm.length,
+      confirmedByLearner: true, source: 'manual', createdAt: now, updatedAt: now,
+    });
+  }
+}
+
 function renderReader() {
   return render(
     withAppProviders(
@@ -290,6 +305,8 @@ describe('reader study tools', () => {
       await user.click(screen.getByRole('button', { name: 'Needed help' }));
       const causes = await screen.findByRole('group', { name: 'What was hard' });
       expect(within(causes).getByRole('button', { name: 'Hearing it' })).toBeInTheDocument();
+      // No pattern on this sentence, so the grammar cause would lead nowhere and is not offered.
+      expect(within(causes).queryByRole('button', { name: 'How the grammar fits' })).not.toBeInTheDocument();
       await user.click(within(causes).getByRole('button', { name: 'Reading a word' }));
 
       expect(await screen.findByText(/Try Reading check on it\?/)).toBeInTheDocument();
@@ -327,6 +344,71 @@ describe('reader study tools', () => {
     } finally {
       random.mockRestore();
     }
+  });
+
+  it('offers a Grammar check when the learner says the grammar was hard, then shows the pattern in another sentence after a miss', async () => {
+    const db = getDb();
+    const now = new Date().toISOString();
+    await seedMashita(now);
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0); // would be a random draw without a named cause
+    try {
+      const user = userEvent.setup();
+      renderReader();
+      await user.click(await screen.findByRole('button', { name: 'Read check' }));
+      await user.click(await screen.findByRole('button', { name: 'Show help and meaning' }));
+      await user.click(screen.getByRole('button', { name: 'Needed help' }));
+      await user.click(await screen.findByRole('button', { name: 'How the grammar fits' }));
+      expect(await screen.findByText(/Try Grammar check on it\?/)).toBeInTheDocument();
+      const offer = (await db.sentenceLearningEvents.toArray()).find((event) => event.action === 'follow_up_offer')!;
+      expect(offer.target).toMatchObject({ key: 'followup:grammar:learner', label: 'grammar' });
+
+      await user.click(screen.getByRole('button', { name: 'Try it' }));
+      const panel = await screen.findByRole('group', { name: 'Grammar check' });
+      expect(panel).not.toHaveTextContent('polite past');
+      await user.click(within(panel).getByRole('button', { name: 'Show the pattern' }));
+      expect(panel).toHaveTextContent('polite past');
+      // A worked example waits until the learner has given their call.
+      expect(within(panel).queryByRole('group', { name: 'Another example' })).not.toBeInTheDocument();
+      await user.click(within(panel).getByRole('button', { name: 'Needed help' }));
+
+      const example = await within(panel).findByRole('group', { name: 'Another example' });
+      expect(example).toHaveTextContent('犬が来ました。');
+      expect(example).toHaveTextContent('A dog came.');
+      expect(within(example).getByText('来ました').tagName).toBe('MARK');
+
+      await waitFor(async () => {
+        const events = await db.sentenceLearningEvents.toArray();
+        // The check's own call is the only grammar evidence; the example credits nothing, on either sentence.
+        expect(events.map((event) => event.action).sort()).toEqual(['follow_up_offer', 'gist_check', 'target_practice']);
+        const use = events.find((event) => event.action === 'target_practice')!;
+        expect(use).toMatchObject({ sentenceId: 'sent-1', visitId: offer.visitId, outcome: 'needed_help', target: { key: grammarFeedbackTargetKey('g-mashita', 'use') } });
+      });
+      expect(await db.reviews.count()).toBe(0);
+      expect(await db.studyItems.count()).toBe(0);
+    } finally {
+      random.mockRestore();
+    }
+  });
+
+  it('shows no example after "Got it" on a Grammar check', async () => {
+    await seedMashita(new Date().toISOString());
+    // jsdom has no scrollIntoView; the lesson/check route scrolls the opened sentence into view.
+    Element.prototype.scrollIntoView = vi.fn();
+    const user = userEvent.setup();
+    render(
+      withAppProviders(
+        <MemoryRouter initialEntries={['/books/book-1/grammar-check/sent-1']}>
+          <Routes>
+            <Route path="books/:bookId/grammar-check/:sentenceId" element={<ReaderPage />} />
+          </Routes>
+        </MemoryRouter>,
+      ),
+    );
+    const panel = await screen.findByRole('group', { name: 'Grammar check' });
+    await user.click(within(panel).getByRole('button', { name: 'Show the pattern' }));
+    await user.click(within(panel).getByRole('button', { name: 'Got it' }));
+    expect(await within(panel).findByText('Recorded.')).toBeInTheDocument();
+    expect(within(panel).queryByRole('group', { name: 'Another example' })).not.toBeInTheDocument();
   });
 
   it('offers nothing after "Got it"', async () => {

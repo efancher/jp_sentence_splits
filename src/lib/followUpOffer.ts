@@ -9,7 +9,7 @@
  * otherwise look worse than it is. Each offer records its `source`.
  */
 
-export type FollowUpTool = 'tiles' | 'dictate' | 'meaning' | 'shadow' | 'reading';
+export type FollowUpTool = 'tiles' | 'dictate' | 'meaning' | 'shadow' | 'reading' | 'grammar';
 export type LearningAspect = 'reading' | 'meaning' | 'listening' | 'pronunciation' | 'grammar';
 /** `learner`: the learner named what was hard (`FollowUpCause`) and the offer matches it; no random draw. */
 export type FollowUpSource = 'rule' | 'random' | 'learner';
@@ -21,6 +21,7 @@ export const FOLLOW_UP_ASPECT: Record<FollowUpTool, LearningAspect> = {
   meaning: 'meaning',
   shadow: 'pronunciation',
   reading: 'reading',
+  grammar: 'grammar',
 };
 
 export const FOLLOW_UP_LABEL: Record<FollowUpTool, string> = {
@@ -29,6 +30,7 @@ export const FOLLOW_UP_LABEL: Record<FollowUpTool, string> = {
   meaning: 'Word check',
   shadow: 'Shadowing',
   reading: 'Reading check',
+  grammar: 'Grammar check',
 };
 
 /** What the offer line says the tool is for. */
@@ -38,6 +40,7 @@ export const FOLLOW_UP_PURPOSE: Record<FollowUpTool, string> = {
   meaning: 'recall a word in it',
   shadow: 'say it along with the clip',
   reading: 'type how a word in it is read',
+  grammar: 'recall what a pattern in it does',
 };
 
 /** Share of offers drawn uniformly from the available tools instead of by the rule. */
@@ -45,8 +48,8 @@ export const FOLLOW_UP_RANDOM_RATE = 0.4;
 
 /**
  * Rule order when nothing says otherwise: a weak word first, then the listening pair (Dictation before the easier
- * Ear tiles, 2026-11-08), then sound. The Reading check is offered only for a named cause, so the rule and random
- * rows stay comparable with the offers logged before it existed.
+ * Ear tiles, 2026-11-08), then sound. The Reading and Grammar checks are offered only for a named cause, so the
+ * rule and random rows stay comparable with the offers logged before they existed.
  */
 const RULE_ORDER: readonly FollowUpTool[] = ['meaning', 'dictate', 'tiles', 'shadow'];
 
@@ -77,12 +80,13 @@ export function chooseFollowUp(input: {
 }
 
 /** What the learner says made the sentence hard, picked after "needed help". */
-export type FollowUpCause = 'reading' | 'meaning' | 'listening';
+export type FollowUpCause = 'reading' | 'meaning' | 'listening' | 'grammar';
 
 export const FOLLOW_UP_CAUSE_LABEL: Record<FollowUpCause, string> = {
   reading: 'Reading a word',
   meaning: "A word's meaning",
   listening: 'Hearing it',
+  grammar: 'How the grammar fits',
 };
 
 /** The tools that answer each cause, in order of preference. */
@@ -90,6 +94,7 @@ const CAUSE_TOOLS: Record<FollowUpCause, readonly FollowUpTool[]> = {
   reading: ['reading'],
   meaning: ['meaning'],
   listening: ['dictate', 'tiles'],
+  grammar: ['grammar'],
 };
 
 /**

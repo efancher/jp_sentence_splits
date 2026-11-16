@@ -509,7 +509,7 @@ export function ReaderPage() {
 
   function toggleReaderTool(
     sentence: Sentence,
-    kind: 'dictate' | 'meaning' | 'tiles' | 'recall' | 'shadow' | 'reading',
+    kind: 'dictate' | 'meaning' | 'tiles' | 'recall' | 'shadow' | 'reading' | 'grammar',
     knownHasAudio?: boolean,
     /** A follow-up opened from a Read check offer shares that check's visit, so its events group with the offer. */
     sharedVisitId?: string,
@@ -550,7 +550,7 @@ export function ReaderPage() {
       }
     }
     const visitId = sharedVisitId ?? createId('visit');
-    if (kind === 'meaning') {
+    if (kind === 'meaning' || kind === 'grammar') {
       setReaderTool({ sentenceId: sentence.id, kind, visitId });
       return;
     }
@@ -788,12 +788,13 @@ export function ReaderPage() {
     if (tileToolUnavailableReason(sentence, 'dictate', hasAudio) === null) available.push('dictate');
     if (hasAudio) available.push('shadow');
     if (cause === 'reading' && (await getReadingCheckTarget(sentence, { orWeakest: true }).catch(() => null))) available.push('reading');
+    if (cause === 'grammar' && (data?.patternsBySentence.get(sentence.id)?.length ?? 0) > 0) available.push('grammar');
     // A content word that is not yet known by strength is the weak-word signal that puts Word check first.
     const weakWord = (data?.wordsBySentence.get(sentence.id) ?? []).some((word) => !data?.knownExpressions.has(word.expression));
     // A named cause decides the tool; when nothing can answer it (or no cause), the rule and random draw apply as before.
     const choice =
       (cause ? chooseFollowUpForCause({ available, cause }) : null) ??
-      chooseFollowUp({ available: available.filter((tool) => tool !== 'reading'), weakWord, draw: Math.random(), pick: Math.random() });
+      chooseFollowUp({ available: available.filter((tool) => tool !== 'reading' && tool !== 'grammar'), weakWord, draw: Math.random(), pick: Math.random() });
     if (!choice) return null;
     void logSentenceLearningEvent({
       id: createId('sl_event'),
@@ -1443,7 +1444,13 @@ export function ReaderPage() {
                           onPlay={() => toggleSentencePlay(index)}
                           onReveal={() => setReaderTool({ ...tool, revealed: true })}
                           onRecord={(outcome) => recordReadCheck(row.sentence.id, tool.visitId, outcome)}
-                          causes={audio ? ['reading', 'meaning', 'listening'] : ['reading', 'meaning']}
+                          causes={[
+                            'reading',
+                            'meaning',
+                            ...(audio ? (['listening'] as const) : []),
+                            // Only a sentence with a pattern the Grammar check can name; otherwise the cause would lead nowhere.
+                            ...((data.patternsBySentence.get(row.sentence.id)?.length ?? 0) > 0 ? (['grammar'] as const) : []),
+                          ]}
                           onCause={(cause) => {
                             void offerFollowUp(row.sentence, Boolean(audio), tool.visitId, cause).then((offer) => {
                               if (offer) setReaderTool((current) => (current?.visitId === tool.visitId ? { ...tool, offer } : current));
@@ -1465,6 +1472,7 @@ export function ReaderPage() {
                       return (
                         <GrammarCheckPanel
                           key={tool.visitId}
+                          sentence={row.sentence}
                           patterns={data.patternsBySentence.get(row.sentence.id) ?? []}
                           onRecord={(outcome, pattern) => {
                             recordPatternFeedback(row.sentence.id, tool.visitId, pattern, 'use', outcome);

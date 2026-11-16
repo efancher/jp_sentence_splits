@@ -52,3 +52,19 @@ export function formsSeen<T>(examples: readonly LinedUpExample<T>[]): { form: st
     .map(([form, count]) => ({ form, count }))
     .sort((a, b) => b.count - a.count || a.form.localeCompare(b.form, 'ja'));
 }
+
+/**
+ * One more sentence with the pattern, to show after a Grammar check the learner needed help on: never the sentence
+ * being checked (or a copy of its text in another book), a sentence already studied before one not yet met (it should
+ * read easily, so the pattern is the only new thing), then the simplest. Null when there is no other sentence.
+ */
+export function pickAnotherExample<T extends { sentenceGrammar: SentenceGrammar; sentence: { id: string; japanese: string } }>(
+  encounters: readonly T[],
+  checked: { id: string; japanese: string },
+  studiedSentenceIds: ReadonlySet<string>,
+): LinedUpExample<T> | null {
+  const others = lineUpExamples(
+    encounters.filter((item) => item.sentence.id !== checked.id && item.sentence.japanese !== checked.japanese),
+  );
+  return others.find((example) => studiedSentenceIds.has(example.item.sentence.id)) ?? others[0] ?? null;
+}
