@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { episodeMomentumBoost, grammarLevelCosts, knownGrammarEntries, orderByIPlusOne, type IPlusOneItem } from './iPlusOne';
+import {
+  episodeMomentumBoost,
+  grammarLevelCosts,
+  knownGrammarEntries,
+  orderByIPlusOne,
+  orderByStrictIPlusOne,
+  type IPlusOneItem,
+} from './iPlusOne';
 import { buildKnownLemmaSet, lemmaKey, type LemmaSource } from './unknownLemmas';
 
 const tok = (word: string, selectedByDefault = true, pos?: string): LemmaSource => ({
@@ -191,5 +198,90 @@ describe('knownGrammarEntries', () => {
 
   it('honours a custom exposure bar', () => {
     expect([...knownGrammarEntries(exposures, new Set(), 1)].sort()).toEqual(['a', 'b', 'c']);
+  });
+});
+
+describe('orderByStrictIPlusOne', () => {
+  it('serves every all-known sentence before adding a new word', () => {
+    const items: IPlusOneItem[] = [
+      sentence('new', '猫', '空'),
+      sentence('known-a', '猫', '犬'),
+      sentence('known-b', '水'),
+    ];
+    expect(orderByStrictIPlusOne(items, known)).toEqual(['known-a', 'known-b', 'new']);
+  });
+
+  it('serves the sentences a new word completes before adding another', () => {
+    const items: IPlusOneItem[] = [
+      sentence('sky-1', '猫', '空'),
+      sentence('sea-1', '猫', '海'),
+      sentence('sky-sea', '空', '海', '犬'),
+      sentence('sky-2', '犬', '空'),
+      sentence('sky-rain', '空', '雨'),
+    ];
+    // 空 is the sole new word in two sentences, 海 in one: 空 first, then everything it completes.
+    // sky-sea then needs only 海, so 海 is next with both its sentences; 雨 last.
+    expect(orderByStrictIPlusOne(items, known)).toEqual(['sky-1', 'sky-2', 'sea-1', 'sky-sea', 'sky-rain']);
+  });
+
+  it('prefers a word already met once over a more widely shared new one', () => {
+    const items: IPlusOneItem[] = [
+      sentence('shared-a', '猫', '空'),
+      sentence('shared-b', '犬', '空'),
+      sentence('met-once', '猫', '海'),
+    ];
+    const reinforce = new Set([lemmaKey('海', '海')]);
+    expect(orderByStrictIPlusOne(items, known, { reinforce })[0]).toBe('met-once');
+    expect(orderByStrictIPlusOne(items, known)[0]).toBe('shared-a');
+  });
+
+  it('counts unmet grammar as a piece and adds it to the list once introduced', () => {
+    const items: IPlusOneItem[] = [
+      { ...sentence('pattern-and-word', '猫', '空'), grammar: ['nagara'] },
+      { ...sentence('pattern', '猫'), grammar: ['nagara'] },
+      { ...sentence('pattern-2', '犬'), grammar: ['nagara'] },
+      sentence('word', '犬', '海'),
+    ];
+    // nagara is the sole piece in two sentences; then 空 and 海 tie, and the earlier sentence goes first.
+    expect(orderByStrictIPlusOne(items, known, { knownGrammar: new Set() })).toEqual([
+      'pattern',
+      'pattern-2',
+      'pattern-and-word',
+      'word',
+    ]);
+  });
+
+  it('holds a costly far-level pattern back behind single new words', () => {
+    const items: IPlusOneItem[] = [{ ...sentence('n2', '猫'), grammar: ['n2a'] }, sentence('word', '猫', '空')];
+    const grammarCost = new Map([['n2a', 3]]);
+    expect(orderByStrictIPlusOne(items, known, { knownGrammar: new Set(), grammarCost })).toEqual(['word', 'n2']);
+  });
+
+  it('falls back to the cheapest sentence when no sentence has a single new piece', () => {
+    const items: IPlusOneItem[] = [
+      sentence('three', '雨', '傘', '風'),
+      sentence('two', '空', '海'),
+      sentence('after-two', '犬', '空', '海'),
+    ];
+    expect(orderByStrictIPlusOne(items, known)).toEqual(['two', 'after-two', 'three']);
+  });
+
+  it('puts not-scorable sentences last and drops nothing', () => {
+    const items: IPlusOneItem[] = [
+      { sentenceId: 'untokenized', suggestions: [] },
+      sentence('new', '猫', '空'),
+      sentence('easy', '猫'),
+    ];
+    expect(orderByStrictIPlusOne(items, known)).toEqual(['easy', 'new', 'untokenized']);
+  });
+
+  it('orders a corpus of thousands of sentences quickly', () => {
+    const items = Array.from({ length: 9000 }, (_, i) =>
+      sentence(`s${i}`, '猫', `w${i % 700}`, `w${(i * 7) % 1300}`, `w${(i * 13) % 2100}`),
+    );
+    const started = performance.now();
+    const order = orderByStrictIPlusOne(items, known);
+    expect(new Set(order).size).toBe(9000);
+    expect(performance.now() - started).toBeLessThan(3000);
   });
 });

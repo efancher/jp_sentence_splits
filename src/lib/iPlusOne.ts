@@ -85,14 +85,7 @@ export function orderByIPlusOne(
       momentum: item.momentum ?? 0,
     };
   });
-  const weights = new Map<string, number>();
-  for (const item of items) {
-    for (const suggestion of item.suggestions ?? []) {
-      if (!suggestion.selectedByDefault) continue;
-      const key = lemmaKey(suggestion.expression, suggestion.reading);
-      if (!weights.has(key)) weights.set(key, lemmaWeight(suggestion.expression, suggestion.pos));
-    }
-  }
+  const weights = lemmaWeightsOf(items);
   const value = unlockValueByLemma(
     scored.filter((entry) => entry.scorable).map((entry) => entry.unknown),
     maxUnknown,
@@ -179,4 +172,163 @@ export function knownGrammarEntries(
   const known = new Set<string>();
   for (const [id, count] of exposures) if (count >= minExposures && !shaky.has(id)) known.add(id);
   return known;
+}
+
+/** Default weight of each content lemma across `items` (`lemmaWeight`, first sighting wins). */
+function lemmaWeightsOf(items: readonly IPlusOneItem[]): Map<string, number> {
+  const weights = new Map<string, number>();
+  for (const item of items) {
+    for (const suggestion of item.suggestions ?? []) {
+      if (!suggestion.selectedByDefault) continue;
+      const key = lemmaKey(suggestion.expression, suggestion.reading);
+      if (!weights.has(key)) weights.set(key, lemmaWeight(suggestion.expression, suggestion.pos));
+    }
+  }
+  return weights;
+}
+
+/**
+ * Strict i+1 (`settings.iPlusOneStrict`): grows the learner's word/grammar list one piece at a time, as if the
+ * sentences were studied in the order returned. Pure, and a permutation of `items` like `orderByIPlusOne`.
+ *
+ * 1. Every sentence with nothing outside the list comes first (episodes with more started sentences first, then
+ *    reading order).
+ * 2. Only when none is left is one new piece added: the cost-1 piece (a word, or a curated grammar entry at the
+ *    learner's level) whose sentences have it as their only new piece, preferring a word already met once
+ *    (`reinforce`), then the most such sentences (scaled by `lemmaWeight`). The sentence introducing it comes next,
+ *    and the piece joins the list, so step 1 then serves every sentence it completed before anything else is added.
+ * 3. With no single-piece sentence left, the cheapest remaining sentence brings in all its pieces at once.
+ *
+ * No stretch cadence. Not-scorable sentences come last in reading order.
+ */
+export function orderByStrictIPlusOne(
+  items: readonly IPlusOneItem[],
+  known: ReadonlySet<string>,
+  options: {
+    knownGrammar?: ReadonlySet<string>;
+    grammarCost?: ReadonlyMap<string, number>;
+    reinforce?: ReadonlySet<string>;
+  } = {},
+): string[] {
+  interface Entry {
+    id: string;
+    position: number;
+    momentum: number;
+    /** Pieces outside the list (`w:<lemma key>` / `g:<entry id>`) and their cost. */
+    pieces: Map<string, number>;
+    cost: number;
+    done: boolean;
+  }
+  const weights = lemmaWeightsOf(items);
+  const isWord = (piece: string) => piece.startsWith('w:');
+  const weightOf = (piece: string) => (isWord(piece) ? weights.get(piece.slice(2)) ?? 1 : 1);
+  const reinforces = (piece: string) => isWord(piece) && (options.reinforce?.has(piece.slice(2)) ?? false);
+
+  const entries: Entry[] = [];
+  const unscorable: string[] = [];
+  items.forEach((item, position) => {
+    const score = scoreSentence(item.suggestions, known);
+    if (!score.scorable) {
+      unscorable.push(item.sentenceId);
+      return;
+    }
+    const pieces = new Map<string, number>(score.unknown.map((key) => [`w:${key}`, 1]));
+    if (options.knownGrammar) {
+      for (const id of item.grammar ?? []) {
+        if (!options.knownGrammar.has(id)) pieces.set(`g:${id}`, options.grammarCost?.get(id) ?? 1);
+      }
+    }
+    const cost = [...pieces.values()].reduce((sum, value) => sum + value, 0);
+    entries.push({ id: item.sentenceId, position, momentum: item.momentum ?? 0, pieces, cost, done: false });
+  });
+
+  const byPiece = new Map<string, Entry[]>();
+  /** Not-yet-served sentences whose only new piece is the key (cost 1). */
+  const sole = new Map<string, Set<Entry>>();
+  const addSole = (entry: Entry) => {
+    const [piece] = entry.pieces.keys();
+    const set = sole.get(piece!) ?? new Set<Entry>();
+    set.add(entry);
+    sole.set(piece!, set);
+  };
+  const dropSole = (entry: Entry) => {
+    const [piece] = entry.pieces.keys();
+    const set = sole.get(piece!);
+    set?.delete(entry);
+    if (set?.size === 0) sole.delete(piece!);
+  };
+  for (const entry of entries) {
+    for (const piece of entry.pieces.keys()) {
+      const list = byPiece.get(piece) ?? [];
+      list.push(entry);
+      byPiece.set(piece, list);
+    }
+    if (entry.cost === 1) addSole(entry);
+  }
+
+  const easiest = (a: Entry, b: Entry) => b.momentum - a.momentum || a.position - b.position;
+  const ready: Entry[] = entries.filter((entry) => entry.cost === 0).sort(easiest);
+  let readyAt = 0;
+  const ordered: string[] = [];
+  const serve = (entry: Entry) => {
+    if (entry.cost === 1) dropSole(entry);
+    entry.done = true;
+    ordered.push(entry.id);
+  };
+  const learned = new Set<string>();
+  const learn = (pieces: readonly string[]) => {
+    const unlocked: Entry[] = [];
+    for (const piece of pieces) {
+      if (learned.has(piece)) continue;
+      learned.add(piece);
+      for (const entry of byPiece.get(piece) ?? []) {
+        if (entry.done || !entry.pieces.has(piece)) continue;
+        if (entry.cost === 1) dropSole(entry);
+        entry.cost -= entry.pieces.get(piece)!;
+        entry.pieces.delete(piece);
+        if (entry.pieces.size === 0) unlocked.push(entry);
+        else if (entry.cost === 1) addSole(entry);
+      }
+    }
+    // Only called once `ready` is used up, so the sentences a new piece completed are served next.
+    ready.push(...unlocked.sort(easiest));
+  };
+
+  while (ordered.length < entries.length) {
+    if (readyAt < ready.length) {
+      const entry = ready[readyAt++]!;
+      if (!entry.done) serve(entry);
+      continue;
+    }
+    // Ties go to the piece whose first sentence is easiest (momentum, then reading order).
+    const firstOf = (set: Set<Entry>) => [...set].reduce((a, b) => (easiest(b, a) < 0 ? b : a));
+    let best: { piece: string; set: Set<Entry>; reinforce: number; value: number } | undefined;
+    for (const [piece, set] of sole) {
+      const candidate = { piece, set, reinforce: Number(reinforces(piece)), value: weightOf(piece) * set.size };
+      if (
+        !best ||
+        (candidate.reinforce - best.reinforce ||
+          candidate.value - best.value ||
+          easiest(firstOf(best.set), firstOf(set))) > 0
+      ) {
+        best = candidate;
+      }
+    }
+    if (best) {
+      serve(firstOf(best.set));
+      learn([best.piece]);
+      continue;
+    }
+    const reinforcing = (entry: Entry) => [...entry.pieces.keys()].filter(reinforces).length;
+    const cheaper = (a: Entry, b: Entry) =>
+      a.cost - b.cost || reinforcing(b) - reinforcing(a) || easiest(a, b);
+    let cheapest: Entry | undefined;
+    for (const entry of entries) {
+      if (!entry.done && (!cheapest || cheaper(entry, cheapest) < 0)) cheapest = entry;
+    }
+    const pieces = [...cheapest!.pieces.keys()];
+    serve(cheapest!);
+    learn(pieces);
+  }
+  return [...ordered, ...unscorable];
 }

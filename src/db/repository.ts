@@ -36,9 +36,16 @@ import {
   type SequentialSentenceStatus,
 } from '../lib/sequentialStudy';
 import { buildGrammarDetector, buildReferenceIndex, curatedGrammarByPattern, wordSpansForDetection } from '../lib/grammarReference';
-import { grammarLevelCosts, knownGrammarEntries, orderByIPlusOne, type IPlusOneItem } from '../lib/iPlusOne';
+import {
+  grammarLevelCosts,
+  knownGrammarEntries,
+  orderByIPlusOne,
+  orderByStrictIPlusOne,
+  type IPlusOneItem,
+} from '../lib/iPlusOne';
 import {
   isIPlusOneOrdering,
+  isStrictIPlusOne,
   iPlusOneStretchEvery,
   isSequentialStudyMode,
 } from '../lib/sentenceLed';
@@ -7787,23 +7794,37 @@ async function loadCuratedGrammar(
   return { entriesBySentence, known, names, cost: grammarLevelCosts(levels, known) };
 }
 
+/** How `loadIPlusOneContext` orders: the stretch cadence, or strict i+1 (`orderByStrictIPlusOne`). */
+interface IPlusOneOptions {
+  stretchEvery: number;
+  strict?: boolean;
+  /** Strict only: sentences already in today's session; their words and grammar join the list as if studied. */
+  planned?: ReadonlySet<string>;
+}
+
 /**
  * Ranks every not-yet-introduced sentence across all books at once (so
  * unlock value and the stretch cadence are global, not per book). A pure
  * permutation of reading order; callers sort their own lists by `rank`.
  */
-async function loadIPlusOneContext(stretchEvery: number): Promise<IPlusOneContext> {
+async function loadIPlusOneContext({ stretchEvery, strict = false, planned }: IPlusOneOptions): Promise<IPlusOneContext> {
   const memberships = await readAllBookSentencesForPass();
   const sentenceIds = [...new Set(memberships.map((row) => row.sentenceId))];
   const introduced = await getIntroducedSentenceIds(sentenceIds);
   const rows = await getDb().sentences.bulkGet(sentenceIds);
   const introducedRows = rows.filter((row) => row && introduced.has(row.id));
   const known = await loadKnownLemmaSet(introducedRows);
+  const plannedIds = strict && planned ? new Set([...planned].filter((id) => !introduced.has(id))) : new Set<string>();
   const reinforce = partlyMetLemmas(
     introducedRows.map((row) => row?.vocabularySuggestions),
     known,
   );
   const grammar = await loadCuratedGrammar(introduced, rows);
+  for (const row of rows) {
+    if (!row || !plannedIds.has(row.id)) continue;
+    for (const key of unknownLemmasForSentence(row.vocabularySuggestions, known)) known.add(key);
+    for (const id of grammar.entriesBySentence.get(row.id) ?? []) grammar.known.add(id);
+  }
   // Sentences already started per episode (book + chapter): new lessons lean toward episodes the learner is into.
   const startedByEpisode = new Map<string, number>();
   const episodesOf = new Map<string, string[]>();
@@ -7821,7 +7842,7 @@ async function loadIPlusOneContext(stretchEvery: number): Promise<IPlusOneContex
   const items: IPlusOneItem[] = [];
   const newWords = new Map<string, string[]>();
   rows.forEach((row, index) => {
-    if (!row || introduced.has(sentenceIds[index]!)) return;
+    if (!row || introduced.has(sentenceIds[index]!) || plannedIds.has(row.id)) return;
     const entryIds = grammar.entriesBySentence.get(row.id);
     items.push({
       sentenceId: row.id,
@@ -7833,12 +7854,14 @@ async function loadIPlusOneContext(stretchEvery: number): Promise<IPlusOneContex
     const patterns = (entryIds ?? []).filter((id) => !grammar.known.has(id)).map((id) => grammar.names.get(id)!);
     if (words.length + patterns.length > 0) newWords.set(row.id, [...words, ...patterns]);
   });
-  const order = orderByIPlusOne(items, known, {
-    stretchEvery,
-    knownGrammar: grammar.known,
-    grammarCost: grammar.cost,
-    reinforce,
-  });
+  const order = strict
+    ? orderByStrictIPlusOne(items, known, { knownGrammar: grammar.known, grammarCost: grammar.cost, reinforce })
+    : orderByIPlusOne(items, known, {
+        stretchEvery,
+        knownGrammar: grammar.known,
+        grammarCost: grammar.cost,
+        reinforce,
+      });
   return { rank: new Map(order.map((id, index) => [id, index])), newWords };
 }
 
@@ -7858,8 +7881,9 @@ export async function getBookReadyToPickUp(
   bookId: string,
   limit = 8,
 ): Promise<{ total: number; items: ReadyToPickUp[] }> {
+  const strict = isStrictIPlusOne(await readSettings(getDb()));
   const [context, memberships, suspended] = await Promise.all([
-    loadIPlusOneContext(0),
+    loadIPlusOneContext({ stretchEvery: 0, strict }),
     readAllBookSentencesForPass(),
     loadSuspendedBookIndex(),
   ]);
@@ -7882,18 +7906,42 @@ export async function getBookReadyToPickUp(
   return { total: unique.length, items };
 }
 
+/**
+ * Strict i+1 serves new sentences in one global order, so the books kept are the ones holding the soonest-ranked
+ * sentences: every book with a new sentence among the first `EXPLORE_SENTENCE_PREVIEW_LIMIT` ranks (more than
+ * `limit` if need be), soonest first, then the rest up to `limit`. Revisit-only books go last.
+ */
+function strictExploreBooks(
+  candidates: ExploreCandidate[],
+  rank: ReadonlyMap<string, number>,
+  limit: number,
+): ExploreCandidate[] {
+  const ranksOf = (candidate: ExploreCandidate) =>
+    candidate.sentences.flatMap((sentence) =>
+      !sentence.revisit && rank.has(sentence.sentenceId) ? [rank.get(sentence.sentenceId)!] : [],
+    );
+  const best = new Map(candidates.map((candidate) => [candidate, Math.min(Infinity, ...ranksOf(candidate))]));
+  const cutoff = candidates.flatMap(ranksOf).sort((a, b) => a - b)[EXPLORE_SENTENCE_PREVIEW_LIMIT - 1] ?? Infinity;
+  const sorted = [...candidates].sort((a, b) => best.get(a)! - best.get(b)!);
+  const needed = sorted.filter((candidate) => best.get(candidate)! <= cutoff).length;
+  return sorted.slice(0, Math.max(limit, needed));
+}
+
 /** Explore candidates: books with sentences not yet started, most-recently-opened first ("continue where you left off" reusing Book.lastOpenedAt, the same signal BookDetailPage's touchBookOpened already maintains). */
 async function findExploreCandidates(
   limit: number,
   sequential = false,
-  iPlusOne?: { stretchEvery: number },
+  iPlusOne?: IPlusOneOptions,
 ): Promise<ExploreCandidate[]> {
   const db = getDb();
   // i+1 order: ranked once across every book (see orderByIPlusOne); each book keeps its own order by that rank.
   const iPlusOneContext =
     iPlusOne && !sequential
-      ? await traceStep('explore: i+1 context', () => loadIPlusOneContext(iPlusOne.stretchEvery))
+      ? await traceStep('explore: i+1 context', () => loadIPlusOneContext(iPlusOne))
       : undefined;
+  // Strict i+1 builds on today's session: sentences already in it are not offered again, but their books stay open.
+  const strict = Boolean(iPlusOneContext && iPlusOne?.strict);
+  const planned = strict ? iPlusOne?.planned ?? new Set<string>() : new Set<string>();
   const [allBooks, coverageByBookId, suspendedIndex] = await Promise.all([
     db.books.toArray(),
     traceStep('explore: getBookVocabularyCoverage', () => getBookVocabularyCoverage()),
@@ -7948,7 +7996,11 @@ async function findExploreCandidates(
       : undefined;
     const inReadingOrder = memberships
       .filter((item) =>
-        item.status !== 'complete' && !walked.has(item.sentenceId) && (!unlocked || unlocked.has(item.sentenceId)) && notShelved(item),
+        item.status !== 'complete' &&
+        !walked.has(item.sentenceId) &&
+        (!unlocked || unlocked.has(item.sentenceId)) &&
+        notShelved(item) &&
+        !planned.has(item.sentenceId),
       )
       .sort((a, b) => a.position - b.position)
       .filter((item, index, all) => all.findIndex((other) => other.sentenceId === item.sentenceId) === index);
@@ -7986,10 +8038,10 @@ async function findExploreCandidates(
     );
     const revisitIds = [
       ...new Set([
-        ...requestedIds,
+        ...requestedIds.filter((id) => !planned.has(id)),
         // The per-book cap only throttles automatic revisits; ones the learner asked for are all kept.
         ...[...new Set([...parkedGlossIds, ...sentencesDueForFreshTry(bookEvents), ...weakWordRevisits.keys()])]
-          .filter((id) => !requestedIds.includes(id) && !shelvedIds.has(id))
+          .filter((id) => !requestedIds.includes(id) && !shelvedIds.has(id) && !planned.has(id))
           .slice(0, automaticRevisitCap),
       ]),
     ];
@@ -8031,6 +8083,7 @@ async function findExploreCandidates(
       })),
     });
   }
+  if (strict) return strictExploreBooks(candidates, iPlusOneContext!.rank, limit);
   // Array.sort is stable, so recency order is preserved within each group.
   const limited = candidates
     .map((candidate, index) => ({ candidate, index }))
@@ -8876,7 +8929,13 @@ async function gatherSessionPlannerInput(
       findExploreCandidates(
         EXPLORE_CANDIDATE_LIMIT + exclude.bookIds.size,
         isSequentialStudyMode(settings),
-        isIPlusOneOrdering(settings) ? { stretchEvery: iPlusOneStretchEvery(settings) } : undefined,
+        isIPlusOneOrdering(settings)
+          ? {
+              stretchEvery: iPlusOneStretchEvery(settings),
+              strict: isStrictIPlusOne(settings),
+              planned: exclude.sentenceIds,
+            }
+          : undefined,
       ),
     ),
   ]);
@@ -8943,9 +9002,13 @@ async function gatherSessionPlannerInput(
         settings.sentenceShadowingPaused ? { ...candidate, phrase: true } : candidate,
       );
 
-  const exploreCandidates = exploreCandidatesRaw
-    .filter((candidate) => !exclude.bookIds.has(candidate.bookId))
-    .slice(0, EXPLORE_CANDIDATE_LIMIT);
+  // Strict i+1 already dropped today's sentences and picked its books by rank, so a top-up keeps building on them.
+  const strictExplore = isIPlusOneOrdering(settings) && isStrictIPlusOne(settings) && !isSequentialStudyMode(settings);
+  const exploreCandidates = strictExplore
+    ? exploreCandidatesRaw
+    : exploreCandidatesRaw
+        .filter((candidate) => !exclude.bookIds.has(candidate.bookId))
+        .slice(0, EXPLORE_CANDIDATE_LIMIT);
   const shadowCandidatesTrimmed = shadowCandidatesRaw
     .filter((candidate) => !exclude.sentenceIds.has(candidate.sentenceId))
     .slice(0, SHADOW_CANDIDATE_LIMIT);

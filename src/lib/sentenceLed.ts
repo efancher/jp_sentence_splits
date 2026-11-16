@@ -1,7 +1,7 @@
 import type { AppSettings } from '../domain/types';
 import { I_PLUS_ONE_STRETCH_EVERY } from './iPlusOne';
 
-type FlowSettings = Pick<AppSettings, 'sequentialStudyMode' | 'iPlusOneOrdering' | 'iPlusOneStretchEvery'>;
+type FlowSettings = Pick<AppSettings, 'sequentialStudyMode' | 'iPlusOneOrdering' | 'iPlusOneStretchEvery' | 'iPlusOneStrict'>;
 
 /**
  * The retired word and grammar drill cards (vocabulary, confusion, conjugation,
@@ -52,4 +52,9 @@ export function isIPlusOneOrdering(settings: Partial<FlowSettings> | undefined):
 export function iPlusOneStretchEvery(settings: Partial<FlowSettings> | undefined): number {
   const value = settings?.iPlusOneStretchEvery;
   return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : I_PLUS_ONE_STRETCH_EVERY;
+}
+
+/** On by default (2026-11-16): with i+1 ordering, grow the known list one piece at a time (`orderByStrictIPlusOne`). */
+export function isStrictIPlusOne(settings: Partial<FlowSettings> | undefined): boolean {
+  return settings?.iPlusOneStrict ?? true;
 }

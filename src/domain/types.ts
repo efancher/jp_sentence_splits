@@ -826,6 +826,12 @@ export interface AppSettings {
    */
   iPlusOneStretchEvery?: number;
   /**
+   * With `iPlusOneOrdering` (on by default; `false` opts out; local to this device): strict i+1. Every new sentence
+   * using only known words/grammar comes first; only when none is left is one new piece added, and the sentences it
+   * completes are served before the next. No stretch sentences. See `orderByStrictIPlusOne`.
+   */
+  iPlusOneStrict?: boolean;
+  /**
    * Background-generate the meaning choices (correct meaning + wrong-meaning
    * bank) for sentences that have none, via the `meaning-assist` Edge
    * Function (needs sign-in + deploy). Treated as on when undefined.

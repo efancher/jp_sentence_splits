@@ -59,8 +59,10 @@ async function seed(): Promise<void> {
 }
 
 describe('walkthrough supply: i+1 ordering (settings.iPlusOneOrdering)', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     resetDbForTests(`i-plus-one-${createId('db')}`);
+    // The stretch/unlock-value order; strict i+1 (the default) has its own suite below.
+    await updateSettings({ iPlusOneStrict: false });
   });
 
   it('keeps reading order when the setting is explicitly off', async () => {
@@ -259,5 +261,70 @@ describe('walkthrough supply: i+1 ordering (settings.iPlusOneOrdering)', () => {
     expect(reason).toContain('〜たことがある');
     expect(reason).toContain('空');
     expect(reason).not.toContain('〜てみる');
+  });
+});
+
+describe('walkthrough supply: strict i+1 (settings.iPlusOneStrict)', () => {
+  beforeEach(() => {
+    resetDbForTests(`strict-i-plus-one-${createId('db')}`);
+  });
+
+  it('is on by default: every all-known sentence first, then one new word, then the rest', async () => {
+    await seed();
+    expect(await lessonOrder()).toEqual(['easy', 'i1', 'hard']);
+  });
+
+  it('serves the sentences a new word completes before adding another', async () => {
+    const book = await createBook({ title: 'Strict' });
+    const rows = [
+      sentenceOf('done', ['猫', '犬']),
+      sentenceOf('done2', ['猫', '犬']),
+      sentenceOf('sea', ['猫', '海']),
+      sentenceOf('sky-1', ['猫', '空']),
+      sentenceOf('rain', ['犬', '雨']),
+      sentenceOf('sky-2', ['犬', '空']),
+    ];
+    await getDb().sentences.bulkPut(rows);
+    await addSentencesToBook(book.id, rows.map((row) => row.id));
+    await setBookSentenceStatus(book.id, 'done', 'complete');
+    await setBookSentenceStatus(book.id, 'done2', 'complete');
+    // 空 completes two sentences, so it comes first and both 空 sentences are served before 海 or 雨.
+    const order = await lessonOrder();
+    expect([...order.slice(0, 2)].sort()).toEqual(['sky-1', 'sky-2']);
+    expect([...order].sort()).toEqual(['rain', 'sea', 'sky-1', 'sky-2']);
+  });
+
+  it('builds a top-up on the sentences already in today\'s session, from the same book', async () => {
+    const book = await createBook({ title: 'Top-up' });
+    const rows = [
+      sentenceOf('done', ['猫', '犬']),
+      sentenceOf('done2', ['猫', '犬']),
+      sentenceOf('sky', ['猫', '空']),
+      ...Array.from({ length: 30 }, (_, i) => sentenceOf(`sea-${i}`, ['猫', '海', `新${i}`])),
+      sentenceOf('sky-sea', ['空', '海']),
+    ];
+    await getDb().sentences.bulkPut(rows);
+    await addSentencesToBook(book.id, rows.map((row) => row.id));
+    await setBookSentenceStatus(book.id, 'done', 'complete');
+    await setBookSentenceStatus(book.id, 'done2', 'complete');
+    const first = (await addMinutesToTodaySession(10)).steps
+      .filter((step) => step.targetKind === 'sentence_learning')
+      .map((step) => step.sentenceId);
+    expect(first[0]).toBe('sky');
+    expect(first).not.toContain('sky-sea');
+    // 空 is now in the list from today's session, so sky-sea needs only 海 and leads the top-up.
+    const all = (await addMinutesToTodaySession(10)).steps
+      .filter((step) => step.targetKind === 'sentence_learning')
+      .map((step) => step.sentenceId);
+    const added = all.slice(first.length);
+    expect(added.length).toBeGreaterThan(0);
+    expect(added).not.toContain('sky');
+    expect(added[0]).toBe('sky-sea');
+  });
+
+  it('can be turned off, going back to the stretch order', async () => {
+    await seed();
+    await updateSettings({ iPlusOneStrict: false });
+    expect(await lessonOrder()).toEqual(['i1', 'easy', 'hard']);
   });
 });

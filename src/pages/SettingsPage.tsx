@@ -16,7 +16,7 @@ import {
 } from '../db/database';
 import { useJapaneseSpeech } from '../hooks/useJapaneseSpeech';
 import { filterJapaneseVoices } from '../lib/speech';
-import { iPlusOneStretchEvery, isIPlusOneOrdering } from '../lib/sentenceLed';
+import { iPlusOneStretchEvery, isIPlusOneOrdering, isStrictIPlusOne } from '../lib/sentenceLed';
 import {
   exportFullBackup,
   refreshVocabularySuggestionDefaults,
@@ -355,10 +355,29 @@ export function SettingsPage() {
           and it has no effect in &ldquo;Focus on episodes already started&rdquo;.
         </p>
         <label className="row">
+          <input
+            type="checkbox"
+            checked={isStrictIPlusOne(settings)}
+            disabled={!isIPlusOneOrdering(settings)}
+            onChange={(event) => {
+              void updateSettings({ iPlusOneStrict: event.target.checked });
+            }}
+          />
+          Strict: one new word or pattern at a time
+        </label>
+        <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+          Every new sentence that uses only words and grammar you know comes
+          first. Only when none is left is one new word or pattern added
+          &mdash; the one that completes the most other sentences &mdash; and
+          the sentences it completes come next, before anything else new.
+          Sentences already in today&rsquo;s session count as studied. No
+          harder sentences are mixed in.
+        </p>
+        <label className="row">
           Harder sentence
           <select
             value={iPlusOneStretchEvery(settings)}
-            disabled={!isIPlusOneOrdering(settings)}
+            disabled={!isIPlusOneOrdering(settings) || isStrictIPlusOne(settings)}
             onChange={(event) => {
               void updateSettings({ iPlusOneStretchEvery: Number(event.target.value) });
             }}
