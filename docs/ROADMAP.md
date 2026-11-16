@@ -47,127 +47,70 @@ The items below retain unfinished work, optional refinements and future ideas.
   whole-episode caching/adjustment improvements as optional follow-ups.
   Design: `docs/mining-pipeline-v2.md` / `docs/mining-wizard-spec.md`.
 
-- [~] **Phrase shadowing (checkpoint ~2026-11-17).** Step 1 shipped 2026-11-03:
-  mark a span on the Shadow pane (Mark start / Mark end), shadow it, self-rate
-  Not yet / Close / Got it → a `phrase_shadow` learning event (span, text, credited
-  words; no Review, no FSRS, never closes the sentence's own shadowing step) that
-  feeds word strength as recognition evidence. `settings.sentenceShadowingPaused`
-  ("Pause sentence shadowing in the daily plan", on for the trial) stops the
-  planner drafting whole-sentence shadowing steps. **Pick up after ~2 weeks of use:**
-  (1) read the data read-only first (counts of `phrase_shadow` by outcome, how many
-  sentences, how many events have an empty phrase text because no alignment was
-  cached, and "Got it" vs the measured timing/pitch of the same take) before
-  changing any gate; (2) feed it into `findShadowCandidates`/the planner as ordering,
-  not a gate: a recent Not yet = phrase pass before the whole sentence, all phrases
-  Got it = sentence more eligible, no phrase data = today's behaviour (per the
-  starved-gate lesson); (3) decide whether to turn the pause off; (4) the Shadow pane
-  suggests the weakest word's phrase, the planner's paused-mode steps are named after
-  it, and the reader offers "Shadow this phrase" after "I didn't" on a word's Reading
-  (all 2026-11-04); still open: a "Sound"-flag trigger for the same shortcut, and that
-  hands-on checklist (`MANUAL_TEST_LOG.md` P1–P7); (5) a `/progress` panel, and revisit
-  the evidence weights (Got it is a small recognition success today). `phraseShadowsBySentence` (`src/lib/phraseShadow.ts`) is the
-  unused-by-the-planner reader of the data. `20261103000000_phrase_shadow_events.sql`
-  is applied to Supabase (confirmed 2026-11-08). **First read, 2026-11-08 (too thin to
-  act on):** 36 events over 20 sentences in one book, on 2 days (11-05, 11-07): 25 Got it,
-  7 Close, 4 Not yet; no empty phrase text; median span 1.75 s (1.1-4.1 s); 12 sentences
-  shadowed more than once, mostly improving. Self-rated, so the high Got it share may be
-  generous. Re-pull around 11-17 before steps 2-3; the join with measured timing/pitch of
-  the same take is still not done.
+- [~] **Phrase shadowing and chunk chain (checkpoint ~2026-11-17).** Shipped
+  behaviour is in `STATUS.md` and `AI_OVERVIEW.md` (phrase shadowing 2026-11-03/04,
+  chunk chain 2026-11-08); implementation detail is in git. In short: a
+  `phrase_shadow` learning event (no Review, no FSRS, never closes the sentence's
+  own shadowing step) feeds word strength as small recognition evidence;
+  `settings.sentenceShadowingPaused` (on for the trial) stops the planner drafting
+  whole-sentence shadowing; the Shadow pane's "Chunk chain" builds a sentence from
+  its end in 3-5 duration-sized rungs (`planChunkChain`, `chunkChainSession.ts`).
+  `20261103000000_phrase_shadow_events.sql` is applied to Supabase (confirmed
+  2026-11-08).
 
-  **Chunk chain (proposed 2026-11-08, nothing built).** The jump from one phrase to a
-  whole sentence is too big, and slowing the whole sentence (tried by the learner)
-  did not help much. Instead build the sentence from the end: last chunk, last two,
-  and so on up to the whole sentence (backward build-up keeps the final intonation
-  intact at every rung). Design agreed so far:
-  - *Grading:* self-rating per rung (Not yet / Close / Got it); the measured take
-    score is shown beside the buttons as evidence and never picks the rating. Got it
-    moves up, Close repeats once, Not yet drops a rung (or to the weakest chunk).
-    About two attempts per rung, then the learner leaves via "Mark complete". The
-    first rung is a "Next" tap, not a rating; ratings start at rung 2.
-  - *Logging:* one `phrase_shadow` link event per rung with an empty credited-word
-    list (diagnostics only, zero planner weight) plus one chain summary event (highest
-    rung with Got it, attempts per rung). Credit each word once per chain, at the
-    highest Got-it rung containing it, so a chain does not double-count words.
-    Planner evidence comes only from the top rung and the summary.
-  - *Eligibility (check before any gate):* a sentence needs at least 3 chunks; shorter
-    ones go straight to whole-sentence shadowing. The chain is an optional route to
-    the whole-sentence step, never a gate on it. Run a read-only count of how many
-    recently imported sentences are chain-eligible with the auto-chunker first.
-  - *Measuring whether it helps:* a cold whole-sentence rating on a random subset of
-    chains (not every one, so the learner is not always warmed up), compared with the
-    final top-rung rating. Read-only diagnostic, not a gate.
-  - *Chunks:* auto-proposed, learner-adjustable. Candidate sources are the stored
-    `AnalysisChunk`s (Cure Dolly chunking) and particle/clause boundaries from the
-    morphology. Adjusting works like the Reader's chunk chips (`ReadingHelpPanel`: tap
-    a chunk, see it, loop it) but with add/remove at the edges: select kana to extend a
-    chunk or tap a divider to move it. The selection snaps to aligned word boundaries
-    (never mid-conjugation) so every chunk has a start and end time. Reuse
-    `isolatedWordSpans`/`isolatedWordRange` and `verifiedTokenCharRange`
-    (`src/lib/isolatedWordRange.ts`) for text to time, and `SegmentLoopPlayer` for
-    playback. Open: free kana selection is a new interaction; the Reader's existing
-    flow is tap-a-chip, not text-range selection. Also open: chunks over a squashed
-    or `<unk>` alignment (the `wordTimingUnreliable` guard) should fall back to
-    whole-sentence shadowing rather than a confidently wrong span.
-  - *First eligibility read, 2026-11-08 (read-only, proxies only; the real chunker
-    does not exist yet, so this is not the final check):* stored `AnalysisChunk`s
-    cover only 64 of 4,435 sentences (56 complete, 8 in progress; 3+ chunks on 46),
-    so they cannot be the main chunk source. The 1,000 newest sentences (all from the
-    2026-11-07/08 imports): median 16 characters, p10 6, p90 50; 64% are 12+
-    characters and 82% are 8+. Splitting at 、。！？ alone gives 3+ clauses for only
-    33%, so a chain needs a within-clause boundary rule (particles/morphology), not
-    punctuation. The space-separated segments in `inline_reading` are no use for
-    these imports (810 have inline readings, 809 are a single segment).
-  - *Real chunker read, 2026-11-08 (`npm run diagnose:chunk-chain`):* the boundary rule
-    already exists: `chunkSentenceIntoTiles` (`src/lib/earTiles.ts`, bunsetsu from the
-    stored UniDic tokens), so no new chunker is needed to start. Over the 5,369
-    sentences with a native clip, 1% are unchunkable (fall back to whole-sentence
-    shadowing), 87% yield 3+ chunks and 77% yield 4+. Since 2026-11-07 (651 sentences):
-    70% yield 3+ and 57% yield 4+. Eligibility is driven by length: under 10
-    characters only 7-11% reach 3 chunks; 10-19 characters 69-85%; 20+ is 100%. So the
-    3-chunk minimum mostly excludes short sentences, which don't need a chain.
-    **New problem:** 38% of all sentences yield 8+ chunks (long caption-style lines), so
-    a one-chunk-per-rung chain would be 8+ rungs. Decide before building: merge
-    neighbouring chunks into ~3-5 rungs (target a rung length in seconds, not chunks),
-    or cap the chain to the last N rungs. The Ear Tiles `MAX_SENTENCE_LENGTH` (45) and
-    `MAX_CLIP_MS` (10 s) are a precedent for limiting this.
-  - *Rung planner, 2026-11-08:* decided to merge by duration. `planChunkChain`
-    (`src/lib/chunkChain.ts`, tests in `tests/chunkChain.test.ts`) cuts the Ear Tiles
-    chunks at their aligned start times and keeps a cut only if it adds at least
-    1.2 s (or total/5 s for long clips) of new audio, so a chain is 3-5 rungs ending in
-    the whole sentence. It rejects with a reason: `no-chunks`, `too-short`,
-    `unreliable-alignment` (a cut is dropped when its start token doesn't verify against
-    the text or a squashed token sits beside it; other cuts still serve). Not built yet: the Shadow-pane UI, the chain logging, the divider
-    adjustment. **First real run (`npm run diagnose:chunk-chain`, 5,369 clips):** only
-    11% (582) get a chain today, and the main limit is stored alignments, not chunks:
-    3,610 clips (67%) have no `reference_alignment` row, including all 649 from the
-    2026-11-07/08 imports (so none of the newest sentences can chain until the
-    alignment backfill runs). Of the ~1,760 clips with an alignment, 582 plan (376 with
-    3 rungs, 206 with 4), 622 are too short once rungs are sized by duration, 408 have
-    an alignment the planner will not trust. **After loosening that rule to per-cut
-    checks:** 743 clips (14%) plan (505 with 3 rungs, 238 with 4); 517 are still
-    `unreliable-alignment`, because the aligner can only be verified as a prefix of the
-    text, so an `<unk>` early in a clip loses every later cut (only trouble at the end
-    is recoverable). **Open:** whether the alignment backfill should cover the clips a
-    chain would use first.
-  - *First UI, 2026-11-08 (merged to main):* a "Chunk chain" button in the Shadow
-    pane (`ChunkChainPanel`, only when the cached alignment plans 3+ rungs). It points
-    the pane's own loop/target at the current rung; the first rung is Next-only, later
-    rungs take Not yet / Close / Got it (`chunkChainSession.ts`: Got it climbs, Close
-    repeats once, Not yet drops, 12 ratings max). Each rating logs a `phrase_shadow`
-    event keyed `chain-rung:<n>` (no credited words, not a pronunciation attempt);
-    when the chain ends, one ordinary `phrase_shadow` Got it over the highest Got-it
-    rung credits its words once. **Also shipped on the branch:** "Adjust steps" (tap an
-    aligned word to start or stop a step there; cuts snap to word starts, `rungsFromCutTimes`;
-    per visit, not saved), a cold whole-sentence try opening ~25% of runs (`chain-cold:0`,
-    skippable, no credit; `COLD_PASS_SHARE`), `npm run diagnose:chunk-chain-outcomes` (read-only:
-    cold rating vs the chain's last rating per visit), and `e2e/chunk-chain.spec.ts`.
-    **Still to do:** read the outcomes diagnostic once there are a few dozen cold pairs.
-    **Manual test:** open a
-    Shadow pane for a clip with a stored alignment and 8+ words; tap Chunk chain, loop
-    the first step, Next, rate Got it up to the whole sentence, then check the finish
-    message and that Review shows no new cards; repeat with Not yet to see it drop; try
-    Adjust steps and confirm the loop follows the moved step.
-    `phraseShadowsBySentence` still includes rung events (it is unused by the planner).
+  **Pick up after ~2 weeks of use:**
+  1. Read the data read-only before changing any gate: `phrase_shadow` counts by
+     outcome, how many sentences, events with an empty phrase text (no cached
+     alignment), and "Got it" against the measured timing/pitch of the same take
+     (that join is still not done). First read, 2026-11-08, was too thin to act
+     on: 36 events over 20 sentences in one book on 2 days, 25 Got it / 7 Close /
+     4 Not yet, median span 1.75 s, 12 sentences shadowed more than once, mostly
+     improving. Self-rated, so the Got it share may be generous.
+  2. Feed it into `findShadowCandidates`/the planner as ordering, not a gate: a
+     recent Not yet = phrase pass before the whole sentence, all phrases Got it =
+     sentence more eligible, no phrase data = today's behaviour (starved-gate
+     lesson). `phraseShadowsBySentence` (`src/lib/phraseShadow.ts`, rung events
+     included) is the reader of this data and is unused by the planner today.
+  3. Decide whether to turn the sentence-shadowing pause off.
+  4. Open shortcuts and checks: a "Sound"-flag trigger for the "Shadow this
+     phrase" shortcut (the reader offers it after "I didn't" on a word's Reading,
+     the Shadow pane suggests the weakest word's phrase, and the planner's
+     paused-mode steps are named after it); the hands-on checklist
+     (`MANUAL_TEST_LOG.md` P1–P7).
+  5. A `/progress` panel; revisit the evidence weights.
+
+  **Chunk chain, still open.**
+  - Read `npm run diagnose:chunk-chain-outcomes` (cold whole-sentence rating, asked
+    on ~25% of runs, vs the chain's last rating per visit) once there are a few
+    dozen cold pairs. Read-only evidence, not a gate.
+  - Alignment coverage is the main limit. `npm run diagnose:chunk-chain` (2026-11-08,
+    5,369 clips): 67% had no `reference_alignment` row, including all 649 clips from
+    the 2026-11-07/08 imports; of the rest, 743 clips (14%) planned a chain and 517
+    were `unreliable-alignment` (the aligner is only verifiable as a prefix of the
+    text, so an early `<unk>` loses every later cut). Open: should the alignment
+    backfill cover chain-eligible clips first (see also the import-time alignment
+    idea)? Re-run the diagnostic after the backfill.
+  - Eligibility is driven by length: under 10 characters only 7-11% reach 3 chunks,
+    10-19 characters 69-85%, 20+ 100%, so the 3-chunk minimum mostly excludes short
+    sentences that don't need a chain. The chain stays an optional route to the
+    whole-sentence step, never a gate on it. Stored `AnalysisChunk`s (64 of 4,435
+    sentences) are too sparse to be the chunk source; `chunkSentenceIntoTiles`
+    (bunsetsu from UniDic) is.
+  - Chunk adjustment: "Adjust steps" (tap an aligned word to start or stop a step;
+    cuts snap to word starts) is per visit and not saved. Free kana selection to
+    extend a chunk, as in the Reader's chunk chips (`ReadingHelpPanel`), would be a
+    new interaction; any chunking over a squashed or `<unk>` alignment
+    (`wordTimingUnreliable`) must fall back to whole-sentence shadowing rather than
+    a confidently wrong span.
+  - Design constraints to keep: self-rating per rung with the measured score shown
+    as evidence only (never picks the rating); rung events carry no credited words
+    (zero planner weight) and each word is credited once per chain at the highest
+    Got it rung containing it; Got it climbs, Close repeats once, Not yet drops, 12
+    ratings max.
+  - Manual test: open a Shadow pane for a clip with a stored alignment and 8+ words;
+    tap Chunk chain, loop the first step, Next, rate Got it up to the whole sentence,
+    check the finish message and that Review shows no new cards; repeat with Not yet
+    to see it drop; try Adjust steps and confirm the loop follows the moved step.
 
 - [~] **Progressive glossing.** Slices 1-2 shipped 2026-10-01 (STATUS), including feasibility script, try-unaided, partial translation, self-report, park-and-prepare, readiness tiers, progress panel, heuristic の attachment skill, planner revisit. Left: AI-verified dependency reference and clause skills. Diagnostic refreshed 2026-10-15: 50/64 analysed sentences have a settled heuristic decision; attachment coverage is 25 の decisions. Pilot drafted 2026-10-16: 12 real sentences, 8 promising, 2 needing chunk repairs, 2 deferred for context/ambiguity; see `research/GLOSS_CLAUSE_PILOT.md`. References are self-reviewed drafts, not independently validated. Opt-in span-based preview shipped and expanded to all active unique sentences (365 questions, 64 reviewed notes as of 2026-10-17, after replacing 46 no-choice questions with connective-link questions and noting 29 too-short ones), including the repaired examples and missing-question notices; independent reference review still required before auto-grading. Helpful/disputed reactions sync as of 2026-10-17 (`clause_question_feedback`; `npm run diagnose:clause-feedback`) so the dispute rate can guide that review.
 
