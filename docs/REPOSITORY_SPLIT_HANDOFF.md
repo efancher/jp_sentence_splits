@@ -48,32 +48,33 @@ Nothing here needed a migration or a deploy.
 
 ## Next: split the rest of `repository.ts`
 
-Slices 2–4 done (`caad3e3`, `dc97a0e`, `538a6f5`; plus the
-`listStudyItemSummaries` test the handoff asked for, `a4595e0`);
-`repository.ts` is now 10,781 lines.
+Slices 2–9 done (`caad3e3`…`023ac37`; `repository.ts` is now 8,033 lines, from
+14,062). New modules under `src/db/repo/`, all re-exported from
+`repository.ts` so no importer changed: `passReads.ts` (planner memo/caches —
+module state stays a single instance; other sections use
+`plannerPassActive()`, `beginPlannerWarming()`/`endPlannerWarming()`,
+`endPlannerPass()`), `alignmentCaches.ts`, `contextDiversity.ts`,
+`studyItemExplainability.ts` (plus the `listStudyItemSummaries` test,
+`a4595e0`), `wordReadingStrengths.ts`, `sentenceLearningEvents.ts`,
+`sequentialUnlocks.ts` (the `recordReview` latch chain; `updateSettings`
+moved to `database.ts` beside `readSettings`), `contextSentences.ts`,
+`reviewScheduling.ts` (whole FSRS section) and `grammarPatterns.ts` (whole
+grammar section — every other-section mention was comment-only).
+`warmPlannerReads` and `getRecentActivityEvents` stayed in `repository.ts`
+(they reach into core helpers above the pass-read layer).
 
-- Slice 2: the planner pass-read layer moved to `src/db/repo/passReads.ts`
-  (407 lines). It owns `plannerShared`, `plannerPassMemo`/`plannerWarming`
-  (single instances, imported — never copied — via `plannerPassActive()`,
-  `plannerWarmingActive()`, `beginPlannerWarming()`/`endPlannerWarming()` and
-  `endPlannerPass()`), `createPlannerTimer`, the timing/trace plumbing and all
-  `read*ForPass` / key-batch readers. `warmPlannerReads` and
-  `getRecentActivityEvents` stayed in `repository.ts` (they reach into core and
-  FSRS helpers above this layer).
-- Slice 3: the alignment/attempt result caches (reference alignments, pitch
-  tracks, attempt alignments/transcriptions/analysis summaries) moved to
-  `src/db/repo/alignmentCaches.ts`. What stayed in `repository.ts` under a
-  rewritten header is really progress/diagnostics readers, not caches.
-- Slice 4: the two context-diversity helpers moved down to
-  `src/db/repo/contextDiversity.ts` and the whole explainability section to
-  `src/db/repo/studyItemExplainability.ts`.
-- Opened but not moved: the evidence foundation. Its `recordReview` call puts
-  it under the FSRS section, and `recordReview` itself ends in
-  `latchSequentialUnlocksForSentence` → `latchSequentialUnlocks` →
-  `getSequentialBookStatus` (sentence-led) — so either that trio moves down
-  first or the latch becomes an injected post-review hook. Pick one when
-  starting the FSRS slice; the trio's own deps (settings, `bookSentences`,
-  sequential lib) look movable.
+Remaining sections, roughly: core (books/chapters/sentences/imports/backup,
+1–3887 era), progress/diagnostics readers (the "cached alignments" header was
+dropped — what is left there is readers, not caches), evidence foundation
+(still gated on FSRS internals now in `repo/reviewScheduling.ts` — it can
+import them directly now), sentence-led flow, and the planner — leaving core
+last. Slices 8–9 each needed several follow-up commits pruning
+`repository.ts` imports; `tsc`'s `noUnusedLocals` output drives that reliably.
+
+Note for whoever goes next: `repository.ts` churns fast — the strict-i+1
+commits landed mid-slice-9 and one of them briefly broke a
+`sessionPlannerRepository` test on main (since fixed in `fda7104`). Fetch +
+rebase + rerun `npm run check` before every push.
 
 Approach that worked for the slices so far: move whole sections into
 `src/db/repo/<area>.ts`, export every moved declaration, `export *` them from
@@ -83,27 +84,21 @@ throwaway scripts used for slice one (dependency analysis, extraction,
 import pruning) lived in `/tmp` and are gone; they were ~100 lines of
 TypeScript-compiler-API code each and are quick to rewrite.
 
-Remaining sections (line numbers as of `73b6bdf`, before slices 2–4; the
-explanatory notes survive, the ranges do not) and what each needs:
+Remaining sections and what each needs (the old per-section table is gone
+with the slices it described):
 
-| Section | Lines | Depends on |
+| Section | Approx. lines | Depends on |
 | --- | ---: | --- |
-| Core: books, chapters, sentences, imports, backup, settings (1–3887) | 3,887 | planner pass reads (3 helpers), `getSavedWordStatus` |
-| Progress/diagnostics readers (was "Cached alignments", 3888–4451) | ~440 now | study-item summaries (imported), grammar summaries, proficiency readers, pass reads |
-| FSRS review / proficiency (4452–5512) | 1,061 | pass reads (many), `pickContextSentenceForGrammarPattern`, `latchSequentialUnlocksForSentence` |
-| Evidence foundation (5513–5555) | 43 | `ensureStudyItem`, `recordReview` (see slice-4 note above) |
-| Sentence-led flow (5556–7077) | ~1,460 now | pass reads, core, FSRS, alignment, `listSentenceLearningEvents` |
-| Grammar patterns (7281–8746) | 1,466 | FSRS, pass reads, `getReferenceAlignment` (imported) |
-| Learning Orchestrator / planner (8747–end) | ~2,400 now | core, FSRS, grammar, sentence-led |
+| Core: books, chapters, sentences, imports, backup, settings (file top) | ~3,900 | planner pass reads (3 helpers), `getSavedWordStatus` (imported) |
+| Progress/diagnostics readers (after the feed-URL helpers) | ~440 | study-item summaries, grammar summaries (both imported) |
+| Evidence foundation | 43 | `repo/reviewScheduling` (now importable directly — unblocked) |
+| Sentence-led flow | ~1,300 | pass reads, core, `repo/reviewScheduling`, `repo/sequentialUnlocks` |
+| Learning Orchestrator / planner (rest) | ~2,200 | core, and everything above |
 
-Suggested order:
-
-1. FSRS/proficiency and grammar (unblock `recordReview`'s latch chain on the
-   way), then sentence-led, then the planner, then evidence foundation,
-   leaving core in `repository.ts` (or `repo/core.ts`) last.
-2. Where two sections genuinely call each other (FSRS ↔ grammar ↔
-   sentence-led each have one or two such calls), move the shared helper down
-   rather than importing upward.
+Suggested order: sentence-led, then the planner, then evidence foundation and
+the progress readers whenever convenient, leaving core in `repository.ts` (or
+`repo/core.ts`) last. Where two remaining areas genuinely call each other,
+keep moving the shared helper down rather than importing upward.
 
 Coordinate before starting: `repository.ts` is edited by many sessions (about
 ten commits in three days). Do one section per commit and push promptly.
