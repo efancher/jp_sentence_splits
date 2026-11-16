@@ -101,12 +101,14 @@ The [first baseline](PERFORMANCE_BASELINE.md) records 16 passing browser cases
 (240 timing observations), 8 usage/summary unit tests and 12 Postgres tests.
 These are scoped follow-up checks, not a rerun of the full coverage suite above.
 
-1. **Sync recovery and audio transfer.** `sync/engine.ts` has 34.24% line
-   coverage; `audioSync.ts` is now ~95% (upload, push-missing, hydrate with
+1. **Sync recovery and audio transfer.** `sync/engine.ts` has ~40% line
+   coverage (`tests/syncEngineCycle.test.ts` drives `runSyncCycle` through signed-out,
+   token-expiry, offline/reconnect, pull-failure and concurrent-cycle cases over a
+   fake client; uncovered: bootstrap/`replaceLocalWithCloud`, remote-event apply,
+   dedupe adoption, `uploadAllLocalData`); `audioSync.ts` is now ~95% (upload, push-missing, hydrate with
    Wi-Fi-only/timeout/retry, repair; `tests/audioSyncTransfer.test.ts`). Queue/conflict and real-RLS tests already
-   provide useful protection, but do not establish browser behavior across token
-   expiry, offline reconnects, interrupted uploads, partial restores and multiple
-   devices. `tests/conflictPanel.test.tsx` covers `ConflictPanel` in jsdom over
+   provide useful protection, but do not establish browser behavior across real token
+   refresh, interrupted uploads, partial restores and multiple devices. `tests/conflictPanel.test.tsx` covers `ConflictPanel` in jsdom over
    fake IndexedDB (Keep local/remote/both, bulk resolve with and without the
    confirm, chapter-by-chapter book merge, issue reporting and its failure); it
    is not a browser test because the panel only renders in a Supabase-configured
