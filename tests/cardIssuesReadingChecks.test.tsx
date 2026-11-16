@@ -43,8 +43,9 @@ describe('CardIssuesPage reading checks', () => {
 
     await waitFor(async () => {
       expect((await getDb().sentences.get(sentenceId))?.inlineReading).toBe('その他[ほか]にも');
+      // The report is resolved after the sentence write, so wait for it too.
+      expect((await listChunkIssueReports())[0]!.status).toBe('resolved');
     });
-    expect((await listChunkIssueReports())[0]!.status).toBe('resolved');
   });
 
   it('keeps non-reading authoring issues in the grouped section', async () => {
