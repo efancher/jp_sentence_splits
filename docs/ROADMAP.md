@@ -1188,7 +1188,8 @@ playback, an ungated client-side heuristic structure preview on
 `ReaderPage` (`previewHeuristicChunks`, no AI, no saved analysis), and
 replacing `continue_book`'s all-or-nothing "every word introduced" gate
 with a `CONTINUE_BOOK_MIN_INTRODUCED_RATIO` density threshold
-(`getSentenceReadingIntroducedReadiness`, repository.ts). The rest are unscheduled,
+(`getSentenceReadingIntroducedReadiness`, repository.ts; both removed 2026-11-16
+with the retired gates). The rest are unscheduled,
 kept here so the thinking isn't lost:
 
 - **Passed `reading_in_context` comprehension check as an alternate
@@ -1310,8 +1311,8 @@ roles all shipped (see STATUS.md). Ideas considered but not built:
 - **Gloss-first sequencing (2026-09-29, user idea; big change, not
   committed to).** Today the planner is vocab-first: an unconfirmed
   sentence only gets `vocabulary_review`; `continue_book` (the Analyze
-  walkthrough) opens once ≥50% of its words are introduced
-  (`CONTINUE_BOOK_MIN_INTRODUCED_RATIO`); "Grammar noticed" comes after.
+  walkthrough) opened once ≥50% of its words were introduced (that gate has
+  since been removed); "Grammar noticed" came after.
   Proposal: make the guided walkthrough the *first exposure*, with the
   English translation shown as the answer key, and pick up vocabulary
   and grammar from inside it. The harder unaided gloss (translation and

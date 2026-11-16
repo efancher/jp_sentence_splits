@@ -58,8 +58,8 @@ and feed edits, resume sentence, mining package input, curated vocabulary,
 report triage, planner-step progress). `tests/plannerCandidates.test.ts` then
 covered reading-check candidates, due-card priority inputs and shadow ordering,
 and unreachable word/grammar branches were removed: 95.6% lines / 79.7% branches.
-`getGateFunnelSnapshot` (Progress "What's stuck") is still thin; it measures the
-retired word-card gates.
+Progress "What's stuck" was reworked around the current gates
+(`getStuckSentenceSnapshot`, `tests/stuckSentences.test.ts`).
 
 Previously, the default coverage calculation only counted imported modules, so
 its higher percentage was not directly comparable. Coverage is reported as a

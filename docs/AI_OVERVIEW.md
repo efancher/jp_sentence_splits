@@ -336,8 +336,9 @@ a sentence with even one never-reviewed word was completely unreachable
 for glossing, blocking exactly the mostly-unfamiliar sentences glossing
 should help with. `CONTINUE_BOOK_MIN_INTRODUCED_RATIO` (2026-09-28)
 relaxes that to a share instead of all of them.
-`getSentenceReadingIntroducedReadiness` takes an optional `minRatio`
-param for this (the removed Particle Puzzle game passed `1`). Full-sentence review cards are untouched — they still gate on
+(Historical: `continue_book` steps are no longer drafted in the sentence-led
+flow; `getSentenceReadingIntroducedReadiness` and the ratio constant were
+removed 2026-11-16.) Full-sentence review cards are untouched — they still gate on
 `isSentenceReadyForFullReview` directly. Within the glossing
 bucket, vocabulary confirmations get first claim on the minutes (user
 request, 2026-08-29): `buildExploreSteps` runs two passes — pass 1 spends
@@ -471,10 +472,6 @@ blocks the whole surface, not just speak-aloud steps:
 - `PitchAccentDrillPage` (`/pitch-accent`) renders a "paused" panel with a
   one-tap resume button instead of the drill; its Home shortcut is hidden.
 - `DailyPracticePanel` leaves out its pitch-drill target.
-- `getSentenceListeningReadiness`'s own separate pitch sub-requirement is
-  treated as satisfied while paused — otherwise `listening` cards for
-  pitch-eligible words would starve for as long as pitch accent stays
-  paused, since `pitch_accent` items can't advance while withheld.
 Nothing is deleted; turning the setting back off resumes every surface
 exactly where its FSRS/history state left off.
 
@@ -680,12 +677,15 @@ missing plumbing — no UI reads the field yet. **Step
 usefulness** (`stepUsefulness.ts` / `getStepUsefulness`) — flattens every
 `PlannerSession.steps` in a 56-day window, grouped by `targetKind`,
 sorted by skip rate — the longitudinal companion to `sessionRecap.ts`'s
-same-day recap. **What's stuck** (`repository.ts#getGateFunnelSnapshot`,
-no separate pure lib module) — sentences that clear every dimension of a
-gate except one specifically-named requirement (confirmed-but-never-
-reviewed for `continue_book`; reading/word-listening-ready-but-pitch-not
-for shadow/listening) — a standing version of the one-off diagnostic
-script used earlier the same session to trace the 皆/元気 gating bugs.
+same-day recap. **What's stuck** (`repository.ts#getStuckSentenceSnapshot`,
+`src/lib/stuckSentences.ts`, reworked 2026-11-16) — of the met sentences
+(`getIntroducedSentenceIds`), how many one named requirement keeps out of a
+planned step: only in shelved (archived/suspended) books; no native audio; no
+word analysis to split into phrases; a phrase count neither Ear tiles nor
+Dictation accepts; or outside the shadowing pool (the
+`SHADOW_POOL_BOOK_LIMIT` most recently opened books). Shelved and no-audio
+sentences are counted only there. Each row links up to three example
+sentences to their deep dive.
 **New-card backlog** (`velocity.ts` / `buildVelocityReport`) — combines
 `countNewVocabularyCardBacklog()` with the words-learned-per-week trend
 `buildProgressReport` already computes into a "confirmed but not yet in
@@ -1225,8 +1225,8 @@ single-user app) auto-runs the existing heuristic chunker first. Each
 wizard step also surfaces that chunk's vocabulary gloss, reusing
 `KaraokeSentenceText`'s `buildSentenceTokens` matcher against
 `vocabularySuggestions`/`targetVocabulary` — a `continue_book` sentence can
-have real vocab still unfamiliar too (only `CONTINUE_BOOK_MIN_INTRODUCED_RATIO`,
-0.5, of its words need be introduced, see the glossing-accessibility entry
+have real vocab still unfamiliar too (under the old gate only half of its
+words needed to be introduced, see the glossing-accessibility entry
 below), so the walkthrough doesn't assume the words are known just because
 the structure is being taught. `getRoleOccurrenceStats(excludeSentenceId?)`
 (repository.ts) feeds two things: a fading "you've seen 「role」 N times
@@ -1593,7 +1593,7 @@ Activity types currently wired, grouped by subject/eligibility (under the defaul
   the sentence's vocabulary occurrences is FSRS-proficient, *and*,
   separately, every dictionary-pitch-eligible underlying word's
   `pitch_accent` card is also proficient (`getSentenceListeningReadiness`,
-  pitch requirement added 2026-09-16 — pitch perception and word-level
+  removed 2026-11-16; pitch requirement added 2026-09-16 — pitch perception and word-level
   listening are two different skills that both support sentence-level
   listening, not one blended signal; a word with no dictionary pitch data
   is exempt from the pitch half so it can't block the sentence forever), on
@@ -1930,7 +1930,7 @@ the learner never reads a passage full of unconfirmed words — with its own
 `deferUnreadyReadingInContextReviews` pass for already-due items (empty
 passage ⇒ nothing to gate on, card falls back to the isolated layout). The
 `listening` card adds a second layer on top (the listening ladder, §4
-above): `getSentenceListeningReadiness` also requires every
+above): `getSentenceListeningReadiness` (removed 2026-11-16) also required every
 `word_listening` occurrence for the sentence to be proficient *and* every
 dictionary-pitch-eligible underlying word's `pitch_accent` card to be
 proficient (added 2026-09-16), and `word_listening` itself is gated behind
