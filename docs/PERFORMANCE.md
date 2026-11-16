@@ -114,7 +114,13 @@ pin current batching/cache behavior; JSON byte ceilings leave measured headroom
 for timestamps/metadata. Update a limit only after examining a changed report
 and the associated stored outcomes, not simply to make a regression green.
 
-Real Postgres/PostgREST tests apply production migrations and authenticated RLS:
+Real Postgres/PostgREST tests apply production migrations and authenticated RLS.
+Since 2026-11-13 (`ce20d1b`) a device that has never pulled restores from a snapshot
+of each synced table rather than replaying the event log, so every first pull or
+restore has a floor of about 31 requests (one per table, plus the cursor), however
+small the library. Re-measured 2026-11-16: 120 books 31 requests (51 KB), 161 mixed
+rows 31 (66 KB), 2,804 rows 32 (1.8 MB), 5,604 rows 33 (3.7 MB). The figures in the
+list below are from before that change; budgets were set to the new measurements.
 
 - Initial incremental pull from cursor zero: 120 book rows over two event pages.
 - Unchanged sync: one request and the two-byte empty JSON array.

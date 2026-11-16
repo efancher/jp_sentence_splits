@@ -30,6 +30,8 @@ describe.skipIf(!PG_TESTS_ENABLED)('sync HTTP budgets against real Postgres and 
     await runSyncCycle();
     expect((await readSyncMeta())?.lastError).toBeUndefined();
     expect(await getDb().books.count()).toBe(120);
+    // A device that has never pulled restores from table snapshots (one request per synced table, ce20d1b), so a
+    // tiny library pays the same ~31-request floor as a large one instead of a few event pages.
     checkUsageBudget('sync-first-pull-120-books', pg.usage());
 
     pg.resetUsage();
