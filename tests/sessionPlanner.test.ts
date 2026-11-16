@@ -236,6 +236,19 @@ describe('buildRecommendedSession', () => {
     expect(shadowSteps.length).toBeGreaterThan(0);
   });
 
+  it('a phrase step that plans a chunk chain is labelled as one', () => {
+    const recentActivity: RecentActivityEvent[] = [{ mode: 'review', timestamp: daysAgo(0) }];
+    const shadowCandidates: ShadowCandidate[] = [
+      { sentenceId: 'chain', bookId: 'book_1', label: 'Chain sentence', reason: 'Ready', phrase: true, chunkChain: true, phraseText: '会社に' },
+      { sentenceId: 'single', bookId: 'book_1', label: 'Short sentence', reason: 'Ready', phrase: true, phraseText: '雨です' },
+    ];
+    const steps = buildRecommendedSession(emptyPlannerInput({ recentActivity, shadowCandidates, totalMinutes: 60 })).steps.filter(
+      (step) => step.targetKind === 'shadow',
+    );
+    expect(steps.find((step) => step.sentenceId === 'chain')?.label).toBe('Chunk chain: Chain sentence');
+    expect(steps.find((step) => step.sentenceId === 'single')?.label).toBe('Shadow a phrase: 雨です');
+  });
+
   it('quiet mode: no shadow steps even with neglected shadowing, and the explanation says why', () => {
     const recentActivity: RecentActivityEvent[] = [
       { mode: 'review', timestamp: daysAgo(0) },

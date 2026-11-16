@@ -265,6 +265,7 @@ import { listSentenceLearningEvents } from './repo/sentenceLearningEvents';
 import {
   listGrammarPatternSummaries,
   listSentenceGrammarForPattern,
+  chunkChainPlannedForSentence,
   suggestPhraseShadowForSentence,
 } from './repo/grammarPatterns';
 import {
@@ -7510,10 +7511,12 @@ async function gatherSessionPlannerInput(
   const shadowCandidatesTrimmed = shadowCandidatesRaw
     .filter((candidate) => !exclude.sentenceIds.has(candidate.sentenceId))
     .slice(0, SHADOW_CANDIDATE_LIMIT);
-  // A phrase step names its suggested phrase (the weakest word's span) when the clip's alignment is cached.
+  // A phrase step becomes a chunk chain when the clip's cached alignment plans one (the reader starts it on
+  // open); otherwise it names its suggested phrase (the weakest word's span) when the alignment is cached.
   const shadowCandidates = await Promise.all(
     shadowCandidatesTrimmed.map(async (candidate) => {
       if (!candidate.phrase) return candidate;
+      if (await chunkChainPlannedForSentence(candidate.sentenceId).catch(() => false)) return { ...candidate, chunkChain: true };
       const suggestion = await suggestPhraseShadowForSentence(candidate.sentenceId).catch(() => null);
       return suggestion?.text ? { ...candidate, phraseText: suggestion.text } : candidate;
     }),

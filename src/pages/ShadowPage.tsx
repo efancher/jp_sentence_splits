@@ -136,6 +136,7 @@ export function ShadowWorkspace({
   embedded = false,
   visitId,
   focusSurface,
+  fromSessionStep = false,
   onSnoozed,
 }: {
   bookId: string;
@@ -145,6 +146,8 @@ export function ShadowWorkspace({
   visitId?: string;
   /** A word (its surface form in this sentence) the learner tapped in the reader: the suggested phrase is that word's, and is applied on open. */
   focusSurface?: string;
+  /** Opened from a daily-plan shadowing step: while sentence shadowing is paused, a chunk chain starts on open when the clip plans one. */
+  fromSessionStep?: boolean;
   /** Called after a snooze; defaults to going back a page. */
   onSnoozed?: () => void;
 }) {
@@ -797,6 +800,7 @@ export function ShadowWorkspace({
           sentenceAudioId={referenceAudio.id}
           visitId={visitId}
           onActiveChange={setChainActive}
+          autoStart={fromSessionStep && !focusSurface && sentenceShadowingPaused === true}
           onRange={(range) => {
             // A rung is a loop target like any marked phrase: the pane's own controls shadow it.
             targetLoopCoordinator.current.cancel();

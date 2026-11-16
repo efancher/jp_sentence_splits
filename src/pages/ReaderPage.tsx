@@ -159,7 +159,7 @@ export function ReaderPage() {
     { sentenceId: string; kind: 'reading'; visitId: string; wordId: string; surface: string; tile: TileDictation; word?: { expression: string; reading: string; meaning: string } } |
     { sentenceId: string; kind: 'grammar'; visitId: string } |
     { sentenceId: string; kind: 'recall'; visitId: string; revealed: boolean; offer?: FollowUpChoice } |
-    { sentenceId: string; kind: 'shadow'; visitId: string; focusSurface?: string } |
+    { sentenceId: string; kind: 'shadow'; visitId: string; focusSurface?: string; fromSessionStep?: boolean } |
     { sentenceId: string; kind: 'tiles'; visitId: string; puzzle: EarTilesPuzzle; progress: EarTilesProgress } |
     undefined
   >();
@@ -368,7 +368,7 @@ export function ReaderPage() {
     const index = data.rows.findIndex((row) => row.sentence.id === lessonSentenceId);
     if (index < 0) return;
     openedLessonRef.current = lessonSentenceId;
-    if (isShadowRoute) setReaderTool({ sentenceId: lessonSentenceId, kind: 'shadow', visitId: createId('visit') });
+    if (isShadowRoute) setReaderTool({ sentenceId: lessonSentenceId, kind: 'shadow', visitId: createId('visit'), fromSessionStep: true });
     else if (isReadCheckRoute) setReaderTool({ sentenceId: lessonSentenceId, kind: 'recall', visitId: createId('visit'), revealed: false });
     else if (isGrammarCheckRoute) setReaderTool({ sentenceId: lessonSentenceId, kind: 'grammar', visitId: createId('visit') });
     else if (isWordCheckRoute) setReaderTool({ sentenceId: lessonSentenceId, kind: 'meaning', visitId: createId('visit'), expression: checkWord });
@@ -1416,6 +1416,7 @@ export function ReaderPage() {
                               embedded
                               visitId={tool.visitId}
                               focusSurface={tool.focusSurface}
+                              fromSessionStep={tool.fromSessionStep}
                               onSnoozed={() => setReaderTool(undefined)}
                             />
                           </Suspense>

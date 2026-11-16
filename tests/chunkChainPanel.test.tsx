@@ -79,6 +79,18 @@ describe('ChunkChainPanel', () => {
     expect(await getDb().reviews.count()).toBe(0);
   });
 
+  it('starts on its own for a daily-plan step, once: leaving it stays left', async () => {
+    await seed();
+    const user = userEvent.setup();
+    const onRange = vi.fn();
+    render(<ChunkChainPanel bookId="b1" sentenceId="s1" sentenceAudioId="a1" onRange={onRange} autoStart random={() => 1} />);
+    expect(await screen.findByText('映画を見ました')).toBeTruthy();
+    await waitFor(() => expect(onRange).toHaveBeenCalledWith({ startMs: 3600, endMs: 5400 }));
+    await user.click(screen.getByRole('button', { name: 'Stop chain' }));
+    expect(await screen.findByRole('button', { name: 'Chunk chain' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Next' })).toBeNull();
+  });
+
   it('drops a rung on Not yet and logs no summary when nothing was Got it', async () => {
     await seed();
     const user = userEvent.setup();

@@ -29,6 +29,7 @@ export function ChunkChainPanel({
   visitId,
   onRange,
   onActiveChange,
+  autoStart = false,
   random = Math.random,
 }: {
   bookId: string;
@@ -39,6 +40,8 @@ export function ChunkChainPanel({
   onRange: (range: { startMs: number; endMs: number } | null) => void;
   /** Lets the pane hide its single-phrase rating while a chain is running. */
   onActiveChange?: (active: boolean) => void;
+  /** Start the chain as soon as it is planned (a daily-plan phrase step), once per clip; Stop chain still leaves it. */
+  autoStart?: boolean;
   /** Decides which runs open with a cold whole-sentence try; injectable for tests. */
   random?: () => number;
 }) {
@@ -100,6 +103,15 @@ export function ChunkChainPanel({
     setCustom(null);
     setAdjusting(null);
   }, [sentenceAudioId, sentenceId]);
+
+  // A daily-plan phrase step opens straight into the chain, once per clip, so leaving it stays left.
+  const autoStartedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!autoStart || !suggested || session || autoStartedFor.current === sentenceAudioId) return;
+    autoStartedFor.current = sentenceAudioId;
+    start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoStart, suggested, session, sentenceAudioId]);
 
   const rungSummary = useMemo(
     () => (rungs ? `${rungs.length} steps, ${Math.round((rungs[0]!.endMs - rungs[0]!.startMs) / 100) / 10}s up to the whole sentence` : ''),

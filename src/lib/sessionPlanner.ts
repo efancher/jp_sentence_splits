@@ -433,6 +433,8 @@ export interface ShadowCandidate {
   phrase?: boolean;
   /** The suggested phrase to shadow (from the cached alignment), when one could be worked out. */
   phraseText?: string;
+  /** A phrase shadow whose cached alignment plans a chunk chain: the step builds the sentence up from its end. */
+  chunkChain?: boolean;
 }
 
 /**
@@ -828,13 +830,17 @@ function buildShadowSteps(
       bookId: candidate.bookId,
       sentenceId: candidate.sentenceId,
       label: candidate.phrase
-        ? candidate.phraseText
-          ? `Shadow a phrase: ${candidate.phraseText}`
-          : `Shadow a phrase from: ${candidate.label}`
+        ? candidate.chunkChain
+          ? `Chunk chain: ${candidate.label}`
+          : candidate.phraseText
+            ? `Shadow a phrase: ${candidate.phraseText}`
+            : `Shadow a phrase from: ${candidate.label}`
         : `Shadow: ${candidate.label}`,
       estimatedMinutes: perItemMinutes,
       reason: candidate.phrase
-        ? `${candidate.reason} — ${candidate.phraseText ? 'use the suggested phrase' : 'mark a phrase'}, shadow it, then rate it`
+        ? candidate.chunkChain
+          ? `${candidate.reason} — build it up from the end, one phrase at a time, rating each step`
+          : `${candidate.reason} — ${candidate.phraseText ? 'use the suggested phrase' : 'mark a phrase'}, shadow it, then rate it`
         : candidate.reason,
       status: 'pending',
       ...(candidate.phrase ? { phrase: true } : {}),

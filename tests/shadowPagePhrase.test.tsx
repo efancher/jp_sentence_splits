@@ -202,3 +202,77 @@ describe('ShadowPage phrase shadowing', () => {
     expect(await db.attempts.count()).toBe(0);
   });
 });
+
+describe('ShadowWorkspace opened from a daily-plan step', () => {
+  // 私は昨日、友達と駅で映画を見ました。 over 5.4 s plans a four-step chain (see chunkChainPanel.test.tsx).
+  const PIECES: [string, string][] = [
+    ['私', '名詞/普通名詞'], ['は', '助詞/係助詞'], ['昨日', '名詞/普通名詞'], ['、', '補助記号/読点'],
+    ['友達', '名詞/普通名詞'], ['と', '助詞/格助詞'], ['駅', '名詞/普通名詞'], ['で', '助詞/格助詞'],
+    ['映画', '名詞/普通名詞'], ['を', '助詞/格助詞'], ['見', '動詞/一般'], ['まし', '助動詞'], ['た', '助動詞'], ['。', '補助記号/句点'],
+  ];
+  const TIMED = [
+    ['私', 0, 0.4], ['は', 0.4, 0.6], ['昨日', 0.8, 1.6], ['友達', 1.8, 2.4], ['と', 2.4, 2.6], ['駅', 2.8, 3.2],
+    ['で', 3.2, 3.4], ['映画', 3.6, 4.2], ['を', 4.2, 4.4], ['見', 4.6, 4.8], ['まし', 4.8, 5.2], ['た', 5.2, 5.4],
+  ] as const;
+
+  async function seedChain() {
+    const db = getDb();
+    const now = new Date().toISOString();
+    let cursor = 0;
+    const vocabularySuggestions = PIECES.map(([surface, pos], i) => {
+      const token = { id: `t${i}`, surface, start: cursor, end: cursor + surface.length, expression: surface, reading: surface, pos, source: 'morphology', selectedByDefault: false };
+      cursor += surface.length;
+      return token;
+    });
+    await db.books.add({ id: 'book-1', title: 'Test Book', archived: false, chapters: [], updatedAt: now });
+    await db.sentences.add({
+      id: 'sent-1', normalizedKey: 'sent-1', japanese: PIECES.map((p) => p[0]).join(''), readingOnly: '', inlineReading: '', translation: 'x',
+      targetVocabulary: [], vocabularySuggestions, sourceReferences: [], conflicts: [], firstOccurrenceIndex: 0,
+      importBatchIds: [], createdAt: now, updatedAt: now,
+    } as never);
+    await db.sentenceAudio.add({
+      id: 'audio-1', sentenceId: 'sent-1', sourceId: 'source-1', sourceSentenceId: 'src-1', sourceTitle: 'Ref',
+      mimeType: 'audio/mp4', durationMs: 5_400, startMs: 0, endMs: 5_400, blob: new Blob(['ref'], { type: 'audio/mp4' }), importedAt: now,
+    });
+    await saveReferenceAlignment('audio-1', { durationSeconds: 5.4, words: TIMED.map(([text, start, end]) => ({ text, start, end, phones: [] })) });
+  }
+
+  function renderWorkspace(fromSessionStep: boolean) {
+    return render(
+      withAppProviders(
+        <MemoryRouter>
+          <ShadowWorkspace bookId="book-1" sentenceId="sent-1" embedded fromSessionStep={fromSessionStep} />
+        </MemoryRouter>,
+      ),
+    );
+  }
+
+  beforeEach(() => {
+    resetDbForTests(`shadow-chain-step-${createId('db')}`);
+    vi.mocked(analysisApi.alignAudio).mockReset();
+  });
+
+  it('while sentence shadowing is paused, opens straight into the chunk chain', async () => {
+    await seedChain();
+    await updateSettings({ sentenceShadowingPaused: true });
+    renderWorkspace(true);
+    // Either the optional cold try or the first step: the chain is running, not waiting for a tap.
+    await waitFor(() =>
+      expect(screen.queryByRole('group', { name: 'Chunk chain' }) ?? screen.queryByRole('group', { name: 'Cold try' })).toBeTruthy(),
+    );
+    expect(screen.queryByRole('button', { name: 'Chunk chain' })).toBeNull();
+  });
+
+  it('opened by hand, or with sentence shadowing on, leaves the chain as a button', async () => {
+    await seedChain();
+    await updateSettings({ sentenceShadowingPaused: true });
+    const { unmount } = renderWorkspace(false);
+    expect(await screen.findByRole('button', { name: 'Chunk chain' })).toBeTruthy();
+    unmount();
+
+    await updateSettings({ sentenceShadowingPaused: false });
+    renderWorkspace(true);
+    expect(await screen.findByRole('button', { name: 'Chunk chain' })).toBeTruthy();
+    expect(screen.queryByRole('group', { name: 'Chunk chain' })).toBeNull();
+  });
+});

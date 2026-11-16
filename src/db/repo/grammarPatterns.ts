@@ -32,6 +32,7 @@ import type {
   StructureDraftChunk,
   VocabularyItem,
 } from '../../domain/types';
+import { planChunkChain } from '../../lib/chunkChain';
 import { CHAIN_COLD_KEY, chainRungTargetKey } from '../../lib/chunkChainSession';
 import { chunksMatchSource } from '../../lib/chunking';
 import { openContentReports, type OpenContentReport } from '../../lib/contentReports';
@@ -893,6 +894,18 @@ export async function suggestPhraseShadowForSentence(
   const audio = await getDb().sentenceAudio.where('sentenceId').equals(sentenceId).first();
   if (!audio || audio.durationMs <= 0) return null;
   return suggestPhraseShadow({ sentenceId, sentenceAudioId: audio.id, clipDurationMs: audio.durationMs });
+}
+
+/**
+ * Whether the Shadow pane would offer a chunk chain for a sentence's first reference clip: the same
+ * cached alignment and plan `ChunkChainPanel` reads (3+ rungs). Read-only.
+ */
+export async function chunkChainPlannedForSentence(sentenceId: string): Promise<boolean> {
+  const db = getDb();
+  const [audio, sentence] = await Promise.all([db.sentenceAudio.where('sentenceId').equals(sentenceId).first(), db.sentences.get(sentenceId)]);
+  if (!audio || audio.durationMs <= 0 || !sentence) return false;
+  const alignment = await db.referenceAlignments.get(audio.id);
+  return alignment ? !planChunkChain(sentence, alignment.result.words).rejection : false;
 }
 
 export async function logGlossDecision(

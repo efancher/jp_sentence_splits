@@ -321,6 +321,42 @@ describe('logPhraseShadow and the shadowing pause', () => {
     const aligned = await getSessionPlannerInput(60);
     expect(aligned.shadowCandidates.find((c) => c.sentenceId === sentence.id)?.phraseText).toContain('寝て');
   });
+
+  it('a phrase step becomes a chunk chain when the cached alignment plans one', async () => {
+    await updateSettings({ sentenceShadowingPaused: true });
+    const book = await createBook({ title: 'Chain' });
+    const pieces: [string, string][] = [
+      ['私', '名詞/普通名詞'], ['は', '助詞/係助詞'], ['昨日', '名詞/普通名詞'], ['、', '補助記号/読点'],
+      ['友達', '名詞/普通名詞'], ['と', '助詞/格助詞'], ['駅', '名詞/普通名詞'], ['で', '助詞/格助詞'],
+      ['映画', '名詞/普通名詞'], ['を', '助詞/格助詞'], ['見', '動詞/一般'], ['まし', '助動詞'], ['た', '助動詞'], ['。', '補助記号/句点'],
+    ];
+    const { sentence, audioId } = await shadowReadySentence(book, pieces.map((p) => p[0]).join(''));
+    const db = getDb();
+    let cursor = 0;
+    const vocabularySuggestions = pieces.map(([surface, pos], i) => {
+      const token = { id: `t${i}`, surface, start: cursor, end: cursor + surface.length, expression: surface, reading: surface, pos, source: 'morphology', selectedByDefault: false };
+      cursor += surface.length;
+      return token;
+    });
+    await db.sentences.update(sentence.id, { vocabularySuggestions } as never);
+    await db.sentenceAudio.update(audioId, { durationMs: 5400, endMs: 5400 });
+    const stamp = new Date().toISOString();
+    await db.sentenceLearningEvents.put({
+      id: createId('sle'), visitId: 'v', action: 'walkthrough_completed', bookId: book.id, sentenceId: sentence.id, timestamp: stamp,
+    });
+    expect((await getSessionPlannerInput(60)).shadowCandidates.find((c) => c.sentenceId === sentence.id)?.chunkChain).toBeUndefined();
+
+    const timed = [
+      ['私', 0, 0.4], ['は', 0.4, 0.6], ['昨日', 0.8, 1.6], ['友達', 1.8, 2.4], ['と', 2.4, 2.6], ['駅', 2.8, 3.2],
+      ['で', 3.2, 3.4], ['映画', 3.6, 4.2], ['を', 4.2, 4.4], ['見', 4.6, 4.8], ['まし', 4.8, 5.2], ['た', 5.2, 5.4],
+    ] as const;
+    await db.referenceAlignments.put({
+      id: audioId, alignmentVersion: ALIGNMENT_VERSION, computedAt: stamp,
+      result: { durationSeconds: 5.4, words: timed.map(([text, start, end]) => ({ text, start, end, phones: [] })) },
+    });
+    const candidate = (await getSessionPlannerInput(60)).shadowCandidates.find((c) => c.sentenceId === sentence.id);
+    expect(candidate).toMatchObject({ phrase: true, chunkChain: true });
+  });
 });
 
 describe('snapRangeToWordBoundaries', () => {
