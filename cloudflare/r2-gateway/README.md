@@ -26,10 +26,12 @@ alert configured.
 
 ## Deploy checklist (user actions; nothing here has been run)
 
-1. Edit `wrangler.toml`: set `SUPABASE_URL` and `ALLOWED_ORIGINS`.
+1. Copy `wrangler.toml` to `wrangler.local.toml` (gitignored) and set `SUPABASE_URL` and
+   `ALLOWED_ORIGINS` there. Keep the tracked `wrangler.toml` as placeholders. Pass
+   `-c wrangler.local.toml` to each `wrangler` command below.
 2. `npx wrangler secret put SUPABASE_ANON_KEY` and `npx wrangler secret put ADMIN_TOKEN`
    (a long random value). Do not commit or paste either.
-3. `npx wrangler deploy` from this directory, then call `/v1/admin/seed` with the
+3. `npx wrangler deploy -c wrangler.local.toml` from this directory, then call `/v1/admin/seed` with the
    bucket's real current size (0 only if you confirmed the bucket is empty).
 4. Set `VITE_R2_GATEWAY_URL` for the app build (a build variable, not a secret),
    after the migration copy has been verified.

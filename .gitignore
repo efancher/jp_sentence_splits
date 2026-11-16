@@ -58,3 +58,6 @@ supabase/.temp/
 
 # Claude Code local session data (memory lives in ~/.claude, not the repo)
 .claude/projects/
+
+# Real Worker config (project URL, origins); copy wrangler.toml and fill in. Never committed.
+cloudflare/r2-gateway/wrangler.local.toml
