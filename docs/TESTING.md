@@ -102,7 +102,8 @@ The [first baseline](PERFORMANCE_BASELINE.md) records 16 passing browser cases
 These are scoped follow-up checks, not a rerun of the full coverage suite above.
 
 1. **Sync recovery and audio transfer.** `sync/engine.ts` has 34.24% line
-   coverage and `audioSync.ts` 5.96%. Queue/conflict and real-RLS tests already
+   coverage; `audioSync.ts` is now ~95% (upload, push-missing, hydrate with
+   Wi-Fi-only/timeout/retry, repair; `tests/audioSyncTransfer.test.ts`). Queue/conflict and real-RLS tests already
    provide useful protection, but do not establish browser behavior across token
    expiry, offline reconnects, interrupted uploads, partial restores and multiple
    devices. `ConflictPanel` and auth/sync settings also have little UI coverage.
