@@ -83,14 +83,12 @@ describe('full backup', () => {
     expect((await getDb().settings.get('settings'))?.newCardsPerSessionLimit).toBe(7);
   });
 
-  it('replace drops local rows the backup does not have, including reference audio', async () => {
+  it('replace drops local rows the backup does not have but keeps audio for restored sentences', async () => {
     const { ids } = await seedLibrary();
     const payload = await exportFullBackup();
     const db = getDb();
     const extra = await createBook({ title: 'Made after the backup' });
-    await db.sentenceAudio.put({
-      id: 'audio-1',
-      sentenceId: ids[0]!,
+    const clip = {
       sourceId: 'src-1',
       sourceSentenceId: 'src-1-0',
       sourceTitle: 'Little birds',
@@ -100,12 +98,16 @@ describe('full backup', () => {
       endMs: 1000,
       blob: new Blob(['x']),
       importedAt: '2026-11-01T00:00:00.000Z',
-    });
+    };
+    await db.sentenceAudio.bulkPut([
+      { ...clip, id: 'audio-kept', sentenceId: ids[0]! },
+      { ...clip, id: 'audio-orphan', sentenceId: 'sentence-not-in-backup' },
+    ]);
 
     await restoreBackup(payload, 'replace');
     expect(await db.books.get(extra.id)).toBeUndefined();
-    // Backups carry no audio, so a replace leaves clips to be re-downloaded or re-cut.
-    expect(await db.sentenceAudio.count()).toBe(0);
+    // Backups carry no audio: clips of restored sentences stay, orphans go.
+    expect((await db.sentenceAudio.toArray()).map((row) => row.id)).toEqual(['audio-kept']);
   });
 
   it('merge keeps newer local edits, adds missing rows, and never duplicates reviews or memberships', async () => {

@@ -3849,7 +3849,6 @@ export async function restoreBackup(
         db.sentenceGrammar.clear(),
         db.grammarRelationships.clear(),
         db.plannerSessions.clear(),
-        db.sentenceAudio.clear(),
       ]);
       await db.books.bulkPut(payload.books);
       await db.sentences.bulkPut(payload.sentences);
@@ -3868,6 +3867,10 @@ export async function restoreBackup(
       await db.grammarRelationships.bulkPut(payload.grammarRelationships);
       await db.plannerSessions.bulkPut(payload.plannerSessions);
       await db.settings.put(payload.settings);
+      // Backups carry no audio, so keep the local clips of every restored
+      // sentence; only clips whose sentence is gone after the replace are dropped.
+      const restoredSentenceIds = new Set(payload.sentences.map((sentence) => sentence.id));
+      await db.sentenceAudio.filter((clip) => !restoredSentenceIds.has(clip.sentenceId)).delete();
     });
     return;
   }
