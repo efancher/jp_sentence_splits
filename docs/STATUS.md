@@ -67,6 +67,23 @@ and possible extensions. This snapshot does not certify a live deployment.
   ranking. The "new here" line names new patterns too, and a sentence-led book
   page has a "Ready to pick up" panel (`getBookReadyToPickUp`, computed when
   opened) listing the book's next sentences within two new pieces. Measure with `npm run diagnose:i-plus-one`.
+- Strict i+1 (2026-11-16, on by default with i+1 order; `settings.iPlusOneStrict`,
+  local to the device; Settings → "Strict: one new word or pattern at a time"):
+  `orderByStrictIPlusOne` replays the queue as if studied in order. Every new
+  sentence with nothing outside the learner's word/grammar list comes first;
+  only when none is left is one new piece added (the cost-1 word or curated
+  pattern that is the only new piece in the most sentences, a word met once
+  first, `lemmaWeight`-scaled), and the sentences it completes are served
+  before the next piece. With no single-piece sentence left, the cheapest
+  sentence brings all its pieces. No stretch slots. Sentences already in
+  today's session count as studied (`IPlusOneOptions.planned`), and a top-up
+  no longer skips books already in the session; books are kept by their
+  soonest-ranked sentence (`strictExploreBooks`). On 2026-11-16 data 482 new
+  sentences use only known pieces, so lessons add nothing new until those are
+  used (chosen deliberately over capping them); after that each new word is
+  followed by roughly 2-30 sentences it completes. `diagnose:i-plus-one`
+  prints the strict replay. Inside a run, ties go to episode momentum, then
+  the membership table's row order, so same-episode runs can still appear.
 - "Fresh try" revisits: automatic ones (parked checks, spaced schedule) are capped
   at `EXPLORE_REVISITS_PER_BOOK` per book per plan, counted after sentences in
   suspended episodes are dropped and only while that book has new lessons waiting

@@ -913,7 +913,12 @@ reader (solid words stay plain); /progress has a "Grammar strength" panel
 (`getGrammarStrengthReport`: solid/shaky/unchecked counts plus the weakest tapped
 patterns). Manual test: type a guess in a Grammar check and see it after the reveal;
 give a pattern a few "I knew it" taps and see it turn green; open /progress and
-check the counts move. Left over: any grammar study surface.
+check the counts move. Left over: any grammar study surface. Strict i+1 (2026-11-16, default): `orderByStrictIPlusOne` serves every
+nothing-new sentence before adding one piece, then the sentences that piece
+completes, and builds top-ups on today's session; the learner chose literal
+strict over capping the 482 nothing-new sentences on 2026-11-16 data. Open:
+tie-breaks inside a run use membership row order, not true reading order or
+episode spread.
 **Grammar check use, first read 2026-11-16 (cloud copy, read-only):** 14 grammar calls
 over 12 patterns in 11 sentences since 2026-11-01 (each tap writes a spot and a use
 row), against ~277 word calls; 12 of the 14 were "needed help" (only ～について and
