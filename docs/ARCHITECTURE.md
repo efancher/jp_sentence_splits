@@ -208,9 +208,7 @@ AppShell.tsx`) surfaces on every route whenever a session is `in_progress`
 since the deep-linked pages themselves (Analyze, Review, Shadow, ...) stay
 unaware a session exists.
 
-## Short games
-
-### Planner read snapshots
+## Planner read snapshots
 
 Session planning scans whole tables, and IndexedDB charges per row (seconds for
 thousands of rows on a phone). `src/db/plannerSnapshots.ts` stores packed copies
@@ -223,43 +221,10 @@ saves a fresh one in the background. An in-memory cross-tap cache in
 `repository.ts` sits on top. When adding a planner read, route it through
 `plannerShared` + `loadSnapshot` and list its table in `SNAPSHOT_DEPS`.
 
-`/play` hosts short standalone rounds (Word Detective, Particle Puzzle, Odd Ear
-Out, Verb Lego). Design
-decisions worth knowing before adding one:
-
-- **Games read FSRS, never write it.** They're cued (clues, hints, pacing), so
-  feeding results into `recordReview` would inflate the proficiency signals that
-  gate `continue_book`/shadowing/listening (`getProficientVocabularyItemIds`).
-  Results go to an append-only `gameRounds` Dexie table, synced as
-  `game_rounds` (`logGameRound`; modelled on `PitchDrillAttempt`; owner RLS,
-  insert/select only). Any FSRS-adjacent write
-  ("queue misses") is a later, opt-in phase — see ROADMAP "Short games".
-- **Eligibility before ranking.** Each game builds its own eligible candidate
-  set (`getWordDetectiveCandidates`); the shared pure picker
-  (`src/lib/gamePicker.ts`) then ranks by a signal (weak/stale/strong) and
-  falls back rather than returning an empty round, so an item that can never
-  be played can't starve a signal.
-- **Routes are query-free** (`/play/:gameId/:signal`) because
-  `useActiveSession` matches a session step's route by exact pathname — a
-  future `game` planner step could deep-link here without breaking the
-  SessionBar's "Mark complete". Not wired into the planner yet; adding a fifth
-  `SessionBucket` is deliberately avoided (it's a `Record` across
-  allocation/settings/recap/Home).
-- **The round log doubles as per-game history.** `GameRoundItem.parts` records
-  per-sub-item outcomes (Particle Puzzle: one per blank). A game can derive its
-  own weakness signal from `gameRounds` (Particle Puzzle does, per particle) and
-  map it onto the picker's `PickerStats` — the field names are FSRS-flavoured,
-  read them as "recent misses / recent accuracy / enough attempts to trust it".
-  A `GameDef` lists which `signals` it offers (a game with no meaningful `stale`
-  omits it) and its own `SignalCopy` wording.
-- **The picker's unit is whatever a round should vary over**, not necessarily an
-  item: Odd Ear Out picks *contrasts* (shape pairs), Verb Lego picks *patterns*
-  (suffix signatures, each backed by several concrete chains), so a round can't
-  repeat one. Games whose correct answers are *generated* (Verb Lego's built
-  chains) must generate only what is certainly right and offer only decoys that
-  are certainly wrong — see the module doc and its test tables.
-- Adding a game = a pure builder + a `GameDef` in `src/games/registry.tsx`
-  whose `loadPools` applies its eligibility.
+Short `/play` games were removed 2026-11-16. Their append-only `gameRounds`
+table stays and still syncs as `game_rounds` (owner RLS, insert/select only) so
+existing rows are kept; nothing writes new ones. Old planner sessions can hold
+`targetKind: 'game'` steps, which `sessionStepTargetPath` maps to no page.
 
 ## Sentence-led flow & sequential study
 

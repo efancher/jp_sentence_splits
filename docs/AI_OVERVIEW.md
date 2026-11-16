@@ -337,11 +337,7 @@ for glossing, blocking exactly the mostly-unfamiliar sentences glossing
 should help with. `CONTINUE_BOOK_MIN_INTRODUCED_RATIO` (2026-09-28)
 relaxes that to a share instead of all of them.
 `getSentenceReadingIntroducedReadiness` takes an optional `minRatio`
-param for this — `getParticlePuzzleData` (§3, `/play`) passes `1`
-deliberately, since that game needs the whole sentence readable for its
-particle blank to be a comprehension check rather than a guess
-(2026-09-25), so its eligibility is unaffected by the `continue_book`
-loosening. Full-sentence review cards are untouched — they still gate on
+param for this (the removed Particle Puzzle game passed `1`). Full-sentence review cards are untouched — they still gate on
 `isSentenceReadyForFullReview` directly. Within the glossing
 bucket, vocabulary confirmations get first claim on the minutes (user
 request, 2026-08-29): `buildExploreSteps` runs two passes — pass 1 spends
@@ -474,11 +470,7 @@ blocks the whole surface, not just speak-aloud steps:
   practice due-queue the same way `quietMode` already does.
 - `PitchAccentDrillPage` (`/pitch-accent`) renders a "paused" panel with a
   one-tap resume button instead of the drill; its Home shortcut is hidden.
-- The three pitch-based `/play` games (Odd Ear Out, Homophone Hunt, Speaker
-  Match) report `eligible: 0` with a `GamePools.pausedReason` string, which
-  `PlayHubPage` shows in place of the generic "not enough data" message.
-  `DailyPracticePanel`'s pitch-drill target and rotating-game slot pick up
-  the same withholding automatically (same `loadPools` calls).
+- `DailyPracticePanel` leaves out its pitch-drill target.
 - `getSentenceListeningReadiness`'s own separate pitch sub-requirement is
   treated as satisfied while paused — otherwise `listening` cards for
   pitch-eligible words would starve for as long as pitch accent stays
@@ -728,8 +720,7 @@ one, stays on its real schedule since cramming it early wouldn't grow
 FSRS cards, so those two rungs link to their existing confirm-vocab/shadow
 pages instead.
 Planner-step integration ("finish sentence X" as a session step)
-deliberately not built yet — view only, same phased-rollout call as the
-short games feature.
+deliberately not built yet — view only.
 **`SessionRunnerPage`** sequences today's steps, deep-linking into
 the existing Analyze/Vocabulary/Grammar-detail/Shadow/Review pages for the
 actual activity rather than reimplementing any of them — start/skip/
@@ -823,10 +814,10 @@ and the counter frozen at 0.
 
 **Daily practice panel** (`DailyPracticePanel`, on Home under "Today" and atop
 `SessionRunnerPage`; pure logic in `src/lib/dailyPractice.ts`): a small set of
-non-SRS "do this today" targets — say 5 pitch-drill words (`/pitch-accent?mode=word`,
-skipped in quiet mode), one Odd Ear Out round, and one rotating game (stable per day).
-Not session steps: progress is counted live from `pitchDrillAttempts` (synced) and
-`gameRounds` (local-only) since local midnight (`getDailyPracticeCounts`), so it ticks
+non-SRS "do this today" targets — currently just say 5 pitch-drill words
+(`/pitch-accent?mode=word`, skipped in quiet mode or while pitch accent is paused).
+Not session steps: progress is counted live from `pitchDrillAttempts` (synced)
+since local midnight (`getDailyPracticeCounts`), so it ticks
 itself, never touches FSRS or the planner's bucket minutes, and has no Mark complete.
 Targets are constants; no settings UI.
 
@@ -1443,278 +1434,17 @@ Sentences with native audio (3–12 raw tiles accepted by `buildCheckPuzzle`, no
 
 Progressive glossing: before the chunk-by-chunk walkthrough, the learner makes up to three structural decisions (main predicate, particle relations) at a per-skill support level (worked example / partial / guided / independent), recomputed from the synced `gloss_decisions` log. Help is typed (word / form / connection / unsure) and climbs a hint ladder; wrong first answers can retry; disputes are not failures; word/form gaps do not lower structural support. Also: try-unaided, partial translation at level 2, a noun-link (の) skill, one-tap too-easy/right/too-hard self-report (never graded), parked checks re-asked first on the next visit (the retry records `retryOfId`) and surfaced by the planner revisit step, per-decision help order / content fingerprint / first-answer time / help offered at the start (vs used) recorded as evidence only, advisory known-word readiness (thin opens glosses), and a Progress panel. Not built: AI-verified dependency reference, clause skills. No FSRS.
 
-### 3a. Short games — `PlayHubPage.tsx` / `PlayGamePage.tsx` (`/play`, `/play/:gameId/:signal`)
-Short (60–180 s), non-arcade rounds built from the learner's own books and
-history, meant as a break that still trains a skill. Reachable from a Home
-shortcut ("Play a round") and the `/play` hub. Currently ten activities:
-- **Word Detective** (`WordDetectiveGame.tsx`, `src/lib/wordDetective.ts`) —
-  3 mystery words per round. Each is blanked out of a real sentence from
-  the learner's books; they type its reading (typed recall, not multiple
-  choice) and may spend clues one at a time — translation → a second blanked
-  sentence → English meaning → first kana → native audio (a clue with no data
-  behind it is left out). Score is 5 minus clues and wrong guesses, min 1 for
-  a solve, 0 for giving up. Accepts the dictionary reading, the in-sentence
-  inflected reading (`surfaceReadingFromInline`), romaji, or the written word.
-  Eligible words (`buildWordDetectiveWord`): a reading, and ≥2 distinct
-  sentences that actually contain the recorded `surfaceForm`, the opening one
-  translated; occurrences that live only in suspended books are skipped.
-- **Particle Puzzle** (`ParticlePuzzleGame.tsx`, `src/lib/particlePuzzle.ts`) —
-  5 real sentences per round with 2–4 particles pulled out into one shared
-  chip bank (plus 1–2 confusable decoys); tap a chip, tap a blank. **Each
-  placement is judged immediately** — right locks in green, wrong flashes red
-  and returns to the bank — and a sentence starts worth one point per blank,
-  losing one per wrong pick (a live "Worth N now" countdown, floor 0), so the
-  cost, not a hidden answer, deters brute-forcing the bank. The translation
-  stays hidden until the sentence is complete, and the two preceding sentences
-  from the home book are shown for は/が context. Blanks only 格助詞/係助詞 (が を に と で から は も まで より) —
-  never の, へ, sentence-final or conjunctive particles, and never a particle
-  touching another particle (には, でも… — ambiguous compounds). A wrong は/が/も
-  swap carries an "often both natural" note (it still costs the point). Eligible sentences: vocabulary confirmed *and* every linked word actually
-  reviewed at least once (`getSentenceReadingIntroducedReadiness`, the same
-  continue_book bar — test particles in a sentence the learner can mostly
-  read, not guess at one whose words are still unfamiliar), translation
-  present, ≤60 chars, ≥2 blankable particles, not suspended-only. Weakness is **per particle** from the round log: each
-  blank is logged as a `GameRoundItem.parts` entry, recent misses become the
-  `focus` that biases which particles a weak round blanks, and a sentence's
-  picker stats are its particles' recent accuracy (the picker's FSRS-named
-  fields are reused as: lapses = misses, retrievability = accuracy). Offers
-  `weak` and `strong` only. With no history yet, everything falls back to `any`.
-- **Odd Ear Out** (`OddEarOutGame.tsx`, `src/lib/oddEarOut.ts`) — up to 5 rounds
-  (at least 3 needed; a contrast may repeat with fresh words but no word is used
-  twice in a round, so a small pool gives a shorter round; the hub gates on the
-  trials a round could actually be built with) of four native clips of same-length words, each cut to the **word alone**
-  (strict `wordOnly` span — never the folded-in particle): three share an
-  in-word accent shape, one doesn't. Tap ▶ to loop a clip (one plays at a time)
-  and "This one" under the odd one; right locks green, wrong goes red and costs
-  a point (a round starts worth 3, live "Worth N now"). The reveal shows all
-  four words with a plain-language shape and the **measured** pitch contour
-  cropped to just that word (cached YIN track via `loadOrComputeReferencePitch`,
-  `cropPitchPayload`) — nothing symbolic is drawn. Groups by *in-word* shape, so
-  heiban and odaka (identical inside the word) count as one shape. Prefers all
-  four clips from one book (same-speaker proxy, as in the minimal-pair warm-up);
-  never mixes two words that read identically. Eligible clips
-  (`getOddEarOutData`): confirmed citation-form word with a dictionary pitch
-  position and 2+ morae, native audio, and a word-only span from a
-  **current-version** forced alignment (300–3000 ms). Manual / backfilled
-  `audioStartMs/EndMs` ranges are deliberately **ignored**: they're meant for the
-  pitch cards and the boundary backfill writes the aligner's raw match, which
-  includes a following particle (71 of 92 comparable prod overrides) — that would
-  leak the heiban/odaka cue. (Dated sentences are fine: `alignerView` in
-  `src/lib/alignerText.ts` reproduces the aligner's digit/counter → hiragana expansion (dates plus bare numbers and common counters, mirroring `app/number_expansion.py` via `src/lib/numeralExpansion.ts`)
-  and punctuation dropping, so spans map by exact offset.) When a clip sounds
-  wrong, the revealed tile has a "Clip sounds wrong? Fix it" toggle
-  (`ZoomedRangeEditor`) that writes a hand-corrected strict span straight to
-  `SentenceVocabulary.wordOnlyStartMs/EndMs` — a field separate from
-  `audioStartMs/EndMs` for the same reason those are ignored above. This is
-  consulted by `isolatedWordSpans` ahead of the aligner match for every
-  `wordOnly` consumer, so one fix here also fixes that occurrence's clip in
-  Speaker Match, without touching the padded pitch/word-listening range.
-  Proficiency deliberately **not** required (it's perception, not knowing the word). Weakness is per **shape pair** from the
-  round log (unordered, per mora count), offered as `weak`/`strong`. Alignments
-  for the pool are loaded in bulk (`loadAlignmentsBulk`: Dexie cache → one
-  Supabase `in()` query per 40 ids, cached locally) — it never falls through to
-  the tailnet aligner just to size a pool.
-- **Verb Lego** (`VerbLegoGame.tsx`, `src/lib/verbLego.ts`) — 6 stacked verb
-  forms per round, built piece by piece: 聞か+れ+た, 食べ+させ+られ+なかっ+た. The
-  prompt shows the dictionary form, gloss and the ordered functions ("Build:
-  passive → past"); slots carry plain-language labels; the **only controls are
-  the piece chips** — each tap fills the next slot and is judged immediately
-  (green ✓ / red ✗, −1 point, live "Worth N now"). Two chain sources, grouped by
-  suffix *pattern* so a round never repeats one: **real** chains read from
-  vocab-confirmed sentences' UniDic tokens (a verb + the contiguous whitelisted
-  auxiliaries after it, ≥2 of them, validated against the text span) and
-  **built** chains composed by fixed rules from confirmed verbs JMdict tags as
-  godan/ichidan (`recipesForVerb`, `buildBuiltChain`, 10 recipes from
-  causative-past up to causative-passive-negative-past) — needed because the real
-  corpus is ~85% 〜ました (115 confirmed-sentence chains, only 7 patterns). Built
-  forms trust the JMdict tag over shape (godan 切る/走る/入る look ichidan), skip
-  statives/irregulars/honorifics/potential-of-another-verb/particle+verb phrases,
-  and passives need an explicit transitive tag. Decoys are *certainly wrong*
-  only: same-lemma forms with a different label, the wrong allomorph after a
-  godan a-stem (られ for れ — **never** れ for られ: ら抜き is real), other stems
-  from the verb's own `conjugate()` (a/i/te/dictionary — **never** the e-stem:
-  聞けない/食べれない are real potentials), and た/だ, て/で twins only when the
-  preceding piece rules them out. Kana-only verbs conjugate via a `仮`+last-kana
-  stand-in. **Plain-English help** (`FUNCTION_INFO`, `functionHelp`,
-  `chainMeaning`): the "Build:" prompt annotates each function ("causative (make/let
-  someone) → passive (be done to)"); a "What do these mean?" expander gives each
-  function's meaning during play; once a form is finished a fixed block adds *this
-  verb* in each function (聞かせる, 聞かれる, 聞いた — from the verb's own
-  conjugation, only when its class is trusted: built chains carry their JMdict tag,
-  real chains must have their own stem confirm the class) and a whole-form
-  gloss for *either* chain source, matched by function sequence against the
-  10 recipes rather than by source: when the recipe lets the verb's own
-  gloss drop in as a bare infinitive without inflecting it (7 of the 10 —
-  causative/negative/want/past combos, e.g. "made/let someone listen"), it
-  does; the 3 passive-only recipes would need an inflected participle ("was
-  *eaten*") that can't be derived from an arbitrary JMdict gloss, so they
-  keep the original symbolic "wasn't X-ed" wording. A chain outside the 10
-  recipes (polite, 〜ている, 〜たら stacks) has no template and shows nothing
-  here. Examples are deliberately withheld during
-  play — they'd hand over the answer. Weakness is per **piece** (`れる|れ`,
-  `stem:られる`, …) from the round log; offered as `weak`/`strong`.
-- **Ear Tiles** (`EarTilesGame.tsx`, `src/lib/earTiles.ts`) — 4 real sentences
-  per round: tap ▶ to hear the native clip, then tap its shuffled phrase tiles in
-  the order you heard them. Each tap is judged at once (green lock / red flash,
-  −1 point, live "Worth N now"); the translation is hidden behind a "Peek (−1)"
-  button. **The audio is the answer key** — an order that would also be
-  grammatical still counts as wrong (that is what a listening game tests), and
-  the intro says so. Tiles are approximate bunsetsu from the stored UniDic tokens
-  (`chunkSentenceIntoTiles`): a content word plus the particles / auxiliaries /
-  suffixes after it; punctuation is a boundary (揺れた。だけど must not fuse);
-  UniDic's 非自立可能 tag (見る/来る/いる/なる, also *main* verbs) only glues on
-  straight after て/で; noun+する and adjacent nouns merge; sentences whose
-  tokens don't tile the text are refused rather than guessed. Eligible: vocab
-  confirmed, native audio ≤10 s, translation, ≤45 chars, 4–7 tiles, not
-  suspended-only. Weakness comes from the FSRS state of the sentence's own words
-  (`getEarTilesCandidates`: lapsed words → `weak`), so all three signals apply.
-- **Remix** (`RemixGame.tsx`, `src/lib/remix.ts`) — the bridge between hearing a
-  known native sentence and producing one. 3 sentences per round: hear the clip,
-  see its skeleton (`[親鳥]が [ひな]に [巣]を 作りました。`, each slot with a
-  plain-English role hint — "what the action is done to" — plus the noun's
-  stored English, the verb marked "stays the same"), then **swap one slot**, then
-  **swap two**. The learner is shown the *English* of a replacement noun from
-  their own sentences' vocabulary and types the Japanese (kanji or kana); one
-  Check judges the stage, "Show the answer" gives up (0 points). 2 points per
-  swap, −1 per miss. The swapped sentence is shown with a TTS "Hear it, then say
-  it" button and a note that the meaning may be silly (checked structurally, not
-  for sense); the original translation appears only at the end. Anchored: fixed
-  text/particles are copied from the native sentence, replacements are only the
-  learner's own nouns, no generated Japanese distractors, no FSRS write and no
-  auto-rating. A sentence qualifies when it is predicate-final (one verb, or an
-  adjective / 形状詞+です, optionally with ONE earlier clause linked by て/から/の) with
-  2–4 plain noun + case-particle slots (が/を/に/で/から/まで/は; a particle may repeat,
-  and the prompt then names the original noun — 声が (1st); no quotes, no formal/time
-  nouns, no slot noun that follows an unabsorbed proper noun), has audio ≤10 s, a translation
-  and has been *introduced* (`filterToIntroducedSentenceIds`: walked through / started in a book /
-  has a card — vocabulary confirmation and vocabulary-card history are not
-  required, since cards are paused under the sentence-led flow); it is a candidate only if a puzzle can really be
-  built from the current noun pool (so the hub gate is satisfiable). The pool is
-  plain nouns from vocabulary linked to introduced sentences whose first English
-  gloss is unique (the reverse English→Japanese ambiguity rule). Deliberately
-  not built: verb swap (no verb→particle data) and free remix / saved remixes
-  (would re-create the retired `grammar_production`); only native material feeds
-  the drills. About 65 of ~2,800 sentences have a skeleton (20 with audio ≤10 s and a translation) (`scripts/remix-feasibility.ts` probes a JSON dump).
-- **Sentence Growth** (`SentenceGrowthGame.tsx`, `src/lib/sentenceGrowth.ts`) —
-  the step between hearing a native sentence and producing one, using only that
-  sentence's own pieces. 3 sentences per round: hear the clip, see only the core
-  (the predicate) with `＿＿` blanks for the rest, then answer one plain-English
-  question at a time — "Who or what does it?" (が), "What are we talking about?"
-  (は), "What is the action done to?" (を), "Where does it happen, or by what
-  means?" (で), "Where to, when, or to whom?" (に), "Where does it start from?"
-  (から), "Where does it go up to?" (まで) — by picking the matching chunk from the
-  sentence's own remaining chunks (a wrong pick is flagged and counted). Then say
-  the whole sentence along with the clip (nothing recorded), reveal the native
-  text + translation, and the learner self-rates Hard/Okay/Easy
-  (`GameRoundItem.selfRating`; no auto rating, no FSRS write, no points). Chunks
-  = the Remix UniDic skeleton's noun + case-particle slots, with の-modifiers and
-  adverbs folded into the next chunk; a sentence is refused (never offered) if it
-  has a leading connective/clause break, a repeated particle, or a verb/adjective/
-  linking clause inside a chunk. Gate: met sentence + native audio ≤10 s +
-  translation; no vocabulary gate. The pool is small (30 on 2026-10-17), so
-  sentence-first planning floats qualifying sentences to the front of each book's
-  20-sentence walkthrough preview window (order only). Not built: typed or
-  recorded per-chunk production, pruning mode.
-- **Keystone** (`KeystoneGame.tsx`, `src/lib/keystone.ts`) — the confirmed-
-  vocabulary no-card backlog's front door: each puzzle shows a few backlog
-  words (confirmed, no study item yet) that appear in the active book's next
-  unread sentences and asks which one unlocks the most upcoming reading
-  (appears in the most of those sentences). No FSRS signal applies (every
-  candidate is by definition card-less); the round's own unlock-count
-  ranking stands in for the picker's signal ranking.
-- **Homophone Hunt** (`HomophoneHuntGame.tsx`, `src/lib/homophoneHunt.ts`) —
-  the in-drill same/different ABX near-minimal-pair warm-up
-  (`PitchAccentMinimalPairWarmup`) promoted to its own scored round: two real
-  native clips of words that share a reading but not a pitch-accent shape
-  (箸 atamadaka vs 橋 heiban/odaka, both はし), guess which clip is which,
-  then see both measured contours. One point per correct guess;
-  `buildMinimalPairTrials` prefers a same-book pairing first, then cross-book.
-  Gated on confirmed vocab, not FSRS proficiency
-  (`getPitchAccentMinimalPairOccurrences`, changed 2026-09-27) — same
-  perception-only stance as Odd Ear Out/Speaker Match, shared with the
-  warm-up; a full FSRS-proficiency bar was starving newly-imported or
-  suspended-book vocab (never reviewed, so never "proficient") even though
-  this is a discrimination task with the answer shown right after, not a
-  recall check.
-- **Grammar Detective** (`GrammarDetectiveGame.tsx`,
-  `src/lib/grammarDetective.ts`) — Word Detective's clue-ladder format,
-  sourced from tracked grammar patterns instead of confirmed vocabulary:
-  a pattern's single tracked sentence (`pickContextSentenceForGrammarPattern`,
-  the same pick the `grammar_completion` review card uses) is enough to
-  play, since most tracked patterns only have the one — the differentiator
-  clue is the pattern's existing reading-order passage context rather than
-  a second occurrence. Typed recall, graded with the review card's own
-  lenient `isGrammarPatternAnswerCorrect`. Weakness comes from the
-  `grammar_completion` card's own lapses, not vocabulary leeches.
-- **Speaker Match** (`SpeakerMatchGame.tsx`, `src/lib/speakerMatch.ts`) —
-  gamifies the "Compare speakers" browse tool (`/pitch-accent/compare`,
-  `getPitchAccentSpeakerComparisons`): two real clips of the *same*
-  confirmed, citation-form word mined from two different books (a book
-  standing in for a speaker), guess which clip belongs to the named book,
-  then see both measured contours. Not the roadmap's literal "matches a
-  dictionary shape" framing — two correctly-pronounced clips of the same
-  word both match, so there's no wrong answer that way; this is a pure
-  cross-recording discrimination task instead. Proficiency deliberately not
-  filtered (perception-only, like Odd Ear Out). Real corpora are thin here
-  (14 words in prod with 2+ non-suspended books as of 2026-09-27) — the
-  roadmap's own caveat, not a code bug.
-- **Then & Now** (`ThenAndNowGame.tsx`, `src/lib/thenAndNow.ts`,
-  `src/lib/duckedRangePlayer.ts`) — the one purely reflective activity here,
-  not a scored round (there's nothing to grade): replays a sentence read a
-  while ago with the words that were still unknown back then turned down
-  quiet (a real `GainNode`-automated duck, not silence), then again at full
-  volume, so the difference is audible. "Then" = the sentence's earliest
-  real review; "then-unknown" = a linked word confirmed after that moment —
-  both documented v1 approximations, not exact. Writes nothing to
-  `gameRounds` or FSRS; `signals: []`, like Keystone.
-- **Item picker** (`src/lib/gamePicker.ts`, pure, shared by every game): a
-  game hands it already-eligible candidates plus a signal — `weak` (a real FSRS
-  lapse, worst first), `stale` (lowest predicted recall), or `strong` (mature
-  cards, high recall) — and gets a seeded sample of the top slice. If the
-  requested signal can't fill a round it falls back weak → stale → strong →
-  `any` (which samples the whole pool for variety) and the intro says so; the
-  wording of that note is per-game (`SignalCopy`). `/play/:gameId/auto` (the hub default) requests
-  `weak`. The hub hides a game or signal whose pool is too small, with the count.
-- **Adaptive difficulty** (2026-09-22, ROADMAP "Short games" P3). Each game
-  reads `getRecentGameDifficulty(gameId)` once per visit (its own last 3
-  rounds' item accuracy, any signal — `recentRoundsAccuracy` +
-  `pickDifficultyTier` in `gamePicker.ts`) and passes the resulting tier into
-  `pickItems`. It only changes how deep into the ranked pool a round samples
-  from — `'harder'` (≥85% recent accuracy) narrows to the most extreme
-  top slice (the words/items furthest into the signal, e.g. the worst
-  lapses), `'easier'` (≤40%) widens the slice to dilute in gentler items,
-  `'standard'` otherwise. Never changes which signal is used or touches the
-  `any` fallback; a game with no rounds yet reads `'standard'`.
-- **Framework**: `GameShell.tsx` (intro with signal chip + "why these items"
-  → play with a no-fail-state pace bar → result), `src/games/registry.tsx`
-  (each game supplies `loadPools` = its own eligibility, and a component).
-- **Storage stance — read FSRS, never write it.** Games are cued, so grading
-  them would inflate the proficiency signals that gate other activities. Each
-  finished round appends one `GameRound` (per-item correct/clues/points/ms) to
-  a **local-only** Dexie table (`gameRounds`, `logGameRound`) — not in the sync
-  engine, no Supabase table. Read by the adaptive-difficulty tier above and by
-  the `/progress` "Games" panel below. Exception: Then & Now is purely
-  reflective (no right/wrong), so it writes no `GameRound` at all — it's
-  absent from the difficulty tier and the progress panel by design.
-- **`/progress` "Games" panel** (`getGamesProgress` + `src/lib/gamesProgress.ts`,
-  2026-09-22): accuracy by game and by signal (the `weak` row doubles as a
-  "recovery rate" — how often previously-lapsed items get answered right in a
-  low-pressure round), plus a cued-vs-FSRS gap in the style of the
-  self-rating-check panel — overall game item accuracy vs. the learner's
-  overall FSRS pass rate (`rating !== 'again'`), since games hand out
-  clues/hints and can look easier than unaided recall. Read-only, same
-  "nothing feeds FSRS" stance as everything else here.
-- **Session breaks.** Adding time on Home also drafts `game` planner steps
-  (`targetKind: 'game'`, `gameId`, path `/play/:gameId/auto`): one per 20
-  requested minutes, max 3, distinct games only, each costed at
-  `GAME_BREAK_MINUTES` (3). Those minutes are subtracted from the requested
-  time before the four buckets split the rest, so breaks count toward the
-  session limit. Steps are spaced between the other steps (never first) and
-  settled only by "Mark complete"/Skip. Playable games come from
-  `loadGameBreakCandidates` (`src/games/gameBreaks.ts`, each game's `loadPools`
-  eligibility, rotated by day); a top-up prefers games not yet in today's
-  session. The step carries `bucket: 'review'` only nominally — the session
-  recap shows them on a separate "game breaks" line.
+### 3a. Short games (removed 2026-11-16)
+The `/play` hub and its games (Word Detective, Particle Puzzle, Odd Ear Out,
+Verb Lego, Ear Tiles, Remix, Sentence Growth, Keystone, Homophone Hunt, Grammar
+Detective, Speaker Match, Then & Now), the planner's game breaks, Daily
+practice's game slots and the Progress "Games" panel were removed at the
+learner's request (unused). Existing `gameRounds` rows stay in Dexie and keep
+syncing as `game_rounds`; nothing writes new ones. Old planner sessions may
+still hold `targetKind: 'game'` steps, which now have no page. The word-only
+pitch clip loader the pitch drill and contrast examples use survives as
+`getPitchWordClips` (`src/lib/pitchWordClip.ts`); `src/lib/earTiles.ts` stays
+for the reader's Ear Tiles and dictation tools.
 
 ### 4. Spaced-repetition review system — `ReviewPage.tsx`,
 `src/lib/scheduling.ts`, `src/db/repository.ts`
@@ -2593,8 +2323,8 @@ a self-hosted pronunciation-analysis backend. Capabilities:
       browse tool, not a drill: nothing is scored or scheduled. Lists every
       pitch-carrying word mined in citation form from 2+ distinct books
       (`getPitchAccentSpeakerComparisons` in `repository.ts`, same
-      eligibility rule as Odd Ear Out's `getOddEarOutData` minus the
-      shape/mora-count restriction that game's round mechanic needs), and
+      eligibility rule as `getPitchWordClips` minus its accent-shape/mora-count
+      restriction), and
       for the selected word shows the dictionary `PitchAccentDiagram` once
       alongside one playable tile per book with its own `WordPitchContour`
       (measured, not symbolic). Same `Book.id`-as-speaker-proxy caveat as

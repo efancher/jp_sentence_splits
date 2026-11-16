@@ -322,12 +322,9 @@ and possible extensions. This snapshot does not certify a live deployment.
   page and the box-side job store are not tracked, a committed row keeps the
   "Imported" mark after the book is deleted on purpose, and a re-import of an
   already committed episode is allowed, not blocked.
-- Remix and Sentence Growth are implemented on `/play`, using UniDic tokens.
-  Both accept introduced sentences without vocabulary confirmation in the
-  default flow. Growth rebuilds the original sentence from its own chunks and
-  records Hard/Okay/Easy self-ratings. Game rounds sync (`game_rounds`, same migration) and do not
-  write FSRS reviews. Growth-eligible lessons float within each book's existing
-  preview window when planning is non-sequential.
+- The short `/play` games (including Remix and Sentence Growth), planner game
+  breaks and the Progress "Games" panel were removed 2026-11-16 (unused). Stored
+  game rounds are kept and still sync (`game_rounds`); nothing writes new ones.
 - Shadowing includes native pitch preparation, phone-aligned mora targets,
   playback highlighting, pause-group rehearsal and cancellable listen–repeat.
   Attempt comparison uses measured contours; older attempts can have pitch
@@ -524,14 +521,9 @@ repair tooling, research materials and future roadmap ideas remain available.
    deployed on Supabase (`supabase functions delete vocab-assist`).
 
 
-- **Game supply:** the 2026-10-17 production probe found only 30 qualifying Growth
-  sentences (none introduced) and one introduced audio-backed Remix skeleton.
-  These are dated observations, not a fresh inventory. Other games' individual
-  confirmed-vocabulary gates may still restrict supply; changing them is a
-  separate product decision.
-- **Production exercises:** per-chunk typed/recorded Growth, pruning mode, Remix
-  verb swaps and free/saved remixes remain unbuilt. See the production-bridge
-  possibilities in the roadmap.
+- **Production exercises:** the sentence-construction ideas (Growth, Remix and
+  others) have no live implementation since the games were removed. See the
+  production-bridge possibilities in the roadmap.
 - **Native pitch:** timing/pitch needs perceptual review against real recordings,
   including `audio_6598874f` / `sent_519942fa`. Synthetic browser fixtures do not
   establish acoustic accuracy or physical-iPhone behavior. Speaking-rate ratio,

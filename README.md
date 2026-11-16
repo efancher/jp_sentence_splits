@@ -14,7 +14,7 @@ builds a daily plan from a time budget: new sentences and revisits (a guided
 walkthrough and the reader), grammar checks, shadowing, and review. Review is
 mainly one FSRS card per introduced sentence (`reading_in_context`: pick the
 English meaning); word and grammar drill cards are paused but their data is
-kept. Ratings are always your own choice; typed-match feedback, games and
+kept. Ratings are always your own choice; typed-match feedback and
 walkthroughs never grade cards for you. See
 [STATUS](docs/STATUS.md) for the current snapshot,
 [AI_OVERVIEW](docs/AI_OVERVIEW.md) for feature-by-feature behavior and

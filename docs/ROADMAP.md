@@ -12,8 +12,8 @@ Original phases match `docs/UNIFIED_APP_ARCHITECTURE.md` §15.
 
 Phases 0–9 established the unified data model, imports, FSRS, vocabulary/kanji,
 grammar, shadowing and pronunciation feedback. The daily planner, progress
-panels, source resegmentation, podcast/NHK Easy import, read-along, pitch practice
-and short games are implemented. The older word/grammar card ladder was removed
+panels, source resegmentation, podcast/NHK Easy import, read-along and pitch
+practice are implemented; the short `/play` games were removed (2026-11-16, unused). The older word/grammar card ladder was removed
 (2026-11-12); learning is sentence-led and old study items and reviews are kept as evidence.
 
 Completed implementation logs and superseded designs have been pruned from this
@@ -339,33 +339,11 @@ Unfinished work and optional extensions; completed behavior is in `AI_OVERVIEW.m
   Consider making `test:pg` a deployment gate if its image-pull cost is acceptable;
   it currently runs independently on relevant pushes and pull requests.
 
-- [~] **Short games (`/play`) — remaining extensions.** The hub, picker,
-  individual games, local round log, planner breaks, progress panel and adaptive
-  pool depth are built. Keep games cued and separate from FSRS grading. Future
-  work and ideas from the original design:
-  - Sync `game_rounds` after usefulness is established; explicitly offer
-    "Queue misses for review" to seed cards without grading them. Eventually
-    evaluate game misses as planner weakness evidence (the riskiest phase).
-  - Replace the fixed three-minute break estimate with per-game timing, add a
-    Settings toggle/frequency, and consider weak-skill selection instead of day
-    rotation. Breaks already displace requested session time. A rolling rounds
-    count versus a streak remains an optional product choice.
-  - Verb Lego: add 〜たくなかった / 〜でした pieces and a reverse "which piece
-    is the passive?" mode; preserve careful aux-lemma labelling.
-  - Ear Tiles: slower replay, per-phrase replay when alignment spans exist, and
-    ways to include sentences rejected for too few phrases.
-  - Unbuilt candidates: **Draft Day** (choose backlog words to adopt) and
-    **Pair Sort** (only when discrimination errors justify it). Earlier ideas
-    deferred for overlap or size remain possibilities: Connections, Furigana
-    Fog, Gremlin Hunt and Ghost Run.
-  - Re-measure eligible pools rather than relying on the September feasibility
-    counts. Speaker Match needs the same word in multiple non-suspended books;
-    Word Detective's multi-context weakness pool can also be thin. Eligibility
-    must run before ranking, with an explanation and fallback for a small pool.
-  - Browser verification remains useful: run a weak round, check that its reason
-    matches the evidence, verify no review/study-item writes, and exercise the
-    small-pool fallback. New game gates should respect the default sentence-led
-    flow rather than depend on paused word-card history.
+- **Short games (`/play`) — dropped 2026-11-16.** The learner no longer used
+  them, so the hub, games, planner breaks and progress panel were removed. Stored
+  `game_rounds` rows are kept and still sync. The unbuilt extension ideas (queue
+  misses for review, per-game timing, Verb Lego/Ear Tiles extensions, Draft Day,
+  Pair Sort and others) are in this file at `863d01e` if games come back.
 
 - [ ] **Grammar pattern discrimination card.** (2026-09-17, follow-up to
   the `grammar_completion` recall redesign) A second retention target
@@ -710,7 +688,7 @@ Unfinished work and optional extensions; completed behavior is in `AI_OVERVIEW.m
     migration — the user's call). Each label stores the auto span *shown* and `spanVersion`, because auto
     spans drift as code changes. The saved files are the only copy that leaves the device: keep them.
   - **Per speaker?** There is no per-clip speaker identity; `Book.id` is the proxy (already used
-    by the perception games). Test before building: label ≥10 per book, check whether per-book
+    by the removed perception games). Test before building: label ≥10 per book, check whether per-book
     median signed error differs from the global one (bootstrap). If not, one global pad is
     enough; if so, store per-book offsets. Speech rate (phones/sec from the alignment itself)
     may predict error better than speaker and needs no per-speaker labels.
@@ -1210,10 +1188,7 @@ playback, an ungated client-side heuristic structure preview on
 `ReaderPage` (`previewHeuristicChunks`, no AI, no saved analysis), and
 replacing `continue_book`'s all-or-nothing "every word introduced" gate
 with a `CONTINUE_BOOK_MIN_INTRODUCED_RATIO` density threshold
-(`getSentenceReadingIntroducedReadiness`, repository.ts — `getParticlePuzzleData`
-deliberately keeps the strict all-or-nothing bar via `minRatio: 1`, since
-that game needs the whole sentence readable for the particle blank to be
-a comprehension check rather than a guess). The rest are unscheduled,
+(`getSentenceReadingIntroducedReadiness`, repository.ts). The rest are unscheduled,
 kept here so the thinking isn't lost:
 
 - **Passed `reading_in_context` comprehension check as an alternate
@@ -1397,8 +1372,8 @@ rather than built "in case it doesn't work out":
   (`BuildPage`'s own hint ladder, `ReaderPage` being ungated) — but
   weakest on the "automatic" part of the original ask, since visiting
   stays fully opt-in.
-- **A `ParticlePuzzle` round targeted at the sentence's flagged role**
-  (rather than the game's normal random weak-pool pick) as a rotation
+- **A particle-blank round targeted at the sentence's flagged role**
+  (like the removed Particle Puzzle game, but aimed at this sentence) as a rotation
   option for a third/later visit, so repeated revisits of the same
   sentence don't all ask the identical typed-reading question. Narrower
   applicability than the others (only sentences with a blankable
@@ -1422,7 +1397,7 @@ From a 2026-10-17 design brainstorm: the learner likes the passive "hear a
 clip, pick the matching chunks in order" activity but struggles to bridge to
 independent sentence construction. Five interface concepts, each removing one
 support (given chunks, given order, attached particles, visible target,
-template). User wants to try all of them; Remix and Sentence Growth (first slice) are built, the rest are not. Suggested
+template). User wanted to try all of them; Remix and Sentence Growth first slices were built as `/play` games and removed with the games on 2026-11-16, the rest were never built. Suggested
 progression: Stage → Elastic → Particle Swap → Sentence Growth → Remix, but
 **Remix Mode is the recommended first build** (closest to the existing chunk
 drill, reuses already-heard native sentences). Cautions from existing
@@ -1438,7 +1413,7 @@ hints.
   to fit) → free remix on the same skeleton about the learner's own life.
   Saved remixes appear beside native sentences. Reuses material already heard
   and shadowed, so only the construction is new.
-  **Status 2026-10-17: scope A built** (the `/play` Remix game, `src/lib/remix.ts`; translation handling = slot hints during play, full translation after). Scope A = (rungs 1–2 only:
+  **Status: scope A was built 2026-10-17 and removed 2026-11-16 with the `/play` games** (it lived in `src/lib/remix.ts`; translation handling = slot hints during play, full translation after). Scope A = (rungs 1–2 only:
   swap one / two slots, as a `/play` game; read-only vs FSRS, local-only
   rounds; no schema/sync changes). Findings from the design pass:
   - The drill the learner likes is Ear Tiles (`earTiles.ts`), whose tiles
@@ -1473,14 +1448,13 @@ hints.
   production; finish by saying the whole sentence against the original clip.
   Reverse mode, *pruning*, strips a native sentence down to its skeleton to
   show what is load-bearing.
-  **Status 2026-10-17: first slice built** as a `/play` game (`src/lib/sentenceGrowth.ts`,
-  `SentenceGrowthGame.tsx`): own chunks only (pick each from the sentence's own
+  **Status: a first slice was built 2026-10-17 as a `/play` game and removed
+  2026-11-16 with the games** (`src/lib/sentenceGrowth.ts`, `SentenceGrowthGame.tsx`): own chunks only (pick each from the sentence's own
   pieces), asked in the order が/は → を → で → に → から → まで, then say the whole
   sentence along with the clip, reveal, three-way self-rating. Not built:
   typed/recorded production per chunk, pruning mode, a recorded take. Chunks come
   from the Remix skeleton (UniDic), not saved Cure-Dolly analyses (~5% coverage).
-  Pool is small (30 qualifying sentences, 0 yet met) and fills through ordinary
-  walkthroughs, which now prefer these sentences within their existing window.
+  Pool was small (30 qualifying sentences, 0 yet met on 2026-10-17).
 - **Particle Swap (one dial, shifting meaning).** One concrete scene with a
   single slot cycling は/が/も/を/に, showing a tiny picture change, an English
   "feel" line, and the audio of each variant (intonation, not just text).

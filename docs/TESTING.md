@@ -149,12 +149,8 @@ These are scoped follow-up checks, not a rerun of the full coverage suite above.
    recovery through the actual screens. Source-cache tests stub the backup
    boundary and cover disabled configuration; enabled Storage upload/restore
    and a configured service round trip remain gaps.
-3. **Games and secondary screens.** Most game rules have pure tests, while many
-   playable components have almost no component coverage. Add outcome-focused
-   browser checks for weak pools, replay, completion logging and unchanged FSRS
-   state. `e2e/play-games.spec.ts` now covers only the empty-library hub, the
-   unknown-game route and horizontal overflow at phone/desktop widths (Chromium
-   and WebKit); seeded rounds are deliberately left open. `e2e/shadow-controls.spec.ts`
+3. **Secondary screens.** (The `/play` games and their tests were removed
+   2026-11-16.) `e2e/shadow-controls.spec.ts`
    covers Shadow mark start/end, the target range and Clear, and the Loop window
    sliders (minimum-length clamp, remembered pause/lead-in, speed, Whole
    sentence reset), asserting no attempts, reviews or study items are created.
