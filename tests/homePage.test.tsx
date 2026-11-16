@@ -61,4 +61,24 @@ describe('HomePage', () => {
     const sessions = await getDb().plannerSessions.toArray();
     expect(sessions).toHaveLength(1);
   });
+
+  it('replans today\'s session fresh: a new session with the same minutes and no stored snapshots', async () => {
+    const first = await addMinutesToTodaySession(30);
+    await getDb().plannerSnapshots.put({ id: 'studyItems#0', table: 'studyItems', chunk: 0, rows: [] });
+    const user = userEvent.setup();
+    renderHomePage();
+
+    await screen.findByText(/min planned today/);
+    await user.click(screen.getByRole('button', { name: "Clear today's session" }));
+    await user.click(screen.getByRole('button', { name: 'Replan fresh (30 min)' }));
+
+    await waitFor(async () => {
+      const sessions = await getDb().plannerSessions.toArray();
+      expect(sessions).toHaveLength(1);
+      expect(sessions[0]!.id).not.toBe(first.id);
+      expect(sessions[0]!.targetMinutes).toBe(30);
+    });
+    expect(await getDb().plannerSnapshots.get('studyItems#0')).toBeUndefined();
+    expect(screen.queryByText(/Clear today's plan and start over/)).not.toBeInTheDocument();
+  });
 });

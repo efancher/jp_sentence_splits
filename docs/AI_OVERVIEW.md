@@ -616,7 +616,11 @@ confirm (no native dialog) — the fix for "I started with the wrong split
 and there was no way to undo it," since only *newly-added* minutes could
 ever pick up a corrected split otherwise; real underlying progress
 (analyses, vocab confirmations, reviews) is untouched, only the session's
-own step-list bookkeeping is discarded. Below that, the same compact
+own step-list bookkeeping is discarded. The same confirm offers "Replan
+fresh" (2026-11-16, `replanTodayPlannerSession`): it drops the planner's
+in-memory reads and packed snapshots (`clearPlannerReadCaches`,
+`clearPlannerSnapshots`), deletes today's session and plans its minutes
+again straight from storage. Below that, the same compact
 rolling-14-day
 balance view as before (four `.progress-bar` meters — reusing the existing
 CSS component rather than a charting dependency — fill = how recently each

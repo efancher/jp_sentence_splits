@@ -8,6 +8,7 @@ import {
   addMinutesToTodaySession,
   computeLearningBalance,
   deleteTodayPlannerSession,
+  replanTodayPlannerSession,
   explainWeakWordRevisits,
   getLastPlannerTiming,
   warmPlannerReads,
@@ -123,6 +124,7 @@ export function HomePage() {
   // Temporary diagnostic: per-step planner timings, shown on-screen because a phone has no console.
   const [plannerTiming, setPlannerTiming] = useState('');
   const [confirmingClear, setConfirmingClear] = useState(false);
+  const [replanning, setReplanning] = useState(false);
   // Open by default (2026-08-27 follow-up) — hiding it behind a click meant
   // the split was easy to forget to adjust before starting/topping up.
   const [splitOpen, setSplitOpen] = useState(true);
@@ -155,6 +157,19 @@ export function HomePage() {
       setPlannerTiming(`Tap to done ${Math.round(performance.now() - tapped)} ms\n${getLastPlannerTiming()}`);
     } finally {
       setAddingMinutes(null);
+    }
+  }
+
+  async function handleReplan() {
+    setReplanning(true);
+    const tapped = performance.now();
+    try {
+      await replanTodayPlannerSession(dailyBudgetMinutes, new Date(), customSplit ?? undefined);
+      if (customSplit) await updateSettings({ sessionAllocation: customSplit });
+      setPlannerTiming(`Replan ${Math.round(performance.now() - tapped)} ms (no cached reads)\n${getLastPlannerTiming()}`);
+    } finally {
+      setReplanning(false);
+      setConfirmingClear(false);
     }
   }
 
@@ -224,10 +239,14 @@ export function HomePage() {
               <div className="row" style={{ gap: '0.5rem', alignItems: 'center' }}>
                 <span className="muted" style={{ fontSize: '0.85rem' }}>
                   Clear today's plan and start over? Completed work (reviews, analysis, vocab
-                  confirmations) isn't affected.
+                  confirmations) isn't affected. Replan fresh builds a new plan straight away,
+                  without reusing cached planner data.
                 </span>
                 <button type="button" className="danger" onClick={handleClear}>
                   Yes, clear it
+                </button>
+                <button type="button" disabled={replanning} onClick={handleReplan}>
+                  {replanning ? 'Replanning…' : `Replan fresh (${session.targetMinutes} min)`}
                 </button>
                 <button type="button" className="ghost" onClick={() => setConfirmingClear(false)}>
                   Cancel

@@ -172,6 +172,7 @@ import {
   type PasteOrderResult,
 } from '../lib/pasteOrder';
 import { ensureSettings, getDb, localDateKey, readSettings, updateSettings } from './database';
+import { clearPlannerSnapshots } from './plannerSnapshots';
 import {
   finishSinkAfterCommit,
   notifySync,
@@ -209,6 +210,7 @@ import {
   allAudioSentenceIds,
   beginPlannerWarming,
   bookSentencesForSentences,
+  clearPlannerReadCaches,
   createPlannerTimer,
   endPlannerPass,
   endPlannerWarming,
@@ -6525,6 +6527,23 @@ export async function deleteTodayPlannerSession(now: Date = new Date()): Promise
   if (!session) return;
   await db.plannerSessions.delete(session.id);
   notifySync('planner_sessions', session.id, { id: session.id }, 'delete');
+}
+
+/**
+ * Home's "Replan fresh": throws away today's plan and plans the same number of minutes again from
+ * storage, bypassing the planner's in-memory reads and packed snapshots (`plannerSnapshots.ts`) so
+ * nothing from an earlier pass is reused. Like "Clear today's session", completed work is untouched.
+ */
+export async function replanTodayPlannerSession(
+  fallbackMinutes: number,
+  now: Date = new Date(),
+  baselineOverride?: Record<SessionBucket, number>,
+): Promise<PlannerSession> {
+  const minutes = (await getTodayPlannerSession(now))?.targetMinutes ?? fallbackMinutes;
+  clearPlannerReadCaches();
+  await clearPlannerSnapshots(getDb());
+  await deleteTodayPlannerSession(now);
+  return addMinutesToTodaySession(minutes, now, baselineOverride);
 }
 
 export interface LearningBalanceEntry {

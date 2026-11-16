@@ -177,9 +177,14 @@ async function cachedPlannerRead<T>(
   return value;
 }
 
-/** Tests only: forget every in-memory cross-tap read so the next pass reads storage (snapshots or tables). */
-export function resetPlannerReadCachesForTests(): void {
+/** Forget every in-memory cross-tap read so the next pass reads storage (snapshots or tables). */
+export function clearPlannerReadCaches(): void {
   plannerCachesByDbName.clear();
+}
+
+/** Tests only: `clearPlannerReadCaches`. */
+export function resetPlannerReadCachesForTests(): void {
+  clearPlannerReadCaches();
 }
 
 /**
