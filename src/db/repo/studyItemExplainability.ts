@@ -1,4 +1,5 @@
 import type {
+  BookSentence,
   GrammarPattern,
   Review,
   Sentence,
@@ -6,14 +7,18 @@ import type {
   VocabularyConfusion,
   VocabularyItem,
 } from '../../domain/types';
+import { CHECK_MAX_TILES, CHECK_MIN_TILES, chunkSentenceIntoTileDetails } from '../../lib/earTiles';
 import {
   computeMaturityLevel,
   MATURE_MIN_SCHEDULED_DAYS,
   type ContextDiversity,
   type MaturityLevel,
 } from '../../lib/maturity';
+import { buildSentenceLadderRows, type SentenceLadderRow } from '../../lib/sentenceCardLadder';
 import { getDb } from '../database';
 import { computeGrammarPatternContextDiversity, computeVocabularyContextDiversity } from './contextDiversity';
+import { bookSentencesForSentences } from './passReads';
+import { getIntroducedSentenceIds } from './reviewScheduling';
 
 // ---------------------------------------------------------------------------
 // Study-item explainability/debug view (Phase 7.10). Read-only: gathers
@@ -215,5 +220,61 @@ export async function listStudyItemSummaries(): Promise<StudyItemSummary[]> {
       if (grammarPattern) subjectLabel = grammarPattern.canonicalName;
     }
     return { studyItem, subjectLabel };
+  });
+}
+
+/** One met sentence on the `/study-items` page: its card ladder plus what the row shows and links to. */
+export interface SentenceLadderListRow extends SentenceLadderRow {
+  japanese: string;
+  translation: string;
+  /** The first book holding it (non-archived first), for the reader link. */
+  book?: { id: string; title: string; chapterId?: string };
+  /** Tiles a `dictation_tile:N` card can target, or null when the sentence doesn't split for dictation. */
+  dictationTileCount: number | null;
+}
+
+/**
+ * Every met sentence (`getIntroducedSentenceIds`) with its sentence-card ladder, for the
+ * `/study-items` page. Read-only; retired word/grammar drill cards are left out on purpose.
+ */
+export async function listSentenceLadderRows(nowIsoValue: string): Promise<SentenceLadderListRow[]> {
+  const db = getDb();
+  const allIds = (await db.sentences.toCollection().primaryKeys()) as string[];
+  const introduced = [...(await getIntroducedSentenceIds(allIds))];
+  if (introduced.length === 0) return [];
+  const [studyItems, sentences, memberships, books] = await Promise.all([
+    db.studyItems.where('subjectType').equals('sentence').toArray(),
+    db.sentences.bulkGet(introduced),
+    bookSentencesForSentences(introduced),
+    db.books.toArray(),
+  ]);
+  const bookById = new Map(books.map((book) => [book.id, book]));
+  const membershipBySentence = new Map<string, BookSentence>();
+  for (const membership of memberships) {
+    const book = bookById.get(membership.bookId);
+    if (!book) continue;
+    const current = membershipBySentence.get(membership.sentenceId);
+    if (!current || (bookById.get(current.bookId)?.archived && !book.archived)) {
+      membershipBySentence.set(membership.sentenceId, membership);
+    }
+  }
+  const sentenceById = new Map(
+    sentences.filter((row): row is Sentence => Boolean(row)).map((row) => [row.id, row]),
+  );
+  return buildSentenceLadderRows(introduced, studyItems, nowIsoValue).flatMap((row) => {
+    const sentence = sentenceById.get(row.sentenceId);
+    if (!sentence) return [];
+    const membership = membershipBySentence.get(row.sentenceId);
+    const book = membership ? bookById.get(membership.bookId) : undefined;
+    const tiles = chunkSentenceIntoTileDetails(sentence)?.length ?? 0;
+    return [
+      {
+        ...row,
+        japanese: sentence.japanese,
+        translation: sentence.translation,
+        book: book ? { id: book.id, title: book.title, chapterId: membership?.chapterId } : undefined,
+        dictationTileCount: tiles >= CHECK_MIN_TILES && tiles <= CHECK_MAX_TILES ? tiles : null,
+      },
+    ];
   });
 }

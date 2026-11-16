@@ -23,7 +23,7 @@ const NAV = [
   { to: '/inbox', label: 'Inbox' },
   { to: '/review', label: 'Review' },
   { to: '/issues', label: 'Issues' },
-  { to: '/study-items', label: 'Study items' },
+  { to: '/study-items', label: 'Sentence cards' },
   { to: '/vocabulary', label: 'Words' },
   { to: '/grammar', label: 'Grammar' },
   { to: '/progress', label: 'Progress' },

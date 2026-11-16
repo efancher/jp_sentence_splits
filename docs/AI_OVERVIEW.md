@@ -1994,8 +1994,15 @@ card inline without breaking the review flow (see §7).
 (`StudyItemDebugPage.tsx`, linked via a "Why?" link on the current review
 card) surfaces raw FSRS state, full review history (source/assistance/
 response), and computed maturity level for vocabulary subjects.
-`/study-items` (`StudyItemsListPage.tsx`) is a top-level browsable list of
-every study item, sorted by due date.
+`/study-items` (`StudyItemsListPage.tsx`, nav "Sentence cards", 2026-11-16)
+lists every met sentence (`getIntroducedSentenceIds`) with its sentence-card
+ladder (`listSentenceLadderRows`, `src/lib/sentenceCardLadder.ts`): Read
+(`reading_in_context`), Listening where one exists, Ear tiles, and Dictation
+cards out of the sentence's dictation tiles, each chip linking to the card's
+debug view; next due date, lapses and the book (reader link) per row; "Due
+now / All / Lapsed" filters, a book filter and per-stage counts. Retired
+word/grammar drill cards are left out (their debug pages still open from
+Progress and Issues).
 
 ### 4a. Sentence-led flow & sequential study
 
