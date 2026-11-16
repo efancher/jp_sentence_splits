@@ -18,7 +18,7 @@
  * Needs the mining API (MINING_API_BASE, default the tailnet service).
  * Dry-run by default; --apply to write.
  *
- * Usage: npx tsx scripts/backfill-missing-sentence-audio.ts [--apply] [--book <id>] [--sentence <id,id,...>]
+ * Usage: npx tsx scripts/backfill-missing-sentence-audio.ts [--apply] [--book <id>] [--sentence <id,id,...>] [--non-youtube]
  */
 import { hashString } from '../src/lib/ids';
 import { parseVideoSpanMs, sourceKeyOfCardId } from './lib/missingAudioPlan';
@@ -47,6 +47,7 @@ async function main() {
   const apply = parseApplyFlag(argv);
   const bookArg = argv.includes('--book') ? argv[argv.indexOf('--book') + 1] : undefined;
   const sentenceArg = argv.includes('--sentence') ? new Set(argv[argv.indexOf('--sentence') + 1].split(',')) : undefined;
+  const nonYoutube = argv.includes('--non-youtube');
   const supabase = await createScriptSupabaseClient();
   const user = await requireAuthedUser(supabase);
 
@@ -94,6 +95,10 @@ async function main() {
     const info = sourceId ? sourceInfo.get(sourceId) : undefined;
     if (!span || !info || !sourceId) {
       console.log(`  skip  ${label} (${!span ? 'no video span' : 'no known source URL'})`);
+      continue;
+    }
+    if (nonYoutube && /youtube\.com|youtu\.be/.test(info.url)) {
+      console.log(`  skip  ${label} (YouTube source)`);
       continue;
     }
     const { startMs, endMs } = span;
