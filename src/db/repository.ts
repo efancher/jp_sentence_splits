@@ -1,20 +1,16 @@
 
 import { openContentReports, type OpenContentReport } from '../lib/contentReports';
-import { isReadingAnswerCorrect, surfaceReadingFromInline } from '../lib/readingAnswer';
-import { buildWordEvidence, MEANING_CHECK_KEY_PREFIX, strugglingWordIds } from '../lib/wordEvidence';
+import { surfaceReadingFromInline } from '../lib/readingAnswer';
+import { MEANING_CHECK_KEY_PREFIX, strugglingWordIds } from '../lib/wordEvidence';
 import { findSetExpressions } from '../lib/setExpressions';
-import { stepTimer } from '../lib/pageTiming';
 import { chapterIdsByEpisodeNumber } from '../lib/chapterEpisodeOrder';
-import { FREQUENCY_WAIT_MS, loadWordFrequency, lookupWordBand } from '../lib/wordFrequency';
 import { grammarPatternStrengths } from '../lib/grammarEvidence';
 import { pickAnotherExample, type ExampleParts } from '../lib/grammarExamples';
 import {
   evidenceLevel,
   type EvidenceLevel,
-  frequencyBandPrior,
   planWeakWordSentences,
   READER_KNOWN_STRENGTH,
-  wordStrength,
 } from '../lib/wordStrength';
 import { readCheckReason, sentencesDueForReadCheck } from '../lib/readCheck';
 import { withoutResetWalkthroughs } from '../lib/sentenceLearning';
@@ -274,7 +270,6 @@ import {
   type PasteOrderResult,
 } from '../lib/pasteOrder';
 import { ensureSettings, getDb, localDateKey, readSettings } from './database';
-import { loadSnapshot } from './plannerSnapshots';
 import {
   finishSinkAfterCommit,
   notifySync,
@@ -296,6 +291,7 @@ export * from './repo/passReads';
 export * from './repo/alignmentCaches';
 export * from './repo/contextDiversity';
 export * from './repo/studyItemExplainability';
+export * from './repo/wordReadingStrengths';
 import { updateSentenceText } from './repo/sentenceWrites';
 import { countAttemptsForSentences } from './repo/shadowingAttempts';
 import { mintGetOrCreateId, ensureVocabularyItem, confirmSentenceVocabulary, setSentenceGrammarReviewStatus } from './repo/vocabularyKanji';
@@ -311,13 +307,11 @@ import {
   learningEventsForSentences,
   plannerPassActive,
   plannerShared,
-  plannerWarmingActive,
   readAllBookSentencesForPass,
   readAllGlossDecisionsForPass,
   readAllLearningEventsForPass,
   readAllSentenceVocabularyForPass,
   readAllStudyItemsForPass,
-  readAllVocabularyItemsForPass,
   readRowsByKeys,
   readSentenceStudyItemsForPass,
   readTileEligibilityForPass,
@@ -332,6 +326,12 @@ import {
   saveReferenceAlignment,
 } from './repo/alignmentCaches';
 import { listStudyItemSummaries } from './repo/studyItemExplainability';
+import {
+  loadWordReadingStrengths,
+  PLANNER_STRENGTH_CACHE_MS,
+  READER_STRENGTH_CACHE_MS,
+  type WordReadingStrengths,
+} from './repo/wordReadingStrengths';
 
 
 
@@ -4498,12 +4498,6 @@ export async function getProficientVocabularyItemIds(
       .map((item) => item.subjectId),
   );
 }
-
-/** How long one planning pass may reuse word strengths across its per-book lookups. */
-const PLANNER_STRENGTH_CACHE_MS = 60_000;
-
-/** How long the Reader may reuse word strengths; "known" shading doesn't need to track each review live. */
-export const READER_STRENGTH_CACHE_MS = 60_000;
 
 /**
  * Saved meanings and "known" status for surface expressions. An expression is
@@ -9414,145 +9408,6 @@ async function activeSentenceIdsForShadowing(bookLimit: number): Promise<Set<str
     }
   }
   return ids;
-}
-
-/**
- * Reading strength of every word that has any evidence (unseen words are left
- * out — unseen is not weak), from local review, typed-recall and walkthrough
- * history. Selection input only (`wordStrength.ts`): no due dates, no FSRS effect.
- */
-type WordReadingStrengths = {
-  strengthByWord: Map<string, number>;
-  meaningStrengthOf: (wordId: string) => number;
-  /** Meaning strength of a word with no vocabulary item yet: its frequency prior alone. */
-  meaningStrengthOfLemma: (expression: string, reading: string) => number;
-  wordsBySentence: Map<string, string[]>;
-  links: SentenceVocabulary[];
-  linksBySentence: Map<string, SentenceVocabulary[]>;
-  vocabById: Map<string, VocabularyItem>;
-  /** Vocabulary items by `lemmaKey(expression, reading)`. */
-  vocabByLemma: Map<string, VocabularyItem>;
-};
-
-/** Clears the Reader's short-lived word-strength reuse (tests). */
-export function resetWordStrengthCache(): void {
-  strengthsCache = undefined;
-}
-
-let strengthsCache: { at: number; value: Promise<WordReadingStrengths> } | undefined;
-
-/**
- * `maxAgeMs` reuses a recent result instead of re-reading five whole tables. Only
- * for callers that show it (the Reader's "known" words) rather than plan from it;
- * reading from the cache also keeps that caller's live query from re-running on
- * every review or learning event.
- */
-async function loadWordReadingStrengths(maxAgeMs = 0): Promise<WordReadingStrengths> {
-  if (maxAgeMs === PLANNER_STRENGTH_CACHE_MS && (plannerPassActive() || plannerWarmingActive())) {
-    // Planner callers: reuse across taps until one of the five tables it reads changes.
-    return plannerShared(
-      'wordStrengths',
-      ['sentenceVocabulary', 'studyItems', 'reviews', 'sentenceLearningEvents', 'vocabularyItems'],
-      () => loadWordReadingStrengths(0),
-    );
-  }
-  if (maxAgeMs > 0 && strengthsCache && Date.now() - strengthsCache.at < maxAgeMs) return strengthsCache.value;
-  const timer = stepTimer('wordStrengths');
-  const value = (async () => {
-    try {
-      return await traceStep('loadWordReadingStrengths compute', () => computeWordReadingStrengths(timer));
-    } finally {
-      timer.done();
-    }
-  })();
-  if (maxAgeMs > 0) {
-    strengthsCache = { at: Date.now(), value };
-    value.catch(() => {
-      if (strengthsCache?.value === value) strengthsCache = undefined;
-    });
-  }
-  return value;
-}
-
-async function computeWordReadingStrengths(timer: ReturnType<typeof stepTimer>): Promise<WordReadingStrengths> {
-  const db = getDb();
-  const [links, studyItems, reviews, events, vocab] = await Promise.all([
-    readAllSentenceVocabularyForPass(),
-    readAllStudyItemsForPass(),
-    plannerShared('reviews', ['reviews'], () => loadSnapshot(db, 'reviews', () => db.reviews.toArray())),
-    readAllLearningEventsForPass(),
-    readAllVocabularyItemsForPass(),
-  ]);
-  timer.mark(`tables(${links.length}/${studyItems.length}/${reviews.length}/${events.length}/${vocab.length})`);
-  const wordsBySentence = new Map<string, string[]>();
-  const linksBySentence = new Map<string, SentenceVocabulary[]>();
-  for (const link of links) {
-    const words = wordsBySentence.get(link.sentenceId);
-    if (words) words.push(link.vocabularyItemId);
-    else wordsBySentence.set(link.sentenceId, [link.vocabularyItemId]);
-    const list = linksBySentence.get(link.sentenceId);
-    if (list) list.push(link);
-    else linksBySentence.set(link.sentenceId, [link]);
-  }
-
-  // A typed reading on a reading_in_context card (flagged word, weakest word, or structure chunk)
-  // asked about one word; find which by matching the saved expected reading to a linked word's reading.
-  const itemById = new Map(studyItems.map((item) => [item.id, item]));
-  const typed = reviews.filter((review) => {
-    if (!review.responseRaw || !review.expectedAnswer) return false;
-    return itemById.get(review.studyItemId)?.activityType === 'reading_in_context';
-  });
-  const typedSentenceIds = [
-    ...new Set(typed.map((review) => review.contextSentenceId ?? itemById.get(review.studyItemId)!.subjectId)),
-  ];
-  const typedSentences = new Map(
-    (await db.sentences.bulkGet(typedSentenceIds)).filter((s): s is Sentence => Boolean(s)).map((s) => [s.id, s]),
-  );
-  const typedRecalls: { wordId: string; at: number; success: boolean }[] = [];
-  for (const review of typed) {
-    const sentenceId = review.contextSentenceId ?? itemById.get(review.studyItemId)!.subjectId;
-    const sentence = typedSentences.get(sentenceId);
-    const at = Date.parse(review.timestamp);
-    if (!sentence || Number.isNaN(at)) continue;
-    const match = (linksBySentence.get(sentenceId) ?? []).find(
-      (link) =>
-        !!link.surfaceForm &&
-        isReadingAnswerCorrect(
-          review.expectedAnswer!,
-          surfaceReadingFromInline(sentence.inlineReading, link.surfaceForm) ?? '\u0000',
-        ),
-    );
-    if (match) {
-      typedRecalls.push({
-        wordId: match.vocabularyItemId,
-        at,
-        success: isReadingAnswerCorrect(review.responseRaw!, review.expectedAnswer!),
-      });
-    }
-  }
-
-  const evidence = buildWordEvidence({ reviews, studyItems, wordsBySentence, learningEvents: events, typedRecalls });
-  const now = Date.now();
-  const vocabById = new Map(vocab.map((item) => [item.id, item]));
-  // General-language frequency is a small starting score; the learner's own evidence moves a word off it.
-  timer.mark('typedRecalls');
-  const frequency = await loadWordFrequency(FREQUENCY_WAIT_MS);
-  timer.mark('frequency');
-  const strengthByWord = new Map<string, number>();
-  const priorOf = (wordId: string) => {
-    const word = vocabById.get(wordId);
-    return frequencyBandPrior(word ? lookupWordBand(frequency, word.expression, word.reading) : null);
-  };
-  for (const [wordId, items] of evidence) {
-    strengthByWord.set(wordId, wordStrength(items, 'reading', now, { prior: priorOf(wordId) }));
-  }
-  // Meaning strength for any word, met or not: it only learns from meaning recall, so it starts at the prior.
-  const meaningStrengthOf = (wordId: string) =>
-    wordStrength(evidence.get(wordId) ?? [], 'meaning', now, { prior: priorOf(wordId) });
-  const meaningStrengthOfLemma = (expression: string, reading: string) =>
-    wordStrength([], 'meaning', now, { prior: frequencyBandPrior(lookupWordBand(frequency, expression, reading)) });
-  const vocabByLemma = new Map(vocab.map((item) => [lemmaKey(item.expression, item.reading), item]));
-  return { strengthByWord, meaningStrengthOf, meaningStrengthOfLemma, wordsBySentence, links, linksBySentence, vocabById, vocabByLemma };
 }
 
 /**
