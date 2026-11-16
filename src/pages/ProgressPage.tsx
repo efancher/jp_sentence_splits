@@ -7,7 +7,7 @@ import {
   getBlindSpots,
   getErrorMix,
   getFsrsConfidenceSnapshot,
-  getGateFunnelSnapshot,
+  getStuckSentenceSnapshot,
   getLeechList,
   getProgressReport,
   getSelfRatingCalibration,
@@ -29,6 +29,8 @@ import type { WeekBucket } from '../lib/progressReport';
 import { LEVEL_NAMES, summariseGloss } from '../lib/glossSkill';
 import { buildVelocityReport } from '../lib/velocity';
 import { listGlossDecisions } from '../db/repository';
+import { SHADOW_POOL_BOOK_LIMIT } from '../lib/sessionPlannerConfig';
+import type { StuckReason } from '../lib/stuckSentences';
 
 /**
  * "How am I doing" progress screen (docs/ROADMAP.md — "Retention /
@@ -70,6 +72,17 @@ function trendMark(trend: TrendDirection): string {
       return '';
   }
 }
+
+const STUCK_REASON_COPY: Record<StuckReason, { label: string; hint: string }> = {
+  held_back: { label: 'Only in shelved books', hint: 'every book holding it is archived or suspended' },
+  no_audio: { label: 'No native audio', hint: 'no shadowing, Ear tiles or Dictation' },
+  no_word_analysis: { label: 'No word analysis', hint: 'Ear tiles and Dictation cannot split it into phrases' },
+  no_phrase_split: { label: 'Wrong length for listening tools', hint: 'too few or too many phrases for Ear tiles and Dictation' },
+  outside_shadow_pool: {
+    label: 'Outside the shadowing pool',
+    hint: `shadowing only draws from the ${SHADOW_POOL_BOOK_LIMIT} most recently opened books`,
+  },
+};
 
 function StatRow({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
@@ -181,7 +194,7 @@ export function ProgressPage() {
   const grammarStrength = useLiveQuery(() => getGrammarStrengthReport(), []);
   const followUpEffect = useLiveQuery(() => getFollowUpEffect(), []);
   const troubleReport = useLiveQuery(() => getReviewTroubleReport(), []);
-  const gateFunnel = useLiveQuery(() => getGateFunnelSnapshot(), []);
+  const stuck = useLiveQuery(() => getStuckSentenceSnapshot(), []);
   const lessonReport = useLiveQuery(() => getSentenceLessonReport(), []);
   const episodeProgress = useLiveQuery(() => getEpisodeProgress(), []);
   const openReports =useLiveQuery(() => getOpenContentReports(), []);
@@ -841,26 +854,38 @@ export function ProgressPage() {
 
       <section className="panel stack">
         <h3 style={{ margin: 0 }}>What's stuck</h3>
-        {gateFunnel === undefined ? (
+        {stuck === undefined ? (
           <p className="muted">Loading…</p>
-        ) : !gateFunnel.hasData ? (
-          <p className="muted">Nothing to check yet.</p>
+        ) : stuck.metCount === 0 ? (
+          <p className="muted">Nothing to check yet — start a sentence in a book first.</p>
         ) : (
           <>
-            <StatRow
-              label="Confirmed, words never reviewed"
-              value={String(gateFunnel.continueBookBlocked)}
-              hint="waiting on Analyze"
-            />
-            <StatRow
-              label="Listening-ready except pitch"
-              value={String(gateFunnel.listeningBlockedOnPitch)}
-              hint="words heard, pitch not yet"
-            />
             <p className="muted" style={{ margin: 0, fontSize: '0.8rem' }}>
-              Sentences that clear every other requirement for a step and are blocked on
-              specifically the one named — not a general readiness count.
+              Of the {stuck.metCount} sentence{stuck.metCount === 1 ? '' : 's'} you've met, how many one
+              specific requirement keeps out of a planned step.
             </p>
+            {stuck.rows.map((row) => (
+              <div key={row.reason} className="stack" style={{ gap: '0.2rem' }}>
+                <StatRow
+                  label={STUCK_REASON_COPY[row.reason].label}
+                  value={String(row.count)}
+                  hint={STUCK_REASON_COPY[row.reason].hint}
+                />
+                {row.examples.length > 0 ? (
+                  <div className="muted" style={{ fontSize: '0.8rem' }}>
+                    e.g.{' '}
+                    {row.examples.map((example, index) => (
+                      <span key={example.sentenceId}>
+                        {index > 0 ? ' · ' : ''}
+                        <Link to={`/sentences/${example.sentenceId}/deep-dive`} className="jp">
+                          {example.preview || example.sentenceId}
+                        </Link>
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ))}
           </>
         )}
       </section>

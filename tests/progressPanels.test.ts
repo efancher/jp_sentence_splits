@@ -3,12 +3,10 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { resetDbForTests } from '../src/db/database';
 import {
   addSentencesToBook,
-  confirmSentenceVocabulary,
   createBook,
   ensureStudyItem,
   getDb,
   getFsrsConfidenceSnapshot,
-  getGateFunnelSnapshot,
   getLeechList,
   getSelfRatingCalibration,
   getSentenceDeepDiveInfo,
@@ -18,7 +16,7 @@ import {
   getStepUsefulness,
   recordReview,
 } from '../src/db/repository';
-import type { PlannerSession, Sentence, VocabularySelection } from '../src/domain/types';
+import type { PlannerSession, Sentence } from '../src/domain/types';
 import { createId } from '../src/lib/ids';
 
 function makeSentence(overrides: Partial<Sentence> = {}): Sentence {
@@ -43,18 +41,6 @@ function makeSentence(overrides: Partial<Sentence> = {}): Sentence {
   };
 }
 
-function makeSelection(overrides: Partial<VocabularySelection> = {}): VocabularySelection {
-  return {
-    id: createId('vocab_selection'),
-    surface: '皆',
-    start: 0,
-    end: 1,
-    expression: '皆',
-    reading: 'みな',
-    source: 'manual',
-    ...overrides,
-  };
-}
 
 async function advanceSubjectToProficient(
   subjectType: 'vocabularyItem' | 'sentenceVocabulary' | 'grammarPattern' | 'sentence' | 'chunk' | 'vocabularyConfusion',
@@ -486,40 +472,6 @@ describe('getStepUsefulness', () => {
     const result = await getStepUsefulness({ windowDays: 56, now: new Date('2026-09-17') });
     expect(result.hasData).toBe(false);
   });
-});
-
-describe('getGateFunnelSnapshot', () => {
-  beforeEach(() => {
-    resetDbForTests(`progress-panels-${createId('db')}`);
-  });
-
-  it('counts a confirmed sentence whose word has never been reviewed as continue_book-blocked', async () => {
-    const book = await createBook({ title: 'Book' });
-    const db = getDb();
-    const sentence = makeSentence();
-    await db.sentences.put(sentence);
-    await addSentencesToBook(book.id, [sentence.id]);
-    await confirmSentenceVocabulary(sentence.id, [makeSelection()]);
-
-    const result = await getGateFunnelSnapshot();
-    expect(result.continueBookBlocked).toBe(1);
-  });
-
-  it('does not count a confirmed sentence once its word has been reviewed once', async () => {
-    const book = await createBook({ title: 'Book' });
-    const db = getDb();
-    const sentence = makeSentence();
-    await db.sentences.put(sentence);
-    await addSentencesToBook(book.id, [sentence.id]);
-    await confirmSentenceVocabulary(sentence.id, [makeSelection()]);
-    const link = await db.sentenceVocabulary.where('sentenceId').equals(sentence.id).first();
-    const item = await ensureStudyItem('vocabularyItem', link!.vocabularyItemId, 'reading_retrieval');
-    await recordReview({ studyItemId: item.id, rating: 'good' });
-
-    const result = await getGateFunnelSnapshot();
-    expect(result.continueBookBlocked).toBe(0);
-  });
-
 });
 
 describe('getLeechList', () => {

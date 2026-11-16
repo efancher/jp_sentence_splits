@@ -180,23 +180,6 @@ export const LISTENING_TOOL_CANDIDATE_LIMIT = 16;
 export const VOCAB_CONFIRM_MIN_GLOSSING_SHARE = 0.6;
 
 /**
- * Share of a confirmed sentence's reviewable vocabulary that must be
- * "introduced" (at least one reading/meaning rep, `isVocabularyItemIntroduced`)
- * before `continue_book` (structural analysis) becomes eligible —
- * `getSentenceReadingIntroducedReadiness`, repository.ts. Was an all-or-
- * nothing "every word" check until 2026-09-28; that meant a sentence with
- * even one never-reviewed word was completely unreachable for structural
- * glossing, which cuts against genuinely new/unfamiliar material ever being
- * accessible — the opposite of the "vocab before glossing" gate's actual
- * goal (don't split attention between recall and parsing on a sentence
- * that's *entirely* unfamiliar). 0.5 means at least half the sentence's
- * words have been looked at once; the rest can still be genuinely unknown
- * going in. Tune down to open the gate further, up to tighten it — 1.0
- * restores the old all-or-nothing behavior.
- */
-export const CONTINUE_BOOK_MIN_INTRODUCED_RATIO = 0.5;
-
-/**
  * Fraction of a sentence's reviewable vocabulary that must be introduced
  * (left FSRS's `new` state on a reading/meaning card) before the sentence is
  * a shadowing candidate. Was all-or-nothing until 2026-10-14: one
@@ -271,3 +254,6 @@ export const SHADOW_CANDIDATE_LIMIT = 10;
 
 /** How many of a learner's most-recently-opened, non-archived books count as "in scope" for shadowing candidates. */
 export const SHADOW_ACTIVE_BOOK_LIMIT = 5;
+
+/** How many most-recently-opened books shadowing draws its candidates from (`activeSentenceIdsForShadowing`). */
+export const SHADOW_POOL_BOOK_LIMIT = 5;

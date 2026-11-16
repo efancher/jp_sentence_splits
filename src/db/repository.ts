@@ -200,6 +200,7 @@ import type { TimeRangeMs } from '../lib/recording';
 import { inWordShape, isPlausibleClipSpan, type PitchWordClip } from '../lib/pitchWordClip';
 import { tileToolUnavailableReason, type TileDictation } from '../lib/earTiles';
 import { dueListeningTools } from '../lib/listeningTools';
+import { buildStuckSummary, type StuckReason } from '../lib/stuckSentences';
 import { readingCheckTile, recentReadingMisses } from '../lib/readingMissSteps';
 import { dueWordChecks, pickTransferSentence, transferWordCheckReason, type TransferSentenceOption } from '../lib/wordCheckSteps';
 import {
@@ -268,7 +269,6 @@ import {
 import { normalizeTroubleTags, routeTroubleTags } from '../lib/reviewTroubleTags';
 import { activeShadowSnoozeIds, shadowSnoozeUntil } from '../lib/shadowSnooze';
 import {
-  CONTINUE_BOOK_MIN_INTRODUCED_RATIO,
   EXPLORE_CANDIDATE_LIMIT,
   EXPLORE_REVISITS_PER_BOOK,
   LISTENING_TOOL_CANDIDATE_LIMIT,
@@ -283,6 +283,7 @@ import {
   RETAIN_ACTIVITY_TYPES,
   SESSION_PLANNER_CANDIDATE_POOL_SIZE,
   SHADOW_CANDIDATE_LIMIT,
+  SHADOW_POOL_BOOK_LIMIT,
 } from '../lib/sessionPlannerConfig';
 import { buildBackupPayload, type BackupBundle } from '../lib/backup';
 import {
@@ -4375,94 +4376,76 @@ export async function getFollowUpEffect(): Promise<FollowUpEffectReport> {
   });
 }
 
-export interface GateFunnelSnapshot {
-  hasData: boolean;
-  /** Confirmed sentences whose linked words haven't all been reviewed once yet — the continue_book backlog. */
-  continueBookBlocked: number;
-  /** Audio-bearing sentences with every word_listening occurrence proficient, blocked from the sentence `listening` card only by the pitch requirement. */
-  listeningBlockedOnPitch: number;
+export interface StuckSentenceExample {
+  sentenceId: string;
+  bookId?: string;
+  preview: string;
+}
+
+export interface StuckSentenceSnapshot {
+  metCount: number;
+  rows: { reason: StuckReason; count: number; examples: StuckSentenceExample[] }[];
 }
 
 /**
- * "What's stuck, and on what" (2026-09-16 discussion — a standing version
- * of the one-off Supabase script used earlier the same day to diagnose why
- * 皆 in "皆さん元気ですか" was surfacing for Analyze). Each count is
- * sentences that clear every *other* dimension of a gate and are blocked
- * on specifically the one named — not a general "how many sentences are
- * ready" count, which the planner's own candidate lists already cover.
- * `shadowBlockedOnPitch` was dropped 2026-09-28 when the shadowing gate's
- * pitch requirement itself was removed (see `getSentenceShadowingReadiness`)
- * — shadow readiness no longer has a pitch dimension to be stuck on.
+ * Progress "What's stuck" (`src/lib/stuckSentences.ts`): every met sentence (`getIntroducedSentenceIds`)
+ * checked against the requirements the planner's current steps apply — a studied, non-shelved book; native
+ * audio; a phrase split Ear tiles or Dictation can open on (`readTileEligibilityForPass`, the planner's own
+ * check); and the shadowing pool (`activeSentenceIdsForShadowing`). Read-only.
  */
-export async function getGateFunnelSnapshot(): Promise<GateFunnelSnapshot> {
+export async function getStuckSentenceSnapshot(): Promise<StuckSentenceSnapshot> {
   const db = getDb();
-  const [settings, analyses, audioRows] = await Promise.all([
-    readSettings(db),
-    db.analyses.toArray(),
-    db.sentenceAudio.toArray(),
+  const allIds = (await db.sentences.toCollection().primaryKeys()) as string[];
+  const introduced = [...(await getIntroducedSentenceIds(allIds))];
+  if (introduced.length === 0) return { metCount: 0, rows: [] };
+  const [audioIds, books, suspendedIndex, memberships, tileEligibility, shadowPool] = await Promise.all([
+    allAudioSentenceIds(),
+    db.books.toArray(),
+    loadSuspendedBookIndex(),
+    bookSentencesForSentences(introduced),
+    readTileEligibilityForPass(),
+    activeSentenceIdsForShadowing(SHADOW_POOL_BOOK_LIMIT),
   ]);
-
-  // --- continue_book: confirmed but not yet reading-introduced ----------
-  const confirmedSentenceIds = analyses
-    .filter((analysis) => analysis.vocabularyReviewStatus === 'confirmed')
-    .map((analysis) => analysis.sentenceId);
-  const introducedReadiness = await getSentenceReadingIntroducedReadiness(confirmedSentenceIds);
-  const continueBookBlocked = confirmedSentenceIds.filter(
-    (id) => introducedReadiness.get(id) === false,
-  ).length;
-
-  // --- listening: audio-bearing sentences --------------------------------
-  const audioSentenceIds = [...new Set(audioRows.map((row) => row.sentenceId))];
-  const vocabularyItemIdsBySentence = await getReviewableVocabularyItemIdsBySentence(
-    audioSentenceIds,
-  );
-  const allVocabularyItemIds = [...new Set([...vocabularyItemIdsBySentence.values()].flat())];
-  const [pitchProficientIds, vocabularyItems] = await Promise.all([
-    getProficientPitchAccentVocabularyItemIds(allVocabularyItemIds),
-    db.vocabularyItems.bulkGet(allVocabularyItemIds),
-  ]);
-  const pitchEligibleIds = new Set(
-    vocabularyItems
-      .filter((item): item is VocabularyItem => Boolean(item?.pitchAccentPositions?.length))
-      .map((item) => item.id),
-  );
-  const isPitchSatisfied = (id: string) =>
-    settings.pitchAccentPaused || !pitchEligibleIds.has(id) || pitchProficientIds.has(id);
-
-  const wordListeningItems = await db.studyItems
-    .where('activityType')
-    .equals('word_listening')
-    .toArray();
-  const proficientLinkIds = new Set(
-    wordListeningItems
-      .filter((item) => isVocabularyItemProficient(item.fsrsState.state))
-      .map((item) => item.subjectId),
-  );
-  const links = (await db.sentenceVocabulary.where('sentenceId').anyOf(audioSentenceIds).toArray()).filter(
-    (link) => !!link.surfaceForm,
-  );
-  const linkIdsBySentence = new Map<string, string[]>();
-  const wordIdsBySentence = new Map<string, string[]>();
-  for (const link of links) {
-    linkIdsBySentence.set(link.sentenceId, [...(linkIdsBySentence.get(link.sentenceId) ?? []), link.id]);
-    wordIdsBySentence.set(link.sentenceId, [
-      ...(wordIdsBySentence.get(link.sentenceId) ?? []),
-      link.vocabularyItemId,
-    ]);
+  const withAudio = new Set(audioIds);
+  const activeBooks = new Set(books.filter(isBookInStudyRotation).map((book) => book.id));
+  const studiedBookBySentence = new Map<string, string>();
+  for (const membership of memberships) {
+    if (!activeBooks.has(membership.bookId)) continue;
+    if (suspendedIndex && membershipIsShelved(membership, suspendedIndex)) continue;
+    if (!studiedBookBySentence.has(membership.sentenceId)) studiedBookBySentence.set(membership.sentenceId, membership.bookId);
   }
-  const listeningBlockedOnPitch = audioSentenceIds.filter((sentenceId) => {
-    const linkIds = linkIdsBySentence.get(sentenceId) ?? [];
-    const wordIds = wordIdsBySentence.get(sentenceId) ?? [];
-    if (linkIds.length === 0) return false;
-    const wordListeningOk = linkIds.every((id) => proficientLinkIds.has(id));
-    const pitchOk = wordIds.every(isPitchSatisfied);
-    return wordListeningOk && !pitchOk;
-  }).length;
-
+  // Sentence rows only for the few no listening tool fits, to tell a missing analysis from a bad phrase count.
+  const unsplittable = introduced.filter(
+    (id) => studiedBookBySentence.has(id) && withAudio.has(id) && !tileEligibility.has(id),
+  );
+  const unsplittableRows = new Map(
+    (await db.sentences.bulkGet(unsplittable)).flatMap((row) => (row ? [[row.id, row] as const] : [])),
+  );
+  const summary = buildStuckSummary(
+    introduced.map((sentenceId) => ({
+      sentenceId,
+      bookId: studiedBookBySentence.get(sentenceId),
+      hasAudio: withAudio.has(sentenceId),
+      listeningToolFits: tileEligibility.has(sentenceId),
+      sentence: unsplittableRows.get(sentenceId),
+      inShadowPool: shadowPool.has(sentenceId),
+    })),
+  );
+  const exampleIds = [...new Set(summary.rows.flatMap((row) => row.examples))];
+  const exampleRows = new Map(
+    (await db.sentences.bulkGet(exampleIds)).flatMap((row) => (row ? [[row.id, row] as const] : [])),
+  );
   return {
-    hasData: confirmedSentenceIds.length > 0 || audioSentenceIds.length > 0,
-    continueBookBlocked,
-    listeningBlockedOnPitch,
+    metCount: summary.metCount,
+    rows: summary.rows.map((row) => ({
+      reason: row.reason,
+      count: row.count,
+      examples: row.examples.map((sentenceId) => ({
+        sentenceId,
+        bookId: studiedBookBySentence.get(sentenceId),
+        preview: exampleRows.get(sentenceId)?.japanese.slice(0, 24) ?? '',
+      })),
+    })),
   };
 }
 
@@ -4716,7 +4699,7 @@ async function filterVocabularyItemIdsByActivity(
  * study item that's left FSRS's `new` state (isVocabularyItemIntroduced) —
  * i.e. actually been reviewed once, not just picked during vocabulary
  * confirmation. `pitch_accent` reps on the same subject don't count. Feeds
- * getSentenceReadingIntroducedReadiness, the `continue_book` gate.
+ * the i+1 known-lemma set (`loadKnownLemmaSet`).
  */
 export async function getIntroducedReadingVocabularyItemIds(
   vocabularyItemIds: string[],
@@ -4769,8 +4752,8 @@ export async function getProficientRecognitionVocabularyItemIds(
 
 /**
  * Pitch-accent proficiency, exported standalone (the two gate functions
- * below compute this inline) for getSkillCoverage and getGateFunnelSnapshot
- * to reuse without duplicating the query.
+ * below compute this inline) for getSkillCoverage to reuse without
+ * duplicating the query.
  */
 export async function getProficientPitchAccentVocabularyItemIds(
   vocabularyItemIds: string[],
@@ -4782,44 +4765,6 @@ export async function getProficientPitchAccentVocabularyItemIds(
   );
 }
 
-
-/**
- * `continue_book` readiness (2026-09-16, density threshold 2026-09-28), the
- * "has enough of the sentence's vocabulary at least been reviewed once"
- * half — paired with `vocabularyConfirmed` in classifyExploreSentences
- * (sessionPlanner.ts). A sentence with zero reviewable vocabulary items has
- * nothing to gate on and is ready (mirrors isSentenceVocabularyReady).
- *
- * Ready once at least `minRatio` of the sentence's reviewable words are
- * introduced — defaults to `CONTINUE_BOOK_MIN_INTRODUCED_RATIO`, not every
- * single one: an all-or-nothing check meant a sentence with even one
- * never-reviewed word was completely unreachable for structural glossing,
- * which starves exactly the case a learner most wants glossing's help
- * with — a sentence that's mostly unfamiliar. The original gate's purpose
- * (don't split attention between recalling words and parsing structure on a
- * sentence that's entirely unfamiliar) only needs *some* of the words to
- * already be familiar, not all of them.
- */
-export async function getSentenceReadingIntroducedReadiness(
-  sentenceIds: string[],
-  minRatio: number = CONTINUE_BOOK_MIN_INTRODUCED_RATIO,
-): Promise<Map<string, boolean>> {
-  const readiness = new Map<string, boolean>();
-  if (sentenceIds.length === 0) return readiness;
-  const vocabularyItemIdsBySentence = await getReviewableVocabularyItemIdsBySentence(sentenceIds);
-  const allVocabularyItemIds = [...new Set([...vocabularyItemIdsBySentence.values()].flat())];
-  const introducedIds = await getIntroducedReadingVocabularyItemIds(allVocabularyItemIds);
-  for (const sentenceId of sentenceIds) {
-    const vocabularyItemIds = vocabularyItemIdsBySentence.get(sentenceId) ?? [];
-    if (vocabularyItemIds.length === 0) {
-      readiness.set(sentenceId, true);
-      continue;
-    }
-    const introducedCount = vocabularyItemIds.filter((id) => introducedIds.has(id)).length;
-    readiness.set(sentenceId, introducedCount / vocabularyItemIds.length >= minRatio);
-  }
-  return readiness;
-}
 
 /**
  * The subset of `sentenceIds` the learner has actually met: walked through,
@@ -4979,100 +4924,6 @@ export async function getBookGrammarProgress(bookId: string): Promise<{
   };
 }
 
-/**
- * Tier-2 gate for the `listening` (full-sentence audio) review card, layered
- * on top of getSentenceFullReviewReadiness: a sentence isn't ready until
- * every one of its surface-form vocabulary occurrences has a `word_listening`
- * study item that has itself reached FSRS proficiency — the learner has
- * shown they can hear each word in isolation before being asked to parse
- * the whole clip — *and*, separately (pitch requirement added 2026-09-16,
- * per user framing: pitch detection and word-level listening both support
- * sentence-level listening), every underlying word that's dictionary-pitch-
- * eligible (`VocabularyItem.pitchAccentPositions` non-empty — the same
- * field `pitch_accent`'s own eligibility rule keys on; the recording-side
- * half of that rule is already covered by this function's own
- * `audioSentenceIds` scoping) has a `pitch_accent` study item that's also
- * reached proficiency. A word with no dictionary pitch data at all could
- * never seed a `pitch_accent` card, so it's exempt on that dimension rather
- * than blocking the sentence forever — the exact starvation shape
- * `continue_book`'s FSRS-proficiency gate hit before (see docs/STATUS.md
- * 2026-09-16), so checked for up front here instead of discovered later. A
- * missing `word_listening` item counts as not-ready on its own dimension
- * (mirrors isSentenceReadyForFullReview treating 'unreviewed' as gating).
- * Only sentences with a SentenceAudio row matter; one with audio but no
- * surface-form vocabulary has nothing to gate on and is ready.
- *
- * While `settings.pitchAccentPaused` is on (2026-09-28), the pitch dimension
- * is treated as satisfied for every word rather than left permanently
- * blocked — pitch_accent items don't advance while paused, so leaving the
- * requirement live would starve `listening` cards the whole time pitch
- * accent is paused (the same gate-starvation shape `continue_book`'s
- * FSRS-proficiency gate hit before).
- */
-export async function getSentenceListeningReadiness(
-  sentenceIds: string[],
-): Promise<Map<string, boolean>> {
-  const readiness = new Map<string, boolean>();
-  if (sentenceIds.length === 0) return readiness;
-  const db = getDb();
-  const [settings, audioSentenceIds] = await Promise.all([
-    readSettings(db),
-    sentenceIdsWithAudioClip(sentenceIds),
-  ]);
-  const links = (
-    await db.sentenceVocabulary.where('sentenceId').anyOf(sentenceIds).toArray()
-  ).filter((link) => !!link.surfaceForm && audioSentenceIds.has(link.sentenceId));
-  const linkIdSet = new Set(links.map((link) => link.id));
-  const vocabularyItemIds = [...new Set(links.map((link) => link.vocabularyItemId))];
-  const [proficientLinkIds, pitchProficientVocabularyItemIds, vocabularyItems] = await Promise.all([
-    linkIdSet.size
-      ? (await db.studyItems.where('activityType').equals('word_listening').toArray())
-          .filter(
-            (item) =>
-              item.subjectType === 'sentenceVocabulary' &&
-              linkIdSet.has(item.subjectId) &&
-              isVocabularyItemProficient(item.fsrsState.state),
-          )
-          .map((item) => item.subjectId)
-      : [],
-    filterVocabularyItemIdsByActivity(
-      vocabularyItemIds,
-      PITCH_ACCENT_ACTIVITY_TYPES,
-      isVocabularyItemProficient,
-    ),
-    db.vocabularyItems.bulkGet(vocabularyItemIds),
-  ]);
-  const proficientLinkIdSet = new Set(proficientLinkIds);
-  const pitchEligibleVocabularyItemIds = new Set(
-    vocabularyItems
-      .filter((item): item is VocabularyItem => Boolean(item?.pitchAccentPositions?.length))
-      .map((item) => item.id),
-  );
-  const linkIdsBySentence = new Map<string, string[]>();
-  const vocabularyItemIdsBySentence = new Map<string, string[]>();
-  for (const link of links) {
-    const linkArr = linkIdsBySentence.get(link.sentenceId) ?? [];
-    linkArr.push(link.id);
-    linkIdsBySentence.set(link.sentenceId, linkArr);
-    const wordArr = vocabularyItemIdsBySentence.get(link.sentenceId) ?? [];
-    wordArr.push(link.vocabularyItemId);
-    vocabularyItemIdsBySentence.set(link.sentenceId, wordArr);
-  }
-  for (const sentenceId of sentenceIds) {
-    const linkIds = linkIdsBySentence.get(sentenceId) ?? [];
-    const wordIds = vocabularyItemIdsBySentence.get(sentenceId) ?? [];
-    readiness.set(
-      sentenceId,
-      linkIds.every((id) => proficientLinkIdSet.has(id)) &&
-        (settings.pitchAccentPaused ||
-          wordIds.every(
-            (id) =>
-              !pitchEligibleVocabularyItemIds.has(id) || pitchProficientVocabularyItemIds.has(id),
-          )),
-    );
-  }
-  return readiness;
-}
 
 /**
  * Full-sentence review readiness (Phase 7.11) for each of `sentenceIds` —
@@ -5312,7 +5163,7 @@ export interface SentenceMasteryOverview {
  * `/progress`'s "Sentence mastery" panel: every confirmed sentence's arc,
  * ranked to surface the "one rung left" cases first
  * (`rankSentenceMasteryArcs`). Scans every confirmed sentence in one pass —
- * same full-corpus-scan convention as `getBlindSpots`/`getGateFunnelSnapshot`,
+ * same full-corpus-scan convention as `getBlindSpots`/`getStuckSentenceSnapshot`,
  * fine at this corpus's size.
  */
 export async function getSentenceMasteryOverview(limit = 20): Promise<SentenceMasteryOverview> {
@@ -10867,7 +10718,11 @@ function allAudioSentenceIds(): Promise<string[]> {
     'audioSentenceIds',
     ['sentenceAudio'],
     () =>
-      loadSnapshot(getDb(), 'audioSentenceIds', () => getDb().sentenceAudio.orderBy('sentenceId').uniqueKeys() as Promise<string[]>),
+      // A plain key cursor, de-duplicated here: `uniqueKeys()` opens a `nextunique` cursor, which
+      // Playwright's WebKit rejects ("Unable to open cursor"), so it is avoided for portability.
+      loadSnapshot(getDb(), 'audioSentenceIds', async () => [
+        ...new Set((await getDb().sentenceAudio.orderBy('sentenceId').keys()) as string[]),
+      ]),
   );
 }
 
@@ -11093,7 +10948,7 @@ async function gatherSessionPlannerInput(
       : timer.time('findShadowCandidates (incl. activeSentenceIdsForShadowing)', async () =>
           findShadowCandidates(
             SHADOW_CANDIDATE_LIMIT + exclude.sentenceIds.size,
-            await activeSentenceIdsForShadowing(5),
+            await activeSentenceIdsForShadowing(SHADOW_POOL_BOOK_LIMIT),
           ),
         ),
     // The planner drops any sentence it actually drafts a Fresh try for (a full walkthrough already covers it).
