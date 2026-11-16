@@ -31,9 +31,7 @@ import { CHAIN_COLD_KEY, chainRungTargetKey } from '../lib/chunkChainSession';
 import { explainWeakWordSentences, type WeakWordExplanation } from '../lib/weakWordExplain';
 import { buildSentenceLessonReport, type SentenceLessonReport } from '../lib/sentenceLessonReport';
 import { parkedSentenceIds } from '../lib/glossSkill';
-import { getMeaningBank } from '../lib/meaningChoices';
 import {
-  computeSequentialStatus,
   type SequentialBookStatus,
   type SequentialSentenceStatus,
 } from '../lib/sequentialStudy';
@@ -69,7 +67,6 @@ import type {
   SentenceLearningEvent,
   ClauseQuestionFeedback,
   GlossDecision,
-  AppSettings,
   Book,
   BookChapter,
   BookSentence,
@@ -269,7 +266,7 @@ import {
   orderBookSentencesFromPaste,
   type PasteOrderResult,
 } from '../lib/pasteOrder';
-import { ensureSettings, getDb, localDateKey, readSettings } from './database';
+import { ensureSettings, getDb, localDateKey, readSettings, updateSettings } from './database';
 import {
   finishSinkAfterCommit,
   notifySync,
@@ -292,6 +289,8 @@ export * from './repo/alignmentCaches';
 export * from './repo/contextDiversity';
 export * from './repo/studyItemExplainability';
 export * from './repo/wordReadingStrengths';
+export * from './repo/sentenceLearningEvents';
+export * from './repo/sequentialUnlocks';
 import { updateSentenceText } from './repo/sentenceWrites';
 import { countAttemptsForSentences } from './repo/shadowingAttempts';
 import { mintGetOrCreateId, ensureVocabularyItem, confirmSentenceVocabulary, setSentenceGrammarReviewStatus } from './repo/vocabularyKanji';
@@ -315,7 +314,6 @@ import {
   readRowsByKeys,
   readSentenceStudyItemsForPass,
   readTileEligibilityForPass,
-  readUsableCheckSentenceIdsForPass,
   reviewsForStudyItems,
   rowCount,
   sentenceIdsWithAudioClip,
@@ -326,6 +324,11 @@ import {
   saveReferenceAlignment,
 } from './repo/alignmentCaches';
 import { listStudyItemSummaries } from './repo/studyItemExplainability';
+import {
+  getSequentialBookStatus,
+  latchSequentialUnlocksForSentence,
+} from './repo/sequentialUnlocks';
+import { listSentenceLearningEvents } from './repo/sentenceLearningEvents';
 import {
   loadWordReadingStrengths,
   PLANNER_STRENGTH_CACHE_MS,
@@ -3871,16 +3874,6 @@ export async function restoreBackup(
   });
 }
 
-export async function updateSettings(
-  patch: Partial<AppSettings>,
-): Promise<AppSettings> {
-  const db = getDb();
-  const current = await ensureSettings(db);
-  const next = { ...current, ...patch, id: 'settings' as const };
-  await db.settings.put(next);
-  return next;
-}
-
 const RECENT_FEED_URL_LIMIT = 8;
 
 function withRecentUrl(list: string[] | undefined, url: string): string[] {
@@ -5487,82 +5480,6 @@ export async function getSentenceReviewHistory(sentenceId: string): Promise<Sent
   });
 }
 
-/**
- * Per-sentence access for one book under sequential study mode, in episode
- * order. Read-only (safe inside a live query); `latchSequentialUnlocks`
- * persists the result so unlocks never revert.
- */
-export async function getSequentialBookStatus(
-  bookId: string,
-  knownMemberships?: BookSentence[],
-): Promise<SequentialBookStatus> {
-  const db = getDb();
-  const memberships = knownMemberships ?? (await db.bookSentences.where('bookId').equals(bookId).toArray());
-  const sentenceIds = memberships.map((item) => item.sentenceId);
-  const [settings, analyses, events, studyItems] = await Promise.all([
-    readSettings(),
-    plannerPassActive()
-      ? Promise.resolve([] as Array<SentenceAnalysis | undefined>)
-      : traceStep('sequential: analyses.bulkGet', () => db.analyses.bulkGet(sentenceIds), rowCount),
-    traceStep('sequential: book events', () => listSentenceLearningEvents(bookId), rowCount),
-    traceStep('sequential: reading_in_context items', () =>
-      plannerShared('readingInContextItems', ['studyItems'], async () =>
-        (await readAllStudyItemsForPass()).filter(
-          (item) => item.activityType === 'reading_in_context' && item.subjectType === 'sentence',
-        ),
-      ),
-      rowCount,
-    ),
-  ]);
-  const itemBySentence = new Map(studyItems.map((item) => [item.subjectId, item]));
-  const reviewItemIds = sentenceIds.flatMap((id) => (itemBySentence.get(id) ? [itemBySentence.get(id)!.id] : []));
-  const reviews = reviewItemIds.length
-    ? await traceStep('sequential: reviews', () => reviewsForStudyItems(reviewItemIds), rowCount)
-    : [];
-  const reviewsByItem = new Map<string, Review[]>();
-  for (const review of reviews) {
-    const list = reviewsByItem.get(review.studyItemId);
-    if (list) list.push(review);
-    else reviewsByItem.set(review.studyItemId, [review]);
-  }
-  const walked = new Set(
-    events.filter((event) => event.action === 'walkthrough_completed').map((event) => event.sentenceId),
-  );
-  // Planner passes ask this for every book; the stored list of usable checks replaces reading each analysis.
-  const usableChecks = plannerPassActive()
-    ? await traceStep('sequential: usable checks', () => readUsableCheckSentenceIdsForPass(), (ids) => ids.size)
-    : null;
-  return computeSequentialStatus(
-    memberships.map((membership, index) => {
-      const item = itemBySentence.get(membership.sentenceId);
-      const bank = usableChecks ? null : getMeaningBank(analyses[index]?.comprehensionCheck);
-      return {
-        sentenceId: membership.sentenceId,
-        position: membership.position,
-        hasUsableCheck: usableChecks ? usableChecks.has(membership.sentenceId) : (bank?.distractors.length ?? 0) > 0,
-        reviews: item ? (reviewsByItem.get(item.id) ?? []) : [],
-        // Sentences already worked on before the mode was enabled stay open.
-        introduced: membership.status !== 'unstarted' || walked.has(membership.sentenceId),
-        // Each chapter is its own episode; chapterless sentences share one.
-        ...(membership.chapterId ? { groupId: membership.chapterId } : {}),
-      };
-    }),
-    new Set(settings.sequentialUnlockOverrides ?? []),
-  );
-}
-
-/** Persist newly reached unlocks (settings.sequentialUnlockOverrides) so they can never revert. */
-export async function latchSequentialUnlocks(bookId: string): Promise<string[]> {
-  const settings = await readSettings();
-  if (!isSequentialStudyMode(settings)) return [];
-  const { newlyLatched } = await getSequentialBookStatus(bookId);
-  if (newlyLatched.length === 0) return [];
-  await updateSettings({
-    sequentialUnlockOverrides: [...new Set([...(settings.sequentialUnlockOverrides ?? []), ...newlyLatched])],
-  });
-  return newlyLatched;
-}
-
 export interface SequentialSentenceView {
   book: SequentialBookStatus;
   current?: SequentialSentenceStatus;
@@ -5584,14 +5501,6 @@ export async function getSequentialSentenceView(
     previous: index > 0 ? book.sentences[index - 1] : undefined,
     next: index >= 0 ? book.sentences[index + 1] : undefined,
   };
-}
-
-async function latchSequentialUnlocksForSentence(sentenceId: string): Promise<void> {
-  if (!isSequentialStudyMode(await readSettings())) return;
-  const memberships = await getDb().bookSentences.where('sentenceId').equals(sentenceId).toArray();
-  for (const bookId of new Set(memberships.map((membership) => membership.bookId))) {
-    await latchSequentialUnlocks(bookId);
-  }
 }
 
 /** Manual escape hatch: open one locked sentence (e.g. a check the learner finds unusable). */
@@ -7805,16 +7714,6 @@ export async function getEpisodeProgress(): Promise<EpisodeProgressRow[]> {
     db.sentenceLearningEvents.toArray(),
   ]);
   return buildEpisodeProgress(books, memberships, events);
-}
-
-export async function listSentenceLearningEvents(bookId: string): Promise<SentenceLearningEvent[]> {
-  if (plannerPassActive()) {
-    // Inside a planning pass this runs once per book; filter the single shared scan instead.
-    return (await readAllLearningEventsForPass())
-      .filter((event) => event.bookId === bookId)
-      .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
-  }
-  return withoutResetWalkthroughs(await getDb().sentenceLearningEvents.where('bookId').equals(bookId).sortBy('timestamp'));
 }
 
 export async function getEpisodePreparationContext(
@@ -10632,5 +10531,5 @@ export async function computeLearningBalance(now: Date = new Date()): Promise<Le
   }));
 }
 
-export { DEFAULT_SETTINGS, ensureSettings, getDb, readSettings } from './database';
+export { DEFAULT_SETTINGS, ensureSettings, getDb, readSettings, updateSettings } from './database';
 export type { GlossbookDatabase } from './database';
