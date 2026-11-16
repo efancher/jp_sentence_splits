@@ -4920,29 +4920,6 @@ export async function getProficientPitchAccentVocabularyItemIds(
   );
 }
 
-/**
- * Grammar patterns (of `grammarPatternIds`) whose `grammar_recognition`
- * study item has reached FSRS proficiency — the tier-1 gate for
- * `grammar_completion` (2026-09-22 recognition/production split), same
- * shape as the tier-1 word_listening gate in ReviewPage's GateContext.
- */
-export async function getProficientGrammarRecognitionPatternIds(
-  grammarPatternIds: string[],
-): Promise<Set<string>> {
-  if (grammarPatternIds.length === 0) return new Set();
-  const db = getDb();
-  const idSet = new Set(grammarPatternIds);
-  return new Set(
-    (await db.studyItems.where('activityType').equals('grammar_recognition').toArray())
-      .filter(
-        (item) =>
-          item.subjectType === 'grammarPattern' &&
-          idSet.has(item.subjectId) &&
-          isVocabularyItemProficient(item.fsrsState.state),
-      )
-      .map((item) => item.subjectId),
-  );
-}
 
 /**
  * `continue_book` readiness (2026-09-16, density threshold 2026-09-28), the
@@ -8160,31 +8137,6 @@ export interface ConfusionPairCandidate {
   itemB: VocabularyTargetCandidate;
 }
 
-/**
- * Confusion pairs (Phase 7.6) eligible for contrastive review (Phase 7.7):
- * both members must themselves be vocabulary-target candidates (a
- * surfaceForm-bearing link within the current scope's sentences) — the same
- * eligibility condition reading_retrieval/cloze already use, reused here
- * via `vocabularyTargetCandidates` rather than re-querying, so a pair only
- * shows up in a book's review queue if both words actually appear there.
- */
-export async function getConfusionPairCandidates(
-  vocabularyTargetCandidates: VocabularyTargetCandidate[],
-): Promise<ConfusionPairCandidate[]> {
-  if (vocabularyTargetCandidates.length === 0) return [];
-  const db = getDb();
-  const byItemId = new Map(
-    vocabularyTargetCandidates.map((candidate) => [candidate.vocabularyItem.id, candidate]),
-  );
-  const confusions = await db.vocabularyConfusions.toArray();
-  const candidates: ConfusionPairCandidate[] = [];
-  for (const confusion of confusions) {
-    const itemA = byItemId.get(confusion.itemAId);
-    const itemB = byItemId.get(confusion.itemBId);
-    if (itemA && itemB) candidates.push({ confusion, itemA, itemB });
-  }
-  return candidates;
-}
 
 // ---------------------------------------------------------------------------
 // Study-item explainability/debug view (Phase 7.10). Read-only: gathers
@@ -11730,24 +11682,6 @@ export async function countNewVocabularyCardBacklog(): Promise<number> {
   return backlog.size;
 }
 
-/**
- * How many distinct vocabulary words were first introduced to the SRS since
- * `sinceIso` — i.e. have a `vocabularyItem`-subject study item created then.
- * Counts what's already in the database (not per-page state), so the daily
- * new-word top-up can't exceed its quota by reopening Review.
- */
-export async function countVocabularyWordsSeededSince(sinceIso: string): Promise<number> {
-  const db = getDb();
-  const items = await db.studyItems.where('subjectType').equals('vocabularyItem').toArray();
-  const first = new Map<string, string>();
-  for (const item of items) {
-    const seen = first.get(item.subjectId);
-    if (seen === undefined || item.createdAt < seen) first.set(item.subjectId, item.createdAt);
-  }
-  let count = 0;
-  for (const createdAt of first.values()) if (createdAt >= sinceIso) count += 1;
-  return count;
-}
 
 /**
  * How many distinct sentences were given a card of `activityType` since
