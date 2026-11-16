@@ -7907,9 +7907,9 @@ export async function getBookReadyToPickUp(
 }
 
 /**
- * Strict i+1 serves new sentences in one global order, so the books kept are the ones holding the soonest-ranked
- * sentences: every book with a new sentence among the first `EXPLORE_SENTENCE_PREVIEW_LIMIT` ranks (more than
- * `limit` if need be), soonest first, then the rest up to `limit`. Revisit-only books go last.
+ * Strict i+1 serves new sentences in one global order (the planner merges books by rank), so every book holding a
+ * new sentence among the first `EXPLORE_SENTENCE_PREVIEW_LIMIT` ranks is kept, even past `limit`; the other books
+ * fill up to `limit`. `candidates` keeps its order.
  */
 function strictExploreBooks(
   candidates: ExploreCandidate[],
@@ -7920,11 +7920,10 @@ function strictExploreBooks(
     candidate.sentences.flatMap((sentence) =>
       !sentence.revisit && rank.has(sentence.sentenceId) ? [rank.get(sentence.sentenceId)!] : [],
     );
-  const best = new Map(candidates.map((candidate) => [candidate, Math.min(Infinity, ...ranksOf(candidate))]));
   const cutoff = candidates.flatMap(ranksOf).sort((a, b) => a - b)[EXPLORE_SENTENCE_PREVIEW_LIMIT - 1] ?? Infinity;
-  const sorted = [...candidates].sort((a, b) => best.get(a)! - best.get(b)!);
-  const needed = sorted.filter((candidate) => best.get(candidate)! <= cutoff).length;
-  return sorted.slice(0, Math.max(limit, needed));
+  const needed = new Set(candidates.filter((candidate) => ranksOf(candidate).some((r) => r <= cutoff)));
+  let room = Math.max(0, limit - needed.size);
+  return candidates.filter((candidate) => needed.has(candidate) || (room > 0 && room-- > 0));
 }
 
 /** Explore candidates: books with sentences not yet started, most-recently-opened first ("continue where you left off" reusing Book.lastOpenedAt, the same signal BookDetailPage's touchBookOpened already maintains). */
@@ -8083,9 +8082,8 @@ async function findExploreCandidates(
       })),
     });
   }
-  if (strict) return strictExploreBooks(candidates, iPlusOneContext!.rank, limit);
   // Array.sort is stable, so recency order is preserved within each group.
-  const limited = candidates
+  const sorted = candidates
     .map((candidate, index) => ({ candidate, index }))
     .sort((a, b) => {
       // Sequential mode: a book whose next episode is further along goes first.
@@ -8103,9 +8101,8 @@ async function findExploreCandidates(
       }
       return a.index - b.index;
     })
-    .slice(0, limit)
     .map((entry) => entry.candidate);
-  return limited;
+  return strict ? strictExploreBooks(sorted, iPlusOneContext!.rank, limit) : sorted.slice(0, limit);
 }
 
 /**
