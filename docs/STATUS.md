@@ -168,9 +168,9 @@ and possible extensions. This snapshot does not certify a live deployment.
   the most-reviewed card each on 2026-11-01 (`npm run retire:extra-dictation-tiles`:
   38 of 48 soft-deleted, reviews untouched; applied to the production database,
   reversible by clearing `deleted_at`).
-- Shadowing candidates are ordered by weak vocabulary after explicit sound flags
-  and missed cloze cards, ahead of fewest attempts (`getWeakWordSentenceSignal`,
-  selection only, local history). Sentence-first planning also revisits
+- Shadowing candidates are ordered by weak vocabulary after explicit sound flags,
+  ahead of fewest attempts (`getWeakWordSentenceSignal`, selection only, local
+  history; the stale missed-cloze boost was removed 2026-11-16). Sentence-first planning also revisits
   walked-through sentences (3+ days since last walked) for weak words, and
   `reading_in_context` asks for the typed reading of the sentence's weakest word
   from its second review (answers feed the model; the rating stays explicit).

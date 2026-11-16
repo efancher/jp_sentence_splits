@@ -9835,7 +9835,7 @@ export async function recordGrammarRelationshipObservation(
  * sentences (cross-activity error routing, docs/ROADMAP.md "Possibilities";
  * same 2-consecutive-again/hard signal `getPitchAccentFocusWords` uses for
  * its sibling case). Computed from *every* `sentence_transformation` study
- * item regardless of due-ness, like `getRecentlyMissedClozeSentenceIds` —
+ * item regardless of due-ness —
  * an "again" rating reschedules the card into the near future, so
  * restricting this to whichever due batch is being scored right now would
  * miss almost every real case.
@@ -11000,41 +11000,6 @@ async function activeSentenceIdsForShadowing(bookLimit: number): Promise<Set<str
 }
 
 /**
- * Sentences where a `cloze` card was just missed twice in a row (last 2
- * reviews both `again`/`hard`) — the cloze/shadowing half of "cross-activity
- * error routing" (docs/ROADMAP.md "Possibilities"; the `pitch_accent` half
- * shipped 2026-09-11 as `getPitchAccentFocusWords`). Keyed by the *most
- * recent* miss review's `contextSentenceId`, since that pins down which
- * sentence the miss actually happened in — `cloze`'s own subjectId is a
- * vocabularyItem, and a word's context sentence is picked fresh per review,
- * so the subjectId alone doesn't identify one.
- */
-async function getRecentlyMissedClozeSentenceIds(): Promise<Set<string>> {
-  const db = getDb();
-  const clozeStudyItems = await db.studyItems.where('activityType').equals('cloze').toArray();
-  if (clozeStudyItems.length === 0) return new Set();
-  const reviews = await db.reviews
-    .where('studyItemId')
-    .anyOf(clozeStudyItems.map((item) => item.id))
-    .sortBy('timestamp');
-  const reviewsByStudyItem = new Map<string, Review[]>();
-  for (const review of reviews) {
-    const list = reviewsByStudyItem.get(review.studyItemId);
-    if (list) list.push(review);
-    else reviewsByStudyItem.set(review.studyItemId, [review]);
-  }
-  const sentenceIds = new Set<string>();
-  for (const itemReviews of reviewsByStudyItem.values()) {
-    if (itemReviews.length < 2) continue;
-    const lastTwo = itemReviews.slice(-2);
-    if (!lastTwo.every((review) => review.rating === 'again' || review.rating === 'hard')) continue;
-    const sentenceId = lastTwo[1]!.contextSentenceId;
-    if (sentenceId) sentenceIds.add(sentenceId);
-  }
-  return sentenceIds;
-}
-
-/**
  * Reading strength of every word that has any evidence (unseen words are left
  * out — unseen is not weak), from local review, typed-recall and walkthrough
  * history. Selection input only (`wordStrength.ts`): no due dates, no FSRS effect.
@@ -11496,18 +11461,14 @@ async function findTransferSentences(
  * vocabulary confirmed and at least half of linked words' reading/meaning introduced
  * (seen once, not full proficiency; no pitch requirement since 2026-09-28),
  * so shadowing doesn't split attention between recalling words and
- * imitating pronunciation. A sentence with a just-
- * missed `cloze` card floats to the front of this otherwise fewest-attempts
- * order (`getRecentlyMissedClozeSentenceIds`, cross-activity error routing).
- * The boost is skipped when `routeClozeMisses` is false (cards paused): no new
- * cloze reviews can clear a stale "missed twice" state, so it would pin the
- * same sentences to the front of every session. Sentences covering weak words
- * (`getWeakWordSentenceSignal`) come next, ahead of fewest attempts.
+ * imitating pronunciation. Sentences covering weak words
+ * (`getWeakWordSentenceSignal`) come ahead of the fewest-attempts order. (The
+ * old "missed cloze card" boost went with the word cards: no cloze review can
+ * clear a stale "missed twice" state, so it pinned the same sentences first.)
  */
 async function findShadowCandidates(
   limit: number,
   activeSentenceIds: Set<string>,
-  routeClozeMisses = true,
 ): Promise<ShadowCandidate[]> {
   if (activeSentenceIds.size === 0) return [];
   const db = getDb();
@@ -11529,13 +11490,12 @@ async function findShadowCandidates(
   startOfToday.setHours(0, 0, 0, 0);
   const startOfTodayIso = startOfToday.toISOString();
   const phraseCooldownIso = new Date(startOfToday.getTime() - (PHRASE_SHADOW_COOLDOWN_DAYS - 1) * 86_400_000).toISOString();
-  const [attemptSentenceIds, requestAttempts, bookSentences, recentlyMissedClozeSentenceIds, todayAttempts, recentPhraseEvents] = await Promise.all([
+  const [attemptSentenceIds, requestAttempts, bookSentences, todayAttempts, recentPhraseEvents] = await Promise.all([
     sentenceIdsWithAudio.length <= ANY_OF_SCAN_THRESHOLD
       ? db.attempts.where('sentenceId').anyOf(sentenceIdsWithAudio).keys()
       : db.attempts.orderBy('sentenceId').keys(),
     requestIds.length ? db.attempts.where('sentenceId').anyOf(requestIds).toArray() : Promise.resolve([]),
     bookSentencesForSentences(sentenceIdsWithAudio),
-    routeClozeMisses ? getRecentlyMissedClozeSentenceIds() : Promise.resolve(new Set<string>()),
     db.attempts.where('createdAt').aboveOrEqual(startOfTodayIso).toArray(),
     db.sentenceLearningEvents
       .where('timestamp')
@@ -11573,7 +11533,6 @@ async function findShadowCandidates(
     .map((sentenceId) => ({
       sentenceId,
       attemptCount: attemptCountBySentenceId.get(sentenceId) ?? 0,
-      recentlyMissedCloze: recentlyMissedClozeSentenceIds.has(sentenceId),
       requested: requestedSentenceIds.has(sentenceId),
       shadowedToday: shadowedTodayIds.has(sentenceId),
       coolingDown: phraseCooldownIds.has(sentenceId),
@@ -11584,7 +11543,6 @@ async function findShadowCandidates(
       if (a.requested !== b.requested) return a.requested ? -1 : 1;
       if (a.shadowedToday !== b.shadowedToday) return a.shadowedToday ? 1 : -1;
       if (a.coolingDown !== b.coolingDown) return a.coolingDown ? 1 : -1;
-      if (a.recentlyMissedCloze !== b.recentlyMissedCloze) return a.recentlyMissedCloze ? -1 : 1;
       // Sentences covering the weakest words come next, in coverage order, ahead of the plain fewest-attempts fallback.
       if (a.weakRank !== b.weakRank) {
         if (a.weakRank === undefined) return 1;
@@ -11608,8 +11566,6 @@ async function findShadowCandidates(
         label: candidate.sentence.japanese.slice(0, 24),
         reason: candidate.requested
           ? `You flagged the sound in review — ${shadowAttemptSummary(candidate.attemptCount).toLowerCase()}`
-          : candidate.recentlyMissedCloze
-          ? `Missed in review — ${shadowAttemptSummary(candidate.attemptCount).toLowerCase()}`
           : weakLabels.length > 0
           ? `Practises words that haven't stuck: ${weakLabels.join('、')} — ${shadowAttemptSummary(candidate.attemptCount).toLowerCase()}`
           : shadowAttemptSummary(candidate.attemptCount),

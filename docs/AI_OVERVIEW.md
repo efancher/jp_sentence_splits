@@ -390,14 +390,12 @@ first. Unlike glossing's not-ready
 sentences (which fall back to a `vocabulary_review` step), an unready
 sentence simply isn't a shadow candidate at all — there's no
 shadow-adjacent activity to substitute in, so `buildShadowSteps` needed no
-change. Among otherwise-eligible candidates, `findShadowCandidates` floats
-a sentence to the front (ahead of its usual fewest-attempts order) when its
-`cloze` card was just missed twice in a row (`getRecentlyMissedClozeSentenceIds`,
-keyed off the miss review's `contextSentenceId` — every `QueueCard` records
-the sentence it displayed there, not just `pitch_accent`) — cross-activity
-error routing's cloze/shadowing half.
+change. A "missed `cloze` card" boost once floated sentences to the front
+here; it went with the word cards (removed 2026-11-16, after the drill-flow
+removal had silently re-enabled it), because no cloze review can clear a stale
+"missed twice" state and it pinned the same sentences first.
 
-After those (a flagged sound, a missed cloze) and ahead of fewest-attempts,
+After a flagged sound and ahead of fewest-attempts,
 `findShadowCandidates` orders sentences by the learner's weak vocabulary
 (2026-11-01). `getWeakWordSentenceSignal` builds per-word reading strength
 from local history (`src/lib/wordEvidence.ts` → `src/lib/wordStrength.ts`:
