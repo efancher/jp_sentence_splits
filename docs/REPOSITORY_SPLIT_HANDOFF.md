@@ -48,15 +48,32 @@ Nothing here needed a migration or a deploy.
 
 ## Next: split the rest of `repository.ts`
 
-Slice 2 done (`caad3e3`): the planner pass-read layer moved to
-`src/db/repo/passReads.ts` (407 lines); `repository.ts` is now 11,176 lines.
-It owns `plannerShared`, `plannerPassMemo`/`plannerWarming` (single
-instances, imported — never copied — via `plannerPassActive()`,
-`plannerWarmingActive()`, `beginPlannerWarming()`/`endPlannerWarming()` and
-`endPlannerPass()`), `createPlannerTimer`, the timing/trace plumbing and all
-`read*ForPass` / key-batch readers. `warmPlannerReads` and
-`getRecentActivityEvents` stayed in `repository.ts` (they reach into core and
-FSRS helpers above this layer).
+Slices 2–4 done (`caad3e3`, `dc97a0e`, `538a6f5`; plus the
+`listStudyItemSummaries` test the handoff asked for, `a4595e0`);
+`repository.ts` is now 10,781 lines.
+
+- Slice 2: the planner pass-read layer moved to `src/db/repo/passReads.ts`
+  (407 lines). It owns `plannerShared`, `plannerPassMemo`/`plannerWarming`
+  (single instances, imported — never copied — via `plannerPassActive()`,
+  `plannerWarmingActive()`, `beginPlannerWarming()`/`endPlannerWarming()` and
+  `endPlannerPass()`), `createPlannerTimer`, the timing/trace plumbing and all
+  `read*ForPass` / key-batch readers. `warmPlannerReads` and
+  `getRecentActivityEvents` stayed in `repository.ts` (they reach into core and
+  FSRS helpers above this layer).
+- Slice 3: the alignment/attempt result caches (reference alignments, pitch
+  tracks, attempt alignments/transcriptions/analysis summaries) moved to
+  `src/db/repo/alignmentCaches.ts`. What stayed in `repository.ts` under a
+  rewritten header is really progress/diagnostics readers, not caches.
+- Slice 4: the two context-diversity helpers moved down to
+  `src/db/repo/contextDiversity.ts` and the whole explainability section to
+  `src/db/repo/studyItemExplainability.ts`.
+- Opened but not moved: the evidence foundation. Its `recordReview` call puts
+  it under the FSRS section, and `recordReview` itself ends in
+  `latchSequentialUnlocksForSentence` → `latchSequentialUnlocks` →
+  `getSequentialBookStatus` (sentence-led) — so either that trio moves down
+  first or the latch becomes an injected post-review hook. Pick one when
+  starting the FSRS slice; the trio's own deps (settings, `bookSentences`,
+  sequential lib) look movable.
 
 Approach that worked for the slices so far: move whole sections into
 `src/db/repo/<area>.ts`, export every moved declaration, `export *` them from
@@ -66,34 +83,32 @@ throwaway scripts used for slice one (dependency analysis, extraction,
 import pruning) lived in `/tmp` and are gone; they were ~100 lines of
 TypeScript-compiler-API code each and are quick to rewrite.
 
-Current sections (line numbers shifted slightly by slice two; as of `73b6bdf`
-they were) and what each needs from the others:
+Remaining sections (line numbers as of `73b6bdf`, before slices 2–4; the
+explanatory notes survive, the ranges do not) and what each needs:
 
 | Section | Lines | Depends on |
 | --- | ---: | --- |
 | Core: books, chapters, sentences, imports, backup, settings (1–3887) | 3,887 | planner pass reads (3 helpers), `getSavedWordStatus` |
-| Cached alignments (3888–4451) | 564 | study-item summaries, grammar summaries, proficiency readers, pass reads |
+| Progress/diagnostics readers (was "Cached alignments", 3888–4451) | ~440 now | study-item summaries (imported), grammar summaries, proficiency readers, pass reads |
 | FSRS review / proficiency (4452–5512) | 1,061 | pass reads (many), `pickContextSentenceForGrammarPattern`, `latchSequentialUnlocksForSentence` |
-| Evidence foundation (5513–5555) | 43 | `ensureStudyItem`, `recordReview` |
-| Sentence-led flow (5556–7077) | 1,522 | pass reads, core, FSRS, alignment, `listSentenceLearningEvents` |
-| Study-item explainability (7078–7280) | 203 | context-diversity helpers in sentence-led |
-| Grammar patterns (7281–8746) | 1,466 | FSRS, pass reads, `getReferenceAlignment` |
-| Learning Orchestrator / planner (8747–end) | ~2,750 | core, FSRS, grammar, sentence-led |
+| Evidence foundation (5513–5555) | 43 | `ensureStudyItem`, `recordReview` (see slice-4 note above) |
+| Sentence-led flow (5556–7077) | ~1,460 now | pass reads, core, FSRS, alignment, `listSentenceLearningEvents` |
+| Grammar patterns (7281–8746) | 1,466 | FSRS, pass reads, `getReferenceAlignment` (imported) |
+| Learning Orchestrator / planner (8747–end) | ~2,400 now | core, FSRS, grammar, sentence-led |
 
 Suggested order:
 
-1. The small leaves: evidence foundation, explainability (after moving
-   the two context-diversity helpers it needs), cached alignments.
-2. Then FSRS/proficiency and grammar, then sentence-led, then the planner,
+1. FSRS/proficiency and grammar (unblock `recordReview`'s latch chain on the
+   way), then sentence-led, then the planner, then evidence foundation,
    leaving core in `repository.ts` (or `repo/core.ts`) last.
-3. Where two sections genuinely call each other (FSRS ↔ grammar ↔
+2. Where two sections genuinely call each other (FSRS ↔ grammar ↔
    sentence-led each have one or two such calls), move the shared helper down
    rather than importing upward.
 
 Coordinate before starting: `repository.ts` is edited by many sessions (about
 ten commits in three days). Do one section per commit and push promptly.
-A thin spot still worth a test before moving its section:
-`listStudyItemSummaries` (67% lines at last measure).
+The `listStudyItemSummaries` thin spot is covered (`a4595e0`); re-measure
+coverage (`npm run test:coverage`) to find the next one before its section moves.
 
 ## Open decisions for the learner
 
