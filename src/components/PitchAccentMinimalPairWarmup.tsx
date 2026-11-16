@@ -194,8 +194,7 @@ export function PitchAccentMinimalPairWarmup({
         <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
           No pairs available right now — this needs two words you've already learned (proficient)
           that happen to be true homophones with a different pitch-accent shape, which is rare in
-          most vocabularies. Odd Ear Out (<code>/play</code>) doesn't need an exact homophone match
-          and has more material for the same kind of practice.
+          most vocabularies.
         </p>
       ) : done ? (
         <>

@@ -185,28 +185,6 @@ describe('Learning Orchestrator repository layer', () => {
     expect(afterComplete!.endedAt).toBeDefined();
   });
 
-  it('game breaks persist gameId, and a later top-up rotates to games not already in today\'s session', async () => {
-    const book = await createBook({ title: 'Games' });
-    const db = getDb();
-    const sentences = Array.from({ length: 12 }, () => makeSentence());
-    await db.sentences.bulkPut(sentences);
-    await addSentencesToBook(book.id, sentences.map((s) => s.id));
-    const games = [
-      { gameId: 'word-detective', title: 'Word Detective', skill: 'word readings' },
-      { gameId: 'particle-puzzle', title: 'Particle Puzzle', skill: 'particles' },
-    ];
-
-    const first = await addMinutesToTodaySession(20, new Date(), undefined, games);
-    const firstGames = first.steps.filter((step) => step.targetKind === 'game');
-    expect(firstGames.map((step) => step.gameId)).toEqual(['word-detective']);
-    expect(first.targetMinutes).toBe(20);
-
-    const second = await addMinutesToTodaySession(20, new Date(), undefined, games);
-    const secondGames = second.steps.filter((step) => step.targetKind === 'game');
-    expect(secondGames.map((step) => step.gameId)).toEqual(['word-detective', 'particle-puzzle']);
-    expect(second.targetMinutes).toBe(40);
-  });
-
   it('sentence-first planning drafts a lesson at zero vocabulary, and settling it confirms nothing', async () => {
     const book = await createBook({ title: 'Lesson Book' });
     const db = getDb();

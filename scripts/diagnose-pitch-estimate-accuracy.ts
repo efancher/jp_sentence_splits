@@ -20,7 +20,7 @@ import type { AlignmentResult } from '../src/domain/types';
 import { ALIGNMENT_VERSION } from '../src/lib/analysisApi';
 import { isolatedWordMatchRange, isolatedWordSpans } from '../src/lib/isolatedWordRange';
 import { segmentIntoMorae } from '../src/lib/mora';
-import { isPlausibleClipSpan } from '../src/lib/oddEarOut';
+import { isPlausibleClipSpan } from '../src/lib/pitchWordClip';
 import { extractPitch, type PitchAnalysisPayload } from '../src/lib/pitch';
 import { classifyLearnerMorae } from '../src/lib/pitchAccentObservations';
 import { expectedPitchShape } from '../src/lib/pitchAccentShape';

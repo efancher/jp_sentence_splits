@@ -1,5 +1,4 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { readSettings } from '../db/database';
@@ -8,23 +7,13 @@ import {
   getPitchAccentDrillWords,
   getPitchAccentFocusWords,
 } from '../db/repository';
-import { GAMES } from '../games/registry';
-import {
-  buildDailyPractice,
-  dailyPracticeProgress,
-  ODD_EAR_OUT_PRACTICE_ID,
-  rotatingGameOrder,
-  type DailyPracticeInput,
-} from '../lib/dailyPractice';
+import { buildDailyPractice, dailyPracticeProgress, type DailyPracticeInput } from '../lib/dailyPractice';
 
 /**
  * Today's small set of practice targets (docs/ROADMAP.md "Daily practice"):
- * "say 5 pitch-drill words", "one Odd Ear Out round", plus one rotating game.
- * Not SRS and not session steps — progress is counted live from the logs the
- * activities already write, so it ticks itself and there's nothing to mark
- * complete by hand. Whether a game can actually fill a round is checked once
- * on mount (the hub does the same `loadPools` check); until then a game is
- * assumed playable, and one found not to be is simply left out.
+ * "say 5 pitch-drill words". Not SRS and not session steps — progress is
+ * counted live from the drill's own log, so it ticks itself and there's
+ * nothing to mark complete by hand.
  */
 export function DailyPracticePanel() {
   const navigate = useNavigate();
@@ -33,46 +22,8 @@ export function DailyPracticePanel() {
   const drillWords = useLiveQuery(() => getPitchAccentDrillWords(), []);
   const focusWords = useLiveQuery(() => getPitchAccentFocusWords(), []);
 
-  // One-shot playability check for the games we might recommend.
-  const [playable, setPlayable] = useState<Record<string, boolean>>({});
-  const [rotatingGameId, setRotatingGameId] = useState<string | undefined>(undefined);
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const known: Record<string, boolean> = {};
-      const check = async (gameId: string) => {
-        const game = GAMES.find((entry) => entry.id === gameId);
-        if (!game) return false;
-        try {
-          const pools = await game.loadPools();
-          return pools.eligible >= game.roundSize;
-        } catch {
-          return false;
-        }
-      };
-      known[ODD_EAR_OUT_PRACTICE_ID] = await check(ODD_EAR_OUT_PRACTICE_ID);
-      let chosen: string | undefined;
-      const others = GAMES.filter((game) => game.id !== ODD_EAR_OUT_PRACTICE_ID).map((game) => game.id);
-      for (const gameId of rotatingGameOrder(others, new Date())) {
-        known[gameId] = await check(gameId);
-        if (known[gameId]) {
-          chosen = gameId;
-          break;
-        }
-      }
-      if (!cancelled) {
-        setPlayable(known);
-        setRotatingGameId(chosen);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   if (!counts || !settings || !drillWords || !focusWords) return null;
 
-  const rotating = GAMES.find((game) => game.id === rotatingGameId);
   const input: DailyPracticeInput = {
     quietMode: settings.quietMode ?? false,
     pitchDrill: {
@@ -80,13 +31,6 @@ export function DailyPracticePanel() {
       focusWordCount: focusWords.length,
       takesToday: counts.pitchDrillTakes,
     },
-    oddEarOut: {
-      available: playable[ODD_EAR_OUT_PRACTICE_ID] ?? true,
-      roundsToday: counts.roundsByGame[ODD_EAR_OUT_PRACTICE_ID] ?? 0,
-    },
-    rotatingGame: rotating
-      ? { id: rotating.id, title: rotating.title, roundsToday: counts.roundsByGame[rotating.id] ?? 0 }
-      : undefined,
   };
   const items = buildDailyPractice(input);
   if (items.length === 0) return null;

@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import type { OddEarClip } from '../src/lib/oddEarOut';
+import type { PitchWordClip } from '../src/lib/pitchWordClip';
 import { inWordShapeKey, pickContrastClip } from '../src/lib/pitchContrastClip';
 
 let n = 0;
-function clip(overrides: Partial<OddEarClip> = {}): OddEarClip {
+function clip(overrides: Partial<PitchWordClip> = {}): PitchWordClip {
   n += 1;
   return {
     vocabularyItemId: `vi-${n}`,
@@ -29,7 +29,7 @@ const base = {
 };
 
 describe('inWordShapeKey', () => {
-  it('matches OddEarClip shapes and folds heiban/odaka together', () => {
+  it('matches PitchWordClip shapes and folds heiban/odaka together', () => {
     expect(inWordShapeKey(2, 1)).toBe('hl');
     expect(inWordShapeKey(2, 0)).toBe('lh');
     expect(inWordShapeKey(2, 2)).toBe('lh');

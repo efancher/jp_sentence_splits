@@ -170,16 +170,6 @@ const SentenceDeepDivePage = lazy(() =>
     default: module.SentenceDeepDivePage,
   })),
 );
-const PlayHubPage = lazy(() =>
-  import('./pages/PlayHubPage').then((module) => ({
-    default: module.PlayHubPage,
-  })),
-);
-const PlayGamePage = lazy(() =>
-  import('./pages/PlayGamePage').then((module) => ({
-    default: module.PlayGamePage,
-  })),
-);
 const PitchAccentDrillPage = lazy(() =>
   import('./pages/PitchAccentDrillPage').then((module) => ({
     default: module.PitchAccentDrillPage,
@@ -224,8 +214,6 @@ export default function App() {
             <Route path="pronunciation" element={<PronunciationProfilePage />} />
             <Route path="progress" element={<ProgressPage />} />
             <Route path="sentences/:sentenceId/deep-dive" element={<SentenceDeepDivePage />} />
-            <Route path="play" element={<PlayHubPage />} />
-            <Route path="play/:gameId/:signal" element={<PlayGamePage />} />
             <Route path="pitch-accent" element={<PitchAccentDrillPage />} />
             <Route path="pitch-accent/compare" element={<PitchAccentSpeakerComparePage />} />
             <Route path="pitch-ear-trainer" element={<PitchEarTrainerPage />} />

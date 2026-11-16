@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { getDb } from '../db/database';
-import { getOddEarOutData, type OddEarOutClip } from '../db/repository';
+import { getPitchWordClips, type PitchWordClipWithAudio } from '../db/repository';
 import { useRangeLoop } from '../hooks/useRangeLoop';
 import { useSentenceAudioBlob } from '../hooks/useSentenceAudioBlob';
-import { shapeLabel } from '../lib/oddEarOut';
+import { shapeLabel } from '../lib/pitchWordClip';
 import { inWordShapeKey, pickContrastClip } from '../lib/pitchContrastClip';
 
 import { WordPitchContour } from './WordPitchContour';
@@ -13,7 +13,7 @@ function ContrastClipPlayer({
   clip,
   onPlay,
 }: {
-  clip: OddEarOutClip;
+  clip: PitchWordClipWithAudio;
   onPlay: () => void;
 }) {
   const blob = useSentenceAudioBlob(clip.audio);
@@ -100,7 +100,7 @@ export function PitchContrastExample({
   onShown: () => void;
   onPlayed: () => void;
 }) {
-  const [clip, setClip] = useState<OddEarOutClip | null>(null);
+  const [clip, setClip] = useState<PitchWordClipWithAudio | null>(null);
   const applicable =
     inWordShapeKey(moraCount, chosenPosition) !== inWordShapeKey(moraCount, correctPosition);
 
@@ -108,7 +108,7 @@ export function PitchContrastExample({
     if (!applicable) return;
     let cancelled = false;
     void Promise.all([
-      getOddEarOutData(),
+      getPitchWordClips(),
       getDb().bookSentences.where('sentenceId').equals(sentenceId).first(),
     ])
       .then(([{ clips }, membership]) => {

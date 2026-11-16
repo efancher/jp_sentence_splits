@@ -431,8 +431,7 @@ export function SettingsPage() {
         </label>
         <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
           Stops seeding/showing `pitch_accent` and `pitch_accent_production`
-          review cards, hides the pitch-accent drill and the pitch-based
-          `/play` games (Odd Ear Out, Homophone Hunt, Speaker Match). Nothing
+          review cards and hides the pitch-accent drill. Nothing
           is deleted — turn this off to pick pitch-accent practice back up
           where it left off. Per-device.
         </p>

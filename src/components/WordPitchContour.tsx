@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import { getReferencePitchTrack, saveReferencePitchTrack } from '../db/repository';
-import { cropPitchPayload } from '../lib/oddEarOut';
+import { cropPitchPayload } from '../lib/pitchWordClip';
 import { pitchSemitoneRange, type PitchAnalysisPayload } from '../lib/pitch';
 import type { TimeRangeMs } from '../lib/recording';
 import { loadOrComputeReferencePitch } from '../lib/referencePitchCache';

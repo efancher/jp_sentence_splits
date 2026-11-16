@@ -3,18 +3,15 @@
  * targets shown beside the planned session (`DailyPracticePanel`). Deliberately
  * *not* session steps and not SRS: they don't take minutes from the planner's
  * buckets, don't touch FSRS, and never settle by hand — progress is counted
- * from logs the activities already write (`pitchDrillAttempts`, `gameRounds`),
+ * from the log the drill already writes (`pitchDrillAttempts`),
  * so doing the work is the only thing that ticks it off. Pure; all data comes
  * in as plain numbers so it is unit-testable without Dexie.
  */
 
 /** Scored words on the pitch-accent drill per day. */
 export const DAILY_PITCH_DRILL_TARGET = 5;
-/** Rounds of each recommended game per day. */
-export const DAILY_GAME_ROUND_TARGET = 1;
 
 export const PITCH_DRILL_PRACTICE_ID = 'pitch-drill';
-export const ODD_EAR_OUT_PRACTICE_ID = 'odd-ear-out';
 
 export interface DailyPracticeItem {
   id: string;
@@ -38,13 +35,6 @@ export interface DailyPracticeInput {
     focusWordCount: number;
     takesToday: number;
   };
-  oddEarOut: {
-    /** The game can build a round (hub eligibility). Unknown-yet callers pass true. */
-    available: boolean;
-    roundsToday: number;
-  };
-  /** The day's rotating extra game, already chosen by `rotatingGameId` and checked playable; omitted when none is. */
-  rotatingGame?: { id: string; title: string; roundsToday: number };
 }
 
 function item(
@@ -74,49 +64,7 @@ export function buildDailyPractice(input: DailyPracticeInput): DailyPracticeItem
     );
   }
 
-  if (input.oddEarOut.available) {
-    items.push(
-      item({
-        id: ODD_EAR_OUT_PRACTICE_ID,
-        title: 'Odd Ear Out — one round',
-        detail: 'Hear four real native words and pick the one with the odd accent shape.',
-        done: input.oddEarOut.roundsToday,
-        target: DAILY_GAME_ROUND_TARGET,
-        unit: 'round',
-        path: `/play/${ODD_EAR_OUT_PRACTICE_ID}/auto`,
-      }),
-    );
-  }
-
-  if (input.rotatingGame) {
-    const game = input.rotatingGame;
-    items.push(
-      item({
-        id: `game:${game.id}`,
-        title: `${game.title} — one round`,
-        detail: "Today's rotating game: a short break that still trains a skill.",
-        done: game.roundsToday,
-        target: DAILY_GAME_ROUND_TARGET,
-        unit: 'round',
-        path: `/play/${game.id}/auto`,
-      }),
-    );
-  }
-
   return items;
-}
-
-/**
- * Which games to try, in order, for today's rotating slot. Stable within a
- * local calendar day (so the recommendation doesn't change under the learner
- * after they play it) and advancing by one each day. The caller takes the
- * first that is actually playable.
- */
-export function rotatingGameOrder(gameIds: readonly string[], now: Date): string[] {
-  if (gameIds.length === 0) return [];
-  const dayNumber = Math.floor(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) / 86_400_000);
-  const start = dayNumber % gameIds.length;
-  return gameIds.map((_, offset) => gameIds[(start + offset) % gameIds.length]!);
 }
 
 export function dailyPracticeProgress(items: readonly DailyPracticeItem[]): {

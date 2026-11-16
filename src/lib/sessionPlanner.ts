@@ -17,9 +17,6 @@ import {
   LISTENING_TOOL_STEP_MINUTES,
   READ_CHECK_STEPS_PER_PLAN,
   READ_CHECK_STEP_MINUTES,
-  GAME_BREAK_INTERVAL_MINUTES,
-  GAME_BREAK_MAX_PER_PASS,
-  GAME_BREAK_MINUTES,
   MAX_NEGLECT_BOOST,
   MODE_ACTIVITY_ESTIMATE_MINUTES,
   NEGLECT_WINDOW_DAYS,
@@ -451,19 +448,6 @@ export interface GrammarNoticingCandidate {
   reason: string;
 }
 
-/**
- * A `/play` game that can fill a round right now, offered to the planner as a
- * possible session break. The caller (which can see the game registry — this
- * module can't without a circular import) checks eligibility and orders the
- * list by preference; the planner takes the first few.
- */
-export interface GameBreakCandidate {
-  gameId: string;
-  title: string;
-  /** Short skill the game trains, for the step's reason line ("pitch listening"). */
-  skill: string;
-}
-
 export interface SessionPlannerInput {
   now: Date;
   /** Minutes this planning pass has to work with — the day's starting budget on first plan, or just the increment being added on a later top-up (see `addMinutesToTodaySession`). */
@@ -491,12 +475,6 @@ export interface SessionPlannerInput {
    * other buckets); this flag only drives the explanation line.
    */
   quietMode?: boolean;
-  /**
-   * Playable short games, most-preferred first. Omitted/empty = no game
-   * breaks. When present, each break's minutes are reserved out of
-   * `totalMinutes` before the buckets split the rest (see `gameBreakCount`).
-   */
-  gameBreakCandidates?: GameBreakCandidate[];
 }
 
 export interface PlannerStepDraft {
@@ -508,7 +486,7 @@ export interface PlannerStepDraft {
   sentenceId?: string;
   grammarPatternId?: string;
   vocabularyItemId?: string;
-  /** The `/play` game a `game` step opens. */
+  /** The game a `game` step opened (game breaks were removed 2026-11-16; kept so old sessions read). */
   gameId?: string;
   /** Sentences a batched step walks in one flow — currently only `grammar_noticing`. See PlannerSessionStep.sentenceIds. */
   sentenceIds?: string[];
@@ -564,9 +542,8 @@ function reviewBatchCostMinutes(ranked: ReviewPriorityResult[], limit: number): 
 /**
  * Step 7 (review bucket): several small batched steps of
  * `REVIEW_STEP_BATCH_SIZE` cards each, rather than one big "do N due
- * reviews" step (2026-09-22 — one giant step read as a long slog and left
- * `interleaveGameBreaks` nothing to actually interleave with, since it only
- * drops breaks *between* whole steps; see that constant's doc comment).
+ * reviews" step (2026-09-22 — one giant step read as a long slog; see that
+ * constant's doc comment).
  * ReviewPage's own due queue is still the actual execution surface — these
  * are checkpoints the session settles and auto-advances through
  * (`countReviewsSince(step.startedAt)` in ReviewPage, already per-step, no
@@ -705,7 +682,7 @@ function classifyExploreSentences(candidates: ExploreCandidate[]): ExploreSenten
 
 /**
  * i+1 ordering ranks new sentences across every book. Each book's own order
- * (already ranked, then adjusted for Sentence Growth) is kept; books are merged
+ * (already ranked) is kept; books are merged
  * by whichever next sentence ranks soonest. Without ranks (setting off) the
  * book-then-position order is returned unchanged.
  */
@@ -898,67 +875,6 @@ function preferCoherentChains(steps: PlannerStepDraft[]): {
   return { steps: ordered, chainedSentenceIds };
 }
 
-/**
- * How many game breaks a pass of `totalMinutes` gets: one per
- * GAME_BREAK_INTERVAL_MINUTES, capped, and never more than there are distinct
- * playable games (a session doesn't offer the same game twice back to back).
- */
-export function gameBreakCount(totalMinutes: number, candidateCount: number): number {
-  if (candidateCount <= 0 || totalMinutes < GAME_BREAK_INTERVAL_MINUTES) return 0;
-  return Math.min(
-    Math.floor(totalMinutes / GAME_BREAK_INTERVAL_MINUTES),
-    GAME_BREAK_MAX_PER_PASS,
-    candidateCount,
-  );
-}
-
-function buildGameBreakSteps(candidates: GameBreakCandidate[], count: number): PlannerStepDraft[] {
-  return candidates.slice(0, count).map((game) => ({
-    id: draftStepId(),
-    // A step needs a bucket; games are not one of the four activities the
-    // learner sets shares for, so they ride on `review` (the catch-all
-    // practice bucket) and the recap breaks them out by `targetKind`.
-    bucket: 'review' as const,
-    activityType: SYNTHETIC_ACTIVITY_TYPES.gameBreak,
-    targetKind: 'game' as const,
-    gameId: game.gameId,
-    label: `Game break: ${game.title}`,
-    estimatedMinutes: GAME_BREAK_MINUTES,
-    reason: `A short round that still trains ${game.skill}`,
-    status: 'pending' as const,
-  }));
-}
-
-/**
- * Spread game breaks through the ordered steps — one after each equal slice of
- * the step time — so they read as breaks rather than a block of games at the
- * end. Never first (the session should start with real work) unless there is
- * nothing else to do.
- */
-function interleaveGameBreaks(
-  steps: PlannerStepDraft[],
-  breaks: PlannerStepDraft[],
-): PlannerStepDraft[] {
-  if (breaks.length === 0) return steps;
-  if (steps.length === 0) return breaks;
-  const totalMinutes = steps.reduce((sum, step) => sum + step.estimatedMinutes, 0);
-  const slice = totalMinutes / (breaks.length + 1);
-  const result: PlannerStepDraft[] = [];
-  let elapsed = 0;
-  let nextBreak = 0;
-  for (const step of steps) {
-    result.push(step);
-    elapsed += step.estimatedMinutes;
-    while (nextBreak < breaks.length && elapsed >= slice * (nextBreak + 1)) {
-      result.push(breaks[nextBreak]!);
-      nextBreak += 1;
-    }
-  }
-  // Any left over (rounding, or one step swallowed several slices) go last.
-  result.push(...breaks.slice(nextBreak));
-  return result;
-}
-
 function explainNeglect(
   neglectScores: NeglectScores,
   distribution: ActivityDistribution,
@@ -1053,17 +969,13 @@ export function sessionStepTargetPath(step: PlannerSessionStep): string | null {
       }
       return `/books/${step.bookId}/learn/${step.sentenceId}`;
     case 'game':
-      // Query-free on purpose: useActiveSession matches a step's page by exact pathname.
-      return step.gameId ? `/play/${step.gameId}/auto` : null;
+      // Game breaks (and the /play games) were removed 2026-11-16; an old step has no page.
+      return null;
   }
 }
 
 export function buildRecommendedSession(input: SessionPlannerInput): RecommendedSession {
-  const gameBreaks = gameBreakCount(input.totalMinutes, input.gameBreakCandidates?.length ?? 0);
-  const gameMinutes = gameBreaks * GAME_BREAK_MINUTES;
-  // The buckets split what's left after the breaks, so the whole plan still
-  // adds up to the time the learner asked for.
-  const totalMinutes = input.totalMinutes - gameMinutes;
+  const totalMinutes = input.totalMinutes;
   const reviewLimit = input.reviewLimit ?? REVIEW_PRIORITY_DEFAULT_LIMIT;
 
   const distribution = computeRecentActivityDistribution(input.recentActivity, input.now);
@@ -1138,10 +1050,7 @@ export function buildRecommendedSession(input: SessionPlannerInput): Recommended
     ...reviewSteps,
   ];
   const { steps: chainedSteps, chainedSentenceIds } = preferCoherentChains(allSteps);
-  const orderedSteps = interleaveGameBreaks(
-    chainedSteps,
-    buildGameBreakSteps(input.gameBreakCandidates ?? [], gameBreaks),
-  );
+  const orderedSteps = chainedSteps;
 
   const explanation = explainNeglect(
     neglectScores,
@@ -1165,14 +1074,9 @@ export function buildRecommendedSession(input: SessionPlannerInput): Recommended
     );
   }
   const plannedMinutes = ALL_SESSION_BUCKETS.reduce((sum, mode) => sum + allocation[mode], 0);
-  if (gameBreaks > 0) {
-    explanation.push(
-      `${gameBreaks} short game break${gameBreaks === 1 ? '' : 's'} (~${Math.round(gameMinutes)} min) ${gameBreaks === 1 ? 'is' : 'are'} counted inside your ${Math.round(input.totalMinutes)} min.`,
-    );
-  }
   if (plannedMinutes < totalMinutes - MODE_ACTIVITY_ESTIMATE_MINUTES.grammar) {
     explanation.push(
-      `Your due queue and new-material lists only add up to about ${Math.round(plannedMinutes + gameMinutes)} min right now, so today's plan is shorter than the ${Math.round(input.totalMinutes)} you asked for.`,
+      `Your due queue and new-material lists only add up to about ${Math.round(plannedMinutes)} min right now, so today's plan is shorter than the ${Math.round(input.totalMinutes)} you asked for.`,
     );
   }
   if (chainedSentenceIds.length > 0) {

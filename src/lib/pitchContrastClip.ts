@@ -1,9 +1,9 @@
 import { expectedPitchShape } from './pitchAccentShape';
-import type { OddEarClip } from './oddEarOut';
+import type { PitchWordClip } from './pitchWordClip';
 
 /**
  * The in-word high/low string (one char per mora, e.g. `lhh`) for a
- * dictionary accent position — the same key `OddEarClip.shape` uses, so a
+ * dictionary accent position — the same key `PitchWordClip.shape` uses, so a
  * chosen answer on the `pitch_accent` card can be matched to real clips.
  * Heiban (0) and odaka (N) share one string: the difference sits in the
  * following particle, not in the word's own morae.
@@ -30,7 +30,7 @@ function hashString(text: string): number {
  * show that difference) or no clip fits. Deterministic per target word, so
  * a re-render doesn't swap the example under the learner.
  */
-export function pickContrastClip<T extends OddEarClip>(
+export function pickContrastClip<T extends PitchWordClip>(
   clips: readonly T[],
   options: {
     moraCount: number;

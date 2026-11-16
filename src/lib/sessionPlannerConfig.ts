@@ -100,38 +100,18 @@ export const SYNTHETIC_ACTIVITY_TYPES = {
   grammarExplore: 'grammar_explore',
   grammarNoticing: 'grammar_noticing',
   shadowingPractice: 'shadowing_practice',
-  gameBreak: 'game_break',
 } as const;
 
 /**
- * Short `/play` games as breaks inside a session (2026-09-21). One break per
- * this many requested minutes (floor), so a 20-minute top-up gets one and the
- * default 60-minute day gets three.
- */
-export const GAME_BREAK_INTERVAL_MINUTES = 20;
-
-/** Cap on breaks drafted by a single planning pass, however large the request. */
-export const GAME_BREAK_MAX_PER_PASS = 3;
-
-/**
  * Review cards per step (2026-09-22, user request: the review bucket read as
- * one long slog and squeezed game breaks to the end — see
- * `interleaveGameBreaks`'s doc comment). Splitting the ranked due queue into
- * several small steps instead of one big one gives `interleaveGameBreaks`
- * real gaps to drop breaks into, and each step settling on its own (the
+ * one long slog). Splitting the ranked due queue into several small steps
+ * instead of one big one, each settling on its own (the
  * existing per-step `countReviewsSince(step.startedAt)` auto-advance already
  * supports several review-kind steps in one session, no new machinery
  * needed) turns the review pass into short bursts instead of one long one.
  */
 export const REVIEW_STEP_BATCH_SIZE = 5;
 
-/**
- * Rough minutes one game round takes (3–6 items at ~30 s each, plus the intro
- * and result screens). Charged against the requested time *before* the four
- * buckets split the rest, so breaks count toward the session limit rather than
- * extending it.
- */
-export const GAME_BREAK_MINUTES = 3;
 
 /** Rough minutes-per-item used to pack a bucket's time budget into concrete steps — deliberately coarse (prompt point 10 prefers estimates over new time-tracking infrastructure). Keys are internal cost tiers, not 1:1 with SessionBucket (the `review` bucket draws on both `retain`/`practice` costs, see RETAIN_ACTIVITY_TYPES/PRACTICE_ACTIVITY_TYPES above). */
 export const MODE_ACTIVITY_ESTIMATE_MINUTES = {

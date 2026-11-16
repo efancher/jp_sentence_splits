@@ -69,14 +69,11 @@ import type {
   SourceReference,
   ConstructionLayer,
   ContextWalkthrough,
-  EffectiveGameSignal,
-  GameRound,
   ReviewTroubleLog,
   ReviewTroubleTag,
   SentenceLearningEvent,
   ClauseQuestionFeedback,
   GlossDecision,
-  GameRoundItem,
   AppSettings,
   AttemptAlignment,
   AttemptAnalysisSummary,
@@ -198,77 +195,13 @@ import {
   type SuspendedBookIndex,
 } from '../lib/suspendedBooks';
 import { startOfLocalDayIso } from '../lib/dailyPractice';
-import {
-  pickDifficultyTier,
-  recentRoundsAccuracy,
-  summarizeCardStats,
-  type DifficultyTier,
-  type PickerCandidate,
-} from '../lib/gamePicker';
-import { buildGamesProgress, type GamesProgress } from '../lib/gamesProgress';
-import { buildWordDetectiveWord, type WordDetectiveWord } from '../lib/wordDetective';
-import { buildGrammarDetectiveWord, type GrammarDetectiveWord } from '../lib/grammarDetective';
-import {
-  buildSpeakerMatchHistory,
-  SPEAKER_MATCH_GAME_ID,
-  type SpeakerMatchComparison,
-  type SpeakerMatchHistoryEntry,
-  type SpeakerMatchWordSummary,
-} from '../lib/speakerMatch';
-import { buildThenAndNowClip, type ThenAndNowClip } from '../lib/thenAndNow';
-import type { KeystoneCandidate } from '../lib/keystone';
-import {
-  isolatedWordRange,
-  isolatedWordSpans,
-  type IsolatedWordSpans,
-} from '../lib/isolatedWordRange';
-import {
-  BUILT_RECIPES,
-  buildBuiltChain,
-  buildVerbLegoCandidates,
-  buildVerbLegoHistory,
-  findVerbChains,
-  isVerbLegoEligible,
-  recipesForVerb,
-  VERB_LEGO_GAME_ID,
-  verbLegoMissFocus,
-  type VerbChain,
-  type VerbLegoCandidate,
-} from '../lib/verbLego';
+import { isolatedWordSpans, type IsolatedWordSpans } from '../lib/isolatedWordRange';
 import type { TimeRangeMs } from '../lib/recording';
-import {
-  buildOddEarHistory,
-  inWordShape,
-  isPlausibleClipSpan,
-  ODD_EAR_OUT_GAME_ID,
-  type OddEarClip,
-  type OddEarHistoryEntry,
-} from '../lib/oddEarOut';
-import {
-  buildHomophoneHistory,
-  HOMOPHONE_HUNT_GAME_ID,
-  type HomophoneHistoryEntry,
-} from '../lib/homophoneHunt';
-import { earTilesRejection, tileToolUnavailableReason, type TileDictation } from '../lib/earTiles';
+import { inWordShape, isPlausibleClipSpan, type PitchWordClip } from '../lib/pitchWordClip';
+import { tileToolUnavailableReason, type TileDictation } from '../lib/earTiles';
 import { dueListeningTools } from '../lib/listeningTools';
 import { readingCheckTile, recentReadingMisses } from '../lib/readingMissSteps';
 import { dueWordChecks, pickTransferSentence, transferWordCheckReason, type TransferSentenceOption } from '../lib/wordCheckSteps';
-import {
-  buildRemixNounPool,
-  buildRemixPuzzle,
-  MIN_POOL_NOUNS,
-  remixRejection,
-  type RemixNoun,
-} from '../lib/remix';
-import { growthRejection } from '../lib/sentenceGrowth';
-import {
-  buildParticleHistory,
-  findBlankableParticles,
-  isParticlePuzzleEligible,
-  missFocus,
-  PARTICLE_PUZZLE_GAME_ID,
-  particleSentenceStats,
-} from '../lib/particlePuzzle';
 import {
   concatCut,
   type ResegmentPlan,
@@ -325,7 +258,6 @@ import {
   type ListeningToolCandidate,
   type WordCheckCandidate,
   type ReadCheckCandidate,
-  type GameBreakCandidate,
   type GrammarNoticingCandidate,
   type RecentActivityEvent,
   type RecommendedSession,
@@ -747,30 +679,6 @@ export async function setSentenceVocabularyAudioRange(
   notifySync('sentence_vocabulary', updated.id, updated);
 }
 
-/**
- * Set or clear the hand-corrected *strict* word-only span on a
- * `SentenceVocabulary` link — the "Fix this clip" editor in the
- * citation-form games (Odd Ear Out, Speaker Match). `null` reverts to the
- * forced-alignment guess. Rounds to whole ms; no-op if the link is gone.
- * Separate from `setSentenceVocabularyAudioRange`: see `wordOnlyStartMs`'s
- * doc comment for why the two must not be conflated.
- */
-export async function setSentenceVocabularyWordOnlyRange(
-  linkId: string,
-  range: { startMs: number; endMs: number } | null,
-): Promise<void> {
-  const db = getDb();
-  const link = await db.sentenceVocabulary.get(linkId);
-  if (!link) return;
-  const updated: SentenceVocabulary = {
-    ...link,
-    wordOnlyStartMs: range ? Math.round(range.startMs) : undefined,
-    wordOnlyEndMs: range ? Math.round(range.endMs) : undefined,
-    updatedAt: nowIso(),
-  };
-  await db.sentenceVocabulary.put(updated);
-  notifySync('sentence_vocabulary', updated.id, updated);
-}
 
 type PendingSyncOp = {
   entity: SyncEntity;
@@ -4370,21 +4278,6 @@ export async function getSelfRatingCalibration(): Promise<SelfRatingCalibration>
   return buildSelfRatingCalibration(calibrationReviews);
 }
 
-/**
- * "Games" progress panel (docs/ROADMAP.md "Short games" P3): accuracy by
- * game and by signal, plus a cued-vs-FSRS gap in the style of
- * `getSelfRatingCalibration` above — games hand out clues/hints, so their
- * raw accuracy can run ahead of unaided FSRS recall. Read-only; `gameRounds`
- * is local-only (never synced, never fed back into FSRS).
- */
-export async function getGamesProgress(): Promise<GamesProgress> {
-  const db = getDb();
-  const [rounds, reviews] = await Promise.all([db.gameRounds.toArray(), db.reviews.toArray()]);
-  return buildGamesProgress(
-    rounds,
-    reviews.map((review) => ({ rating: review.rating })),
-  );
-}
 
 /**
  * "Skill coverage" (2026-09-16, docs/ROADMAP.md "Skill-imbalance metric").
@@ -4906,12 +4799,6 @@ export async function getProficientPitchAccentVocabularyItemIds(
  * (don't split attention between recalling words and parsing structure on a
  * sentence that's entirely unfamiliar) only needs *some* of the words to
  * already be familiar, not all of them.
- *
- * `getParticlePuzzleData` passes `minRatio: 1` deliberately — that game
- * needs the learner to actually be able to read the whole sentence for the
- * particle blank to be a comprehension check rather than a guess (user
- * report, 2026-09-25), so it keeps the original all-or-nothing bar even
- * though `continue_book` no longer does.
  */
 export async function getSentenceReadingIntroducedReadiness(
   sentenceIds: string[],
@@ -4937,8 +4824,8 @@ export async function getSentenceReadingIntroducedReadiness(
 /**
  * The subset of `sentenceIds` the learner has actually met: walked through,
  * started in a book, or already carrying a card (`getIntroducedSentenceIds`,
- * the same rule as `ReviewPage` and the shadowing gate). The `/play` games
- * share it so a round never serves a sentence that was only triaged, never seen.
+ * the same rule as `ReviewPage` and the shadowing gate), so a pitch clip never
+ * comes from a sentence that was only triaged, never seen.
  */
 export async function filterToIntroducedSentenceIds(sentenceIds: string[]): Promise<Set<string>> {
   return getIntroducedSentenceIds([...new Set(sentenceIds)]);
@@ -6576,12 +6463,11 @@ export interface PitchAccentMinimalPairOccurrence extends MinimalPairOccurrence 
  * (`link.surfaceForm === expression`) — near-minimal accent pairs are almost
  * always nouns, and skipping inflected occurrences avoids resolving
  * `pitchAccentPositions` (a citation-form value) against a conjugated
- * surface. Deliberately perception-only, same stance as Odd Ear
- * Out/Speaker Match: this is a listening-discrimination task with the
+ * surface. Deliberately perception-only: this is a listening-discrimination task with the
  * answer shown right after, not a recall/production check, so it doesn't
  * need `getProficientVocabularyItemIds`'s FSRS-reviewed bar. Sentences that
  * live only in suspended books/chapters are skipped (and `bookId` is taken
- * from a non-shelved membership), same as every other `/play` game.
+ * from a non-shelved membership).
  * `bookId` doubles as a "same speaker" proxy: a book is
  * normally one show/narrator or one consistent cast, so two occurrences
  * sharing a `bookId` are treated as same-speaker and two differing ones as
@@ -6689,46 +6575,6 @@ export async function getPitchAccentMinimalPairTrials(): Promise<
   return buildMinimalPairTrials(contrasts, occurrences);
 }
 
-export interface HomophoneClip extends PitchAccentMinimalPairOccurrence {
-  /** The word's own span in its reference recording (may fold in a following particle — see `isolatedWordRange`). */
-  span: TimeRangeMs;
-}
-
-/**
- * Data for Homophone Hunt (`/play`): every real near-minimal-pair occurrence
- * `PitchAccentMinimalPairWarmup` already draws from, with its clip span
- * resolved up front (unlike the warm-up, which resolves it live per
- * occurrence — a game round wants its eligible count known before play, same
- * "gate cards missing support" reasoning as Odd Ear Out), plus this game's
- * own per-pair history from `gameRounds`. The occurrences are gated on
- * confirmed vocab, not FSRS proficiency (see
- * `getPitchAccentMinimalPairOccurrences`) — same perception-only stance as
- * Odd Ear Out/Speaker Match, shared with the in-drill warm-up.
- */
-export async function getHomophoneHuntData(): Promise<{
-  clips: HomophoneClip[];
-  history: Map<string, HomophoneHistoryEntry>;
-}> {
-  const [occurrences, rounds] = await Promise.all([
-    getPitchAccentMinimalPairOccurrences(),
-    getDb().gameRounds.where('gameId').equals(HOMOPHONE_HUNT_GAME_ID).toArray(),
-  ]);
-  const history = buildHomophoneHistory(rounds);
-  if (occurrences.length === 0) return { clips: [], history };
-
-  const alignments = await loadAlignmentsBulk([
-    ...new Set(occurrences.map((occurrence) => occurrence.audio.id)),
-  ]);
-  const clips: HomophoneClip[] = [];
-  for (const occurrence of occurrences) {
-    const alignment = alignments.get(occurrence.audio.id);
-    const span = alignment
-      ? isolatedWordRange(alignment.words, occurrence.sentence.japanese, occurrence.surfaceForm)
-      : null;
-    if (span) clips.push({ ...occurrence, span });
-  }
-  return { clips, history };
-}
 
 /**
  * Logs one take on the free, ungated pitch-accent production drill
@@ -6777,41 +6623,6 @@ export async function logPitchDrillAttempt(input: {
   return attempt;
 }
 
-/**
- * Append one finished short-game round to the `gameRounds` log
- * (docs/ROADMAP.md "Short games"). Append-only and synced (`game_rounds`) —
- * and never read by FSRS or the session planner: games are cued, so grading
- * them would inflate the proficiency signals that gate other activities.
- */
-export async function logGameRound(input: {
-  gameId: string;
-  signal: EffectiveGameSignal;
-  poolSize: number;
-  items: GameRoundItem[];
-  now?: Date;
-}): Promise<GameRound> {
-  const round: GameRound = {
-    id: createId('game_round'),
-    timestamp: (input.now ?? new Date()).toISOString(),
-    gameId: input.gameId,
-    signal: input.signal,
-    poolSize: input.poolSize,
-    items: input.items,
-  };
-  await getDb().gameRounds.put(round);
-  notifySyncMany([{ entity: 'game_rounds', recordId: round.id, payload: round }]);
-  return round;
-}
-
-/**
- * Adaptive difficulty (docs/ROADMAP.md "Short games" P3) — the tier a game's
- * next round should sample at, from its own last `DIFFICULTY_WINDOW` rounds.
- * Read-only; `pickDifficultyTier`/`recentRoundsAccuracy` do the actual work.
- */
-export async function getRecentGameDifficulty(gameId: string): Promise<DifficultyTier> {
-  const rounds = await getDb().gameRounds.where('gameId').equals(gameId).toArray();
-  return pickDifficultyTier(recentRoundsAccuracy(rounds, gameId));
-}
 
 /**
  * What today's "Daily practice" panel counts (`src/lib/dailyPractice.ts`):
@@ -6822,493 +6633,11 @@ export async function getRecentGameDifficulty(gameId: string): Promise<Difficult
  */
 export async function getDailyPracticeCounts(
   now: Date = new Date(),
-): Promise<{ pitchDrillTakes: number; roundsByGame: Record<string, number> }> {
-  const db = getDb();
+): Promise<{ pitchDrillTakes: number }> {
   const start = startOfLocalDayIso(now);
-  const [pitchDrillTakes, rounds] = await Promise.all([
-    db.pitchDrillAttempts.where('timestamp').aboveOrEqual(start).count(),
-    db.gameRounds.where('timestamp').aboveOrEqual(start).toArray(),
-  ]);
-  const roundsByGame: Record<string, number> = {};
-  for (const round of rounds) roundsByGame[round.gameId] = (roundsByGame[round.gameId] ?? 0) + 1;
-  return { pitchDrillTakes, roundsByGame };
+  return { pitchDrillTakes: await getDb().pitchDrillAttempts.where('timestamp').aboveOrEqual(start).count() };
 }
 
-export interface WordDetectiveCandidate extends PickerCandidate {
-  word: WordDetectiveWord;
-}
-
-/**
- * Every confirmed vocabulary word that can be played in Word Detective
- * (`buildWordDetectiveWord`'s eligibility), with the FSRS-derived stats the
- * game picker ranks by. Eligibility is applied here, before any signal
- * ranking. Read-only. Occurrences in a suspended book's sentences are
- * skipped when that sentence lives *only* in suspended books (the transcripts
- * of shelved books were often shelved for being unreliable).
- */
-export async function getWordDetectiveCandidates(
-  options: { now?: Date } = {},
-): Promise<WordDetectiveCandidate[]> {
-  const now = options.now ?? new Date();
-  const db = getDb();
-  const [allLinks, suspendedIndex] = await Promise.all([
-    db.sentenceVocabulary.toArray(),
-    loadSuspendedBookIndex(),
-  ]);
-  let links = allLinks.filter(
-    (link) =>
-      !!link.surfaceForm && !(suspendedIndex && sentenceIsSuspendedOnly(link.sentenceId, suspendedIndex)),
-  );
-  const introduced = await filterToIntroducedSentenceIds(links.map((link) => link.sentenceId));
-  links = links.filter((link) => introduced.has(link.sentenceId));
-  if (links.length === 0) return [];
-
-  const sentenceIds = [...new Set(links.map((link) => link.sentenceId))];
-  const vocabularyItemIds = [...new Set(links.map((link) => link.vocabularyItemId))];
-  const [sentences, items, audioRows, studyItems] = await Promise.all([
-    db.sentences.bulkGet(sentenceIds),
-    db.vocabularyItems.bulkGet(vocabularyItemIds),
-    db.sentenceAudio.where('sentenceId').anyOf(sentenceIds).toArray(),
-    db.studyItems.where('subjectType').equals('vocabularyItem').toArray(),
-  ]);
-
-  const sentenceById = new Map(
-    sentences.filter((row): row is Sentence => Boolean(row)).map((row) => [row.id, row]),
-  );
-  const audioBySentenceId = new Map<string, SentenceAudio>();
-  for (const audio of audioRows) {
-    if (!audioBySentenceId.has(audio.sentenceId)) audioBySentenceId.set(audio.sentenceId, audio);
-  }
-  const linksByItemId = new Map<string, SentenceVocabulary[]>();
-  for (const link of links) {
-    const list = linksByItemId.get(link.vocabularyItemId);
-    if (list) list.push(link);
-    else linksByItemId.set(link.vocabularyItemId, [link]);
-  }
-  const statesByItemId = new Map<string, FsrsState[]>();
-  for (const studyItem of studyItems) {
-    const list = statesByItemId.get(studyItem.subjectId);
-    if (list) list.push(studyItem.fsrsState);
-    else statesByItemId.set(studyItem.subjectId, [studyItem.fsrsState]);
-  }
-
-  const candidates: WordDetectiveCandidate[] = [];
-  for (const item of items) {
-    if (!item) continue;
-    const word = buildWordDetectiveWord({
-      item,
-      links: linksByItemId.get(item.id) ?? [],
-      sentenceById,
-      audioBySentenceId,
-    });
-    if (!word) continue;
-    candidates.push({
-      id: item.id,
-      word,
-      stats: summarizeCardStats(statesByItemId.get(item.id) ?? [], now),
-    });
-  }
-  return candidates;
-}
-
-export interface GrammarDetectiveCandidate extends PickerCandidate {
-  word: GrammarDetectiveWord;
-}
-
-/**
- * Every tracked grammar pattern that can be played in Grammar Detective
- * (`buildGrammarDetectiveWord`'s eligibility), with the FSRS stats of its
- * `grammar_completion` card (the "misses" signal the roadmap asks for,
- * mirroring Word Detective's vocab-lapse ranking). Reuses
- * `pickContextSentenceForGrammarPattern` — the same sentence + passage
- * context the review card itself shows — rather than re-deriving it, so a
- * pattern only needs the one tracked encounter the review card already
- * requires. Read-only.
- */
-export async function getGrammarDetectiveCandidates(
-  options: { now?: Date } = {},
-): Promise<GrammarDetectiveCandidate[]> {
-  const now = options.now ?? new Date();
-  const db = getDb();
-  const [patterns, suspendedIndex, studyItems] = await Promise.all([
-    db.grammarPatterns.toArray(),
-    loadSuspendedBookIndex(),
-    db.studyItems.where('subjectType').equals('grammarPattern').toArray(),
-  ]);
-  if (patterns.length === 0) return [];
-
-  const statesByPatternId = new Map<string, FsrsState[]>();
-  for (const studyItem of studyItems) {
-    if (studyItem.activityType !== 'grammar_completion') continue;
-    const list = statesByPatternId.get(studyItem.subjectId);
-    if (list) list.push(studyItem.fsrsState);
-    else statesByPatternId.set(studyItem.subjectId, [studyItem.fsrsState]);
-  }
-
-  const picks: {
-    pattern: GrammarPattern;
-    sentence: Sentence;
-    sentenceGrammar: SentenceGrammar;
-    readingContext: ReadingContext;
-  }[] = [];
-  for (const pattern of patterns) {
-    const picked = await pickContextSentenceForGrammarPattern(pattern.id, suspendedIndex);
-    if (picked) picks.push({ pattern, ...picked });
-  }
-  if (picks.length === 0) return [];
-
-  const sentenceIds = [...new Set(picks.map((pick) => pick.sentence.id))];
-  const audioRows = await db.sentenceAudio.where('sentenceId').anyOf(sentenceIds).toArray();
-  const audioBySentenceId = new Map<string, SentenceAudio>();
-  for (const audio of audioRows) {
-    if (!audioBySentenceId.has(audio.sentenceId)) audioBySentenceId.set(audio.sentenceId, audio);
-  }
-
-  const candidates: GrammarDetectiveCandidate[] = [];
-  for (const { pattern, sentence, sentenceGrammar, readingContext } of picks) {
-    const word = buildGrammarDetectiveWord({
-      pattern,
-      sentence,
-      sentenceGrammar,
-      readingContext,
-      audio: audioBySentenceId.get(sentence.id),
-    });
-    if (!word) continue;
-    candidates.push({
-      id: pattern.id,
-      word,
-      stats: summarizeCardStats(statesByPatternId.get(pattern.id) ?? [], now),
-    });
-  }
-  return candidates;
-}
-
-export interface ParticlePuzzleCandidate extends PickerCandidate {
-  sentence: Sentence;
-  /** The sentence's blankable particles (for the "why this sentence" line). */
-  particles: string[];
-}
-
-/**
- * Sentences playable in Particle Puzzle (`isParticlePuzzleEligible`), limited
- * to ones whose vocabulary the learner has confirmed *and* actually reviewed
- * at least once (`getSentenceReadingIntroducedReadiness`, the same
- * continue_book bar) — "confirmed" alone only means the word list was
- * triaged, not that the learner has ever seen it, so without this a puzzle
- * could hand back a sentence the learner can't read at all and the particle
- * blanks become a pure guess rather than a check on a sentence they mostly
- * understand (user report, 2026-09-25). Also skips sentences that live only
- * in suspended books. Each candidate's picker stats come from the recent
- * per-particle history in the `gameRounds` log; `focus` is the particles
- * missed most, used to bias which blanks a weak round drills. Read-only.
- */
-export async function getParticlePuzzleData(): Promise<{
-  candidates: ParticlePuzzleCandidate[];
-  focus: Map<string, number>;
-}> {
-  const db = getDb();
-  const [sentences, analyses, rounds, suspendedIndex] = await Promise.all([
-    db.sentences.toArray(),
-    db.analyses.toArray(),
-    db.gameRounds.where('gameId').equals(PARTICLE_PUZZLE_GAME_ID).toArray(),
-    loadSuspendedBookIndex(),
-  ]);
-  const confirmed = new Set(
-    analyses
-      .filter((analysis) => analysis.vocabularyReviewStatus === 'confirmed')
-      .map((analysis) => analysis.sentenceId),
-  );
-  const history = buildParticleHistory(rounds);
-
-  const eligibleSentences = sentences.filter(
-    (sentence) =>
-      confirmed.has(sentence.id) &&
-      isParticlePuzzleEligible(sentence) &&
-      !(suspendedIndex && sentenceIsSuspendedOnly(sentence.id, suspendedIndex)),
-  );
-  const introducedReadiness = await getSentenceReadingIntroducedReadiness(
-    eligibleSentences.map((sentence) => sentence.id),
-    1,
-  );
-
-  const candidates: ParticlePuzzleCandidate[] = [];
-  for (const sentence of eligibleSentences) {
-    if (!introducedReadiness.get(sentence.id)) continue;
-    const tokens = findBlankableParticles(sentence);
-    candidates.push({
-      id: sentence.id,
-      sentence,
-      particles: tokens.map((token) => token.surface),
-      stats: particleSentenceStats(tokens, history),
-    });
-  }
-  return { candidates, focus: missFocus(history) };
-}
-
-/**
- * Confirmed vocabulary with no `vocabularyItem`-subject study item yet (the
- * same backlog `countNewVocabularyCardBacklog` counts), scoped to words that
- * actually occur in each active book's next unstarted sentences (the same
- * "next chapter" preview window `findExploreCandidates` uses,
- * `EXPLORE_SENTENCE_PREVIEW_LIMIT` sentences per book) — Keystone's premise
- * is "which of these unlocks the most upcoming reading," so a backlog word
- * with no upcoming occurrence isn't a useful candidate here even though it
- * still counts in the raw backlog number. Skips sentences that live only in
- * suspended books/chapters. Read-only.
- */
-export async function getKeystoneCandidates(
-  options: { now?: Date } = {},
-): Promise<KeystoneCandidate[]> {
-  const now = options.now ?? new Date();
-  const db = getDb();
-  const [allBooks, allMemberships, vocabularyStudyItems, suspendedIndex] = await Promise.all([
-    db.books.toArray(),
-    db.bookSentences.toArray(),
-    db.studyItems.where('subjectType').equals('vocabularyItem').toArray(),
-    loadSuspendedBookIndex(),
-  ]);
-  const introduced = new Set(vocabularyStudyItems.map((item) => item.subjectId));
-
-  const activeBookIds = new Set(allBooks.filter(isBookInStudyRotation).map((book) => book.id));
-  const membershipsByBook = new Map<string, BookSentence[]>();
-  for (const membership of allMemberships) {
-    if (!activeBookIds.has(membership.bookId)) continue;
-    const list = membershipsByBook.get(membership.bookId);
-    if (list) list.push(membership);
-    else membershipsByBook.set(membership.bookId, [membership]);
-  }
-
-  const upcomingSentenceIds: string[] = [];
-  for (const bookMemberships of membershipsByBook.values()) {
-    const unstarted = bookMemberships
-      .filter((item) => item.status === 'unstarted')
-      .filter(
-        (item) => !(suspendedIndex && sentenceIsSuspendedOnly(item.sentenceId, suspendedIndex)),
-      )
-      .sort((a, b) => a.position - b.position)
-      .slice(0, EXPLORE_SENTENCE_PREVIEW_LIMIT);
-    for (const item of unstarted) upcomingSentenceIds.push(item.sentenceId);
-  }
-  if (upcomingSentenceIds.length === 0) return [];
-
-  const vocabByUpcomingSentence = await getReviewableVocabularyItemIdsBySentence(upcomingSentenceIds);
-  const sentenceIdsByVocabularyItemId = new Map<string, string[]>();
-  for (const [sentenceId, vocabIds] of vocabByUpcomingSentence) {
-    for (const vocabId of vocabIds) {
-      const list = sentenceIdsByVocabularyItemId.get(vocabId);
-      if (list) list.push(sentenceId);
-      else sentenceIdsByVocabularyItemId.set(vocabId, [sentenceId]);
-    }
-  }
-
-  const backlogIds = [...sentenceIdsByVocabularyItemId.keys()].filter((id) => !introduced.has(id));
-  if (backlogIds.length === 0) return [];
-
-  const items = await db.vocabularyItems.bulkGet(backlogIds);
-  const itemById = new Map(items.flatMap((item) => (item ? [[item.id, item] as const] : [])));
-  const exampleSentenceIds = new Set(
-    backlogIds.flatMap((id) => sentenceIdsByVocabularyItemId.get(id)?.[0] ?? []),
-  );
-  const exampleSentences = await db.sentences.bulkGet([...exampleSentenceIds]);
-  const sentenceById = new Map(
-    exampleSentences.filter((row): row is Sentence => Boolean(row)).map((row) => [row.id, row]),
-  );
-
-  const candidates: KeystoneCandidate[] = [];
-  for (const id of backlogIds) {
-    const item = itemById.get(id);
-    const unlockedSentenceIds = sentenceIdsByVocabularyItemId.get(id) ?? [];
-    const exampleSentence = sentenceById.get(unlockedSentenceIds[0] ?? '');
-    if (!item || !exampleSentence) continue;
-    candidates.push({
-      id,
-      item,
-      unlockedSentenceIds,
-      exampleSentence,
-      stats: summarizeCardStats([], now),
-    });
-  }
-  return candidates;
-}
-
-export interface EarTilesCandidate extends PickerCandidate {
-  sentence: Sentence;
-  audio: SentenceAudio;
-  /** Words in the sentence that have lapsed in review (for the "why this sentence" line). */
-  weakWords: string[];
-}
-
-/**
- * Sentences playable in Ear Tiles (`earTilesRejection`): vocabulary confirmed
- * (the game should test hearing, not unknown words), native audio, a
- * translation, and a tile count that makes a real ordering task; skipping
- * sentences that live only in suspended books. Picker stats come from the FSRS
- * state of the sentence's own words, so a `weak` round hears sentences that
- * contain words you have actually lapsed on. Read-only.
- */
-export async function getEarTilesCandidates(
-  options: { now?: Date } = {},
-): Promise<EarTilesCandidate[]> {
-  return loadNativeAudioSentences(earTilesRejection, options.now ?? new Date());
-}
-
-/**
- * Shared loader for the sentence-with-native-audio games (Ear Tiles, Remix):
- * native audio, introduced and not suspended-only, kept when `rejection`
- * returns null, and (unless `requireConfirmed` is off) vocabulary confirmed.
- * Picker stats come from the FSRS state of the sentence's own words. Read-only.
- */
-async function loadNativeAudioSentences(
-  rejection: (sentence: Sentence, audioDurationMs: number) => string | null,
-  now: Date,
-  { requireConfirmed = true }: { requireConfirmed?: boolean } = {},
-): Promise<EarTilesCandidate[]> {
-  const db = getDb();
-  const [sentences, analyses, audioRows, links, suspendedIndex] = await Promise.all([
-    db.sentences.toArray(),
-    db.analyses.toArray(),
-    db.sentenceAudio.toArray(),
-    db.sentenceVocabulary.toArray(),
-    loadSuspendedBookIndex(),
-  ]);
-  const confirmed = new Set(
-    analyses
-      .filter((analysis) => analysis.vocabularyReviewStatus === 'confirmed')
-      .map((analysis) => analysis.sentenceId),
-  );
-  const audioBySentenceId = new Map<string, SentenceAudio>();
-  for (const audio of audioRows) {
-    if (!audioBySentenceId.has(audio.sentenceId)) audioBySentenceId.set(audio.sentenceId, audio);
-  }
-
-  const preFiltered = sentences.filter((sentence) => {
-    const audio = audioBySentenceId.get(sentence.id);
-    return (
-      (!requireConfirmed || confirmed.has(sentence.id)) &&
-      !!audio &&
-      rejection(sentence, audio.durationMs) === null &&
-      !(suspendedIndex && sentenceIsSuspendedOnly(sentence.id, suspendedIndex))
-    );
-  });
-  const preFilteredIds = preFiltered.map((sentence) => sentence.id);
-  const seenIds = await filterToIntroducedSentenceIds(preFilteredIds);
-  const playable = preFiltered.filter((sentence) => seenIds.has(sentence.id));
-  if (playable.length === 0) return [];
-
-  const playableIds = new Set(playable.map((sentence) => sentence.id));
-  const itemIdsBySentence = new Map<string, string[]>();
-  for (const link of links) {
-    if (!link.surfaceForm || !playableIds.has(link.sentenceId)) continue;
-    const list = itemIdsBySentence.get(link.sentenceId);
-    if (list) list.push(link.vocabularyItemId);
-    else itemIdsBySentence.set(link.sentenceId, [link.vocabularyItemId]);
-  }
-  const itemIds = [...new Set([...itemIdsBySentence.values()].flat())];
-  const [items, studyItems] = await Promise.all([
-    db.vocabularyItems.bulkGet(itemIds),
-    db.studyItems.where('subjectType').equals('vocabularyItem').toArray(),
-  ]);
-  const expressionById = new Map(
-    items.flatMap((item) => (item ? [[item.id, item.expression] as const] : [])),
-  );
-  const statesByItemId = new Map<string, FsrsState[]>();
-  for (const studyItem of studyItems) {
-    const list = statesByItemId.get(studyItem.subjectId);
-    if (list) list.push(studyItem.fsrsState);
-    else statesByItemId.set(studyItem.subjectId, [studyItem.fsrsState]);
-  }
-
-  return playable.map((sentence) => {
-    const wordIds = [...new Set(itemIdsBySentence.get(sentence.id) ?? [])];
-    const weakWords = wordIds
-      .filter((id) => summarizeCardStats(statesByItemId.get(id) ?? [], now).lapses > 0)
-      .flatMap((id) => expressionById.get(id) ?? []);
-    return {
-      id: sentence.id,
-      sentence,
-      audio: audioBySentenceId.get(sentence.id)!,
-      weakWords,
-      stats: summarizeCardStats(
-        wordIds.flatMap((id) => statesByItemId.get(id) ?? []),
-        now,
-      ),
-    };
-  });
-}
-
-export type RemixCandidate = EarTilesCandidate;
-
-/**
- * Remix (`src/lib/remix.ts`): introduced sentences with native audio and a
- * clean noun+particle skeleton (vocabulary confirmation is not required), plus
- * the learner's swap-noun pool (plain nouns linked to an introduced sentence). A sentence
- * counts as a candidate only if a puzzle can actually be built from that pool
- * right now, so the hub's eligibility can always be satisfied. Read-only.
- */
-export async function getRemixData(options: { now?: Date } = {}): Promise<{
-  candidates: RemixCandidate[];
-  pool: RemixNoun[];
-}> {
-  const db = getDb();
-  const links = await db.sentenceVocabulary.toArray();
-  // The swap nouns are words from sentences the learner has met (vocabulary
-  // cards are paused under the sentence-led flow, so a card is not the signal).
-  const introduced = await filterToIntroducedSentenceIds(links.map((link) => link.sentenceId));
-  const itemIds = [
-    ...new Set(links.filter((link) => introduced.has(link.sentenceId)).map((link) => link.vocabularyItemId)),
-  ];
-  const items = (await db.vocabularyItems.bulkGet(itemIds)).filter(
-    (item): item is VocabularyItem => Boolean(item),
-  );
-  const pool = buildRemixNounPool(items);
-  if (pool.length < MIN_POOL_NOUNS) return { candidates: [], pool };
-
-  const loaded = await loadNativeAudioSentences(remixRejection, options.now ?? new Date(), {
-    requireConfirmed: false,
-  });
-  const candidates = loaded.filter((candidate) => buildRemixPuzzle(candidate.sentence, pool, 'probe') !== null);
-  return { candidates, pool };
-}
-
-/**
- * Sentence Growth (`src/lib/sentenceGrowth.ts`): introduced sentences with
- * native audio, a translation and a chunk layout that leaves nothing unasked
- * (`growthRejection`). Needs no swap-noun pool, confirmed vocabulary or word
- * proficiency, so the only gate is the sentence-level "met it" signal. Read-only.
- */
-export async function getSentenceGrowthCandidates(
-  options: { now?: Date } = {},
-): Promise<EarTilesCandidate[]> {
-  return loadNativeAudioSentences(growthRejection, options.now ?? new Date(), {
-    requireConfirmed: false,
-  });
-}
-
-/**
- * The (up to two) sentences read immediately before each of `sentenceIds`, in
- * reading order, from each sentence's home book (`buildReadingContextMap`).
- * Particle Puzzle shows them for the は/が context a bare sentence lacks.
- */
-export async function getPrecedingSentences(
-  sentenceIds: string[],
-  count = 2,
-): Promise<Map<string, Sentence[]>> {
-  const db = getDb();
-  const [allSentences, bookSentences, books] = await Promise.all([
-    db.sentences.toArray(),
-    db.bookSentences.toArray(),
-    db.books.toArray(),
-  ]);
-  const contextMap = buildReadingContextMap({
-    targetSentenceIds: sentenceIds,
-    bookSentences,
-    books,
-    sentencesById: new Map(allSentences.map((sentence) => [sentence.id, sentence])),
-    before: count,
-    after: 0,
-  });
-  return new Map(sentenceIds.map((id) => [id, contextMap.get(id)?.before ?? []]));
-}
 
 /**
  * Alignments for many recordings at once: the local Dexie cache first, then
@@ -7359,38 +6688,28 @@ function isTrustworthyCitationSpan(item: VocabularyItem, spans: IsolatedWordSpan
   return spans.tokenExact;
 }
 
-export interface OddEarOutClip extends OddEarClip {
+export interface PitchWordClipWithAudio extends PitchWordClip {
   audio: SentenceAudio;
   sentence: Sentence;
   surfaceForm: string;
 }
 
 /**
- * Every clip playable in Odd Ear Out: a confirmed, citation-form occurrence of
- * a word with a dictionary pitch position and 2+ morae, whose *word alone*
- * can be cut out of its reference recording by a **current-version** forced
- * alignment (manual/backfilled `audioStartMs/EndMs` ranges are ignored — they
- * usually include the following particle; a hand-corrected `wordOnlyStartMs/
- * EndMs`, set from this game's own "Fix this clip" editor, is used instead
- * when present) with a plausible length. One clip per word per book,
- * skipping sentences that live only in suspended books. A sentence with a
- * digit+日/月 date plays normally — the aligner's date expansion is accounted
- * for in the span mapping (see `alignerView`). Also returns this game's
- * per-shape-pair history from `gameRounds`. Read-only apart from caching
- * alignments locally. Proficiency is deliberately not required: it's a
- * perception game about accent shape, not a test of knowing the word.
+ * Word-only pitch clips for the pitch drill and contrast examples: a confirmed,
+ * citation-form occurrence of a word with a dictionary pitch position and 2+
+ * morae, whose *word alone* can be cut out of its reference recording by a
+ * **current-version** forced alignment (manual/backfilled `audioStartMs/EndMs`
+ * ranges are ignored — they usually include the following particle; a
+ * hand-corrected `wordOnlyStartMs/EndMs` is used instead when present) with a
+ * plausible length. One clip per word per book, skipping sentences that live
+ * only in suspended books. A sentence with a digit+日/月 date plays normally —
+ * the aligner's date expansion is accounted for in the span mapping (see
+ * `alignerView`). Read-only apart from caching alignments locally.
+ * Proficiency is deliberately not required.
  */
-export async function getOddEarOutData(): Promise<{
-  clips: OddEarOutClip[];
-  history: Map<string, OddEarHistoryEntry>;
-}> {
+export async function getPitchWordClips(): Promise<{ clips: PitchWordClipWithAudio[] }> {
   const db = getDb();
-  const [allLinks, rounds, suspendedIndex] = await Promise.all([
-    db.sentenceVocabulary.toArray(),
-    db.gameRounds.where('gameId').equals(ODD_EAR_OUT_GAME_ID).toArray(),
-    loadSuspendedBookIndex(),
-  ]);
-  const history = buildOddEarHistory(rounds);
+  const [allLinks, suspendedIndex] = await Promise.all([db.sentenceVocabulary.toArray(), loadSuspendedBookIndex()]);
   let links = allLinks.filter(
     (link) =>
       !!link.surfaceForm &&
@@ -7400,7 +6719,7 @@ export async function getOddEarOutData(): Promise<{
     const introduced = await filterToIntroducedSentenceIds(links.map((link) => link.sentenceId));
     links = links.filter((link) => introduced.has(link.sentenceId));
   }
-  if (links.length === 0) return { clips: [], history };
+  if (links.length === 0) return { clips: [] };
 
   const sentenceIds = [...new Set(links.map((link) => link.sentenceId))];
   const [items, sentences, audioRows, memberships] = await Promise.all([
@@ -7446,7 +6765,7 @@ export async function getOddEarOutData(): Promise<{
     [...chosen.values()].map(({ link }) => audioBySentenceId.get(link.sentenceId)!.id),
   );
 
-  const clips: OddEarOutClip[] = [];
+  const clips: PitchWordClipWithAudio[] = [];
   for (const [key, { link, item }] of chosen) {
     const audio = audioBySentenceId.get(link.sentenceId)!;
     const sentence = sentenceById.get(link.sentenceId)!;
@@ -7457,8 +6776,8 @@ export async function getOddEarOutData(): Promise<{
     // (`backfill-word-audio-range.ts`) writes the aligner's raw match, which
     // *includes a following particle* (71 of the 92 comparable overrides in
     // prod end at word+particle). A clip with the particle in it carries the
-    // heiban/odaka cue this game groups away, so only the strict word-only span
-    // from a current-version alignment — or this game's own hand-corrected
+    // heiban/odaka cue a word-only clip must leave out, so only the strict
+    // word-only span from a current-version alignment — or a hand-corrected
     // `wordOnlyStartMs/EndMs` — is safe here.
     const wordOnlyOverride =
       link.wordOnlyStartMs != null && link.wordOnlyEndMs != null
@@ -7489,7 +6808,7 @@ export async function getOddEarOutData(): Promise<{
       surfaceForm: link.surfaceForm!,
     });
   }
-  return { clips, history };
+  return { clips };
 }
 
 export interface PitchAccentSpeakerClip {
@@ -7513,10 +6832,9 @@ export interface PitchAccentSpeakerComparison {
  * different recordings realize the same word's accent, side by side against
  * the dictionary pattern, rather than drilling one clip in isolation.
  *
- * Same eligibility rule as `getOddEarOutData` (citation-form link, current-
+ * Same eligibility rule as `getPitchWordClips` (citation-form link, current-
  * version forced alignment, plausible word-only span, non-suspended book),
- * minus the shape/mora-count restriction that game needs for its round
- * mechanic — this is a browse tool, not a drill, so single-mora and
+ * minus its accent-shape/mora-count restriction — this is a browse tool, not a drill, so single-mora and
  * shapeless words are still worth showing.
  */
 export async function getPitchAccentSpeakerComparisons(): Promise<PitchAccentSpeakerComparison[]> {
@@ -7587,9 +6905,9 @@ export async function getPitchAccentSpeakerComparisons(): Promise<PitchAccentSpe
   for (const { link, item, bookId } of chosen.values()) {
     const audio = audioBySentenceId.get(link.sentenceId)!;
     const sentence = sentenceById.get(link.sentenceId)!;
-    // Same strict word-only span as Odd Ear Out (comparing accent shapes
-    // across speakers also breaks if a particle sneaks in), so a boundary
-    // fix made in that game's editor carries over here too.
+    // Same strict word-only span as `getPitchWordClips` (comparing accent shapes
+    // across speakers also breaks if a particle sneaks in), so an existing
+    // hand-corrected word-only span carries over here too.
     const wordOnlyOverride =
       link.wordOnlyStartMs != null && link.wordOnlyEndMs != null
         ? { startMs: link.wordOnlyStartMs, endMs: link.wordOnlyEndMs }
@@ -7623,207 +6941,6 @@ export async function getPitchAccentSpeakerComparisons(): Promise<PitchAccentSpe
   return result;
 }
 
-export interface SpeakerMatchClip extends PitchAccentSpeakerClip, SpeakerMatchWordSummary {}
-
-/**
- * Data for Speaker Match (`/play`): every `getPitchAccentSpeakerComparisons`
- * word (2+ books, so a real cross-recording pair exists), flattened onto the
- * shared `SpeakerMatchComparison` shape plus this game's own per-word history
- * from `gameRounds`. Proficiency deliberately **not** filtered — same
- * perception-only stance as Odd Ear Out/Homophone Hunt (both gated on
- * confirmed vocab only, not FSRS proficiency; see
- * `getPitchAccentMinimalPairOccurrences`).
- */
-export async function getSpeakerMatchData(): Promise<{
-  comparisons: SpeakerMatchComparison<SpeakerMatchClip>[];
-  history: Map<string, SpeakerMatchHistoryEntry>;
-}> {
-  const [comparisons, rounds] = await Promise.all([
-    getPitchAccentSpeakerComparisons(),
-    getDb().gameRounds.where('gameId').equals(SPEAKER_MATCH_GAME_ID).toArray(),
-  ]);
-  const history = buildSpeakerMatchHistory(rounds);
-  const mapped: SpeakerMatchComparison<SpeakerMatchClip>[] = comparisons.map((comparison) => {
-    const word: SpeakerMatchWordSummary = {
-      vocabularyItemId: comparison.vocabularyItem.id,
-      expression: comparison.vocabularyItem.expression,
-      reading: comparison.vocabularyItem.reading,
-      meaning: comparison.vocabularyItem.meaning ?? '',
-      position: comparison.vocabularyItem.pitchAccentPositions![0]!,
-    };
-    return { word, clips: comparison.clips.map((clip) => ({ ...clip, ...word })) };
-  });
-  return { comparisons: mapped, history };
-}
-
-export interface ThenAndNowClipData extends ThenAndNowClip {
-  audio: SentenceAudio;
-}
-
-/**
- * Data for Then & Now (`/play`): every sentence with a real review history
- * whose "then" (its earliest review — see `buildThenAndNowClip`) is far
- * enough in the past, and at least one linked vocabulary word confirmed
- * *after* that moment with a resolvable clip span to duck. Read-only, and
- * never writes anything back — this activity has no `gameRounds` log (2026-
- * 09-27 decision: there's no right/wrong here to grade).
- */
-export async function getThenAndNowData(options: { now?: Date } = {}): Promise<ThenAndNowClipData[]> {
-  const now = options.now ?? new Date();
-  const db = getDb();
-  const [sentenceStudyItems, suspendedIndex] = await Promise.all([
-    db.studyItems.where('subjectType').equals('sentence').toArray(),
-    loadSuspendedBookIndex(),
-  ]);
-  if (sentenceStudyItems.length === 0) return [];
-
-  const sentenceIdByStudyItemId = new Map(sentenceStudyItems.map((s) => [s.id, s.subjectId]));
-  const reviews = await db.reviews.where('studyItemId').anyOf([...sentenceIdByStudyItemId.keys()]).toArray();
-  const thenAtBySentenceId = new Map<string, string>();
-  for (const review of reviews) {
-    const sentenceId = sentenceIdByStudyItemId.get(review.studyItemId);
-    if (!sentenceId) continue;
-    const current = thenAtBySentenceId.get(sentenceId);
-    if (!current || review.timestamp < current) thenAtBySentenceId.set(sentenceId, review.timestamp);
-  }
-  const sentenceIds = [...thenAtBySentenceId.keys()].filter(
-    (id) => !(suspendedIndex && sentenceIsSuspendedOnly(id, suspendedIndex)),
-  );
-  if (sentenceIds.length === 0) return [];
-
-  const [sentences, links, audioRows] = await Promise.all([
-    db.sentences.bulkGet(sentenceIds),
-    db.sentenceVocabulary.where('sentenceId').anyOf(sentenceIds).toArray(),
-    db.sentenceAudio.where('sentenceId').anyOf(sentenceIds).toArray(),
-  ]);
-  const sentenceById = new Map(
-    sentences.filter((row): row is Sentence => Boolean(row)).map((row) => [row.id, row]),
-  );
-  const audioBySentenceId = new Map<string, SentenceAudio>();
-  for (const audio of audioRows) {
-    if (!audioBySentenceId.has(audio.sentenceId)) audioBySentenceId.set(audio.sentenceId, audio);
-  }
-
-  const confirmedLinks = links.filter((link) => !!link.surfaceForm);
-  const items = await db.vocabularyItems.bulkGet([
-    ...new Set(confirmedLinks.map((link) => link.vocabularyItemId)),
-  ]);
-  const itemById = new Map(
-    items.filter((row): row is VocabularyItem => Boolean(row)).map((row) => [row.id, row]),
-  );
-  const linksBySentenceId = new Map<string, SentenceVocabulary[]>();
-  for (const link of confirmedLinks) {
-    const list = linksBySentenceId.get(link.sentenceId);
-    if (list) list.push(link);
-    else linksBySentenceId.set(link.sentenceId, [link]);
-  }
-
-  const alignments = await loadAlignmentsBulk(
-    [...new Set([...audioBySentenceId.values()].map((audio) => audio.id))],
-  );
-
-  const clips: ThenAndNowClipData[] = [];
-  for (const sentenceId of sentenceIds) {
-    const sentence = sentenceById.get(sentenceId);
-    const audio = audioBySentenceId.get(sentenceId);
-    if (!sentence || !audio) continue;
-    const alignment = alignments.get(audio.id);
-    const sentenceLinks = linksBySentenceId.get(sentenceId) ?? [];
-    const spanByVocabularyItemId = new Map<string, { startMs: number; endMs: number }>();
-    for (const link of sentenceLinks) {
-      if (!alignment || spanByVocabularyItemId.has(link.vocabularyItemId)) continue;
-      const span = isolatedWordRange(alignment.words, sentence.japanese, link.surfaceForm!);
-      if (span) spanByVocabularyItemId.set(link.vocabularyItemId, span);
-    }
-    const clip = buildThenAndNowClip({
-      sentenceId,
-      japanese: sentence.japanese,
-      translation: sentence.translation ?? '',
-      thenAt: thenAtBySentenceId.get(sentenceId)!,
-      now,
-      links: sentenceLinks.map((link) => ({
-        vocabularyItemId: link.vocabularyItemId,
-        expression: itemById.get(link.vocabularyItemId)?.expression ?? link.surfaceForm!,
-        createdAt: itemById.get(link.vocabularyItemId)?.createdAt ?? '',
-      })),
-      spanByVocabularyItemId,
-    });
-    if (clip) clips.push({ ...clip, audio });
-  }
-  return clips;
-}
-
-const BUILT_RECIPES_BY_ID = new Map(BUILT_RECIPES.map((recipe) => [recipe.id, recipe]));
-
-/** Built chains per recipe: enough verb variety for a round without composing every verb × recipe. */
-const BUILT_VERBS_PER_RECIPE = 12;
-
-/**
- * Everything Verb Lego can offer, grouped by suffix pattern: real chains read
- * from sentences whose vocabulary you've confirmed (translated, not
- * suspended-only), plus chains *built* from confirmed verbs JMdict tags as
- * godan/ichidan (`recipesForVerb`) for the "monster" forms the corpus almost
- * never contains. Each candidate's picker stats come from per-piece history in
- * the `gameRounds` log; `focus` is the pieces missed most. Read-only.
- */
-export async function getVerbLegoData(): Promise<{
-  candidates: VerbLegoCandidate[];
-  focus: Map<string, number>;
-}> {
-  const db = getDb();
-  const [sentences, analyses, links, rounds, suspendedIndex] = await Promise.all([
-    db.sentences.toArray(),
-    db.analyses.toArray(),
-    db.sentenceVocabulary.toArray(),
-    db.gameRounds.where('gameId').equals(VERB_LEGO_GAME_ID).toArray(),
-    loadSuspendedBookIndex(),
-  ]);
-  const confirmed = new Set(
-    analyses
-      .filter((analysis) => analysis.vocabularyReviewStatus === 'confirmed')
-      .map((analysis) => analysis.sentenceId),
-  );
-  const history = buildVerbLegoHistory(rounds);
-
-  const chains: VerbChain[] = [];
-  const introducedSentenceIds = await filterToIntroducedSentenceIds(
-    sentences.filter((sentence) => confirmed.has(sentence.id) && isVerbLegoEligible(sentence)).map((sentence) => sentence.id),
-  );
-  for (const sentence of sentences) {
-    if (!confirmed.has(sentence.id) || !isVerbLegoEligible(sentence)) continue;
-    if (!introducedSentenceIds.has(sentence.id)) continue;
-    if (suspendedIndex && sentenceIsSuspendedOnly(sentence.id, suspendedIndex)) continue;
-    chains.push(...findVerbChains(sentence));
-  }
-
-  // Built chains: confirmed verbs only (a link with a surface form = the learner confirmed it).
-  const confirmedItemIds = [
-    ...new Set(links.filter((link) => !!link.surfaceForm).map((link) => link.vocabularyItemId)),
-  ].sort();
-  const items = (await db.vocabularyItems.bulkGet(confirmedItemIds)).filter(
-    (row): row is VocabularyItem => Boolean(row),
-  );
-  const verbsByRecipe = new Map<string, VocabularyItem[]>();
-  for (const item of items) {
-    for (const recipe of recipesForVerb(item)) {
-      const list = verbsByRecipe.get(recipe.id) ?? [];
-      if (list.length < BUILT_VERBS_PER_RECIPE) list.push(item);
-      verbsByRecipe.set(recipe.id, list);
-    }
-  }
-  for (const [recipeId, verbs] of verbsByRecipe) {
-    const recipe = BUILT_RECIPES_BY_ID.get(recipeId)!;
-    for (const item of verbs) {
-      const built = buildBuiltChain({ ...item, english: item.meaning }, recipe);
-      if (built) chains.push(built);
-    }
-  }
-
-  return {
-    candidates: buildVerbLegoCandidates(chains, history),
-    focus: verbLegoMissFocus(history),
-  };
-}
 
 export interface VocabularyOccurrenceCandidate {
   link: SentenceVocabulary;
@@ -9968,41 +9085,6 @@ function pendingFreshTryRequestIds(
     .map(([id]) => id);
 }
 
-/**
- * Stable reorder of the first `EXPLORE_SENTENCE_PREVIEW_LIMIT` items: sentences
- * Sentence Growth could use (a chunk plan, native audio ≤10 s, a translation —
- * `growthRejection`) ahead of the rest, each group keeping its reading order.
- * Items past the window and the window's membership are untouched, so a
- * qualifying sentence never delays a non-qualifying one by more than the
- * window and none can be starved.
- */
-async function floatGrowthEligibleFirst<T extends { sentenceId: string }>(items: T[]): Promise<T[]> {
-  const head = items.slice(0, EXPLORE_SENTENCE_PREVIEW_LIMIT);
-  if (head.length < 2) return items;
-  const db = getDb();
-  const ids = head.map((item) => item.sentenceId);
-  const [sentences, audioRows] = await Promise.all([
-    db.sentences.bulkGet(ids),
-    db.sentenceAudio.where('sentenceId').anyOf(ids).toArray(),
-  ]);
-  const durationBySentenceId = new Map<string, number>();
-  for (const audio of audioRows) {
-    if (!durationBySentenceId.has(audio.sentenceId)) durationBySentenceId.set(audio.sentenceId, audio.durationMs);
-  }
-  const eligible = new Set(
-    ids.filter((id, index) => {
-      const sentence = sentences[index];
-      const duration = durationBySentenceId.get(id);
-      return !!sentence && duration !== undefined && growthRejection(sentence, duration) === null;
-    }),
-  );
-  if (eligible.size === 0 || eligible.size === head.length) return items;
-  return [
-    ...head.filter((item) => eligible.has(item.sentenceId)),
-    ...head.filter((item) => !eligible.has(item.sentenceId)),
-    ...items.slice(EXPLORE_SENTENCE_PREVIEW_LIMIT),
-  ];
-}
 
 /** Strength per grammar pattern that has any reader tap: its weakest tapped facet. Untapped patterns are absent. */
 async function loadGrammarPatternStrengths(): Promise<Map<string, number>> {
@@ -10647,18 +9729,13 @@ async function findExploreCandidates(
       inReadingOrder.sort((a, b) => learnt(b) - learnt(a));
       leadEpisodeLearnt.set(book.id, inReadingOrder[0] ? learnt(inReadingOrder[0]) : 0);
     }
-    // Sentence Growth can only serve sentences the learner has met, so within
-    // the window already previewed, lessons that qualify for it come first.
-    // Order only: nothing is added, gated or skipped, and sequential mode keeps
-    // its strict episode order.
     const newInOrder = iPlusOneContext
       ? [...inReadingOrder].sort(
           (a, b) =>
             (iPlusOneContext.rank.get(a.sentenceId) ?? Infinity) - (iPlusOneContext.rank.get(b.sentenceId) ?? Infinity),
         )
       : inReadingOrder;
-    const unstarted =
-      !sequential ? await traceStep('explore: floatGrowthEligibleFirst', () => floatGrowthEligibleFirst(newInOrder)) : newInOrder;
+    const unstarted = newInOrder;
     // Shelved (suspended-episode) sentences are dropped *before* the cap, or the
     // oldest due ones — often in shelved episodes — would eat the cap and then vanish.
     const shelvedIds = new Set(memberships.filter((item) => !notShelved(item)).map((item) => item.sentenceId));
@@ -11978,10 +11055,9 @@ export async function getSessionPlannerInput(
   now: Date = new Date(),
   exclude: SessionPlannerExclusions = NO_EXCLUSIONS,
   baselineOverride?: Record<SessionBucket, number>,
-  gameBreakCandidates?: GameBreakCandidate[],
 ): Promise<SessionPlannerInput> {
   try {
-    return await gatherSessionPlannerInput(totalMinutes, now, exclude, baselineOverride, gameBreakCandidates);
+    return await gatherSessionPlannerInput(totalMinutes, now, exclude, baselineOverride);
   } finally {
     // The per-pass memo must never outlive the pass (a failed pass would leave stale reads behind).
     plannerTrace = null;
@@ -11994,7 +11070,6 @@ async function gatherSessionPlannerInput(
   now: Date,
   exclude: SessionPlannerExclusions,
   baselineOverride?: Record<SessionBucket, number>,
-  gameBreakCandidates?: GameBreakCandidate[],
 ): Promise<SessionPlannerInput> {
   const db = getDb();
   const timer = createPlannerTimer();
@@ -12147,7 +11222,6 @@ async function gatherSessionPlannerInput(
     shadowCandidates,
     baseline: baselineOverride ?? settings.sessionAllocation,
     quietMode: settings.quietMode ?? false,
-    gameBreakCandidates,
   };
 }
 
@@ -12181,15 +11255,11 @@ export async function getTodayPlannerSession(now: Date = new Date()): Promise<Pl
  * its displayed count doesn't retroactively grow. `baselineOverride` (Home's
  * per-add-time split picker) applies only to this call's own newly-added
  * steps, not to the session's already-settled allocation history.
- * `gameBreakGames` (playable `/play` games, most-preferred first) opts the
- * pass into game breaks whose minutes come out of `minutes`; games already in
- * today's steps are tried last so a top-up rotates rather than repeats.
  */
 export async function addMinutesToTodaySession(
   minutes: number,
   now: Date = new Date(),
   baselineOverride?: Record<SessionBucket, number>,
-  gameBreakGames?: GameBreakCandidate[],
 ): Promise<PlannerSession> {
   const db = getDb();
   const date = localDateKey(now);
@@ -12201,17 +11271,7 @@ export async function addMinutesToTodaySession(
     (step) => step.activityType === 'due_review_batch' && step.status === 'pending',
   );
 
-  const gamesAlreadyToday = new Set(
-    (existing?.steps ?? []).flatMap((step) => (step.gameId ? [step.gameId] : [])),
-  );
-  // Stable sort: unplayed-today games keep the caller's preference order, ahead of repeats.
-  const orderedGames = gameBreakGames
-    ? [...gameBreakGames].sort(
-        (a, b) => Number(gamesAlreadyToday.has(a.gameId)) - Number(gamesAlreadyToday.has(b.gameId)),
-      )
-    : undefined;
-
-  const input = await getSessionPlannerInput(minutes, now, exclude, baselineOverride, orderedGames);
+  const input = await getSessionPlannerInput(minutes, now, exclude, baselineOverride);
   const recommended = buildRecommendedSession(input);
 
   const newSteps: PlannerSessionStep[] = recommended.steps

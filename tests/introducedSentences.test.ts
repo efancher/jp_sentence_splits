@@ -17,7 +17,7 @@ beforeEach(async () => {
   await resetDbForTests();
 });
 
-describe('filterToIntroducedSentenceIds (the shared /play gate)', () => {
+describe('filterToIntroducedSentenceIds', () => {
   it('a walked-through sentence is introduced without any vocabulary card', async () => {
     await logSentenceLearningEvent({ id: 'e1', visitId: 'v', action: 'walkthrough_completed', sentenceId: 'walked' });
     const introduced = await filterToIntroducedSentenceIds(['walked', 'untouched']);
@@ -100,19 +100,3 @@ async function seedRemixWorld({ walked }: { walked: boolean }) {
     await logSentenceLearningEvent({ id: 'w1', visitId: 'v', action: 'walkthrough_completed', sentenceId: 'remix1' });
   }
 }
-
-describe('getRemixData under the sentence-led flow', () => {
-  it('offers a walked-through sentence with unconfirmed vocabulary and no vocabulary cards (pool from linked nouns)', async () => {
-    await seedRemixWorld({ walked: true });
-    const { candidates, pool } = await getRemixData();
-    expect(pool.length).toBeGreaterThanOrEqual(6);
-    expect(candidates.map((c) => c.id)).toEqual(['remix1']);
-    expect(await getDb().studyItems.where('subjectType').equals('vocabularyItem').count()).toBe(0);
-  });
-
-  it('offers nothing for a sentence the learner has not met', async () => {
-    await seedRemixWorld({ walked: false });
-    const { candidates } = await getRemixData();
-    expect(candidates).toEqual([]);
-  });
-});

@@ -36,7 +36,7 @@ import {
   measureNativeWord,
   type NativeWordMeasurement,
 } from '../src/lib/nativeClipPitchAudit';
-import { isPlausibleClipSpan } from '../src/lib/oddEarOut';
+import { isPlausibleClipSpan } from '../src/lib/pitchWordClip';
 import { extractPitch, type PitchAnalysisPayload } from '../src/lib/pitch';
 import { fetchAll, requireAuthedUser } from './lib/scriptHelpers';
 import { createScriptSupabaseClient } from './lib/scriptSupabaseClient';

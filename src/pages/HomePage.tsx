@@ -65,7 +65,6 @@ const SHORTCUTS = [
   { to: '/grammar', label: 'Grammar' },
   { to: '/review', label: 'Review' },
   { to: '/vocabulary', label: 'Words' },
-  { to: '/play', label: 'Play a round' },
   { to: '/pronunciation', label: 'Pronunciation' },
   { to: '/pitch-accent', label: 'Pitch-accent drill' },
   { to: '/pitch-ear-trainer', label: 'Pitch ear trainer' },
@@ -151,9 +150,6 @@ export function HomePage() {
     const tapped = performance.now();
     try {
       const now = new Date();
-      // Game breaks are off for now (2026-10-21): omitting the candidates keeps
-      // /play games out of planned sessions and skips every game pool scan.
-      // Re-enable by passing `await loadGameBreakCandidates(now)` (src/games/gameBreaks.ts).
       await addMinutesToTodaySession(minutes, now, customSplit ?? undefined);
       if (customSplit) await updateSettings({ sessionAllocation: customSplit });
       setPlannerTiming(`Tap to done ${Math.round(performance.now() - tapped)} ms\n${getLastPlannerTiming()}`);

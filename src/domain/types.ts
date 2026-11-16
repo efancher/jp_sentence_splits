@@ -760,9 +760,7 @@ export interface AppSettings {
    * it instead (2026-09-28 user decision — see docs/STATUS.md). While set,
    * no new `pitch_accent`/`pitch_accent_production` study items are seeded
    * and existing due ones are withheld from `/review`; the standalone
-   * `/pitch-accent` drill and its Home shortcut are hidden; the pitch-based
-   * `/play` games (Odd Ear Out, Homophone Hunt, Speaker Match) report
-   * themselves ineligible with a "paused" reason; and the sentence-level
+   * `/pitch-accent` drill and its Home shortcut are hidden; and the sentence-level
    * `listening` card's own pitch-accent sub-requirement is treated as
    * satisfied rather than left permanently blocked (the exact gate-
    * starvation shape `continue_book`'s FSRS-proficiency gate hit before).
@@ -949,8 +947,8 @@ export interface SentenceVocabulary {
   audioEndMs?: number;
   /**
    * Hand-corrected *strict* word-only span (no particle, no pad) for this
-   * occurrence, in ms — set from the citation-form games (Odd Ear Out,
-   * Speaker Match), which loop just the word and need it particle-free.
+   * occurrence, in ms — set from the removed citation-form games' clip editor
+   * (2026-11-16); existing values are still honoured by word-only clips.
    * When both are set they override `isolatedWordSpans`' aligner-derived
    * `wordOnly` guess for every consumer of it. Deliberately separate from
    * `audioStartMs`/`audioEndMs` above: that one is padded and often carries
@@ -1298,12 +1296,9 @@ export interface GameRoundItem {
 }
 
 /**
- * One finished round of a short game (`/play`). Append-only usage log,
- * modelled on `PitchDrillAttempt` and synced as `game_rounds`. Deliberately
- * never read by FSRS/the session planner: games are cued (clues, pacing), so
- * feeding them into proficiency would inflate the signals that gate
- * `continue_book`/shadowing/listening. Only ever written by
- * `logGameRound`.
+ * One finished round of a short game. Append-only usage log, synced as
+ * `game_rounds`. The games were removed 2026-11-16: existing rows are kept and
+ * still sync, but nothing writes or reads new ones in the app.
  */
 export interface GameRound {
   id: string;
@@ -1674,7 +1669,7 @@ export type PlannerStepTargetKind =
   | 'vocabulary_review'
   /** Sentence-first lesson (`/books/:bookId/learn/:sentenceId`) — the Reader's walkthrough, no vocabulary gate. Logs only SentenceLearningEvents; settling it never confirms vocabulary or changes BookSentence status. */
   | 'sentence_learning'
-  /** A short `/play` game break (`gameId`). Settled only by "Mark complete"/Skip, like every other step. */
+  /** A short game break (`gameId`). No longer drafted (games removed 2026-11-16); kept so old sessions still read. */
   | 'game';
 
 export interface PlannerSessionStep {
@@ -1687,7 +1682,7 @@ export interface PlannerSessionStep {
   sentenceId?: string;
   grammarPatternId?: string;
   vocabularyItemId?: string;
-  /** The `/play` game a `game` step opens (`src/games/registry.tsx` id). */
+  /** The game a `game` step opened (games removed 2026-11-16). */
   gameId?: string;
   /**
    * Sentences a batched step walks in one flow. Currently only set for the

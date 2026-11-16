@@ -8,7 +8,7 @@ import { DrillTakeLabelsPanel } from '../components/DrillTakeLabels';
 import { RecordToggleButton } from '../components/RecordToggleButton';
 import { SentencePitchAccentText } from '../components/SentencePitchAccentText';
 import {
-  getOddEarOutData,
+  getPitchWordClips,
   getPitchAccentDrillSentences,
   getPitchAccentDrillWords,
   getPitchAccentFocusWords,
@@ -19,7 +19,7 @@ import {
   readSettings,
   saveReferencePitchTrack,
   updateSettings,
-  type OddEarOutClip,
+  type PitchWordClipWithAudio,
   type PitchAccentDrillWord,
 } from '../db/repository';
 import type { Sentence } from '../domain/types';
@@ -112,7 +112,7 @@ function pitchDrillWordWeight(word: PitchAccentDrillWord): number {
  * never a gate on it.
  */
 async function nativeContinuousComparison(
-  clip: OddEarOutClip | undefined,
+  clip: PitchWordClipWithAudio | undefined,
   learnerClasses: MoraPitchClass[] | undefined,
   learnerContrastSemitones: number | null | undefined,
 ): Promise<ContinuousPitchComparison | null> {
@@ -229,9 +229,9 @@ export function PitchAccentDrillPage() {
   // "Reveal bridges" already draw native clips from. Loaded once, not
   // per-take: it's a full sweep of sentenceVocabulary, cheap to keep around
   // for a whole drill session.
-  const oddEarClips = useLiveQuery(() => getOddEarOutData().then(({ clips }) => clips), []);
+  const oddEarClips = useLiveQuery(() => getPitchWordClips().then(({ clips }) => clips), []);
   const clipByVocabularyItemId = useMemo(() => {
-    const map = new Map<string, OddEarOutClip>();
+    const map = new Map<string, PitchWordClipWithAudio>();
     for (const clip of oddEarClips ?? []) {
       if (!map.has(clip.vocabularyItemId)) map.set(clip.vocabularyItemId, clip);
     }

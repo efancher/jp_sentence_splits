@@ -34,7 +34,7 @@ import { isolatedWordMatchRange, isolatedWordSpans } from '../src/lib/isolatedWo
 import { phonesToMoraIntervals, type MoraInterval } from '../src/lib/moraTiming';
 import { segmentIntoMorae } from '../src/lib/mora';
 import { measureNativeWord } from '../src/lib/nativeClipPitchAudit';
-import { isPlausibleClipSpan } from '../src/lib/oddEarOut';
+import { isPlausibleClipSpan } from '../src/lib/pitchWordClip';
 import { extractPitch, type PitchAnalysisPayload } from '../src/lib/pitch';
 import { fetchAll, parseApplyFlag, requireAuthedUser } from './lib/scriptHelpers';
 import { createScriptSupabaseClient } from './lib/scriptSupabaseClient';
