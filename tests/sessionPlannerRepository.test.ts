@@ -436,6 +436,23 @@ describe('Learning Orchestrator repository layer', () => {
     expect(review.daysSinceLast).toBeCloseTo(1, 1);
   });
 
+  it('counts Read checks (gist_check events, no Review row) as review activity', async () => {
+    const db = getDb();
+    const hours = (n: number) => new Date(Date.now() - n * 3_600_000).toISOString();
+    await db.reviews.put({ id: 'old', studyItemId: 'item-1', rating: 'good', timestamp: hours(24 * 12) });
+    await db.sentenceLearningEvents.put({
+      id: createId('sle'),
+      sentenceId: 's1',
+      bookId: 'b1',
+      action: 'gist_check',
+      timestamp: hours(24),
+    } as never);
+
+    const review = (await computeLearningBalance()).find((entry) => entry.bucket === 'review')!;
+    expect(review.daysSinceLast).toBeCloseTo(1, 1);
+    expect(review.count).toBe(2);
+  });
+
   it('does not re-offer sentences already shadowed today after the session is cleared', async () => {
     const book = await createBook({ title: 'Shadow Twice' });
     const db = getDb();

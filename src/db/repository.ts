@@ -13001,6 +13001,9 @@ interface IndexedTimestampTable {
   orderBy(index: string): { last(): PromiseLike<object | undefined> };
 }
 
+/** Learning-event actions that are review work (recall checks) for the planner's neglect tracking, though they write no `Review` row. */
+const REVIEW_LEARNING_ACTIONS: ReadonlySet<string> = new Set(['gist_check', 'held_back_check', 'transfer_recheck']);
+
 async function getRecentActivityEvents(now: Date): Promise<RecentActivityEvent[]> {
   const db = getDb();
   const cutoffIso = new Date(now.getTime() - NEGLECT_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
@@ -13024,16 +13027,21 @@ async function getRecentActivityEvents(now: Date): Promise<RecentActivityEvent[]
     return [{ mode, timestamp, count }];
   };
 
-  const [review, shadowing, grammarFromAnalyses, grammarFromLinks, allBookSentences] = await Promise.all([
+  const [review, shadowing, grammarFromAnalyses, grammarFromLinks, allBookSentences, learningEvents] = await Promise.all([
     summarise('review', 'reviews', db.reviews, 'timestamp'),
     summarise('shadowing', 'attempts', db.attempts, 'createdAt'),
     summarise('grammar', 'analyses', db.analyses, 'updatedAt'),
     summarise('grammar', 'sentenceGrammar', db.sentenceGrammar, 'updatedAt'),
     // addedAt has no index, so glossing still needs the (shared, once-per-pass) membership scan.
     traceStep('recent: bookSentences.toArray', () => readAllBookSentencesForPass(), rowCount),
+    // Read checks and the other sentence-led recall checks log learning events, never `Review` rows.
+    traceStep('recent: sentenceLearningEvents.toArray', () => readAllLearningEventsForPass(), rowCount),
   ]);
 
   const events: RecentActivityEvent[] = [...review, ...shadowing, ...grammarFromAnalyses, ...grammarFromLinks];
+  for (const event of learningEvents) {
+    if (REVIEW_LEARNING_ACTIONS.has(event.action)) events.push({ mode: 'review', timestamp: event.timestamp });
+  }
   for (const membership of allBookSentences) {
     if (membership.addedAt >= cutoffIso) events.push({ mode: 'glossing', timestamp: membership.addedAt });
   }
