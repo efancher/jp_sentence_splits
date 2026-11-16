@@ -80,6 +80,11 @@ The items below retain unfinished work, optional refinements and future ideas.
   5. A `/progress` panel; revisit the evidence weights.
 
   **Chunk chain, still open.**
+  - Session steps (2026-11-16): with sentence shadowing paused, a plan step on a
+    sentence whose clip plans a chain is "Chunk chain: …" and the reader starts the
+    chain on open; other phrase steps stay single phrases. Because so few clips
+    plan a chain today (below), most steps will stay single phrases until alignment
+    coverage improves.
   - Read `npm run diagnose:chunk-chain-outcomes` (cold whole-sentence rating, asked
     on ~25% of runs, vs the chain's last rating per visit) once there are a few
     dozen cold pairs. Read-only evidence, not a gate.

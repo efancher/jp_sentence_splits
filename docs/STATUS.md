@@ -113,6 +113,11 @@ and possible extensions. This snapshot does not certify a live deployment.
   `phrase_shadow` Got it over the highest Got-it rung credits its words once.
   `npm run diagnose:chunk-chain-outcomes` compares cold vs chain-end ratings. Plan:
   ROADMAP "Phrase shadowing".
+  2026-11-16: while sentence shadowing is paused, a daily-plan shadowing step whose
+  clip plans a chain is drafted as "Chunk chain: <sentence>" and the reader's docked
+  Shadowing tool starts the chain on open (`chunkChainPlannedForSentence`,
+  `ShadowWorkspace` `fromSessionStep`, `ChunkChainPanel` `autoStart`, once per clip;
+  Stop chain falls back to the single phrase). Other phrase steps are unchanged.
 - Phrase shadowing (2026-11-03, trial): after marking a span narrower than the clip on
   the Shadow pane, "How did this phrase go?" offers Not yet / Close / Got it, logged
   as a `phrase_shadow` `sentence_learning_events` row (`rangeStartMs`/`rangeEndMs`,
