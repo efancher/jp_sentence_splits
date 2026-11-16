@@ -532,11 +532,9 @@ re-encounter freshness, plus a standalone weakness term, additive rather
 than the source brief's literal product so a fresh single-context item
 never scores to zero; the old two-pool retain/practice ranking is now one
 combined ranked list, since the score doesn't care which pool an item came
-from and `ReviewPage` itself doesn't distinguish them either; a due
-`grammar_completion` item also gets a `crossActivityMissBoost` bump when its
-pattern occurs in a sentence whose `sentence_transformation` card was just
-missed twice — cross-activity error routing, reorders among already-due
-items only, never makes a not-due one due) -> **time
+from and `ReviewPage` itself doesn't distinguish them either; the old
+`crossActivityMissBoost` for grammar cards was removed 2026-11-16, since the
+planner no longer scans word/grammar cards) -> **time
 allocation** across the four buckets (a 35/15/15/35
 glossing/grammar/shadowing/review baseline nudged toward neglected buckets,
 then clamped two ways: against how much each bucket's own candidate list can

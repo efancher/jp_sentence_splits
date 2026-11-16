@@ -199,7 +199,6 @@ describe('review priority inputs for due sentence cards', () => {
     expect(input.recentReviewCount).toBe(7);
     expect(input.recentAgainCount).toBe(1);
     expect(input.daysSinceLastEncounter).toBeCloseTo(18, 5);
-    expect(input.crossActivityMissBoost).toBe(false);
   });
 
   it('reports no natural encounter as null', async () => {

@@ -9829,136 +9829,38 @@ export async function recordGrammarRelationshipObservation(
  * "batched" discipline above).
  */
 /**
- * Sentences whose `sentence_transformation` (contextual conjugation) card
- * was just missed twice in a row — feeds `crossActivityMissBoost` for any
- * `grammarPattern`-subject item whose pattern also occurs in one of these
- * sentences (cross-activity error routing, docs/ROADMAP.md "Possibilities";
- * same 2-consecutive-again/hard signal `getPitchAccentFocusWords` uses for
- * its sibling case). Computed from *every* `sentence_transformation` study
- * item regardless of due-ness —
- * an "again" rating reschedules the card into the near future, so
- * restricting this to whichever due batch is being scored right now would
- * miss almost every real case.
+ * Priority inputs for due cards. The planner's due scan leaves out the retired
+ * word/grammar subjects (`RETIRED_DRILL_SUBJECT_TYPES`), so only sentence cards
+ * carry source diversity: the distinct books (by source key) holding the sentence.
  */
-async function getRecentlyMissedSentenceTransformationSentenceIds(): Promise<Set<string>> {
-  const db = getDb();
-  const inPass = Boolean(plannerPassMemo);
-  const items = inPass
-    ? (await readAllStudyItemsForPass()).filter((item) => item.activityType === 'sentence_transformation')
-    : await db.studyItems.where('activityType').equals('sentence_transformation').toArray();
-  if (items.length === 0) return new Set();
-  const links = inPass
-    ? await readAllSentenceVocabularyForPass()
-    : await db.sentenceVocabulary.bulkGet(items.map((item) => item.subjectId));
-  const sentenceIdByLinkId = new Map(
-    links.filter((link): link is SentenceVocabulary => Boolean(link)).map((link) => [link.id, link.sentenceId]),
-  );
-  const reviews = (await reviewsForStudyItems(items.map((item) => item.id))).sort((a, b) =>
-    a.timestamp.localeCompare(b.timestamp),
-  );
-  const reviewsByStudyItem = new Map<string, Review[]>();
-  for (const review of reviews) {
-    const list = reviewsByStudyItem.get(review.studyItemId);
-    if (list) list.push(review);
-    else reviewsByStudyItem.set(review.studyItemId, [review]);
-  }
-  const sentenceIds = new Set<string>();
-  for (const item of items) {
-    const itemReviews = reviewsByStudyItem.get(item.id) ?? [];
-    if (itemReviews.length < 2) continue;
-    const lastTwo = itemReviews.slice(-2);
-    if (!lastTwo.every((review) => review.rating === 'again' || review.rating === 'hard')) continue;
-    const sentenceId = sentenceIdByLinkId.get(item.subjectId);
-    if (sentenceId) sentenceIds.add(sentenceId);
-  }
-  return sentenceIds;
-}
-
 async function buildReviewPriorityInputs(
   studyItems: StudyItem[],
   mode: SessionBucket,
   now: Date,
-  recentlyMissedTransformationSentenceIds: Set<string>,
 ): Promise<ReviewPriorityInput[]> {
   if (studyItems.length === 0) return [];
   const db = getDb();
 
-  const vocabIds = studyItems
-    .filter((item) => item.subjectType === 'vocabularyItem')
-    .map((item) => item.subjectId);
-  const grammarIds = studyItems
-    .filter((item) => item.subjectType === 'grammarPattern')
-    .map((item) => item.subjectId);
-  const occurrenceLinkIds = studyItems
-    .filter((item) => item.subjectType === 'sentenceVocabulary')
-    .map((item) => item.subjectId);
-
-  const [vocabLinks, grammarLinks, occurrenceLinks] = await Promise.all([
-    vocabIds.length
-      ? db.sentenceVocabulary.where('vocabularyItemId').anyOf(vocabIds).toArray()
-      : Promise.resolve([]),
-    grammarIds.length
-      ? db.sentenceGrammar.where('grammarPatternId').anyOf(grammarIds).toArray()
-      : Promise.resolve([]),
-    occurrenceLinkIds.length
-      ? db.sentenceVocabulary.bulkGet(occurrenceLinkIds)
-      : Promise.resolve([]),
-  ]);
-  const sentenceIdByOccurrenceLinkId = new Map<string, string>();
-  for (const link of occurrenceLinks) {
-    if (link) sentenceIdByOccurrenceLinkId.set(link.id, link.sentenceId);
-  }
-  const sentenceIdsByVocabId = new Map<string, string[]>();
-  for (const link of vocabLinks) {
-    const list = sentenceIdsByVocabId.get(link.vocabularyItemId);
-    if (list) list.push(link.sentenceId);
-    else sentenceIdsByVocabId.set(link.vocabularyItemId, [link.sentenceId]);
-  }
-  const sentenceIdsByGrammarId = new Map<string, string[]>();
-  for (const link of grammarLinks) {
-    const list = sentenceIdsByGrammarId.get(link.grammarPatternId);
-    if (list) list.push(link.sentenceId);
-    else sentenceIdsByGrammarId.set(link.grammarPatternId, [link.sentenceId]);
-  }
-
-  const directSentenceIds = studyItems
-    .filter((item) => item.subjectType === 'sentence')
-    .map((item) => item.subjectId);
-  const allReferencedSentenceIds = [
-    ...new Set([
-      ...directSentenceIds,
-      ...vocabLinks.map((l) => l.sentenceId),
-      ...grammarLinks.map((l) => l.sentenceId),
-      ...sentenceIdByOccurrenceLinkId.values(),
-    ]),
+  const sentenceIds = [
+    ...new Set(studyItems.filter((item) => item.subjectType === 'sentence').map((item) => item.subjectId)),
   ];
-  const referencedBookSentences = allReferencedSentenceIds.length
-    ? await bookSentencesForSentences(allReferencedSentenceIds)
-    : [];
-  const bookIds = [...new Set(referencedBookSentences.map((item) => item.bookId))];
+  const memberships = sentenceIds.length ? await bookSentencesForSentences(sentenceIds) : [];
+  const bookIds = [...new Set(memberships.map((item) => item.bookId))];
   const books = await db.books.bulkGet(bookIds);
   const sourceKeyByBookId = new Map<string, string>();
   books.forEach((book, index) => {
     if (book) sourceKeyByBookId.set(bookIds[index]!, book.sourceKey ?? book.id);
   });
   const sourceKeysBySentenceId = new Map<string, Set<string>>();
-  for (const membership of referencedBookSentences) {
+  for (const membership of memberships) {
     const key = sourceKeyByBookId.get(membership.bookId);
     if (!key) continue;
     const existing = sourceKeysBySentenceId.get(membership.sentenceId);
     if (existing) existing.add(key);
     else sourceKeysBySentenceId.set(membership.sentenceId, new Set([key]));
   }
-  function diversityFor(sentenceIds: string[]): { distinctSourceCount: number; distinctSentenceCount: number } {
-    const sources = new Set<string>();
-    for (const sentenceId of sentenceIds) {
-      for (const key of sourceKeysBySentenceId.get(sentenceId) ?? []) sources.add(key);
-    }
-    return { distinctSourceCount: sources.size, distinctSentenceCount: sentenceIds.length };
-  }
 
-  const studyItemIds = studyItems.map((item) => item.id);
-  const allReviews = await reviewsForStudyItems(studyItemIds);
+  const allReviews = await reviewsForStudyItems(studyItems.map((item) => item.id));
   const reviewsByStudyItemId = new Map<string, Review[]>();
   for (const review of allReviews) {
     const list = reviewsByStudyItemId.get(review.studyItemId);
@@ -9973,19 +9875,7 @@ async function buildReviewPriorityInputs(
     const recent = itemReviews.slice(0, 7);
     const recentAgainCount = recent.filter((review) => review.rating === 'again').length;
     const lastNaturalEncounter = itemReviews.find((review) => review.source === 'natural_encounter');
-
-    let sentenceIds: string[];
-    if (item.subjectType === 'sentence') sentenceIds = [item.subjectId];
-    else if (item.subjectType === 'vocabularyItem') sentenceIds = sentenceIdsByVocabId.get(item.subjectId) ?? [];
-    else if (item.subjectType === 'grammarPattern') sentenceIds = sentenceIdsByGrammarId.get(item.subjectId) ?? [];
-    else if (item.subjectType === 'sentenceVocabulary') {
-      const sentenceId = sentenceIdByOccurrenceLinkId.get(item.subjectId);
-      sentenceIds = sentenceId ? [sentenceId] : [];
-    } else sentenceIds = [];
-    const diversity = diversityFor(sentenceIds);
-    const crossActivityMissBoost =
-      item.subjectType === 'grammarPattern' &&
-      sentenceIds.some((sentenceId) => recentlyMissedTransformationSentenceIds.has(sentenceId));
+    const isSentence = item.subjectType === 'sentence';
 
     return {
       studyItemId: item.id,
@@ -9995,15 +9885,14 @@ async function buildReviewPriorityInputs(
       due: item.fsrsState.due,
       scheduledDays: item.fsrsState.scheduledDays,
       state: item.fsrsState.state,
-      distinctSourceCount: diversity.distinctSourceCount,
-      distinctSentenceCount: diversity.distinctSentenceCount,
+      distinctSourceCount: isSentence ? (sourceKeysBySentenceId.get(item.subjectId)?.size ?? 0) : 0,
+      distinctSentenceCount: isSentence ? 1 : 0,
       recentAgainCount,
       recentReviewCount: recent.length,
       daysSinceLastEncounter: lastNaturalEncounter
         ? (now.getTime() - new Date(lastNaturalEncounter.timestamp).getTime()) / (24 * 60 * 60 * 1000)
         : null,
       now,
-      crossActivityMissBoost,
     } satisfies ReviewPriorityInput;
   });
 }
@@ -12150,7 +12039,6 @@ async function gatherSessionPlannerInput(
     readCheckCandidates,
     listeningToolCandidates,
     wordCheckCandidates,
-    recentlyMissedTransformationSentenceIds,
     dueItems,
     exploreCandidatesRaw,
   ] = await Promise.all([
@@ -12179,9 +12067,6 @@ async function gatherSessionPlannerInput(
     }),
     timer.time('findWordCheckCandidates', () =>
       findWordCheckCandidates(WORD_CHECK_CANDIDATE_LIMIT, exclude.sentenceIds, now),
-    ),
-    timer.time('getRecentlyMissedSentenceTransformationSentenceIds', () =>
-      getRecentlyMissedSentenceTransformationSentenceIds(),
     ),
     // Not capped here: the pool is trimmed after the suspended/paused/readiness
     // filters below, or long-overdue paused-drill items crowd out live ones.
@@ -12243,7 +12128,6 @@ async function gatherSessionPlannerInput(
         retainDueReady.slice(0, SESSION_PLANNER_CANDIDATE_POOL_SIZE),
         'review',
         now,
-        recentlyMissedTransformationSentenceIds,
       ),
     ),
     timer.time('buildReviewPriorityInputs(practice)', () =>
@@ -12251,7 +12135,6 @@ async function gatherSessionPlannerInput(
         practiceDueReady.slice(0, SESSION_PLANNER_CANDIDATE_POOL_SIZE),
         'review',
         now,
-        recentlyMissedTransformationSentenceIds,
       ),
     ),
   ]);
