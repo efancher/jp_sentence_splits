@@ -97,6 +97,7 @@
     "diagnose:pitch-estimate-accuracy": "tsx scripts/diagnose-pitch-estimate-accuracy.ts",
     "build:kanjium-pitch-data": "tsx scripts/build-kanjium-pitch-data.ts",
     "diagnose:i-plus-one": "tsx scripts/diagnose-i-plus-one.ts",
+    "diagnose:word-check-transfer": "tsx scripts/diagnose-word-check-transfer.ts",
     "diagnose:chunk-chain": "tsx scripts/diagnose-chunk-chain.ts",
     "diagnose:grammar-reference": "tsx scripts/diagnose-grammar-reference.ts",
     "vendor:openjlpt-grammar": "tsx scripts/vendor-openjlpt-grammar.ts",

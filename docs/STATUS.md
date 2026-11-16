@@ -194,7 +194,11 @@ and possible extensions. This snapshot does not certify a live deployment.
   (`/books/:bookId/check/:sentenceId/:word`, `wordCheckWord` on the step). When the planner
   drafts that sentence as a new lesson the check falls back to the walked sentence. A meaning
   check on the word anywhere now spaces every sentence whose weakest word it is. Evidence only,
-  self-judged as before. Jsdom tests only; not yet used in a browser or on a phone.
+  self-judged as before. Jsdom tests only; not yet used in a browser or on a phone. A read-only
+  production check (2026-11-16, `npm run diagnose:word-check-transfer`, 4 books in rotation)
+  found 371 of 430 distinct checkable words in walked sentences (86%) also in an unstudied
+  sentence (median 14 each), and 222 of 224 walked sentences with at least one such word, so
+  most checks will move. It does not rebuild the strength model's weakest-word pick.
   Grammar (2026-11-08): the same revisits also cover weak grammar patterns
   (`getWeakGrammarSentenceSignal`, from the reader's grammar taps; a pattern is
   weak by its weakest tapped facet, untapped is unseen not weak). Weak words
