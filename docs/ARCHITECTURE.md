@@ -132,7 +132,7 @@ bar `reading_in_context` uses. `grammar_completion` is now the sole
 grammar activity type, entered only via "Track" in `GrammarPicker.tsx`
 (never lazily seeded by `ReviewPage`, unlike every other category),
 global scope only, rebuilt around two changes: `pickContextSentenceForGrammarPattern`
-(`repository.ts`) dropped the vocab-proficiency gate entirely — mirrors
+(`src/db/repo/contextSentences.ts`) dropped the vocab-proficiency gate entirely — mirrors
 `pickContextSentenceForVocabularyItem` exactly, just needs a linked
 sentence — and the card (`GrammarCompletionCard` in `ReviewPage.tsx`) now
 always shows the target sentence's English translation up front (the
@@ -187,8 +187,7 @@ convention as `scheduling.ts`/`maturity.ts`) that take already-fetched
 `StudyItem`/`Review`/`Attempt`/`SentenceGrammar` data and produce a
 recommended mixed session across four conceptual `LearningMode`s (explore/
 understand/practice/retain — `src/lib/sessionPlannerConfig.ts`'s
-`ACTIVITY_TYPE_MODE` maps existing activity types onto them). `src/db/
-repository.ts`'s "Learning Orchestrator" section (end of file) is the only
+`ACTIVITY_TYPE_MODE` maps existing activity types onto them). `src/db/repo/learningOrchestrator.ts` is the only
 Dexie-touching half. One new table, `PlannerSession` (Dexie v14,
 schema-adjusted v15), records what was actually recommended/executed — one
 row per local calendar day (`date`, at most one `in_progress`/settled
@@ -218,7 +217,7 @@ backed up; safe to delete). A snapshot is trusted only while no table it depends
 on was written (`storagemutated` marks it dirty, persisted in localStorage) and
 the stored row counts still match; otherwise the planner scans normally and
 saves a fresh one in the background. An in-memory cross-tap cache in
-`repository.ts` sits on top. When adding a planner read, route it through
+`src/db/repo/passReads.ts` sits on top. When adding a planner read, route it through
 `plannerShared` + `loadSnapshot` and list its table in `SNAPSHOT_DEPS`.
 
 Short `/play` games were removed 2026-11-16. Their append-only `gameRounds`
@@ -239,7 +238,7 @@ existing rows are kept; nothing writes new ones. Old planner sessions can hold
 ## Scheduling
 
 **Chapter review presentation (2026-09-30):** `ReviewDocumentText` loads a
-read-only document through `repository.ts#getReviewDocument` for vocabulary
+read-only document through `src/db/repo/grammarPatterns.ts#getReviewDocument` for vocabulary
 reading/cloze and grammar recognition. `ReadingContext.bookId` carries the
 selected source identity; document rows stay within that membership's chapter
 (or the unassigned group). This display scope does not widen readiness gates

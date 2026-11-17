@@ -23,6 +23,18 @@ The items below retain unfinished work, optional refinements and future ideas.
 
 ## In progress
 
+- **Open decisions carried from the repository-split handoff (2026-11-16).**
+  (1) Deleting stored game rounds (`gameRounds` / `game_rounds`) needs a
+  Supabase migration and permanently drops the data — deliberately left in
+  place until the learner decides. (2) Six locked git worktrees
+  (`docs-trim`, `fix-append-only-push-conflict`, `perf-coverage`,
+  `perf-large-episode`, `reader-tap-numeral-counters`,
+  `wordcheck-dictation-steps`) are held by live sessions with merged
+  branches; removal needs the learner's go-ahead (force-remove is destructive).
+  (3) `research/gloss-clause-pilot` — the learner asked to wait on it.
+  The `repository.ts` split these notes tracked is done except core; see
+  `docs/ARCHITECTURE.md` for the current layout.
+
 - [~] **Phase 5 — Vocabulary/kanji relationships.** Implemented and covered by
   repository/component tests. The original interactive confirm-vocabulary
   manual verification remains unrecorded; retain it as a verification follow-up.
@@ -504,7 +516,7 @@ Unfinished work and optional extensions; completed behavior is in `AI_OVERVIEW.m
   `resolveInflectedPitchAccent`'s citation-form branch
   (`src/lib/pitchAccentShift.ts:230`) always takes `positions[0]` and
   silently discards the rest — same in the ambient display
-  (`getSentencePitchAccentTargets`, `src/db/repository.ts`), which calls
+  (`getSentencePitchAccentTargets`, `src/db/repo/sentenceLedFlow.ts`), which calls
   the same resolver. So the real gap is "no representation for a
   dictionary-attested alternate accent," not something specific to
   predicate position.

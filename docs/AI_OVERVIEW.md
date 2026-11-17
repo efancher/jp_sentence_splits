@@ -311,7 +311,7 @@ vocabulary is confirmed (`SentenceAnalysis.vocabularyReviewStatus ===
 `sessionPlannerConfig.ts`) of its linked words have a reading/meaning
 study item (`reading_retrieval`/`cloze`/`reading_production`) that's left
 FSRS's `new` state — `isVocabularyItemIntroduced`,
-`getSentenceReadingIntroducedReadiness` (`repository.ts`), patched onto
+`getSentenceReadingIntroducedReadiness` (since removed, see the historical note below), patched onto
 `ExploreCandidate.sentences[].vocabularyIntroduced` — so structural
 analysis/grammar-noticing never surfaces before the learner has had *some*
 of the sentence's words come up in a review, not just picked them during
@@ -361,7 +361,7 @@ null`, still sort last — same convention as `BooksPage`'s "Easiest first"
 toggle).
 
 The **shadowing bucket** has its own readiness gate
-(`getSentenceShadowingReadiness`, `repository.ts`, replacing
+(`getSentenceShadowingReadiness`, `src/db/repo/reviewScheduling.ts`, replacing
 `findShadowCandidates`'s old reuse of `getSentenceFullReviewReadiness`):
 under the sentence-led flow (default; vocab cards aren't shown or seeded) just the sentence
 introduced (walkthrough done, book started, or already has a card; the confirmed-vocabulary
@@ -562,8 +562,7 @@ never-introduced words and the per-session cap isn't reached -> **coherent-chain
 (steps that share a sentence id, e.g. a grammar pattern and a shadowing
 candidate from the same sentence, run back to back) -> a short
 human-readable explanation ("You haven't touched shadowing in 6 days, so
-this session emphasizes it."). `src/db/repository.ts`'s "Learning
-Orchestrator" section is the only Dexie-touching half — it adapts live
+this session emphasizes it."). `src/db/repo/learningOrchestrator.ts` is the only Dexie-touching half — it adapts live
 `StudyItem`/`Review`/`Attempt`/`SentenceGrammar`/`bookSentences` data into
 the planner's plain input types, batched (not N+1) the same way
 `listGrammarPatternSummaries` already is.
@@ -611,7 +610,7 @@ persists it back as the new saved default. This **replaces** Settings'
 old "Activity mix" panel rather than sitting alongside it — the split is
 only editable here now. A "Clear today's session" button (2026-08-27,
 below the step list) deletes today's `PlannerSession` outright
-(`deleteTodayPlannerSession`, `src/db/repository.ts`) via an inline
+(`deleteTodayPlannerSession`, `src/db/repo/learningOrchestrator.ts`) via an inline
 confirm (no native dialog) — the fix for "I started with the wrong split
 and there was no way to undo it," since only *newly-added* minutes could
 ever pick up a corrected split otherwise; real underlying progress
@@ -1454,7 +1453,7 @@ pitch clip loader the pitch drill and contrast examples use survives as
 for the reader's Ear Tiles and dictation tools.
 
 ### 4. Spaced-repetition review system — `ReviewPage.tsx`,
-`src/lib/scheduling.ts`, `src/db/repository.ts`
+`src/lib/scheduling.ts`, `src/db/repo/reviewScheduling.ts`
 The unified FSRS-based SRS, at `/review` (global) and
 `/books/:bookId/review` (scoped). Uses `ts-fsrs` (FSRS-6) via a thin,
 content-agnostic wrapper (`scheduling.ts` only ever sees `FsrsState` + a
@@ -2468,7 +2467,7 @@ a self-hosted pronunciation-analysis backend. Capabilities:
   reveal** (one shared insert in `ReviewPage` before the rating buttons;
   excluded only for `pitch_accent`, which highlights its own copy). Each
   word's contour is inflection-aware (since 2026-09-12,
-  `getSentencePitchAccentTargets` in `src/db/repository.ts`): an occurrence
+  `getSentencePitchAccentTargets` in `src/db/repo/sentenceLedFlow.ts`): an occurrence
   read in an inflected form (走らない for 走る) resolves to the *conjugated*
   reading/position via `resolveInflectedPitchAccent`
   (`src/lib/pitchAccentShift.ts` — the same resolver the `pitch_accent`
