@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { resetDbForTests } from '../src/db/database';
+import { localDateKey, resetDbForTests } from '../src/db/database';
 import {
   addMinutesToTodaySession,
   addSentencesToBook,
@@ -522,6 +522,34 @@ describe('Learning Orchestrator repository layer', () => {
     await updateSettings({ quietMode: false });
     const loud = await getSessionPlannerInput(60);
     expect(loud.practiceDue.some((d) => d.studyItemId === card.id)).toBe(true);
+  });
+
+  it('duplicate sessions for one day: today is the newest, and clearing removes every row (2026-11-17: an old duplicate kept resurfacing after Replan fresh)', async () => {
+    const db = getDb();
+    const now = new Date();
+    const date = localDateKey(now);
+    const row = (id: string, createdAt: string) => ({
+      id,
+      createdAt,
+      updatedAt: createdAt,
+      date,
+      targetMinutes: 60,
+      allocation: { glossing: 1, grammar: 0, shadowing: 0, review: 0 },
+      explanation: [],
+      steps: [],
+      status: 'in_progress' as const,
+    });
+    // The older row has the id that sorts first, which is what a bare `.first()` on the date index returned.
+    await db.plannerSessions.bulkPut([
+      row('planner_session_a', '2026-11-17T01:01:10.000Z'),
+      row('planner_session_b', '2026-11-17T01:21:40.000Z'),
+    ]);
+
+    expect((await getTodayPlannerSession(now))?.id).toBe('planner_session_b');
+
+    await deleteTodayPlannerSession(now);
+    expect(await db.plannerSessions.count()).toBe(0);
+    expect(await getTodayPlannerSession(now)).toBeUndefined();
   });
 
   it('deleteTodayPlannerSession removes today\'s session entirely, letting the next Start build a fresh one (user request, 2026-08-27: "clear out a session created with the wrong split")', async () => {

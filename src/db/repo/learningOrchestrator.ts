@@ -2112,7 +2112,17 @@ export async function planRecommendedSession(
 
 /** Today's (local calendar day) PlannerSession, if one has been started yet — read-only, never creates one. */
 export async function getTodayPlannerSession(now: Date = new Date()): Promise<PlannerSession | undefined> {
-  return getDb().plannerSessions.where('date').equals(localDateKey(now)).first();
+  return (await plannerSessionsOnDate(localDateKey(now)))[0];
+}
+
+/**
+ * Every session row for a local date, newest first. Two devices (or repeated taps while syncing) can each
+ * create one, and a `.first()` on the date index would pick by id, not by age, so reads, top-ups and
+ * clears all go through this to agree on the same row.
+ */
+async function plannerSessionsOnDate(date: string): Promise<PlannerSession[]> {
+  const rows = await getDb().plannerSessions.where('date').equals(date).toArray();
+  return rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 /**
@@ -2140,7 +2150,7 @@ export async function addMinutesToTodaySession(
   const date = localDateKey(now);
   const timestamp = nowIso();
 
-  const existing = await db.plannerSessions.where('date').equals(date).first();
+  const existing = (await plannerSessionsOnDate(date))[0];
   const exclude = exclusionsFromSteps(existing?.steps ?? []);
   const hasPendingReviewBatch = (existing?.steps ?? []).some(
     (step) => step.activityType === 'due_review_batch' && step.status === 'pending',
@@ -2510,10 +2520,11 @@ export async function expireStalePlannerSessions(
  */
 export async function deleteTodayPlannerSession(now: Date = new Date()): Promise<void> {
   const db = getDb();
-  const session = await db.plannerSessions.where('date').equals(localDateKey(now)).first();
-  if (!session) return;
-  await db.plannerSessions.delete(session.id);
-  notifySync('planner_sessions', session.id, { id: session.id }, 'delete');
+  // Every row for the date, not just the first: a surviving duplicate would become today's session again.
+  for (const session of await plannerSessionsOnDate(localDateKey(now))) {
+    await db.plannerSessions.delete(session.id);
+    notifySync('planner_sessions', session.id, { id: session.id }, 'delete');
+  }
 }
 
 /**
