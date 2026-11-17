@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../db/database';
 import { pushMutations } from './engine';
 import {
+  APPEND_ONLY_ENTITIES,
   addConflict,
   enqueueMutation,
   getRecordMeta,
@@ -59,6 +60,21 @@ describe('pushing an append-only event the cloud already has', () => {
     expect(await getRecordMeta('sentence_learning_events', 'sl_event_1')).toMatchObject({
       syncedVersion: 1,
     });
+  });
+
+  it.each([...APPEND_ONLY_ENTITIES])('adopts an already-delivered %s row', async (entity) => {
+    remoteRow = { version: 1 };
+    await enqueueMutation({
+      entity,
+      recordId: `${entity}_1`,
+      operation: 'upsert',
+      expectedVersion: null,
+      payload: { id: `${entity}_1` },
+    });
+
+    expect(await pushMutations()).toBeUndefined();
+    expect(updates).toBe(0);
+    expect(await listOpenConflicts()).toHaveLength(0);
   });
 
   it('sweeps an earlier conflict on a live append-only row', async () => {

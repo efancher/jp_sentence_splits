@@ -171,10 +171,11 @@ describe('sweepNoopConflicts', () => {
 
   it('leaves a conflict with a real content difference open', async () => {
     await addConflict({
-      entity: 'reviews',
+      // An updatable entity: append-only ones (reviews, …) are always swept.
+      entity: 'study_items',
       recordId: 'review_real',
-      localPayload: { id: 'review_real', rating: 'good' },
-      remotePayload: { id: 'review_real', rating: 'again', version: 1 },
+      localPayload: { id: 'review_real', status: 'active' },
+      remotePayload: { id: 'review_real', status: 'suspended', version: 1 },
       localVersion: 0,
       remoteVersion: 1,
     });

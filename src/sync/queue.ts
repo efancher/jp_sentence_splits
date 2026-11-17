@@ -321,10 +321,17 @@ function isSatisfiedDeleteConflict(conflict: SyncConflict): boolean {
  * (a retried or overlapping push whose first attempt landed) must adopt it — an
  * update is silently filtered to 0 rows by RLS and would surface as a
  * `version_conflict` with nothing to decide (reported 2026-11-16,
- * sentence_learning_events).
+ * sentence_learning_events). Keep in step with supabase/migrations: every
+ * synced table created with only `_select` + `_insert` policies belongs here.
  */
 export const APPEND_ONLY_ENTITIES: ReadonlySet<SyncEntity> = new Set<SyncEntity>([
+  'reviews',
+  'pitch_drill_attempts',
+  'review_trouble_logs',
+  'game_rounds',
   'sentence_learning_events',
+  'gloss_decisions',
+  'clause_question_feedback',
 ]);
 
 export async function sweepNoopConflicts(): Promise<number> {
