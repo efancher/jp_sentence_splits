@@ -92,6 +92,8 @@ describe('Word checks are planned on their own, from sentence morphology', () =>
     expect(await getWordMeaningCheckTarget(sentence)).toMatchObject({ surface: '行事' });
     const quoting = makeSentence([['って'], ['いう', 'to say']]);
     expect(await getWordMeaningCheckTarget(quoting)).toBeUndefined();
+    const demonstrative = makeSentence([['こう'], ['いう', 'to say'], ['時', 'time']]);
+    expect(await getWordMeaningCheckTarget(demonstrative)).toMatchObject({ surface: '時' });
     const only = makeSentence([['に'], ['つい', 'to attach'], ['て']]);
     expect(await getWordMeaningCheckTarget(only)).toBeUndefined();
   });

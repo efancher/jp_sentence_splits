@@ -13,6 +13,12 @@ export const SET_EXPRESSIONS: ReadonlyMap<string, { reading: string; english: st
   ['として', { reading: 'として', english: 'as / in the role of' }],
   ['という', { reading: 'という', english: 'called / that (quoting or naming)' }],
   ['っていう', { reading: 'っていう', english: 'called / that (casual quoting or naming)' }],
+  // Kana いう after a manner demonstrative is the adnominal "this kind of" use;
+  // the literal "say it this way" is normally written こう言う, so it's left alone.
+  ['こういう', { reading: 'こういう', english: 'this kind of / like this' }],
+  ['そういう', { reading: 'そういう', english: 'that kind of / like that' }],
+  ['ああいう', { reading: 'ああいう', english: 'that kind of (over there) / like that' }],
+  ['どういう', { reading: 'どういう', english: 'what kind of / how' }],
   ['といえば', { reading: 'といえば', english: 'speaking of' }],
   ['によると', { reading: 'によると', english: 'according to' }],
   ['に関して', { reading: 'にかんして', english: 'regarding' }],

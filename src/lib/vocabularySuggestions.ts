@@ -161,6 +161,8 @@ const MANNER_DEMONSTRATIVES = new Set(['こう', 'そう', 'ああ', 'どう']);
  * (the "that kind of / such" adnominal use) is tagged identically to a
  * literal "he said this way" use (彼はこう言った), so POS gives no way to
  * tell them apart; suppressing it by default would wrongly hide a real verb.
+ * The kana spellings (こういう/そういう/…) are instead handled downstream as
+ * set expressions in `setExpressions.ts`, keyed on surface rather than POS.
  */
 function isDemonstrativeLightVerb(
   token: MorphologyToken,
