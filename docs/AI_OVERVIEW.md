@@ -2729,13 +2729,20 @@ not just mid-review.
   remains schema-only, no writer yet). `sources` exists in
   Dexie/Postgres but has no writer/reader wired into the sync engine yet
   (schema-ready only). `attempts` and all shadowing-analysis caches
-  (alignment, transcription, summaries) are local-only by design.
+  (alignment, transcription, summaries) are local-only by design. `settings`
+  syncs as one per-owner row carrying only the study-value subset
+  (`SYNCED_SETTINGS_KEYS`, `src/lib/settingsSync.ts`; last-write-wins, pull
+  merges) — theme, TTS, quiet mode, last-opened book and the shadowing note
+  stay on each device.
 
 ### 9. Settings, backup & TTS — `SettingsPage.tsx`
 Theme, default import destination, text-display mode (plain/furigana/
 reading), TTS voice/rate/pitch/volume (Web Speech API only, no cloud TTS),
 session-planner and graduation thresholds, native-audio cache size/clear,
-Supabase auth/sync controls (`AuthAndSyncSettings.tsx`). **JSON backup/
+Supabase auth/sync controls (`AuthAndSyncSettings.tsx`). Study values, planner
+numbers and the settings-embedded unlock/snooze records sync across signed-in
+devices (`settings` entity, section 8); appearance and quiet mode stay
+device-local. **JSON backup/
 restore** (`src/lib/backup.ts`, Zod-validated, checksummed) is a full-
 fidelity independent safety net alongside cloud sync — but does **not**
 currently cover `Source`, `Attempt`, or any shadowing-analysis-cache

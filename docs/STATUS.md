@@ -16,7 +16,7 @@ and possible extensions. This snapshot does not certify a live deployment.
   still feed word strength, i+1 known words and the progress panels; pitch-accent
   cards stay, paused by default). Introduction gates
   use sentence learning events, started book membership or a sentence card.
-- i+1 sentence order (on by default since 2026-11-15, `settings.iPlusOneOrdering`, local to the device,
+- i+1 sentence order (on by default since 2026-11-15, `settings.iPlusOneOrdering`, synced across devices,
   2026-11-07): new lessons are ordered by known-word coverage instead of
   reading order (`orderByIPlusOne`, `loadIPlusOneContext`/`findExploreCandidates`).
   Known = content lemmas (default-checked `vocabularySuggestions`) of introduced
@@ -68,7 +68,7 @@ and possible extensions. This snapshot does not certify a live deployment.
   page has a "Ready to pick up" panel (`getBookReadyToPickUp`, computed when
   opened) listing the book's next sentences within two new pieces. Measure with `npm run diagnose:i-plus-one`.
 - Strict i+1 (2026-11-16, on by default with i+1 order; `settings.iPlusOneStrict`,
-  local to the device; Settings → "Strict: one new word or pattern at a time"):
+  synced across devices; Settings → "Strict: one new word or pattern at a time"):
   `orderByStrictIPlusOne` replays the queue as if studied in order. Every new
   sentence with nothing outside the learner's word/grammar list comes first;
   only when none is left is one new piece added (the cost-1 word or curated
@@ -97,8 +97,8 @@ and possible extensions. This snapshot does not certify a live deployment.
   re-drafted daily and crowded out new lessons (2026-10-21).
 - Shadowing "Try again: Tomorrow / 5 days / 2 weeks" (2026-10-31): a button row
   on shadowing session-step rows and the Shadow page. It stores
-  `settings.shadowSnoozes[sentenceId]` (end of the snooze, local-only like
-  `shadowRequests`), which `findShadowCandidates` skips, and skips the sentence's
+  `settings.shadowSnoozes[sentenceId]` (end of the snooze, synced in the settings
+  payload like `shadowRequests`), which `findShadowCandidates` skips, and skips the sentence's
   open session step. A later Sound flag clears the snooze. Shadowing is not an
   FSRS card (the review-card attempt of 2026-10-30 was reverted the same day).
 - Chunk chain shadowing (2026-11-08, merged to main):
@@ -374,6 +374,25 @@ and possible extensions. This snapshot does not certify a live deployment.
   Reference-audio sync now defaults to on for new devices (`syncReferenceAudio`);
   existing devices keep their stored choice. The bootstrap hydrates audio blobs in the
   background rather than holding the sync cycle open.
+- Settings study values follow the learner (2026-11-17): `settings` is a synced
+  entity — a per-owner single Postgres row (migration `20261117000000_settings_sync.sql`,
+  composite key `(owner_id, id)`, owner-only RLS, never deleted) whose `data`
+  jsonb carries only `SYNCED_SETTINGS_KEYS` (`src/lib/settingsSync.ts`): study
+  toggles (sequential, i+1 incl. strict, the three pause flags, auto meaning
+  choices), planner numbers (budget, allocation, quotas, graduation, new-card
+  cap), reading defaults (text-display mode, hide-English/show-readings
+  initially, import destination) and settings-embedded learning data
+  (`sequentialUnlockOverrides`, fresh-try/shadow requests, snoozes, recent feed
+  URLs). Last-write-wins like `planner_sessions`; pull merges, so per-device
+  fields (theme, TTS, quiet mode, last-opened book, shadowing note) are never
+  overwritten. `updateSettings` (moved to `src/db/repo/settingsWrites.ts`)
+  enqueues only when the synced slice changes, ignoring its `updatedAt` stamp
+  so per-device toggles produce no traffic. Validated locally: unit tests
+  (`src/sync/settingsSync.test.ts`) and real-Postgres RLS
+  (`tests/pgIntegration/syncPush.pg.test.ts`); the migration is NOT deployed
+  (verify with `npm run check:migrations-applied` after deploying). Backup
+  restore still writes the row directly and does not enqueue — restored
+  settings reach the cloud on the next study-value change.
 
 ## Test and maintenance review
 
