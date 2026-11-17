@@ -609,7 +609,9 @@ then Start/+time applies that split to just that call
 persists it back as the new saved default. This **replaces** Settings'
 old "Activity mix" panel rather than sitting alongside it — the split is
 only editable here now. A "Clear today's session" button (2026-08-27,
-below the step list) deletes today's `PlannerSession` outright
+below the step list; since 2026-11-17 Replan fresh/Clear also show when Home has no session, and
+`getTodayPlannerSession` picks the newest row while clear removes every row for the date,
+because duplicate rows had let a stale session resurface) deletes today's `PlannerSession` outright
 (`deleteTodayPlannerSession`, `src/db/repo/learningOrchestrator.ts`) via an inline
 confirm (no native dialog) — the fix for "I started with the wrong split
 and there was no way to undo it," since only *newly-added* minutes could

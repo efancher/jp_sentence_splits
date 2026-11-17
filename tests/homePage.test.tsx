@@ -48,6 +48,13 @@ describe('HomePage', () => {
     expect(await screen.findByText(/Nothing planned yet today/)).toBeInTheDocument();
   });
 
+  it('offers Replan fresh and Clear even when no session is displayed', async () => {
+    renderHomePage();
+    await screen.findByText(/Nothing planned yet today/);
+    expect(screen.getByRole('button', { name: /Replan fresh/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: "Clear today's session" })).toBeInTheDocument();
+  });
+
   it('cancelling the clear confirmation leaves the session untouched', async () => {
     await addMinutesToTodaySession(30);
     const user = userEvent.setup();

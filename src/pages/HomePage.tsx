@@ -184,6 +184,35 @@ export function HomePage() {
     (step) => step.status === 'pending' || step.status === 'active',
   );
 
+  const planControls = confirmingClear ? (
+    <div className="row" style={{ gap: '0.5rem', alignItems: 'center' }}>
+      <span className="muted" style={{ fontSize: '0.85rem' }}>
+        Clear today's plan and start over? Completed work (reviews, analysis, vocab
+        confirmations) isn't affected.
+      </span>
+      <button type="button" className="danger" onClick={handleClear}>
+        Yes, clear it
+      </button>
+      <button type="button" className="ghost" onClick={() => setConfirmingClear(false)}>
+        Cancel
+      </button>
+    </div>
+  ) : (
+    <>
+      <div className="row" style={{ gap: '0.5rem', flexWrap: 'wrap' }}>
+        <button type="button" disabled={replanning} onClick={handleReplan}>
+          {replanning ? 'Replanning…' : `Replan fresh (${session?.targetMinutes ?? dailyBudgetMinutes} min)`}
+        </button>
+        <button type="button" className="ghost" onClick={() => setConfirmingClear(true)}>
+          Clear today's session
+        </button>
+      </div>
+      <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+        Replan fresh rebuilds today's plan from scratch, without reusing cached planner data.
+      </p>
+    </>
+  );
+
   return (
     <div className="stack">
       <section className="panel stack">
@@ -206,6 +235,7 @@ export function HomePage() {
                 {earlierSession.steps.length} steps); the bar below resumes it. Starting today's session ends it.
               </p>
             ) : null}
+            {planControls}
           </>
         ) : (
           <>
@@ -251,32 +281,7 @@ export function HomePage() {
               </p>
             )}
 
-            {confirmingClear ? (
-              <div className="row" style={{ gap: '0.5rem', alignItems: 'center' }}>
-                <span className="muted" style={{ fontSize: '0.85rem' }}>
-                  Clear today's plan and start over? Completed work (reviews, analysis, vocab
-                  confirmations) isn't affected.
-                </span>
-                <button type="button" className="danger" onClick={handleClear}>
-                  Yes, clear it
-                </button>
-                <button type="button" className="ghost" onClick={() => setConfirmingClear(false)}>
-                  Cancel
-                </button>
-              </div>
-            ) : (
-              <div className="row" style={{ gap: '0.5rem', flexWrap: 'wrap' }}>
-                <button type="button" disabled={replanning} onClick={handleReplan}>
-                  {replanning ? 'Replanning…' : `Replan fresh (${session.targetMinutes} min)`}
-                </button>
-                <button type="button" className="ghost" onClick={() => setConfirmingClear(true)}>
-                  Clear today's session
-                </button>
-              </div>
-            )}
-            <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
-              Replan fresh rebuilds today's plan from scratch, without reusing cached planner data.
-            </p>
+            {planControls}
           </>
         )}
 
