@@ -2167,6 +2167,8 @@ export async function addMinutesToTodaySession(
     };
     await db.plannerSessions.put(session);
     notifySync('planner_sessions', session.id, session);
+    // Today's plan replaces any earlier day's unfinished one, so the SessionBar stops resuming it.
+    await endEarlierPlannerSessions(now);
     return session;
   }
 
@@ -2454,6 +2456,24 @@ export async function endPlannerSessionEarly(sessionId: string): Promise<Planner
   await db.plannerSessions.put(updated);
   notifySync('planner_sessions', updated.id, updated);
   return updated;
+}
+
+/** An in-progress session from an earlier day, if any: what the SessionBar resumes while today has no plan. */
+export async function getEarlierOpenPlannerSession(now: Date = new Date()): Promise<PlannerSession | undefined> {
+  const today = localDateKey(now);
+  const open = await getDb().plannerSessions.where('status').equals('in_progress').toArray();
+  return open
+    .filter((session) => session.date !== today)
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+}
+
+/** Ends every in-progress session from an earlier day (unsettled steps count as skipped). */
+export async function endEarlierPlannerSessions(now: Date = new Date()): Promise<void> {
+  const today = localDateKey(now);
+  const open = await getDb().plannerSessions.where('status').equals('in_progress').toArray();
+  for (const session of open) {
+    if (session.date !== today) await endPlannerSessionEarly(session.id);
+  }
 }
 
 export const STALE_SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1000;

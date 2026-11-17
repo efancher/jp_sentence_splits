@@ -69,7 +69,6 @@ describe('HomePage', () => {
     renderHomePage();
 
     await screen.findByText(/min planned today/);
-    await user.click(screen.getByRole('button', { name: "Clear today's session" }));
     await user.click(screen.getByRole('button', { name: 'Replan fresh (30 min)' }));
 
     await waitFor(async () => {
@@ -79,6 +78,20 @@ describe('HomePage', () => {
       expect(sessions[0]!.targetMinutes).toBe(30);
     });
     expect(await getDb().plannerSnapshots.get('studyItems#0')).toBeUndefined();
-    expect(screen.queryByText(/Clear today's plan and start over/)).not.toBeInTheDocument();
+  });
+
+  it('names an earlier day\'s open session, and starting today\'s ends it', async () => {
+    const yesterday = new Date(Date.now() - 86_400_000);
+    const old = await addMinutesToTodaySession(30, yesterday);
+    const user = userEvent.setup();
+    renderHomePage();
+
+    expect(await screen.findByText(/is still open/)).toHaveTextContent(`The session from ${old.date} is still open`);
+    await user.click(screen.getByRole('button', { name: /^Start/ }));
+
+    await waitFor(async () => {
+      expect((await getDb().plannerSessions.get(old.id))?.status).toBe('ended_early');
+    });
+    expect(screen.queryByText(/is still open/)).not.toBeInTheDocument();
   });
 });

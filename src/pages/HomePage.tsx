@@ -12,6 +12,7 @@ import {
   explainWeakWordRevisits,
   getLastPlannerTiming,
   warmPlannerReads,
+  getEarlierOpenPlannerSession,
   getTodayPlannerSession,
   updateSettings,
 } from '../db/repository';
@@ -142,6 +143,7 @@ export function HomePage() {
   // "still fetching" indistinguishable (same convention StudyItemDebugPage
   // uses).
   const session = useLiveQuery(async () => (await getTodayPlannerSession()) ?? null, []);
+  const earlierSession = useLiveQuery(() => getEarlierOpenPlannerSession(), []);
   const balance = useLiveQuery(() => computeLearningBalance(), []);
   const settings = useLiveQuery(() => readSettings(), []);
   const dailyBudgetMinutes = settings?.dailyBudgetMinutes ?? DEFAULT_DAILY_BUDGET_MINUTES;
@@ -190,7 +192,21 @@ export function HomePage() {
         {session === undefined ? (
           <p className="muted">Loading…</p>
         ) : !session ? (
-          <p className="muted">Nothing planned yet today — add some time to get a recommendation.</p>
+          <>
+            <p className="muted">Nothing planned yet today — add some time to get a recommendation.</p>
+            {earlierSession ? (
+              <p className="muted" style={{ margin: 0 }}>
+                The session from {earlierSession.date} is still open (
+                {
+                  earlierSession.steps.filter(
+                    (step) => step.status === 'completed' || step.status === 'skipped' || step.status === 'replaced',
+                  ).length
+                }
+                /
+                {earlierSession.steps.length} steps); the bar below resumes it. Starting today's session ends it.
+              </p>
+            ) : null}
+          </>
         ) : (
           <>
             <p className="muted" style={{ margin: 0 }}>
@@ -239,24 +255,28 @@ export function HomePage() {
               <div className="row" style={{ gap: '0.5rem', alignItems: 'center' }}>
                 <span className="muted" style={{ fontSize: '0.85rem' }}>
                   Clear today's plan and start over? Completed work (reviews, analysis, vocab
-                  confirmations) isn't affected. Replan fresh builds a new plan straight away,
-                  without reusing cached planner data.
+                  confirmations) isn't affected.
                 </span>
                 <button type="button" className="danger" onClick={handleClear}>
                   Yes, clear it
-                </button>
-                <button type="button" disabled={replanning} onClick={handleReplan}>
-                  {replanning ? 'Replanning…' : `Replan fresh (${session.targetMinutes} min)`}
                 </button>
                 <button type="button" className="ghost" onClick={() => setConfirmingClear(false)}>
                   Cancel
                 </button>
               </div>
             ) : (
-              <button type="button" className="ghost" onClick={() => setConfirmingClear(true)}>
-                Clear today's session
-              </button>
+              <div className="row" style={{ gap: '0.5rem', flexWrap: 'wrap' }}>
+                <button type="button" disabled={replanning} onClick={handleReplan}>
+                  {replanning ? 'Replanning…' : `Replan fresh (${session.targetMinutes} min)`}
+                </button>
+                <button type="button" className="ghost" onClick={() => setConfirmingClear(true)}>
+                  Clear today's session
+                </button>
+              </div>
             )}
+            <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+              Replan fresh rebuilds today's plan from scratch, without reusing cached planner data.
+            </p>
           </>
         )}
 
