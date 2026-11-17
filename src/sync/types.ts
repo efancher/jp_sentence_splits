@@ -29,7 +29,8 @@ export type SyncEntity =
   | 'clause_question_feedback'
   | 'named_podcast_feeds'
   | 'mining_imports'
-  | 'sentence_extras';
+  | 'sentence_extras'
+  | 'settings';
 
 export type SyncOperationType = 'upsert' | 'delete';
 

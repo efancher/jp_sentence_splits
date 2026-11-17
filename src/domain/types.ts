@@ -689,6 +689,12 @@ export interface TtsSettings {
 
 export interface AppSettings {
   id: 'settings';
+  /**
+   * Stamped by `updateSettings` on every local edit; carried in the synced
+   * payload as the last-write-wins clock (src/lib/settingsSync.ts). Absent on
+   * rows written before settings sync existed.
+   */
+  updatedAt?: string;
   theme: ThemePreference;
   hideSatoriEnglishInitially: boolean;
   showReadingsInitially: boolean;
@@ -746,7 +752,8 @@ export interface AppSettings {
    */
   sessionAllocation: Record<SessionBucket, number>;
   /**
-   * "Quiet mode" (per-device, like the rest of `settings`): the learner is
+   * "Quiet mode" (per-device — see `SYNCED_SETTINGS_KEYS` in
+   * src/lib/settingsSync.ts for what syncs): the learner is
    * somewhere they can't speak aloud. The session planner skips shadowing
    * steps (the candidates aren't consumed — they come back next plan) and
    * `/shadow` shows a non-blocking banner. Defaults to `false`. (The
@@ -807,13 +814,13 @@ export interface AppSettings {
    */
   shadowSnoozes?: Record<string, string>;
   /**
-   * Sequential study (opt-in, local to this device): a book's sentences are
+   * Sequential study (opt-in; synced across devices): a book's sentences are
    * introduced in episode order, the next unlocking once the previous one's
    * meaning checks are answered well enough. See `src/lib/sequentialStudy.ts`.
    */
   sequentialStudyMode?: boolean;
   /**
-   * i+1 sentence order (on by default; `false` opts out; local to this device): a book's new sentences
+   * i+1 sentence order (on by default; `false` opts out; synced across devices): a book's new sentences
    * are offered by how much of them is already known — 1-2 unknown content
    * words first, with a harder sentence every few — instead of reading order.
    * Order only; nothing is gated or dropped. Ignored in sequential study mode
@@ -826,7 +833,7 @@ export interface AppSettings {
    */
   iPlusOneStretchEvery?: number;
   /**
-   * With `iPlusOneOrdering` (on by default; `false` opts out; local to this device): strict i+1. Every new sentence
+   * With `iPlusOneOrdering` (on by default; `false` opts out; synced across devices): strict i+1. Every new sentence
    * using only known words/grammar comes first; only when none is left is one new piece added, and the sentences it
    * completes are served before the next. No stretch sentences. See `orderByStrictIPlusOne`.
    */

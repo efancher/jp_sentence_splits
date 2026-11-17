@@ -31,6 +31,7 @@ import type {
   VocabularyKanji,
 } from '../domain/types';
 import type { SyncEntity } from './types';
+import { SETTINGS_RECORD_ID, type SyncedSettings } from '../lib/settingsSync';
 
 export type LocalSyncPayload =
   | Book
@@ -1356,6 +1357,30 @@ export function remoteToClauseQuestionFeedback(row: Record<string, unknown>): Cl
   };
 }
 
+/**
+ * The one synced-settings row per owner: `data` carries only
+ * `SYNCED_SETTINGS_KEYS` (src/lib/settingsSync.ts); per-device fields never
+ * leave the device. LWW conflict policy — see LAST_WRITE_WINS_ENTITIES.
+ */
+export function settingsToRemote(
+  synced: SyncedSettings,
+  ownerId: string,
+  version: number,
+): Record<string, unknown> {
+  return {
+    id: SETTINGS_RECORD_ID,
+    owner_id: ownerId,
+    data: synced,
+    updated_at: synced.updatedAt ?? new Date().toISOString(),
+    deleted_at: null,
+    version,
+  };
+}
+
+export function remoteToSettings(row: Record<string, unknown>): SyncedSettings {
+  return ((row.data ?? {}) as SyncedSettings);
+}
+
 export function toRemoteRow(
   entity: SyncEntity,
   payload: unknown,
@@ -1439,6 +1464,8 @@ export function toRemoteRow(
       return miningImportToRemote(payload as MiningImport, ownerId, version);
     case 'sentence_extras':
       return sentenceExtrasToRemote(payload as SentenceExtras, ownerId, version);
+    case 'settings':
+      return settingsToRemote(payload as SyncedSettings, ownerId, version);
   }
 }
 

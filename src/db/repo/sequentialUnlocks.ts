@@ -10,7 +10,8 @@ import type { BookSentence, Review, SentenceAnalysis } from '../../domain/types'
 import { getMeaningBank } from '../../lib/meaningChoices';
 import { computeSequentialStatus, type SequentialBookStatus } from '../../lib/sequentialStudy';
 import { isSequentialStudyMode } from '../../lib/sentenceLed';
-import { getDb, readSettings, updateSettings } from '../database';
+import { getDb, readSettings } from '../database';
+import { updateSettings } from './settingsWrites';
 import {
   plannerPassActive,
   plannerShared,

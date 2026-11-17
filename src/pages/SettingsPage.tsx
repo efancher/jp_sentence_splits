@@ -272,6 +272,11 @@ export function SettingsPage() {
 
       <section className="panel stack">
         <h3 style={{ margin: 0 }}>Learning Orchestrator</h3>
+        <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+          These study settings — and the unlocks, fresh tries and snoozes they
+          remember — sync to your signed-in devices. Quiet mode and
+          appearance stay per-device.
+        </p>
         <label>
           Daily session length (minutes)
           <input

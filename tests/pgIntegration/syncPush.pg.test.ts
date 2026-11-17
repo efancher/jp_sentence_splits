@@ -11,6 +11,7 @@ vi.mock('../../src/sync/supabaseClient', () => ({
 import { getDb, resetDbForTests } from '../../src/db/database';
 import {
   beginMiningImport,
+  updateSettings,
   ensureGrammarPattern,
   ensureKanji,
   ensureSentenceGrammar,
@@ -329,5 +330,43 @@ describe.skipIf(!PG_TESTS_ENABLED)('push against real Postgres + RLS', () => {
     expect(await getDb().syncQueue.count()).toBe(0);
     expect(scalar('select count(*) from kanji')).toBe('1');
     expect(scalar('select count(*) from sentence_grammar')).toBe('0');
+  });
+});
+
+describe.skipIf(!PG_TESTS_ENABLED)('settings row against real Postgres + RLS', () => {
+  beforeEach(() => {
+    resetDatabase();
+  });
+
+  it('pushes one owner-scoped row carrying only the synced subset; other users cannot see it', async () => {
+    const a = await device(USER_A);
+    await updateSettings({ theme: 'dark', iPlusOneStrict: false });
+    expect(await pushOnce()).toBeUndefined();
+
+    const { data: aRows } = await a.client.from('settings').select('*');
+    expect(aRows).toHaveLength(1);
+    const data = aRows![0].data as Record<string, unknown>;
+    expect(data.iPlusOneStrict).toBe(false);
+    expect(data.theme).toBeUndefined();
+    expect(aRows![0].id).toBe('settings');
+
+    const b = await device(USER_B);
+    const { data: bRows } = await b.client.from('settings').select('*');
+    expect(bRows).toHaveLength(0);
+    expect(scalar('select count(*) from settings')).toBe('1');
+
+    // Second owner writes its own row — the composite key allows id='settings' twice.
+    await updateSettings({ dailyBudgetMinutes: 20 });
+    expect(await pushOnce()).toBeUndefined();
+    expect(scalar('select count(*) from settings')).toBe('2');
+  });
+
+  it('per-device-only changes never reach the server', async () => {
+    await device(USER_A);
+    await updateSettings({ quietMode: true });
+    await updateSettings({ theme: 'dark' });
+    expect(await getDb().syncQueue.count()).toBe(0);
+    expect(await pushOnce()).toBeUndefined();
+    expect(scalar('select count(*) from settings')).toBe('0');
   });
 });

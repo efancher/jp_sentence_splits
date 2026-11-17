@@ -150,13 +150,8 @@ import {
   SHADOW_CANDIDATE_LIMIT,
   SHADOW_POOL_BOOK_LIMIT,
 } from '../../lib/sessionPlannerConfig';
-import {
-  ensureSettings,
-  getDb,
-  localDateKey,
-  readSettings,
-  updateSettings,
-} from '../database';
+import { ensureSettings, getDb, localDateKey, readSettings } from '../database';
+import { updateSettings } from './settingsWrites';
 import { clearPlannerSnapshots } from '../plannerSnapshots';
 import {
   notifySync,

@@ -49,7 +49,8 @@ import {
 } from '../../lib/sentencePitchAccent';
 import { type SequentialBookStatus, type SequentialSentenceStatus } from '../../lib/sequentialStudy';
 import { membershipIsShelved, sentenceIsSuspendedOnly } from '../../lib/suspendedBooks';
-import { getDb, readSettings, updateSettings } from '../database';
+import { getDb, readSettings } from '../database';
+import { updateSettings } from './settingsWrites';
 import { notifySync, notifySyncMany } from '../syncNotify';
 import { saveReferenceAlignment } from './alignmentCaches';
 import { getShadowingWeakWords } from './shadowingAttempts';

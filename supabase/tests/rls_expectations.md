@@ -36,6 +36,13 @@ manual or via the SQL outline above against a staging project.
 `grammar_patterns`, `sentence_grammar`, `grammar_relationships` — simpler
 than the book-shared tables above, since none of them support sharing yet.
 
+`settings` — one row per owner keyed `id='settings'`, so its primary key is
+`(owner_id, id)` rather than `id` alone; select/insert/update are
+owner-only and there is no delete policy (the row is never tombstoned, and
+the engine never deletes it). `data` holds only the synced study-value
+subset (`SYNCED_SETTINGS_KEYS`, src/lib/settingsSync.ts); per-device fields
+never reach the server.
+
 `sentence_vocabulary`/`vocabulary_kanji`/`reviews`/`vocabulary_confusions`/
 `sentence_grammar`/`grammar_relationships` additionally check that
 *referenced* rows (`vocabulary_item_id`, `kanji_id`, `study_item_id`,

@@ -1,7 +1,7 @@
 import type { EntityTable, Table } from 'dexie';
 
 import { hasLocalStudyData } from './migration';
-import { getDb } from '../db/database';
+import { DEFAULT_SETTINGS, ensureSettings, getDb } from '../db/database';
 import {
   bumpQueueRetry,
   dedupeQueueRows,
@@ -53,6 +53,7 @@ import {
   remoteToVocabularyItem,
   remoteToVocabularyKanji,
   toRemoteRow,
+  remoteToSettings,
 } from './mappers';
 import { hydrateMissingReferenceAudio, hydrateReferenceAudioAfterCycle } from './audioSync';
 import { getSupabase } from './supabaseClient';
@@ -67,6 +68,11 @@ import {
   setPushPlan,
   setSyncStage,
 } from './progress';
+import {
+  extractSyncedSettings,
+  mergeSyncedSettings,
+  SETTINGS_RECORD_ID,
+} from '../lib/settingsSync';
 import type { SyncEntity, SyncQueueItem, SyncRecordMeta } from './types';
 
 const PULL_PAGE_SIZE = 500;
@@ -1248,7 +1254,7 @@ async function remapLinkReferences<T extends { id: string }, F extends keyof T &
  * acceptable simplification (confirmed with the user, see
  * docs/STATUS.md).
  */
-const LAST_WRITE_WINS_ENTITIES = new Set<SyncEntity>(['planner_sessions', 'mining_imports']);
+const LAST_WRITE_WINS_ENTITIES = new Set<SyncEntity>(['planner_sessions', 'mining_imports', 'settings']);
 
 /** Unconditionally overwrites the remote row with the local payload, ignoring the CAS mismatch that triggered `version_conflict` — see `LAST_WRITE_WINS_ENTITIES`. */
 async function forcePushOverwrite(
@@ -1690,6 +1696,10 @@ function entityTable(entity: SyncEntity): Table<unknown, string> | undefined {
       return db.miningImports;
     case 'sentence_extras':
       return db.sentenceExtras;
+    case 'settings':
+      // AppSettings' literal-typed id makes the EntityTable not structurally assignable
+      // to Table<unknown, string>; the entity layer only uses get()/put() with 'settings'.
+      return db.settings as unknown as Table<unknown, string>;
     default:
       return undefined;
   }
@@ -2134,6 +2144,13 @@ export async function applyRemoteUpsert(
     case 'sentence_extras':
       await db.sentenceExtras.put(remoteToSentenceExtras(remote));
       break;
+    case 'settings': {
+      // Merge, never replace: the row also holds per-device fields (theme,
+      // TTS, quiet mode) the remote payload must not overwrite.
+      const current = (await db.settings.get(SETTINGS_RECORD_ID)) ?? DEFAULT_SETTINGS;
+      await db.settings.put(mergeSyncedSettings(current, remoteToSettings(remote)));
+      break;
+    }
   }
   const recordId =
     entity === 'analyses' || entity === 'inbox'
@@ -2271,6 +2288,9 @@ export async function uploadAllLocalData(userId: string): Promise<void> {
   for (const extras of sentenceExtras) {
     await trackAndEnqueue('sentence_extras', extras.id, extras);
   }
+
+  // One settings row: only the synced study-value slice leaves the device.
+  await trackAndEnqueue('settings', SETTINGS_RECORD_ID, extractSyncedSettings(await ensureSettings(db)));
 
   await updateSyncMeta({ userId, migrationChoice: 'upload' });
   await runSyncCycle();
@@ -2482,6 +2502,10 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
   });
   await pullFullTable('sentence_extras', userId, async (rows) => {
     await db.sentenceExtras.bulkPut(rows.map((r) => remoteToSentenceExtras(r)));
+  });
+  await pullFullTable('settings', userId, async (rows) => {
+    const remote = rows[rows.length - 1];
+    if (remote) await applyRemoteUpsert('settings', remote, Number(remote.version ?? 1));
   });
 
   // Reference audio: metadata only (blob-less placeholders), gated on the

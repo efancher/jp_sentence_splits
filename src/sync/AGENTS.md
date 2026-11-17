@@ -14,8 +14,13 @@ Apply the root and `src/` guidance. Paths below are relative to this directory.
   books, sentences or analyses to make a conflict disappear.
 - New synced entities require coordinated types, mappers, queue tracking,
   push/pull/delete handling and SQL/RLS changes. Check local-only entities
-  deliberately: settings (`shadowRequests`, `shadowSnoozes`, `iPlusOneOrdering`)
-  and `plannerSnapshots` are not synced; game rounds and review trouble logs are.
+  deliberately: `plannerSnapshots` is not synced; game rounds and review trouble
+  logs are. `settings` syncs as one per-owner row (`SYNCED_SETTINGS_KEYS` in
+  `src/lib/settingsSync.ts`) carrying only study values, planner numbers and the
+  settings-embedded unlock/snooze data — last-write-wins like
+  `planner_sessions`. Per-device fields (`theme`, `tts`, `quietMode`,
+  `lastOpenedBookId`, `shadowingNote`) and appearance must **not** enter its
+  payload; the pull path merges onto the local row rather than replacing it.
 - Auth and transfer failures must leave local study usable and recoverable.
   Preserve the signed-out reminder/offline choice and avoid logging credentials
   or access tokens when adding diagnostics.

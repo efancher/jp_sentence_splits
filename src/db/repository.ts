@@ -58,7 +58,7 @@ import {
   orderBookSentencesFromPaste,
   type PasteOrderResult,
 } from '../lib/pasteOrder';
-import { ensureSettings, getDb, updateSettings } from './database';
+import { ensureSettings, getDb } from './database';
 import {
   finishSinkAfterCommit,
   notifySync,
@@ -81,6 +81,8 @@ export * from './repo/sentenceLedFlow';
 export * from './repo/learningOrchestrator';
 export * from './repo/evidenceFoundation';
 export * from './repo/progressReports';
+export * from './repo/settingsWrites';
+import { updateSettings } from './repo/settingsWrites';
 export * from './repo/passReads';
 export * from './repo/alignmentCaches';
 export * from './repo/contextDiversity';
@@ -3579,5 +3581,5 @@ export async function rememberNhkEasyFeedUrl(url: string): Promise<void> {
 }
 
 
-export { DEFAULT_SETTINGS, ensureSettings, getDb, readSettings, updateSettings } from './database';
+export { DEFAULT_SETTINGS, ensureSettings, getDb, readSettings } from './database';
 export type { GlossbookDatabase } from './database';

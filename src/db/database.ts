@@ -825,13 +825,3 @@ export async function ensureSettings(db = getDb()): Promise<AppSettings> {
   await db.settings.put(DEFAULT_SETTINGS);
   return DEFAULT_SETTINGS;
 }
-
-export async function updateSettings(
-  patch: Partial<AppSettings>,
-): Promise<AppSettings> {
-  const db = getDb();
-  const current = await ensureSettings(db);
-  const next = { ...current, ...patch, id: 'settings' as const };
-  await db.settings.put(next);
-  return next;
-}
