@@ -9,6 +9,9 @@ import pytest
 
 from app import config, exit_node
 
+# The autouse fixture stubs this out; the probe's own tests call the original.
+_real_wait_for_dns = exit_node._wait_for_dns
+
 
 def _fake_run(online: dict[str, bool], calls: list[list[str]]):
     """Return a stand-in for `exit_node._run`. `online` maps device name ->
@@ -44,6 +47,7 @@ def _fake_run(online: dict[str, bool], calls: list[list[str]]):
 def _reset(monkeypatch):
     monkeypatch.setattr(config, "MINING_EXIT_NODE", None)
     monkeypatch.setattr(config, "MINING_EXIT_NODE_FALLBACK", None)
+    monkeypatch.setattr(exit_node, "_wait_for_dns", lambda _node: True)
 
 
 def test_noop_when_unconfigured(monkeypatch):
@@ -100,6 +104,55 @@ def test_clears_exit_node_on_exception(monkeypatch):
         with exit_node.routed_for_download():
             raise RuntimeError("download blew up")
     assert calls[-1] == ["set", "--exit-node="]
+
+
+def test_falls_back_when_primary_dns_broken(monkeypatch):
+    calls: list[list[str]] = []
+    monkeypatch.setattr(config, "MINING_EXIT_NODE", "phone")
+    monkeypatch.setattr(config, "MINING_EXIT_NODE_FALLBACK", "laptop")
+    monkeypatch.setattr(
+        exit_node, "_run", _fake_run({"phone": True, "laptop": True}, calls)
+    )
+    monkeypatch.setattr(exit_node, "_wait_for_dns", lambda node: node == "laptop")
+    with exit_node.routed_for_download():
+        pass
+    assert [c for c in calls if c[0] == "set"] == [
+        ["set", "--exit-node=phone"],
+        ["set", "--exit-node="],
+        ["set", "--exit-node=laptop"],
+        ["set", "--exit-node="],
+    ]
+
+
+def test_proceeds_direct_when_no_node_resolves_dns(monkeypatch):
+    calls: list[list[str]] = []
+    monkeypatch.setattr(config, "MINING_EXIT_NODE", "phone")
+    monkeypatch.setattr(exit_node, "_run", _fake_run({"phone": True}, calls))
+    monkeypatch.setattr(exit_node, "_wait_for_dns", lambda _node: False)
+    ran = False
+    with exit_node.routed_for_download():
+        ran = True
+    assert ran
+    # Cleared right after the failed probe, and not a second time on exit.
+    assert [c for c in calls if c[0] == "set"] == [
+        ["set", "--exit-node=phone"],
+        ["set", "--exit-node="],
+    ]
+
+
+def test_wait_for_dns_retries_until_resolvable(monkeypatch):
+    results = iter([False, False, True])
+    monkeypatch.setattr(exit_node, "_dns_works", lambda: next(results))
+    monkeypatch.setattr(exit_node.time, "sleep", lambda _s: None)
+    assert _real_wait_for_dns("phone") is True
+
+
+def test_wait_for_dns_gives_up_after_timeout(monkeypatch):
+    clock = iter([0.0, 5.0, 100.0])
+    monkeypatch.setattr(exit_node, "_dns_works", lambda: False)
+    monkeypatch.setattr(exit_node.time, "monotonic", lambda: next(clock))
+    monkeypatch.setattr(exit_node.time, "sleep", lambda _s: None)
+    assert _real_wait_for_dns("phone") is False
 
 
 def test_run_survives_missing_binary(monkeypatch):

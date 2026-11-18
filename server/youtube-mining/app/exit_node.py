@@ -19,8 +19,10 @@ from __future__ import annotations
 
 import json
 import logging
+import socket
 import subprocess
 import threading
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 
@@ -82,6 +84,41 @@ def _set_exit_node(node: str) -> bool:
     return False
 
 
+# After `tailscale set --exit-node=X`, DNS goes through X's resolver. That
+# takes a moment to settle, and an iOS exit node whose app is backgrounded
+# can stop answering DNS while still showing as online. Without a check,
+# yt-dlp's first request failed with "[Errno -3] Temporary failure in name
+# resolution" (podcast import via the phone node, 2026-11-18).
+DNS_PROBE_HOST = "www.youtube.com"
+DNS_PROBE_TIMEOUT_S = 15.0
+DNS_PROBE_INTERVAL_S = 1.0
+
+
+def _dns_works(host: str = DNS_PROBE_HOST) -> bool:
+    try:
+        socket.getaddrinfo(host, 443, proto=socket.IPPROTO_TCP)
+        return True
+    except OSError:
+        return False
+
+
+def _wait_for_dns(node: str) -> bool:
+    """Poll until name resolution works through the newly set exit node."""
+    deadline = time.monotonic() + DNS_PROBE_TIMEOUT_S
+    while True:
+        if _dns_works():
+            return True
+        if time.monotonic() >= deadline:
+            logger.warning(
+                "DNS does not resolve through exit node %s after %.0fs — "
+                "skipping it (on a phone, keep the Tailscale app foregrounded)",
+                node,
+                DNS_PROBE_TIMEOUT_S,
+            )
+            return False
+        time.sleep(DNS_PROBE_INTERVAL_S)
+
+
 def _clear_exit_node() -> None:
     result = _run(["set", "--exit-node="])
     if result.returncode != 0:
@@ -121,9 +158,12 @@ def routed_for_download() -> Iterator[None]:
                     "Exit node %s is offline or not advertising one — skipping", node
                 )
                 continue
-            if _set_exit_node(node):
+            if not _set_exit_node(node):
+                continue
+            if _wait_for_dns(node):
                 active = node
                 break
+            _clear_exit_node()
         if active is None:
             logger.warning(
                 "No configured Tailscale exit node is reachable (%s) — "
