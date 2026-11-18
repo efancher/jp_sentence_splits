@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { SegmentationEditor } from '../components/SegmentationEditor';
+import { MiningReconnectNotice } from '../components/MiningReconnectNotice';
 import { NamedPodcastFeedPicker } from '../components/NamedPodcastFeedPicker';
 import { ShadowingPreviewCard } from '../components/ShadowingPreviewCard';
 import { SpanAudioButton } from '../components/SpanAudioButton';
@@ -206,6 +207,8 @@ export function YouTubeMinePage() {
   const [aiSegmented, setAiSegmented] = useState(false);
   const [preview, setPreview] = useState<ShadowingImportPreview | null>(null);
   const [resuming, setResuming] = useState(true);
+  const [resumeError, setResumeError] = useState('');
+  const stopResumeRef = useRef<() => void>(() => setResuming(false));
   const [resumable, setResumable] = useState<MiningJobSummary[]>([]);
   // videoId -> the book it was already imported as, so the idle screen can
   // warn before you re-mine something (re-mining is still allowed — it's how
@@ -286,6 +289,7 @@ export function YouTubeMinePage() {
           if (cancelled) return;
           if (!(err instanceof MiningJobGoneError)) {
             // Poor connectivity, not a missing job: keep the pointer and retry.
+            setResumeError(err instanceof Error ? err.message : 'network error');
             retryTimer = setTimeout(attempt, 4000);
             return;
           }
@@ -295,11 +299,16 @@ export function YouTubeMinePage() {
         },
       );
     };
-    attempt();
-    return () => {
+    const stop = () => {
       cancelled = true;
       clearTimeout(retryTimer);
     };
+    stopResumeRef.current = () => {
+      stop();
+      setResuming(false);
+    };
+    attempt();
+    return stop;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -825,7 +834,7 @@ export function YouTubeMinePage() {
           boundaries, and the translations before adding a book.
         </p>
         {resuming && stage === 'idle' ? (
-          <div className="muted">Reconnecting to your last mining job…</div>
+          <MiningReconnectNotice error={resumeError} onStop={() => stopResumeRef.current()} />
         ) : null}
         {!resuming && stage === 'idle' ? (
           <div className="stack" style={{ gap: '0.4rem' }}>

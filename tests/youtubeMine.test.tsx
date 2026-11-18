@@ -60,6 +60,7 @@ vi.mock('../src/lib/miningApi', () => {
   };
 
   return {
+    MiningJobGoneError: class MiningJobGoneError extends Error {},
     createMiningJob: vi.fn(async () => 'job-1'),
     getMiningJob: vi.fn(async () => ({
       jobId: 'job-1',
@@ -337,6 +338,30 @@ describe('YouTube mining wizard', () => {
     ).not.toBeInTheDocument();
     // ASR transcript → no auto-caption warning.
     expect(screen.queryByText(/Segmented from YouTube auto-captions/)).not.toBeInTheDocument();
+  }, 30000);
+
+  it('shows why reconnecting is stuck and lets the user stop waiting', async () => {
+    const { getMiningJob } = await import('../src/lib/miningApi');
+    vi.mocked(getMiningJob).mockRejectedValue(new TypeError('Load failed'));
+    localStorage.setItem(
+      'ytmine.activeJob',
+      JSON.stringify({ jobId: 'job-unreachable', savedAt: Date.now() }),
+    );
+
+    const user = userEvent.setup();
+    render(withAppProviders(<App />));
+    await openNavMenu(user);
+    await user.click(await screen.findByRole('link', { name: 'Import from YouTube' }));
+
+    expect(
+      await screen.findByText(/Can't reach the mining service \(Load failed\)/),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Stop waiting' }));
+    expect(
+      await screen.findByPlaceholderText('https://www.youtube.com/watch?v=…'),
+    ).toBeInTheDocument();
+    // The pointer survives so a later reload can still pick the job up.
+    expect(localStorage.getItem('ytmine.activeJob')).toContain('job-unreachable');
   }, 30000);
 
   it('warns on the Segment stage when the job fell back to auto-captions', async () => {

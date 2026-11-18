@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { AssistRunActivity } from '../components/AssistRunActivity';
+import { MiningReconnectNotice } from '../components/MiningReconnectNotice';
 import { NamedPodcastFeedPicker } from '../components/NamedPodcastFeedPicker';
 import { ShadowingPreviewCard } from '../components/ShadowingPreviewCard';
 import { SpanAudioButton } from '../components/SpanAudioButton';
@@ -224,6 +225,8 @@ export function QuickMinePage() {
   const [busy, setBusy] = useState(false);
   const [busyNote, setBusyNote] = useState('');
   const [resuming, setResuming] = useState(true);
+  const [resumeError, setResumeError] = useState('');
+  const stopResumeRef = useRef<() => void>(() => setResuming(false));
   const [resumable, setResumable] = useState<MiningJobSummary[]>([]);
   const [minedVideos, setMinedVideos] = useState<Map<string, { title: string; createdAt: string }>>(
     new Map(),
@@ -376,7 +379,7 @@ export function QuickMinePage() {
           if (cancelled) return;
           if (!(err instanceof MiningJobGoneError)) {
             // Poor connectivity, not a missing job: keep the pointer and retry.
-            setProgress('Reconnecting to your previous import…');
+            setResumeError(err instanceof Error ? err.message : 'network error');
             retryTimer = setTimeout(attempt, 4000);
             return;
           }
@@ -388,11 +391,16 @@ export function QuickMinePage() {
         },
       );
     };
-    attempt();
-    return () => {
+    const stop = () => {
       cancelled = true;
       clearTimeout(retryTimer);
     };
+    stopResumeRef.current = () => {
+      stop();
+      setResuming(false);
+    };
+    attempt();
+    return stop;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1121,7 +1129,7 @@ export function QuickMinePage() {
           <a href="#/import/youtube">import wizard</a> instead.
         </p>
         {resuming && stage === 'idle' ? (
-          <div className="muted">Reconnecting to your last mining job…</div>
+          <MiningReconnectNotice error={resumeError} onStop={() => stopResumeRef.current()} />
         ) : null}
         {!resuming && stage === 'idle' ? (
           <label className="stack" style={{ gap: '0.25rem' }}>
