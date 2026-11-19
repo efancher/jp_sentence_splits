@@ -72,6 +72,12 @@ export function describeStop(where: string, error: string, saved: string): strin
 }
 
 /** " (and N other parts also failed)" for the pieces after the first that the run could not finish. */
+/** The start of a rejected reply, one line, for the activity log (the reply itself isn't kept). */
+export function replyHead(reply: string, max = 160): string {
+  const flat = reply.replace(/\s+/g, ' ').trim();
+  return flat ? `“${flat.length > max ? `${flat.slice(0, max)}…` : flat}” (${reply.length} chars)` : '(empty)';
+}
+
 export function otherFailures(failures: readonly unknown[]): string {
   const others = failures.length - 1;
   return others > 0 ? `; ${others} other part${others === 1 ? '' : 's'} also failed` : '';
@@ -194,7 +200,7 @@ export async function runSegmentChunks(input: {
         if (problem) {
           lastError = problem;
           rejection = problem;
-          input.onNote?.(`${label}: reply rejected (${problem}) — attempt ${attempt} of ${MAX_ATTEMPTS_PER_CHUNK}`);
+          input.onNote?.(`${label}: reply rejected (${problem}) — attempt ${attempt} of ${MAX_ATTEMPTS_PER_CHUNK}; reply began: ${replyHead(reply)}`);
           continue;
         }
         replies[index] = reply;

@@ -8,7 +8,7 @@
  * they land so a stopped run resumes where it left off; a piece gets
  * {@link MAX_ATTEMPTS_PER_CHUNK} tries and then the run stops for the user.
  */
-import { MAX_ATTEMPTS_PER_CHUNK, isOutOfCreditsError, runPool } from './assistChunks';
+import { MAX_ATTEMPTS_PER_CHUNK, isOutOfCreditsError, replyHead, runPool } from './assistChunks';
 import {
   singleExtraBlock,
   type CombinedPromptOptions,
@@ -319,7 +319,7 @@ export async function runExtraTasks(input: {
         const problem = validateExtraReply(task, reply);
         if (problem) {
           lastError = problem;
-          input.onNote?.(`${label}: reply rejected (${problem}) — attempt ${attempt} of ${MAX_ATTEMPTS_PER_CHUNK}`);
+          input.onNote?.(`${label}: reply rejected (${problem}) — attempt ${attempt} of ${MAX_ATTEMPTS_PER_CHUNK}; reply began: ${replyHead(reply)}`);
           continue;
         }
         accepted = reply;
