@@ -851,7 +851,7 @@ export function ShadowWorkspace({
           </div>
         )
       ) : null}
-      {suggestedPhrase &&
+      {suggestedPhrase && !chainActive &&
       phraseRange && phraseRange.startMs === suggestedPhrase.startMs && phraseRange.endMs === suggestedPhrase.endMs ? (
         // Applied: keep a visible confirmation (the chain panel hides Fine-tune/rating, so the offer vanishing looked like a bug).
         <div className="row" style={{ alignItems: 'center', flexWrap: 'wrap' }} data-testid="suggested-phrase-applied">
@@ -859,7 +859,7 @@ export function ShadowWorkspace({
           <strong lang="ja">{suggestedPhrase.text}</strong>
         </div>
       ) : null}
-      {suggestedPhrase &&
+      {suggestedPhrase && !chainActive &&
       !(phraseRange && phraseRange.startMs === suggestedPhrase.startMs && phraseRange.endMs === suggestedPhrase.endMs) ? (
         <div className="row" style={{ alignItems: 'center', flexWrap: 'wrap' }}>
           <span className="muted">Suggested phrase{suggestedPhrase.wordLabel ? ` (covers ${suggestedPhrase.wordLabel})` : ''}:</span>
