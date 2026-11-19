@@ -439,7 +439,16 @@ export function checkCombinedReply(input: {
     const a = rows[i - 1]!;
     const b = rows[i]!;
     if (b.startMs - a.startMs <= 45_000) continue;
-    if (transcript.some((seg) => seg.startMs > a.startMs + 15_000 && seg.startMs < b.startMs - 15_000)) {
+    const aText = a.japanese.replace(COMPARE_STRIP_RE, '');
+    // A sentence that already contains the in-between line's opening is one
+    // sentence spanning a long pause (Episode #105: 推し活の例としては、…28s of
+    // silence…誕生日を祝ったり…), not a drop; splitting it would break the clause.
+    const unaccounted = (seg: { startMs: number; text?: string }) => {
+      if (seg.startMs <= a.startMs + 15_000 || seg.startMs >= b.startMs - 15_000) return false;
+      const head = (seg.text ?? '').replace(COMPARE_STRIP_RE, '').slice(0, 5);
+      return head.length < 3 || !aText.includes(head);
+    };
+    if (transcript.some(unaccounted)) {
       warnings.push(
         `No sentences between ${formatMinSec(a.startMs)} and ${formatMinSec(b.startMs)}, though the transcript has speech there — it was dropped, or joined into one very long sentence.`,
       );

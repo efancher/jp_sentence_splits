@@ -117,6 +117,20 @@ describe('checkCombinedReply', () => {
     expect(warnings.some((w) => w.includes('No sentences between 1:00 and 4:00'))).toBe(true);
   });
 
+  it('does not flag one sentence that spans a long pause in the speech', () => {
+    const segs = [
+      { startMs: 0, endMs: 4_000, text: '推し活の例としては、' },
+      { startMs: 32_000, endMs: 50_000, text: '誕生日を祝ったり、グッズを持ち歩いたりします。' },
+      { startMs: 60_000, endMs: 64_000, text: '次の文です。' },
+    ];
+    const rows = [
+      { startMs: 0, endMs: 52_000, japanese: '推し活の例としては、誕生日を祝ったり、グッズを持ち歩いたりします。' },
+      { startMs: 60_000, endMs: 64_000, japanese: '次の文です。' },
+    ];
+    const warnings = checkCombinedReply({ reply: end, sections: empty, rows, transcript: segs, options: none });
+    expect(warnings.some((w) => w.includes('No sentences between'))).toBe(false);
+  });
+
   it('flags a ticked extra whose section is missing', () => {
     const rows = [0, 60, 120, 180, 240, 300].map((s) => row(s, s + 55));
     const warnings = checkCombinedReply({
