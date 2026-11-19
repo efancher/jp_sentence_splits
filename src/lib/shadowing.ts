@@ -27,6 +27,9 @@ interface ShadowingSnapshot {
 
 type Listener = () => void;
 
+/** How long to ignore the playback position after seeking the reference. */
+const SEEK_SETTLE_MS = 500;
+
 const TICK_MS = 100;
 
 function messageFor(error: unknown): string {
@@ -74,6 +77,10 @@ export class ShadowingController {
         leadInMs: number;
         /** While set, the reference is muted and waiting for this wall-clock time to start the rep. */
         leadInUntil?: number;
+        /** After a seek the element can report its old position for a while (Safari on blobs); ignore range checks until then. */
+        settleUntil?: number;
+        /** Wall-clock time of the last recorder cycle, so a stalled element can't count reps in a burst. */
+        lastCycleAt: number;
       }
     | undefined;
 
@@ -208,6 +215,7 @@ export class ShadowingController {
       range,
       gapMs: Math.max(0, opts.gapMs ?? 0),
       leadInMs: Math.max(0, opts.leadInMs ?? 0),
+      lastCycleAt: 0,
     };
     if (this.shadowLoop.leadInMs > 0) {
       // First rep gets the same countdown: hold the reference silent until the lead-in is over.
@@ -253,6 +261,7 @@ export class ShadowingController {
         if (now < range.startMs / 1000 || now >= range.endMs / 1000) {
           this.shadowPlayer.seek(range.startMs / 1000);
           loop.lastCurrentTime = range.startMs / 1000;
+          loop.settleUntil = Date.now() + SEEK_SETTLE_MS;
         }
       } else {
         loop.clipSeconds = this.shadowPlayer.duration() ?? 3;
@@ -340,11 +349,18 @@ export class ShadowingController {
     // (`now < startSec` also catches a native wrap-to-0 when the range
     // doesn't start at 0.)
     if (loop.range) {
+      // A seek hasn't landed yet (the element still reports the old position): re-seeking and
+      // cycling on every tick made the rep count race with the reference silent and stuck.
+      if (loop.settleUntil !== undefined) {
+        if (Date.now() < loop.settleUntil || this.shadowPlayer.isSeeking()) return;
+        loop.settleUntil = undefined;
+      }
       const startSec = loop.range.startMs / 1000;
       const endSec = loop.range.endMs / 1000;
       if (now >= endSec || now < startSec - 0.05) {
         this.shadowPlayer.seek(startSec);
         loop.lastCurrentTime = startSec;
+        loop.settleUntil = Date.now() + SEEK_SETTLE_MS;
         this.cycleShadowLoopRecorder(loop);
         return;
       }
@@ -364,6 +380,9 @@ export class ShadowingController {
     loop: NonNullable<ShadowingController['shadowLoop']>,
   ): void {
     if (loop.cycling) return;
+    // A real rep takes at least about the clip's length (speeds up to ~2x): closer wraps are a stalled element.
+    if (Date.now() - loop.lastCycleAt < loop.clipSeconds * 250) return;
+    loop.lastCycleAt = Date.now();
     loop.cycling = true;
     void this.recordingService
       .cycleRecorder()

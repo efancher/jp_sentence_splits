@@ -23,6 +23,7 @@ const FakeShadowReferencePlayer = vi.hoisted(() => {
     getSampleRate = vi.fn(() => 48_000);
     setPlaybackRate = vi.fn();
     setMuted = vi.fn();
+    isSeeking = vi.fn(() => false);
     seek = vi.fn((seconds: number) => {
       this.fakeCurrentTime = seconds;
     });
@@ -308,6 +309,30 @@ describe('ShadowingController shadow mode', () => {
     expect(takes).toHaveLength(2); // final take captured on stop
     expect(controller.getSnapshot()).toMatchObject({ status: 'stopped', shadowActive: false });
     expect(player.teardown).toHaveBeenCalled();
+  });
+
+  it('a range loop whose seek never lands counts one rep, not a burst', async () => {
+    const controller = new ShadowingController();
+    const blob = new Blob(['ref'], { type: 'audio/webm' });
+    const takes: Array<{ blob: Blob; durationMs: number }> = [];
+
+    await controller.startShadowLoop(blob, {
+      range: { startMs: 8_870, endMs: 10_510 },
+      onRep: (take) => takes.push(take),
+    });
+    const player = FakeShadowReferencePlayer.instances.at(-1)!;
+
+    // Reaches the range end, then the element is stuck reporting a position before the range start.
+    player.fakeCurrentTime = 10.6;
+    await new Promise((r) => setTimeout(r, 150));
+    player.fakeCurrentTime = 0;
+    const seeksBefore = player.seek.mock.calls.length;
+    await new Promise((r) => setTimeout(r, 400));
+
+    expect(player.seek.mock.calls.length).toBe(seeksBefore);
+    expect(takes.length).toBeLessThanOrEqual(1);
+    controller.stopShadowLoop();
+    await new Promise((r) => setTimeout(r, 30));
   });
 
   it('startShadowLoop with a range seeks to the range start and wraps at the range end', async () => {

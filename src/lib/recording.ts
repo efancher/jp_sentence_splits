@@ -343,6 +343,11 @@ export class ShadowReferencePlayer {
     if (this.audio) this.audio.muted = muted;
   }
 
+  /** True while a seek is still in flight (the position may not have updated yet). */
+  isSeeking(): boolean {
+    return this.audio?.seeking ?? false;
+  }
+
   /** Seek the reference element — used to wrap a sub-range loop back to its start. */
   seek(seconds: number): void {
     if (this.audio) this.audio.currentTime = Math.max(0, seconds);
