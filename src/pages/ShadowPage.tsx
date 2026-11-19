@@ -747,7 +747,7 @@ export function ShadowWorkspace({
   const canHearTake = Boolean(ephemeralUrl) && !isLoopingReps;
   const practiceBar = (
     <div className="stack" style={{ gap: '0.4rem' }}>
-      <div className="gloss-rail" role="toolbar" aria-label="Shadow practice controls">
+      <div className="gloss-rail gloss-rail--row" role="toolbar" aria-label="Shadow practice controls">
       {referenceAudio ? (
         <>
           <button type="button" className="icon-button" aria-pressed={isLoopingReps}
@@ -850,6 +850,14 @@ export function ShadowWorkspace({
             </button>
           </div>
         )
+      ) : null}
+      {suggestedPhrase &&
+      phraseRange && phraseRange.startMs === suggestedPhrase.startMs && phraseRange.endMs === suggestedPhrase.endMs ? (
+        // Applied: keep a visible confirmation (the chain panel hides Fine-tune/rating, so the offer vanishing looked like a bug).
+        <div className="row" style={{ alignItems: 'center', flexWrap: 'wrap' }} data-testid="suggested-phrase-applied">
+          <span className="muted">Shadowing phrase:</span>
+          <strong lang="ja">{suggestedPhrase.text}</strong>
+        </div>
       ) : null}
       {suggestedPhrase &&
       !(phraseRange && phraseRange.startMs === suggestedPhrase.startMs && phraseRange.endMs === suggestedPhrase.endMs) ? (

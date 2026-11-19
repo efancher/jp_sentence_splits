@@ -1575,6 +1575,13 @@ button.sync-retry {
     flex-direction: column;
     flex-wrap: nowrap;
   }
+
+  /* Inline control strips (e.g. the shadow practice bar) stay horizontal. */
+  .gloss-rail.gloss-rail--row {
+    position: static;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
 }
 
 .reader-line {
