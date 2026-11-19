@@ -119,6 +119,13 @@ function formatDuration(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
+type ShadowMode = 'sentence' | 'phrase' | 'chain';
+const SHADOW_MODES: { value: ShadowMode; label: string; hint: string }[] = [
+  { value: 'sentence', label: 'Full sentence', hint: 'Shadow the whole sentence' },
+  { value: 'phrase', label: 'Phrase', hint: 'Shadow one phrase, then rate it' },
+  { value: 'chain', label: 'Chunk chain', hint: 'Build up the sentence in growing chunks' },
+];
+
 export function ShadowPage() {
   const { bookId = '', sentenceId = '' } = useParams();
   return <ShadowWorkspace bookId={bookId} sentenceId={sentenceId} />;
@@ -420,8 +427,28 @@ export function ShadowWorkspace({
   /** undefined while loading: the preset waits for it so a phrase-mode pane isn't preset late or never. */
   const sentenceShadowingPaused = useLiveQuery(async () => (await readSettings()).sentenceShadowingPaused ?? false, []);
   const [editingPhrase, setEditingPhrase] = useState(false);
-  /** A chunk chain is running: it owns the loop range and rating, so the single-phrase rating and tuning step aside. */
-  const [chainActive, setChainActive] = useState(false);
+  /**
+   * Which kind of shadowing this pane is doing; each owns its own loop range and controls, so they can't overwrite
+   * one another. Picked automatically on open (tapped word → phrase; paused sentence shadowing → chain from the daily
+   * plan, else phrase) until the learner chooses.
+   */
+  const [mode, setMode] = useState<ShadowMode>(focusSurface ? 'phrase' : 'sentence');
+  const modePickedRef = useRef(false);
+  useEffect(() => {
+    if (modePickedRef.current || focusSurface || sentenceShadowingPaused !== true) return;
+    setMode(fromSessionStep ? 'chain' : 'phrase');
+  }, [focusSurface, fromSessionStep, sentenceShadowingPaused]);
+  function selectMode(next: ShadowMode) {
+    if (next === mode) return;
+    modePickedRef.current = true;
+    targetLoopCoordinator.current.cancel();
+    setIsLoopingTarget(false);
+    setEditingPhrase(false);
+    setLoopWindow(null);
+    setTargetRange(null);
+    focusAppliedRef.current = null;
+    setMode(next);
+  }
   // A phrase worth shadowing (the weakest word's span, widened), offered as one tap; computed once per clip.
   const [suggestedPhrase, setSuggestedPhrase] = useState<
     { startMs: number; endMs: number; text: string; wordLabel: string } | null
@@ -464,18 +491,19 @@ export function ShadowWorkspace({
       .then((suggestion) => {
         if (cancelled) return;
         setSuggestedPhrase(suggestion);
-        // Phrase mode (opened from a tapped word, or whole-sentence shadowing is paused): preset the loop to the
-        // estimated phrase once per sentence, ready to fine-tune, unless a range is already set.
-        if (suggestion && (focusSurface || sentenceShadowingPaused) && focusAppliedRef.current !== sentenceId) {
-          focusAppliedRef.current = sentenceId;
-          const range = { startMs: suggestion.startMs, endMs: suggestion.endMs };
-          setLoopWindow((prev) => prev ?? range);
-          setTargetRange((prev) => prev ?? range);
-        }
       })
       .catch(() => { /* a missing suggestion just hides the offer */ });
     return () => { cancelled = true; };
-  }, [sentenceId, suggestionAudioId, suggestionDurationMs, alignmentComputedAt, focusSurface, sentenceShadowingPaused]);
+  }, [sentenceId, suggestionAudioId, suggestionDurationMs, alignmentComputedAt, focusSurface]);
+  // Phrase mode: preset the loop to the estimated phrase once per sentence/mode entry, ready to fine-tune, unless a
+  // range is already set.
+  useEffect(() => {
+    if (mode !== 'phrase' || !suggestedPhrase || focusAppliedRef.current === sentenceId) return;
+    focusAppliedRef.current = sentenceId;
+    const range = { startMs: suggestedPhrase.startMs, endMs: suggestedPhrase.endMs };
+    setLoopWindow((prev) => prev ?? range);
+    setTargetRange((prev) => prev ?? range);
+  }, [mode, suggestedPhrase, sentenceId]);
 
   if (!data?.sentence) return <p className="muted">Loading…</p>;
 
@@ -780,6 +808,23 @@ export function ShadowWorkspace({
       ) : null}
       </div>
       {referenceAudio && referenceAudio.durationMs > 0 ? (
+        <div className="row" role="group" aria-label="Shadowing mode" style={{ gap: '0.3rem', flexWrap: 'wrap' }}>
+          {SHADOW_MODES.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              className={mode === option.value ? undefined : 'ghost'}
+              aria-pressed={mode === option.value}
+              disabled={isLoopingReps || isRecording}
+              title={option.hint}
+              onClick={() => selectMode(option.value)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {referenceAudio && referenceAudio.durationMs > 0 ? (
         <LoopWindowControls
           durationMs={referenceAudio.durationMs}
           range={loopRange ?? { startMs: 0, endMs: referenceAudio.durationMs }}
@@ -793,14 +838,13 @@ export function ShadowWorkspace({
           onSpeedChange={setSpeed}
         />
       ) : null}
-      {referenceAudio && referenceAudio.durationMs > 0 ? (
+      {referenceAudio && referenceAudio.durationMs > 0 && mode === 'chain' ? (
         <ChunkChainPanel
           bookId={bookId}
           sentenceId={sentenceId}
           sentenceAudioId={referenceAudio.id}
           visitId={visitId}
-          onActiveChange={setChainActive}
-          autoStart={fromSessionStep && !focusSurface && sentenceShadowingPaused === true}
+          autoStart
           onRange={(range) => {
             // A rung is a loop target like any marked phrase: the pane's own controls shadow it.
             targetLoopCoordinator.current.cancel();
@@ -810,7 +854,7 @@ export function ShadowWorkspace({
           }}
         />
       ) : null}
-      {referenceAudio && referenceAudio.durationMs > 0 && !chainActive ? (
+      {referenceAudio && referenceAudio.durationMs > 0 && mode === 'phrase' ? (
         editingPhrase ? (
           <ZoomedRangeEditor
             blob={referenceAudio.blob}
@@ -851,7 +895,7 @@ export function ShadowWorkspace({
           </div>
         )
       ) : null}
-      {suggestedPhrase && !chainActive &&
+      {suggestedPhrase && mode === 'phrase' &&
       phraseRange && phraseRange.startMs === suggestedPhrase.startMs && phraseRange.endMs === suggestedPhrase.endMs ? (
         // Applied: keep a visible confirmation (the chain panel hides Fine-tune/rating, so the offer vanishing looked like a bug).
         <div className="row" style={{ alignItems: 'center', flexWrap: 'wrap' }} data-testid="suggested-phrase-applied">
@@ -859,7 +903,7 @@ export function ShadowWorkspace({
           <strong lang="ja">{suggestedPhrase.text}</strong>
         </div>
       ) : null}
-      {suggestedPhrase && !chainActive &&
+      {suggestedPhrase && mode === 'phrase' &&
       !(phraseRange && phraseRange.startMs === suggestedPhrase.startMs && phraseRange.endMs === suggestedPhrase.endMs) ? (
         <div className="row" style={{ alignItems: 'center', flexWrap: 'wrap' }}>
           <span className="muted">Suggested phrase{suggestedPhrase.wordLabel ? ` (covers ${suggestedPhrase.wordLabel})` : ''}:</span>
@@ -876,7 +920,7 @@ export function ShadowWorkspace({
           </button>
         </div>
       ) : null}
-      {referenceAudio && !chainActive && phraseRange && isPhraseRange(phraseRange, referenceAudio.durationMs) ? (
+      {referenceAudio && mode === 'phrase' && phraseRange && isPhraseRange(phraseRange, referenceAudio.durationMs) ? (
         <PhraseShadowRating
           key={`${referenceAudio.id}:${phraseRange.startMs}:${phraseRange.endMs}`}
           bookId={bookId}

@@ -105,6 +105,12 @@ and possible extensions. This snapshot does not certify a live deployment.
   payload like `shadowRequests`), which `findShadowCandidates` skips, and skips the sentence's
   open session step. A later Sound flag clears the snooze. Shadowing is not an
   FSRS card (the review-card attempt of 2026-10-30 was reverted the same day).
+- Shadow pane modes (2026-11-19): the pane has a "Full sentence / Phrase / Chunk chain"
+  switch; each mode owns its loop range and controls (suggestion, Fine-tune and the
+  Not yet/Close/Got it rating are Phrase only; `ChunkChainPanel` is Chain only and
+  auto-starts). Opens on Phrase from a tapped word or while sentence shadowing is paused,
+  on Chain from a daily-plan chain step, else Full sentence. Switching clears the range.
+  Chain shows nothing when the clip has no plan (needs a cached alignment).
 - Chunk chain shadowing (2026-11-08, merged to main):
   the Shadow pane offers "Chunk chain" when the cached alignment plans 3+ duration-sized
   rungs from the Ear Tiles chunks (`src/lib/chunkChain.ts`; per-cut alignment trust, so

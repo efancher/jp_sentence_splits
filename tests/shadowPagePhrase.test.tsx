@@ -90,8 +90,10 @@ describe('ShadowPage phrase shadowing', () => {
     await seed();
     renderShadowPage();
 
-    // The page opens before any alignment exists: no suggestion, no rating row.
+    // Opens on Full sentence (no suggestion, no rating) until the learner picks Phrase.
     await screen.findByText(/Loop window/);
+    expect(screen.getByRole('button', { name: 'Full sentence' }).getAttribute('aria-pressed')).toBe('true');
+    await user.click(screen.getByRole('button', { name: 'Phrase' }));
     expect(screen.queryByText(/Suggested phrase/)).toBeNull();
     expect(screen.queryByRole('group', { name: 'Rate this phrase' })).toBeNull();
 
@@ -143,12 +145,16 @@ describe('ShadowPage phrase shadowing', () => {
     expect(screen.queryByRole('button', { name: 'Use this phrase' })).toBeNull();
   });
 
-  it('does not preset when sentence shadowing is not paused, and keeps a range the learner already set', async () => {
+  it('opens on Full sentence with no phrase offer, and choosing Phrase presets the estimated phrase', async () => {
     await seed();
     await saveReferenceAlignment('audio-1', { durationSeconds: 4, words: WORDS });
     renderShadowPage();
-    expect(await screen.findByText(/Suggested phrase \(covers 寝る\)/)).toBeTruthy();
-    expect(screen.queryByRole('group', { name: 'Rate this phrase' })).toBeNull();
+    // Full sentence mode offers no phrase at all; Phrase mode presets it.
+    await screen.findByText(/Loop window/);
+    expect(screen.queryByText(/Suggested phrase/)).toBeNull();
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Phrase' }));
+    await waitFor(() => expect(screen.queryByText(/Shadowing phrase:/)).toBeTruthy());
+    expect(screen.queryByRole('group', { name: 'Rate this phrase' })).toBeTruthy();
   });
 
   it('opens the zoomed edge editor from Fine-tune phrase and closes it without changing the range', async () => {
@@ -260,7 +266,7 @@ describe('ShadowWorkspace opened from a daily-plan step', () => {
     await waitFor(() =>
       expect(screen.queryByRole('group', { name: 'Chunk chain' }) ?? screen.queryByRole('group', { name: 'Cold try' })).toBeTruthy(),
     );
-    expect(screen.queryByRole('button', { name: 'Chunk chain' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Chunk chain' }).getAttribute('aria-pressed')).toBe('true');
   });
 
   it('opened by hand, or with sentence shadowing on, leaves the chain as a button', async () => {
@@ -268,6 +274,7 @@ describe('ShadowWorkspace opened from a daily-plan step', () => {
     await updateSettings({ sentenceShadowingPaused: true });
     const { unmount } = renderWorkspace(false);
     expect(await screen.findByRole('button', { name: 'Chunk chain' })).toBeTruthy();
+    expect(screen.queryByRole('group', { name: 'Chunk chain' })).toBeNull();
     unmount();
 
     await updateSettings({ sentenceShadowingPaused: false });
