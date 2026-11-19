@@ -33,6 +33,12 @@ describe('orderByIPlusOne', () => {
     expect(orderByIPlusOne(items, known)).toEqual(['i1', 'easy', 'hard', 'untokenized']);
   });
 
+  it('puts all-known sentences with shaky known words first, without jumping ahead of i+1 sentences', () => {
+    const weak = new Map([[lemmaKey('犬', '犬'), 0.3]]);
+    const items: IPlusOneItem[] = [sentence('plain', '猫'), sentence('shaky', '犬'), sentence('i1', '猫', '空')];
+    expect(orderByIPlusOne(items, known, { weak })).toEqual(['i1', 'shaky', 'plain']);
+  });
+
   it('ranks i+1 sentences by how many other sentences their unknown word unlocks', () => {
     const items: IPlusOneItem[] = [
       sentence('lonely', '猫', '珍'),
@@ -209,6 +215,17 @@ describe('orderByStrictIPlusOne', () => {
       sentence('known-b', '水'),
     ];
     expect(orderByStrictIPlusOne(items, known)).toEqual(['known-a', 'known-b', 'new']);
+  });
+
+  it('serves all-known sentences with shaky known words first, the shakiest first', () => {
+    const weak = new Map([[lemmaKey('犬', '犬'), 0.4], [lemmaKey('水', '水'), 0.1]]);
+    const items: IPlusOneItem[] = [
+      sentence('plain', '猫'),
+      sentence('slightly', '水'),
+      sentence('very', '犬', '猫'),
+    ];
+    expect(orderByStrictIPlusOne(items, known, { weak })).toEqual(['very', 'slightly', 'plain']);
+    expect(orderByStrictIPlusOne(items, known)).toEqual(['plain', 'slightly', 'very']);
   });
 
   it('serves the sentences a new word completes before adding another', () => {

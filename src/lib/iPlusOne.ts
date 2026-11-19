@@ -1,4 +1,4 @@
-import { lemmaKey, lemmaWeight, scoreSentence, unlockValueByLemma, type LemmaSource } from './unknownLemmas';
+import { lemmaKey, lemmaWeight, scoreSentence, sentenceContentLemmas, unlockValueByLemma, type LemmaSource } from './unknownLemmas';
 
 /** A sentence with 1..this many unknown content lemmas is an "i+1" sentence. */
 export const I_PLUS_ONE_MAX_UNKNOWN = 2;
@@ -12,6 +12,15 @@ export interface IPlusOneItem {
   grammar?: readonly string[];
   /** Sentences of the same episode the learner has already started (see `episodeMomentumBoost`). */
   momentum?: number;
+}
+
+/**
+ * How shaky a sentence's known words are: the summed deficit (`weak` maps a known lemma to how far its strength
+ * sits below the known line) over its content lemmas. Zero when nothing in it is weak.
+ */
+function weaknessOf(item: IPlusOneItem, weak: ReadonlyMap<string, number> | undefined): number {
+  if (!weak || weak.size === 0) return 0;
+  return sentenceContentLemmas(item.suggestions).reduce((sum, key) => sum + (weak.get(key) ?? 0), 0);
 }
 
 /** Started sentences in an episode beyond this add nothing more, so a huge episode cannot swamp everything else. */
@@ -40,7 +49,8 @@ export function episodeMomentumBoost(started: number | undefined): number {
  *    then episodes with more already-started sentences, then reading order. The
  *    unlock value is lifted by up to +50% for such episodes (`episodeMomentumBoost`)
  *    so they are favoured without overriding a much more useful word.
- * 2. all-known: no unknown lemma (little to learn, but never wasted).
+ * 2. all-known: no unknown lemma (little to learn, but never wasted). Those carrying known-but-shaky words
+ *    (`weak`) come first, the shakiest first, so the practice lands where it is needed; then reading order.
  * 3. stretch: 3+ unknowns, fewest unknowns first. Every
  *    `I_PLUS_ONE_STRETCH_EVERY`th slot is drawn from here while i+1 sentences
  *    remain, so a harder sentence still arrives regularly.
@@ -60,6 +70,8 @@ export function orderByIPlusOne(
     grammarCost?: ReadonlyMap<string, number>;
     /** Lemmas already met but not yet known (`partlyMetLemmas`): ready sentences carrying one are offered first, to reinforce. */
     reinforce?: ReadonlySet<string>;
+    /** Known lemmas whose strength is below the known line → the deficit; all-known sentences carrying them go first. */
+    weak?: ReadonlyMap<string, number>;
   } = {},
 ): string[] {
   const maxUnknown = options.maxUnknown ?? I_PLUS_ONE_MAX_UNKNOWN;
@@ -83,6 +95,7 @@ export function orderByIPlusOne(
       count: unknown.length + grammarUnknown,
       reinforces: options.reinforce ? unknown.some((key) => options.reinforce!.has(key)) : false,
       momentum: item.momentum ?? 0,
+      weakness: weaknessOf(item, options.weak),
     };
   });
   const weights = lemmaWeightsOf(items);
@@ -110,6 +123,7 @@ export function orderByIPlusOne(
       Number(b.reinforces) - Number(a.reinforces) ||
       lift(b) - lift(a) || a.count - b.count || b.momentum - a.momentum || a.position - b.position,
   );
+  allKnown.sort((a, b) => b.weakness - a.weakness || a.position - b.position);
   stretch.sort((a, b) => a.count - b.count || b.momentum - a.momentum || a.position - b.position);
 
   const ordered: string[] = [];
@@ -191,8 +205,8 @@ function lemmaWeightsOf(items: readonly IPlusOneItem[]): Map<string, number> {
  * Strict i+1 (`settings.iPlusOneStrict`): grows the learner's word/grammar list one piece at a time, as if the
  * sentences were studied in the order returned. Pure, and a permutation of `items` like `orderByIPlusOne`.
  *
- * 1. Every sentence with nothing outside the list comes first (episodes with more started sentences first, then
- *    reading order).
+ * 1. Every sentence with nothing outside the list comes first: those carrying known-but-shaky words (`weak`) before
+ *    the rest, the shakiest first, then episodes with more started sentences, then reading order.
  * 2. Only when none is left is one new piece added: the cost-1 piece (a word, or a curated grammar entry at the
  *    learner's level) whose sentences have it as their only new piece, preferring a word already met once
  *    (`reinforce`), then the most such sentences (scaled by `lemmaWeight`). The sentence introducing it comes next,
@@ -208,12 +222,15 @@ export function orderByStrictIPlusOne(
     knownGrammar?: ReadonlySet<string>;
     grammarCost?: ReadonlyMap<string, number>;
     reinforce?: ReadonlySet<string>;
+    /** Known lemmas whose strength is below the known line → the deficit; see `orderByIPlusOne`. */
+    weak?: ReadonlyMap<string, number>;
   } = {},
 ): string[] {
   interface Entry {
     id: string;
     position: number;
     momentum: number;
+    weakness: number;
     /** Pieces outside the list (`w:<lemma key>` / `g:<entry id>`) and their cost. */
     pieces: Map<string, number>;
     cost: number;
@@ -239,7 +256,7 @@ export function orderByStrictIPlusOne(
       }
     }
     const cost = [...pieces.values()].reduce((sum, value) => sum + value, 0);
-    entries.push({ id: item.sentenceId, position, momentum: item.momentum ?? 0, pieces, cost, done: false });
+    entries.push({ id: item.sentenceId, position, momentum: item.momentum ?? 0, weakness: weaknessOf(item, options.weak), pieces, cost, done: false });
   });
 
   const byPiece = new Map<string, Entry[]>();
@@ -267,7 +284,9 @@ export function orderByStrictIPlusOne(
   }
 
   const easiest = (a: Entry, b: Entry) => b.momentum - a.momentum || a.position - b.position;
-  const ready: Entry[] = entries.filter((entry) => entry.cost === 0).sort(easiest);
+  // Sentences with nothing new are served shakiest-words first, then the usual easiest order.
+  const shakiest = (a: Entry, b: Entry) => b.weakness - a.weakness || easiest(a, b);
+  const ready: Entry[] = entries.filter((entry) => entry.cost === 0).sort(shakiest);
   let readyAt = 0;
   const ordered: string[] = [];
   const serve = (entry: Entry) => {
@@ -291,7 +310,7 @@ export function orderByStrictIPlusOne(
       }
     }
     // Only called once `ready` is used up, so the sentences a new piece completed are served next.
-    ready.push(...unlocked.sort(easiest));
+    ready.push(...unlocked.sort(shakiest));
   };
 
   while (ordered.length < entries.length) {

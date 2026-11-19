@@ -84,6 +84,10 @@ and possible extensions. This snapshot does not certify a live deployment.
   followed by roughly 2-30 sentences it completes. `diagnose:i-plus-one`
   prints the strict replay. Inside a run, ties go to episode momentum, then
   the membership table's row order, so same-episode runs can still appear.
+  Shaky-words-first (2026-11-19): among sentences with nothing new (strict step 1, and the all-known tier of
+  the non-strict order) those carrying known words whose reading strength is below the reader's known line
+  (`loadWeakKnownLemmas`; unseen words don't count) are served first, shakiest first. Never jumps ahead of a
+  sentence that adds a new piece.
 - "Fresh try" revisits: automatic ones (parked checks, spaced schedule) are capped
   at `EXPLORE_REVISITS_PER_BOOK` per book per plan, counted after sentences in
   suspended episodes are dropped and only while that book has new lessons waiting

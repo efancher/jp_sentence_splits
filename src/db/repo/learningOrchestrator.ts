@@ -853,6 +853,22 @@ async function loadCuratedGrammar(
   return { entriesBySentence, known, names, cost: grammarLevelCosts(levels, known) };
 }
 
+/**
+ * Known lemmas that still read as shaky: some reading/meaning evidence, strength below the reader's known line.
+ * Maps lemma key → deficit. A known word with no evidence yet is unseen, not weak, so it is left out.
+ * Used to serve all-known sentences carrying such words first (`orderByIPlusOne`).
+ */
+async function loadWeakKnownLemmas(known: ReadonlySet<string>): Promise<Map<string, number>> {
+  const { strengthByWord, vocabByLemma } = await loadWordReadingStrengths(READER_STRENGTH_CACHE_MS);
+  const weak = new Map<string, number>();
+  for (const key of known) {
+    const item = vocabByLemma.get(key);
+    const strength = item ? strengthByWord.get(item.id) : undefined;
+    if (strength !== undefined && strength < READER_KNOWN_STRENGTH) weak.set(key, READER_KNOWN_STRENGTH - strength);
+  }
+  return weak;
+}
+
 /** How `loadIPlusOneContext` orders: the stretch cadence, or strict i+1 (`orderByStrictIPlusOne`). */
 interface IPlusOneOptions {
   stretchEvery: number;
@@ -878,6 +894,7 @@ async function loadIPlusOneContext({ stretchEvery, strict = false, planned }: IP
     introducedRows.map((row) => row?.vocabularySuggestions),
     known,
   );
+  const weak = await loadWeakKnownLemmas(known);
   const grammar = await loadCuratedGrammar(introduced, rows);
   for (const row of rows) {
     if (!row || !plannedIds.has(row.id)) continue;
@@ -914,12 +931,13 @@ async function loadIPlusOneContext({ stretchEvery, strict = false, planned }: IP
     if (words.length + patterns.length > 0) newWords.set(row.id, [...words, ...patterns]);
   });
   const order = strict
-    ? orderByStrictIPlusOne(items, known, { knownGrammar: grammar.known, grammarCost: grammar.cost, reinforce })
+    ? orderByStrictIPlusOne(items, known, { knownGrammar: grammar.known, grammarCost: grammar.cost, reinforce, weak })
     : orderByIPlusOne(items, known, {
         stretchEvery,
         knownGrammar: grammar.known,
         grammarCost: grammar.cost,
         reinforce,
+        weak,
       });
   return { rank: new Map(order.map((id, index) => [id, index])), newWords };
 }
