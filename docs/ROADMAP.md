@@ -943,8 +943,9 @@ row), against ~277 word calls; 12 of the 14 were "needed help" (only ～につ�
 on weak-grammar revisits, and it nearly always fails, so it confirms a gap more than it
 closes one. Learner's call the same day: add grammar to the Read check's "What was
 hard?" causes and show a second example after a miss (both shipped 2026-11-16, STATUS).
-Not chosen for now (still open): standalone Grammar checks with their own candidate list
-(like `findWordCheckCandidates`), moved Grammar checks on an unstudied sentence holding
+Standalone Grammar checks with their own candidate list shipped 2026-11-20 (STATUS; manual test:
+walk a sentence with a never-tapped pattern, plan the next day, see one Grammar check in review).
+Not chosen for now (still open): moved Grammar checks on an unstudied sentence holding
 the pattern (like moved Word checks; the text detector finds them), and a grammar
 Dictation that blanks the pattern's phrase. All 12 checked patterns had 2-108 linked
 sentences, so the example rarely has nothing to show. Re-read after a week: how often

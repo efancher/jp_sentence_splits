@@ -15,7 +15,8 @@ import {
   strugglingWordIds,
 } from '../../lib/wordEvidence';
 import { findSetExpressions } from '../../lib/setExpressions';
-import { grammarPatternStrengths } from '../../lib/grammarEvidence';
+import { GRAMMAR_USE_KEY_PREFIX, grammarPatternStrengths } from '../../lib/grammarEvidence';
+import { dueGrammarChecks, type GrammarCheckSentence } from '../../lib/grammarCheckSteps';
 import {
   pickAnotherExample,
   type ExampleParts,
@@ -117,6 +118,7 @@ import {
   type ExploreCandidate,
   type ListeningToolCandidate,
   type WordCheckCandidate,
+  type GrammarCheckCandidate,
   type ReadCheckCandidate,
   type GrammarNoticingCandidate,
   type RecentActivityEvent,
@@ -138,6 +140,7 @@ import {
   EXPLORE_REVISITS_PER_BOOK,
   LISTENING_TOOL_CANDIDATE_LIMIT,
   WORD_CHECK_CANDIDATE_LIMIT,
+  GRAMMAR_CHECK_CANDIDATE_LIMIT,
   READ_CHECK_CANDIDATE_LIMIT,
   WEAK_WORD_REVISIT_MIN_GAP_DAYS,
   isSentenceCardSubject,
@@ -1572,6 +1575,89 @@ export async function findWordCheckCandidates(
 }
 
 /**
+ * Walked-through sentences due for a standalone Grammar check (`grammarCheckSteps.ts`): in an active book, walked
+ * at least a day ago, with a linked grammar pattern that is unchecked or shaky and not checked recently. Selection
+ * only: nothing is stored and no card is created.
+ */
+export async function findGrammarCheckCandidates(
+  limit: number,
+  excluded: ReadonlySet<string> = new Set(),
+  now: Date = new Date(),
+): Promise<GrammarCheckCandidate[]> {
+  const db = getDb();
+  const [events, books, suspendedIndex] = await Promise.all([
+    readAllLearningEventsForPass(),
+    db.books.toArray(),
+    loadSuspendedBookIndex(),
+  ]);
+  const lastWalk = new Map<string, number>();
+  const lastCheckByPattern = new Map<string, { at: number; gotIt: boolean }>();
+  for (const event of events) {
+    const at = Date.parse(event.timestamp);
+    if (Number.isNaN(at)) continue;
+    if (event.action === 'walkthrough_completed') {
+      if (at > (lastWalk.get(event.sentenceId) ?? 0)) lastWalk.set(event.sentenceId, at);
+    } else if (
+      event.action === 'target_practice' &&
+      event.outcome &&
+      event.support === 'target_masked' &&
+      event.target?.key.startsWith(GRAMMAR_USE_KEY_PREFIX)
+    ) {
+      const patternId = event.target.key.slice(GRAMMAR_USE_KEY_PREFIX.length);
+      if (at > (lastCheckByPattern.get(patternId)?.at ?? 0)) lastCheckByPattern.set(patternId, { at, gotIt: event.outcome === 'got_it' });
+    }
+  }
+  const walked = [...lastWalk.keys()].filter((id) => !excluded.has(id));
+  if (walked.length === 0) return [];
+  const activeBooks = new Set(books.filter(isBookInStudyRotation).map((book) => book.id));
+  const membershipBySentence = new Map<string, BookSentence>();
+  for (const membership of await bookSentencesForSentences(walked)) {
+    if (!activeBooks.has(membership.bookId)) continue;
+    if (suspendedIndex && membershipIsShelved(membership, suspendedIndex)) continue;
+    if (!membershipBySentence.has(membership.sentenceId)) membershipBySentence.set(membership.sentenceId, membership);
+  }
+  const reachable = walked.filter((id) => membershipBySentence.has(id));
+  if (reachable.length === 0) return [];
+  const links = await db.sentenceGrammar.where('sentenceId').anyOf(reachable).toArray();
+  if (links.length === 0) return [];
+  const patternIds = [...new Set(links.map((link) => link.grammarPatternId))];
+  const [patternRows, sentenceRows] = await Promise.all([db.grammarPatterns.bulkGet(patternIds), db.sentences.bulkGet(reachable)]);
+  const nameById = new Map(patternRows.flatMap((row) => (row ? [[row.id, row.canonicalName] as const] : [])));
+  const sentenceById = new Map(sentenceRows.flatMap((row) => (row ? [[row.id, row] as const] : [])));
+  const strengthByPattern = grammarPatternStrengths(events, now.getTime());
+  const patternsBySentence = new Map<string, GrammarCheckSentence['patterns']>();
+  for (const link of links) {
+    const name = nameById.get(link.grammarPatternId);
+    if (!name) continue;
+    const list = patternsBySentence.get(link.sentenceId) ?? [];
+    if (list.some((entry) => entry.patternId === link.grammarPatternId)) continue;
+    list.push({
+      patternId: link.grammarPatternId,
+      name,
+      strength: strengthByPattern.get(link.grammarPatternId),
+      lastCheck: lastCheckByPattern.get(link.grammarPatternId),
+    });
+    patternsBySentence.set(link.sentenceId, list);
+  }
+  return dueGrammarChecks({
+    sentences: [...patternsBySentence].map(([sentenceId, patterns]) => ({
+      sentenceId,
+      lastWalkedAt: lastWalk.get(sentenceId)!,
+      patterns,
+    })),
+    now: now.getTime(),
+  })
+    .filter((entry) => sentenceById.has(entry.sentenceId))
+    .slice(0, limit)
+    .map((entry) => ({
+      bookId: membershipBySentence.get(entry.sentenceId)!.bookId,
+      sentenceId: entry.sentenceId,
+      preview: sentenceById.get(entry.sentenceId)!.japanese.slice(0, 24),
+      reason: entry.reason,
+    }));
+}
+
+/**
  * Not-yet-introduced sentences in active books where each wanted word (dictionary form) is a checkable word, for
  * moving a Word check off a familiar sentence (`pickTransferSentence`). `skip` holds walked or otherwise taken ids.
  */
@@ -1956,6 +2042,7 @@ async function gatherSessionPlannerInput(
     readCheckCandidates,
     listeningToolCandidates,
     wordCheckCandidates,
+    grammarCheckCandidates,
     dueItems,
     exploreCandidatesRaw,
   ] = await Promise.all([
@@ -1984,6 +2071,9 @@ async function gatherSessionPlannerInput(
     }),
     timer.time('findWordCheckCandidates', () =>
       findWordCheckCandidates(WORD_CHECK_CANDIDATE_LIMIT, exclude.sentenceIds, now),
+    ),
+    timer.time('findGrammarCheckCandidates', () =>
+      findGrammarCheckCandidates(GRAMMAR_CHECK_CANDIDATE_LIMIT, exclude.sentenceIds, now),
     ),
     // Not capped here: the pool is trimmed after the suspended/paused/readiness
     // filters below, or long-overdue paused-drill items crowd out live ones.
@@ -2107,6 +2197,7 @@ async function gatherSessionPlannerInput(
     readCheckCandidates,
     listeningToolCandidates,
     wordCheckCandidates,
+    grammarCheckCandidates,
     shadowCandidates,
     baseline: baselineOverride ?? settings.sessionAllocation,
     quietMode: settings.quietMode ?? false,

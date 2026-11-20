@@ -218,7 +218,7 @@ and possible extensions. This snapshot does not certify a live deployment.
   per sentence per plan: a sentence drafted a Fresh try gets no check, and one given a Word
   check gets no Read check or Ear tiles/Dictation step that day. Reader Dictation now blanks
   the phrase holding the sentence's weakest-meaning word first. Jsdom tests and the Chromium
-  `reader-tools` spec pass; not yet used on a phone. Grammar checks still ride on their revisit.
+  `reader-tools` spec pass; not yet used on a phone. Grammar checks have their own candidates since 2026-11-20 (below).
   Moved Word checks (2026-11-15): a walked sentence can answer for a word it holds (the
   "masked signal" in ROADMAP), so a due check on a sentence that is not "struggling" moves to
   an unstudied sentence in an active book holding the same word, the one with the fewest other
@@ -248,6 +248,14 @@ and possible extensions. This snapshot does not certify a live deployment.
   and it waits until the call is given. /progress "Grammar strength" shows pattern
   counts by level and the weakest ones (`getGrammarStrengthReport`). Counts as a
   grammar step in the session.
+  Standalone Grammar checks (2026-11-20): a walked sentence (a day or more ago, active book) with a
+  linked pattern that is unchecked or below the known line gets a 1-minute Grammar check in the
+  review bucket after the Word checks, with no earlier taps needed
+  (`findGrammarCheckCandidates` → `dueGrammarChecks` in `src/lib/grammarCheckSteps.ts`). Shaky
+  patterns rank first, then unchecked; spacing is per pattern from the last Grammar check on it
+  (7 days after "got it", 2 otherwise); a pattern is offered once per pass. One Grammar check per
+  plan: none here when a weak-grammar revisit already drafted one. Same panel and evidence as
+  before (`use` facet, no rating).
   Missing evidence is shown in the reader (2026-11-08): on the focused sentence
   each tappable word and grammar pattern has an evidence level
   (`getReaderEvidenceLevels`: `unchecked` = never tapped/reviewed/walked, `shaky`

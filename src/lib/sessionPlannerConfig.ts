@@ -147,6 +147,14 @@ export const WORD_CHECK_CANDIDATE_LIMIT = 12;
 
 /** At most this many Grammar check steps per planning pass; they ride on weak-grammar revisits only. */
 export const GRAMMAR_CHECK_STEPS_PER_PLAN = 1;
+/**
+ * Standalone Grammar checks (src/lib/grammarCheckSteps.ts): walked-through sentences with an unchecked or shaky
+ * pattern, drafted into the `review` bucket after the Word checks. At most this many per plan, and none when a
+ * weak-grammar revisit already drafted one, so a plan holds one Grammar check either way.
+ */
+export const GRAMMAR_CHECK_REVIEW_STEPS_PER_PLAN = 1;
+export const GRAMMAR_CHECK_REVIEW_STEP_MINUTES = 1;
+export const GRAMMAR_CHECK_CANDIDATE_LIMIT = 12;
 
 /**
  * Read checks (the reader's replacement for sentence review cards, see src/lib/readCheck.ts):

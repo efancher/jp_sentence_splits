@@ -13,6 +13,8 @@ import {
   WORD_CHECK_STEPS_PER_PLAN,
   WORD_CHECK_STEP_MINUTES,
   GRAMMAR_CHECK_STEPS_PER_PLAN,
+  GRAMMAR_CHECK_REVIEW_STEPS_PER_PLAN,
+  GRAMMAR_CHECK_REVIEW_STEP_MINUTES,
   LISTENING_TOOL_STEPS_PER_PLAN,
   LISTENING_TOOL_STEP_MINUTES,
   READ_CHECK_STEPS_PER_PLAN,
@@ -386,6 +388,14 @@ export interface ListeningToolCandidate {
   tool: 'tiles' | 'dictate' | 'reading';
 }
 
+/** A walked-through sentence due for a standalone Grammar check in the reader (see src/lib/grammarCheckSteps.ts). */
+export interface GrammarCheckCandidate {
+  bookId: string;
+  sentenceId: string;
+  preview: string;
+  reason: string;
+}
+
 /** A walked-through sentence due for a Word check in the reader (see src/lib/wordCheckSteps.ts). */
 export interface WordCheckCandidate {
   bookId: string;
@@ -466,6 +476,8 @@ export interface SessionPlannerInput {
   listeningToolCandidates?: ListeningToolCandidate[];
   /** Sentences due for a Word check in the reader, most urgent first. Drafted into the `review` bucket ahead of the Read checks. */
   wordCheckCandidates?: WordCheckCandidate[];
+  /** Sentences due for a standalone Grammar check in the reader. Drafted into the `review` bucket after the Word checks. */
+  grammarCheckCandidates?: GrammarCheckCandidate[];
   shadowCandidates: ShadowCandidate[];
   reviewLimit?: number;
   /** User-adjustable override for BASELINE_SESSION_ALLOCATION (set directly on Home) — see AllocateTimeInput.baseline. */
@@ -665,6 +677,30 @@ function buildWordCheckSteps(candidates: readonly WordCheckCandidate[], budgetMi
       ...(candidate.word ? { wordCheckWord: candidate.word } : {}),
     });
     remaining -= WORD_CHECK_STEP_MINUTES;
+  }
+  return steps;
+}
+
+/** Standalone Grammar check steps, within the review budget left after the Word checks. */
+function buildGrammarCheckReviewSteps(candidates: readonly GrammarCheckCandidate[], budgetMinutes: number): PlannerStepDraft[] {
+  const steps: PlannerStepDraft[] = [];
+  let remaining = budgetMinutes;
+  for (const candidate of candidates.slice(0, GRAMMAR_CHECK_REVIEW_STEPS_PER_PLAN)) {
+    if (GRAMMAR_CHECK_REVIEW_STEP_MINUTES > remaining) break;
+    steps.push({
+      id: draftStepId(),
+      bucket: 'review',
+      activityType: SYNTHETIC_ACTIVITY_TYPES.sentenceLearning,
+      targetKind: 'sentence_learning',
+      bookId: candidate.bookId,
+      sentenceId: candidate.sentenceId,
+      label: `Grammar check: ${candidate.preview}`,
+      estimatedMinutes: GRAMMAR_CHECK_REVIEW_STEP_MINUTES,
+      reason: candidate.reason,
+      status: 'pending',
+      grammarCheck: true,
+    });
+    remaining -= GRAMMAR_CHECK_REVIEW_STEP_MINUTES;
   }
   return steps;
 }
@@ -998,8 +1034,10 @@ export function buildRecommendedSession(input: SessionPlannerInput): Recommended
     Math.min(LISTENING_TOOL_STEPS_PER_PLAN, input.listeningToolCandidates?.length ?? 0) * LISTENING_TOOL_STEP_MINUTES;
   const wordCheckMinutes =
     Math.min(WORD_CHECK_STEPS_PER_PLAN, input.wordCheckCandidates?.length ?? 0) * WORD_CHECK_STEP_MINUTES;
+  const grammarCheckMinutes =
+    Math.min(GRAMMAR_CHECK_REVIEW_STEPS_PER_PLAN, input.grammarCheckCandidates?.length ?? 0) * GRAMMAR_CHECK_REVIEW_STEP_MINUTES;
   const reviewCeiling =
-    reviewBatchCostMinutes(rankedReview, reviewLimit) + readCheckMinutes + wordCheckMinutes + listeningToolMinutes;
+    reviewBatchCostMinutes(rankedReview, reviewLimit) + readCheckMinutes + wordCheckMinutes + grammarCheckMinutes + listeningToolMinutes;
 
   // Every bucket — not just review — is clamped to what its candidate list
   // can actually spend. Without this, minutes freed by a capped bucket get
@@ -1045,11 +1083,17 @@ export function buildRecommendedSession(input: SessionPlannerInput): Recommended
   const wordCheckSteps = buildWordCheckSteps(wordCheckCandidates, reviewLeft);
   reviewLeft -= spent(wordCheckSteps);
   for (const step of wordCheckSteps) taken.add(step.sentenceId);
+  // One Grammar check per plan: a weak-grammar revisit already drafted one in the explore steps, so none here then.
+  const grammarCheckSteps = exploreSteps.some((step) => step.grammarCheck)
+    ? []
+    : buildGrammarCheckReviewSteps(untaken(input.grammarCheckCandidates), reviewLeft);
+  reviewLeft -= spent(grammarCheckSteps);
+  for (const step of grammarCheckSteps) taken.add(step.sentenceId);
   const readCheckSteps = buildReadCheckSteps(untaken(input.readCheckCandidates), reviewLeft);
   reviewLeft -= spent(readCheckSteps);
   for (const step of readCheckSteps) taken.add(step.sentenceId);
   const listeningToolSteps = buildListeningToolSteps(untaken(input.listeningToolCandidates), reviewLeft);
-  const reviewSteps = [...reviewBatchSteps, ...wordCheckSteps, ...readCheckSteps, ...listeningToolSteps];
+  const reviewSteps = [...reviewBatchSteps, ...wordCheckSteps, ...grammarCheckSteps, ...readCheckSteps, ...listeningToolSteps];
   const allSteps = [
     ...exploreSteps,
     ...shadowSteps,
