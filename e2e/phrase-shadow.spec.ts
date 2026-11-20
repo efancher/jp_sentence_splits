@@ -102,9 +102,9 @@ test.describe('phrase shadowing on the Shadow page', () => {
     // (the "appears as soon as it lands" path, which goes through Dexie, is covered in tests/shadowPagePhrase.test.tsx).
     await cacheAlignment(page);
     await page.reload();
-    await expect(page.getByText('Suggested phrase (covers 寝る):')).toBeVisible();
-
-    await page.getByRole('button', { name: 'Use this phrase' }).click();
+    // Opens on Full sentence: no phrase offer until Phrase is chosen, which presets the estimate.
+    await expect(page.getByText(/Suggested phrase/)).toHaveCount(0);
+    await page.getByRole('button', { name: 'Phrase', exact: true }).click();
     const rating = page.getByRole('group', { name: 'Rate this phrase' });
     await expect(rating).toContainText('寝ています');
     // The trailing ね stays with います, but the aligner stretched it over the silence to 4 s, so it is capped at a particle's length.
@@ -129,6 +129,7 @@ test.describe('phrase shadowing on the Shadow page', () => {
     await seed(page);
     await page.goto('/#/books/book/shadow/s-0');
     await expect(page.getByText(/Loop window/)).toBeVisible();
+    await page.getByRole('button', { name: 'Phrase', exact: true }).click();
     await expect(page.getByText(/Suggested phrase/)).toHaveCount(0);
     await expect(page.getByRole('group', { name: 'Rate this phrase' })).toHaveCount(0);
     expect((await stored(page)).events).toHaveLength(0);

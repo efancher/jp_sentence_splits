@@ -123,7 +123,7 @@ type ShadowMode = 'sentence' | 'phrase' | 'chain';
 const SHADOW_MODES: { value: ShadowMode; label: string; hint: string }[] = [
   { value: 'sentence', label: 'Full sentence', hint: 'Shadow the whole sentence' },
   { value: 'phrase', label: 'Phrase', hint: 'Shadow one phrase, then rate it' },
-  { value: 'chain', label: 'Chunk chain', hint: 'Build up the sentence in growing chunks' },
+  { value: 'chain', label: 'Chain', hint: 'Build up the sentence in growing chunks' },
 ];
 
 export function ShadowPage() {
@@ -844,7 +844,7 @@ export function ShadowWorkspace({
           sentenceId={sentenceId}
           sentenceAudioId={referenceAudio.id}
           visitId={visitId}
-          autoStart
+          autoStart={!modePickedRef.current}
           onRange={(range) => {
             // A rung is a loop target like any marked phrase: the pane's own controls shadow it.
             targetLoopCoordinator.current.cancel();

@@ -101,9 +101,8 @@ describe('ShadowPage phrase shadowing', () => {
     await saveReferenceAlignment('audio-1', { durationSeconds: 4, words: WORDS });
     expect(await screen.findByText(/Suggested phrase \(covers 寝る\)/)).toBeTruthy();
 
-    await user.click(screen.getByRole('button', { name: 'Use this phrase' }));
     const rating = await screen.findByRole('group', { name: 'Rate this phrase' });
-    expect(rating.textContent).toContain('寝ています');
+    await waitFor(() => expect(rating.textContent).toContain('寝ています'));
 
     await user.click(screen.getByRole('button', { name: 'Close' }));
     await waitFor(async () => expect(await getDb().sentenceLearningEvents.count()).toBe(1));
@@ -266,19 +265,23 @@ describe('ShadowWorkspace opened from a daily-plan step', () => {
     await waitFor(() =>
       expect(screen.queryByRole('group', { name: 'Chunk chain' }) ?? screen.queryByRole('group', { name: 'Cold try' })).toBeTruthy(),
     );
-    expect(screen.getByRole('button', { name: 'Chunk chain' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Chain' }).getAttribute('aria-pressed')).toBe('true');
   });
 
-  it('opened by hand, or with sentence shadowing on, leaves the chain as a button', async () => {
+  it('opened by hand, or with sentence shadowing on, does not start the chain; choosing Chain leaves it as a button', async () => {
+    const user = userEvent.setup();
     await seedChain();
     await updateSettings({ sentenceShadowingPaused: true });
     const { unmount } = renderWorkspace(false);
-    expect(await screen.findByRole('button', { name: 'Chunk chain' })).toBeTruthy();
+    await screen.findByRole('button', { name: 'Phrase' });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Phrase' }).getAttribute('aria-pressed')).toBe('true'));
     expect(screen.queryByRole('group', { name: 'Chunk chain' })).toBeNull();
     unmount();
 
     await updateSettings({ sentenceShadowingPaused: false });
     renderWorkspace(true);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Full sentence' }).getAttribute('aria-pressed')).toBe('true'));
+    await user.click(screen.getByRole('button', { name: 'Chain' }));
     expect(await screen.findByRole('button', { name: 'Chunk chain' })).toBeTruthy();
     expect(screen.queryByRole('group', { name: 'Chunk chain' })).toBeNull();
   });

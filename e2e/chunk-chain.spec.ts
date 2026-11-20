@@ -97,7 +97,8 @@ test.describe('chunk chain on the Shadow page', () => {
   test('builds the sentence from its end, logs each rating, and grades nothing', async ({ page }) => {
     await seed(page);
     await page.goto('/#/books/book/shadow/s-0');
-    await page.getByRole('button', { name: 'Chunk chain' }).click();
+    await page.getByRole('button', { name: 'Chain', exact: true }).click();
+    await page.getByRole('button', { name: 'Chunk chain', exact: true }).click();
     await skipColdTry(page);
 
     const chain = page.getByRole('group', { name: 'Chunk chain' });
@@ -128,10 +129,11 @@ test.describe('chunk chain on the Shadow page', () => {
   test('moving a divider changes the steps, snapped to a word start', async ({ page }) => {
     await seed(page);
     await page.goto('/#/books/book/shadow/s-0');
+    await page.getByRole('button', { name: 'Chain', exact: true }).click();
     await page.getByRole('button', { name: 'Adjust steps' }).click();
     await page.getByRole('button', { name: 'Step starts at 友達' }).click();
     await page.getByRole('button', { name: 'Use these steps' }).click();
-    await page.getByRole('button', { name: 'Chunk chain' }).click();
+    await page.getByRole('button', { name: 'Chunk chain', exact: true }).click();
     await skipColdTry(page);
 
     const chain = page.getByRole('group', { name: 'Chunk chain' });
