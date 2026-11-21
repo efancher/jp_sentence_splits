@@ -11,7 +11,7 @@ import { readRowsByKeys, saveSentenceExtras } from '../db/repository';
 import { getBookWithExtras } from '../db/sentenceExtras';
 import { CONTEXT_WALKTHROUGH_VERSION, mergeChapterWalkthroughs, sentencesNeedingWalkthrough, validWalkthroughFor } from './contextWalkthrough';
 import { chunksMatchSource } from './chunking';
-import { linkablePatterns, parseBookGrammarReply, type GrammarPatternRef } from './grammarLinkReply';
+import { connectivesWithoutLink, linkablePatterns, parseBookGrammarReply, type GrammarPatternRef } from './grammarLinkReply';
 import { constructionChecked, validLayersFor } from './phraseConstruction';
 import { applyQuickImportExtras, type Rejection } from './quickImportExtras';
 import { BOOK_EXTRA_KINDS, mergeBookExtraReplies, planBookExtraTasks, type BookExtraKind, type BookExtraSelection } from './bookAssistRun';
@@ -79,7 +79,12 @@ export async function planBookAssistExtras(bookId: string): Promise<BookExtrasPl
     db.sentenceExtras.bulkGet(sentences.map((s) => s.id)),
   ]);
   const grammarCounts = new Map<string, number>();
-  for (const row of grammarRows) grammarCounts.set(row.sentenceId, (grammarCounts.get(row.sentenceId) ?? 0) + 1);
+  const grammarLinksBySentence = new Map<string, { start?: number; end?: number }[]>();
+  for (const row of grammarRows) {
+    grammarCounts.set(row.sentenceId, (grammarCounts.get(row.sentenceId) ?? 0) + 1);
+    grammarLinksBySentence.set(row.sentenceId, [...(grammarLinksBySentence.get(row.sentenceId) ?? []), row]);
+  }
+  const suggestionsById = new Map(rows.flatMap((row) => (row ? [[row.id, row.vocabularySuggestions ?? []] as const] : [])));
   const chapters = book?.chapters ?? [];
   const chapterOf = new Map(chapters.map((c) => [c.id, c]));
   const walkthroughs = mergeChapterWalkthroughs(chapters);
@@ -117,8 +122,13 @@ export async function planBookAssistExtras(bookId: string): Promise<BookExtrasPl
     mark('particles', particles ? (particles.length === 0 ? 'checked, no particle questions' : `${particles.length} question${particles.length === 1 ? '' : 's'}`) : null);
 
     const linked = grammarCounts.get(sentence.id) ?? 0;
-    if (linked > 0) mark('grammar', `${linked} pattern${linked === 1 ? '' : 's'}`);
-    else mark('grammar', extraRows[index]?.grammarChecked ? 'checked, nothing to link' : null);
+    const checked = linked > 0 || extraRows[index]?.grammarChecked;
+    // Sentences looked at before connectives were requested: flagged older-format so a re-check can add just those links.
+    const connectives = checked ? connectivesWithoutLink(suggestionsById.get(sentence.id) ?? [], grammarLinksBySentence.get(sentence.id) ?? []) : [];
+    const noLink = connectives.length > 0 ? `, no link for ${connectives.join('、')}` : '';
+    if (linked > 0) mark('grammar', `${linked} pattern${linked === 1 ? '' : 's'}${noLink}`);
+    else mark('grammar', extraRows[index]?.grammarChecked ? `checked, nothing to link${noLink}` : null);
+    if (connectives.length > 0) kinds.grammar.outdated.push(sentence.handle);
 
     const draft = chapter?.structureDrafts?.[sentence.id];
     if (analysis?.chunks?.length) mark('structure', `saved analysis: ${truncate(analysis.chunks.map((c) => c.japanese).join(' / '))}`);

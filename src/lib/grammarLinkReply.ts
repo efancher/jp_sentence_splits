@@ -24,6 +24,25 @@ export interface ParsedGrammarLink {
   note: string;
 }
 
+/**
+ * Sentence connectives (UniDic 接続詞: だから, でも, それから) in a sentence's stored suggestions that no saved
+ * grammar link's span covers. Used to offer a re-check of sentences linked before connectives were requested.
+ */
+export function connectivesWithoutLink(
+  suggestions: readonly { surface?: string; start?: number; end?: number; pos?: string; source?: string }[],
+  links: readonly { start?: number; end?: number }[],
+): string[] {
+  const found: string[] = [];
+  for (const item of suggestions) {
+    if (item.source !== 'morphology' || !item.pos?.startsWith('接続詞') || !item.surface) continue;
+    if (item.start === undefined || item.end === undefined) continue;
+    const { start, end } = item;
+    const covered = links.some((link) => link.start !== undefined && link.end !== undefined && link.start <= start && link.end >= end);
+    if (!covered && !found.includes(item.surface)) found.push(item.surface);
+  }
+  return found;
+}
+
 export const GRAMMAR_HEADING = 'GRAMMAR';
 
 /** The patterns the assistant may be told about: everything except entries the learner tagged no-auto-link. */

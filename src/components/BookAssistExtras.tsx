@@ -364,7 +364,11 @@ export function BookAssistExtras({ bookId }: { bookId: string }) {
                             checked={status.outdated.every((handle) => replace[kind].has(handle))}
                             onChange={(event) => setReplaceOutdated(kind, event.target.checked)}
                           />
-                          <span>Upgrade the {status.outdated.length} older-format ones (adds the word-by-word list)</span>
+                          <span>
+                            {kind === 'grammar'
+                              ? `Re-check the ${status.outdated.length} with a connective (だから, でも…) that has no link yet (only adds links)`
+                              : `Upgrade the ${status.outdated.length} older-format ones (adds the word-by-word list)`}
+                          </span>
                         </label>
                       ) : null}
                       <label className="row" style={{ alignItems: 'center', gap: '0.5rem' }}>

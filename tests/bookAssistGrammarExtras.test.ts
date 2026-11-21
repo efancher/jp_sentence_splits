@@ -87,6 +87,27 @@ describe('book assistant grammar links', () => {
     expect(plan.kinds.grammar.existing.map((e) => e.summary)).toEqual(['1 pattern', 'checked, nothing to link', '1 pattern']);
   });
 
+  it('flags checked sentences whose connective has no link as re-checkable, and clears it once linked', async () => {
+    const db = getDb();
+    const row = (await db.sentences.get(ids[1]!))!;
+    // 'もう一つは紙です。': pretend the tokenizer tagged もう as a connective for the test.
+    await db.sentences.put({
+      ...row,
+      vocabularySuggestions: [
+        { id: 'v1', surface: 'もう', start: 0, end: 2, expression: 'もう', reading: 'もう', pos: '接続詞', source: 'morphology', selectedByDefault: false },
+      ],
+    });
+    await saveBookAssistExtras(snapshot(), { 'grammar:1-3': REPLY });
+    let plan = await planBookAssistExtras(bookId);
+    expect(plan.kinds.grammar.outdated).toEqual([2]);
+    expect(plan.kinds.grammar.existing.find((e) => e.handle === 2)?.summary).toBe('checked, nothing to link, no link for もう');
+
+    const reply = ['=== Sentence 2 ===', 'PATTERN: もう', 'TEMPLATE: もう', 'MEANING: already', 'SPAN: もう', 'NOTE: n'].join('\n');
+    await saveBookAssistExtras({ ...snapshot([2]), kinds: { grammar: { handles: [2], replaceHandles: [2] } } }, { 'grammar:2-2': reply });
+    plan = await planBookAssistExtras(bookId);
+    expect(plan.kinds.grammar.outdated).toEqual([]);
+  });
+
   it('leaves a sentence the reply did not answer unchecked so the next run retries it', async () => {
     const partial = REPLY.split('=== Sentence 2 ===')[0]!;
     await saveBookAssistExtras(snapshot(), { 'grammar:1-3': partial });
