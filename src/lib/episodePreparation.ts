@@ -114,30 +114,80 @@ export function extractJson(reply: string): unknown {
   try {
     return JSON.parse(json);
   } catch (strictError) {
-    // Chat apps and phone keyboards often turn the JSON's straight quotes into
-    // curly ones, add non-breaking spaces, or leave trailing commas. Repair only
-    // after a strict parse fails, so a valid reply is never altered.
-    const repaired = json
-      .replace(/[\u201c\u201d\u201e\u201f\u00ab\u00bb]/g, '"')
-      .replace(/\u00a0/g, ' ')
-      .replace(/,(\s*[}\]])/g, '$1');
+    // Repair only after a strict parse fails, so a valid reply is never altered.
+    const balanced = firstBalancedObject(candidate);
+    for (const text of balanced && balanced !== json ? [json, balanced] : [json]) {
+      try {
+        return parseWithRepairs(text);
+      } catch {
+        // try the next candidate
+      }
+    }
+    const detail = strictError instanceof Error ? strictError.message : 'parse error';
+    throw new Error(`The reply is not valid JSON (${detail}). Ask the AI to answer again with only the JSON, using plain straight quotes.`);
+  }
+}
+
+/** Escapes raw newlines/tabs inside JSON strings (models often write multi-line notes). */
+export function escapeControlCharsInStrings(json: string): string {
+  let out = '';
+  let inString = false;
+  for (let i = 0; i < json.length; i++) {
+    const ch = json[i]!;
+    if (inString && ch === '\\') {
+      out += ch + (json[i + 1] ?? '');
+      i++;
+      continue;
+    }
+    if (ch === '"') inString = !inString;
+    if (inString && ch === '\n') out += '\\n';
+    else if (inString && ch === '\r') out += '\\r';
+    else if (inString && ch === '\t') out += '\\t';
+    else out += ch;
+  }
+  return out;
+}
+
+/** The first balanced top-level `{...}` in `text` (braces inside strings ignored), or null. */
+function firstBalancedObject(text: string): string | null {
+  const start = text.indexOf('{');
+  if (start < 0) return null;
+  let depth = 0;
+  let inString = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i]!;
+    if (inString) {
+      if (ch === '\\') i++;
+      else if (ch === '"') inString = false;
+    } else if (ch === '"') inString = true;
+    else if (ch === '{') depth++;
+    else if (ch === '}' && --depth === 0) return text.slice(start, i + 1);
+  }
+  return null;
+}
+
+function parseWithRepairs(json: string): unknown {
+  // Chat apps and phone keyboards often turn straight quotes into curly ones,
+  // add non-breaking spaces, or leave trailing commas.
+  const simple = json
+    .replace(/[\u201c\u201d\u201e\u201f\u00ab\u00bb]/g, '"')
+    .replace(/\u00a0/g, ' ')
+    .replace(/,(\s*[}\]])/g, '$1');
+  const attempts: (() => string)[] = [
+    () => simple,
+    () => repairCurlyQuotes(json),
+    () => repairInnerQuotes(repairCurlyQuotes(json)),
+    () => escapeControlCharsInStrings(simple),
+    () => repairInnerQuotes(repairCurlyQuotes(escapeControlCharsInStrings(json))),
+  ];
+  for (const attempt of attempts) {
     try {
-      return JSON.parse(repaired);
+      return JSON.parse(attempt());
     } catch {
-      try {
-        return JSON.parse(repairCurlyQuotes(json));
-      } catch {
-        // fall through
-      }
-      try {
-        return JSON.parse(repairInnerQuotes(repairCurlyQuotes(json)));
-      } catch {
-        // fall through to the error below
-      }
-      const detail = strictError instanceof Error ? strictError.message : 'parse error';
-      throw new Error(`The reply is not valid JSON (${detail}). Ask the AI to answer again with only the JSON, using plain straight quotes.`);
+      // try the next repair
     }
   }
+  throw new Error('unrepairable');
 }
 
 const KINDS: PreparedTargetKind[] = ['vocabulary', 'grammar', 'expression'];
