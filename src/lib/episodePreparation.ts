@@ -127,6 +127,11 @@ export function extractJson(reply: string): unknown {
       try {
         return JSON.parse(repairCurlyQuotes(json));
       } catch {
+        // fall through
+      }
+      try {
+        return JSON.parse(repairInnerQuotes(repairCurlyQuotes(json)));
+      } catch {
         // fall through to the error below
       }
       const detail = strictError instanceof Error ? strictError.message : 'parse error';
@@ -302,4 +307,31 @@ export function repairCurlyQuotes(json: string): string {
     } else out += ch;
   }
   return out.replace(/\u00a0/g, ' ').replace(/,(\s*[}\]])/g, '$1');
+}
+
+/**
+ * Straight quotes inside a string value (a model writing "ね" unescaped in a
+ * Japanese explanation) end the string early. Inside a string, a `"` closes it
+ * only when what follows looks like JSON structure; otherwise it is content and
+ * is escaped.
+ */
+export function repairInnerQuotes(json: string): string {
+  let out = '';
+  let inString = false;
+  for (let i = 0; i < json.length; i += 1) {
+    const ch = json[i]!;
+    if (ch === '\\' && inString) {
+      out += ch + (json[i + 1] ?? '');
+      i += 1;
+    } else if (ch === '"') {
+      if (!inString) {
+        inString = true;
+        out += ch;
+      } else if (/^\s*(?:[:}\]]|,\s*(?:["{[\-0-9]|true|false|null))|^\s*$/.test(json.slice(i + 1))) {
+        inString = false;
+        out += ch;
+      } else out += '\\"';
+    } else out += ch;
+  }
+  return out;
 }
