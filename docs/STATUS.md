@@ -346,7 +346,7 @@ and possible extensions. This snapshot does not certify a live deployment.
   page is unchanged. Episode preparation accepts the main JSON and
   structure lines together. Source-matched extras live in `sentence_extras`, with a read-only
   overlay for older inline book data.
-- Progressive glossing and ungraded clause questions are available. Source
+- The walkthrough's pre-check (progressive glossing / structure checks) was removed 2026-11-21; ungraded clause questions are available. Source
   matching invalidates stale questions and review notes. Reactions now sync via
   `clause_question_feedback`; old local reactions are imported once. Use
   `questions:coverage` for a fresh active-book inventory rather than historical

@@ -66,7 +66,6 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.screenshot({ path: test.info().outputPath('walkthrough.png'), fullPage: true });
 
-    await panel.getByRole('button', { name: 'Skip the check, just walk through' }).click();
     while (await panel.getByRole('button', { name: /^(Continue|Finish)$/ }).isEnabled()) {
       await panel.getByRole('button', { name: /^(Continue|Finish)$/ }).click();
     }

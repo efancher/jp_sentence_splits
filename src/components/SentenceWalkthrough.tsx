@@ -4,7 +4,7 @@ import { FuriganaText } from '../lib/furigana';
 import { glossesFromWords } from '../lib/chunkGlosses';
 import { registerReportContext } from '../lib/reportContext';
 
-import type { AnalysisChunk, ConstructionLayer, ContextWalkthrough, GlossDecision, ParticleCheck, Sentence, StructureDraftChunk, SentenceAudio, SentenceLearningEvent } from '../domain/types';
+import type { AnalysisChunk, ConstructionLayer, ContextWalkthrough, Sentence, StructureDraftChunk, SentenceAudio, SentenceLearningEvent } from '../domain/types';
 import { validWalkthroughFor } from '../lib/contextWalkthrough';
 import { previewHeuristicChunks } from '../lib/analysisHelpers';
 import { assignClauseIndices, isClauseConnectorRole, isEngineRole } from '../lib/clauseBands';
@@ -19,13 +19,8 @@ import { ClausePilotPreview } from './ClausePilotPreview';
 import { ChunkPuzzleStrip } from './ChunkPuzzleStrip';
 import { buildClauseMap } from '../lib/clauseMap';
 import { ClauseMapView, ContextStepCard, HighlightedSentence, ParticipantList, WalkthroughCheckView, WordByWordList, WalkthroughContentImport, type RoleHelp } from './ContextWalkthroughView';
-import { buildCheckPuzzle } from '../lib/earTiles';
-import { parkedDecisionKeys } from '../lib/glossSkill';
 
-import { buildStructureChecks } from '../lib/structureChecks';
 
-import { StructureChecks } from './StructureChecks';
-import { GlossDecisionPanel, planGlossDecisions, type GlossDecisionInput } from './GlossDecisionPanel';
 import { SentenceExpressionCard, meaningUnits } from './SentenceExpressionCard';
 import { NativeAudioButton } from './NativeAudioButton';
 import { ReloadSentenceAudioButton } from './ReloadSentenceAudioButton';
@@ -139,11 +134,7 @@ export function SentenceWalkthrough({
   importTarget,
   events = [],
   onEvent,
-  glossRecords,
-  onGlossDecision,
-  skipCheck = false,
-  knownRatio,
-  particleChecks,
+  englishUnderChunks = false,
   quietMode,
   shadowHref,
   onQuietModeChange,
@@ -174,15 +165,8 @@ export function SentenceWalkthrough({
   /** Earlier lesson events for this book, to show what has been practised/compared. */
   events?: SentenceLearningEvent[];
   onEvent?: (event: LessonEventInput) => void;
-  /** Earlier structural decisions (progressive glossing). With `onGlossDecision`, the walkthrough opens on a "try it first" check. */
-  glossRecords?: GlossDecision[];
-  onGlossDecision?: (decision: GlossDecisionInput) => void;
-  /** Open past the "try it first" check with English under the chunks (arrived from a missed review card, so the answer is already seen). */
-  skipCheck?: boolean;
-  /** Share of this sentence's content words already known (advisory readiness; thin opens the glosses). */
-  knownRatio?: number;
-  /** Authored contextual particle questions for this sentence (SentenceAnalysis.particleChecks). */
-  particleChecks?: ParticleCheck[];
+  /** Open with English under the chunks (arrived from a missed review card, so the answer is already seen). */
+  englishUnderChunks?: boolean;
   quietMode: boolean;
   shadowHref?: string;
   onQuietModeChange: (quiet: boolean) => void;
@@ -210,24 +194,6 @@ export function SentenceWalkthrough({
   );
   const [step, setStep] = useState(0);
   const visitId = useMemo(() => createId('visit'), []);
-  // The tap-what-you-hear tile check is its own review card now (`ear_tiles`, ReviewPage). Here the
-  // same eligibility (audio + a clean tile split) just selects the structure checks over the gloss panel.
-  const tilePuzzle = useMemo(
-    () =>
-      !skipCheck && audio && onGlossDecision != null && glossRecords != null && !parkedDecisionKeys(glossRecords).has(sentence.id)
-        ? buildCheckPuzzle(sentence, visitId)
-        : null,
-    // Chosen once per opening so the bank doesn't reshuffle under the learner.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [visitId, sentence.id],
-  );
-  const structureChecks = useMemo(
-    () => buildStructureChecks(chunks.map(({ id, japanese, role, literalEnglish }) => ({ id, japanese, role, literalEnglish })), visitId),
-    [chunks, visitId],
-  );
-  const hasStructureChecks = structureChecks.roles != null || structureChecks.describes != null;
-  const [tryFirst, setTryFirst] = useState(() =>
-    !skipCheck && onGlossDecision != null && glossRecords != null && (tilePuzzle != null ? hasStructureChecks : planGlossDecisions(walkthroughChunks(sentence, savedChunks, structureDraft).chunks, glossRecords, new Date(), sentence.id, particleChecks).length > 0));
   const [showTranslation, setShowTranslation] = useState(false);
   const [showFurigana, setShowFurigana] = useState(false);
   const [stickyEnglish, setStickyEnglish] = useState(false);
@@ -235,7 +201,7 @@ export function SentenceWalkthrough({
     () => glossesFromWords(chunks, compareAids?.get(sentence.id)?.words ?? []),
     [chunks, compareAids, sentence.id],
   );
-  const [glossUnderChunks, setGlossUnderChunks] = useState(skipCheck);
+  const [glossUnderChunks, setGlossUnderChunks] = useState(englishUnderChunks);
   const [englishBefore, setEnglishBefore] = useState(0);
   const [englishAfter, setEnglishAfter] = useState(0);
   const contextStep = contextual?.steps[step];
@@ -310,7 +276,6 @@ export function SentenceWalkthrough({
       structureDraftReceived: structureDraft ? { chunkCount: structureDraft.length, rebuildsSentence: chunksMatchSource(structureDraft.map((chunk) => chunk.japanese), sentence.japanese) } : null,
       chunks: chunks.map((item) => ({ japanese: item.japanese, role: item.role, literalEnglish: item.literalEnglish ?? null, wordListGloss: wordGlosses.get(item.id) ?? null })),
       step,
-      tryFirst,
       preset,
       stickyEnglish,
       glossUnderChunks,
@@ -388,30 +353,7 @@ export function SentenceWalkthrough({
           {(Object.keys(PRESET_LABELS) as SupportPreset[]).map((key) => <option key={key} value={key}>{PRESET_LABELS[key]}</option>)}
         </select>
       </label>
-      {tryFirst && onGlossDecision && tilePuzzle ? (
-        <StructureChecks
-          sentenceId={sentence.id}
-          visitId={visitId}
-          checks={structureChecks}
-          onRecord={onGlossDecision}
-          onFinish={() => setTryFirst(false)}
-        />
-      ) : null}
-      {tryFirst && onGlossDecision && !tilePuzzle ? (
-        <GlossDecisionPanel
-          sentenceId={sentence.id}
-          visitId={visitId}
-          chunks={chunks.map(({ id, japanese, role, literalEnglish }) => ({ id, japanese, role, literalEnglish }))}
-          records={glossRecords ?? []}
-          translation={sentence.translation}
-          words={compareAids?.get(sentence.id)?.words ?? []}
-          knownRatio={knownRatio}
-          particleChecks={particleChecks}
-          onRecord={onGlossDecision}
-          onFinish={() => setTryFirst(false)}
-        />
-      ) : null}
-      {tryFirst ? null : contextual ? (
+      {contextual ? (
         <>
           {sentence.inlineReading ? (
             <button type="button" aria-pressed={showFurigana} onClick={() => setShowFurigana((value) => !value)} style={{ alignSelf: 'flex-start' }}>
@@ -443,7 +385,7 @@ export function SentenceWalkthrough({
         revealedIds={done ? undefined : revealedIds}
         revealRoles={preset !== 'minimal'}
       />}
-      {tryFirst ? <button type="button" onClick={() => setTryFirst(false)}>Skip the check, just walk through</button> : done ? (
+      {done ? (
         <div className="stack" style={{ gap: '0.35rem' }}>
           {contextual ? null : showFurigana && sentence.inlineReading ? <FuriganaText className="jp jp-lg" text={sentence.inlineReading} /> : <div className="jp jp-lg">{sentence.japanese}</div>}
           {contextual && gist !== 'asking' ? (

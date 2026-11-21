@@ -55,7 +55,6 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 
 
     await page.getByRole('button', { name: 'Walk through' }).first().click();
     const panel = page.getByRole('region', { name: 'Sentence walkthrough' });
-    await panel.getByRole('button', { name: 'Skip the check, just walk through' }).click();
     await expect(panel.getByLabel('Words in this sentence').first()).toContainText('読む (よむ) — to read');
     // Help level: minimal hides role/gloss/explanation until asked, and the choice persists.
     await panel.getByLabel('Help level').selectOption('minimal');

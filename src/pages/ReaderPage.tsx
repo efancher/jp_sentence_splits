@@ -48,7 +48,7 @@ import { SentenceWalkthrough, walkthroughChunks } from '../components/SentenceWa
 import { glossesFromWords } from '../lib/chunkGlosses';
 import { mergeChapterConstructionDrafts, mergeChapterWalkthroughs } from '../lib/contextWalkthrough';
 import { WordGlossList, type CompareAids } from '../components/TargetLessonCard';
-import { ensureDefaultBookChapter, getDb, getEpisodeFocus, getSavedWordStatus, getReaderEvidenceLevels, getStrengthKnownExpressions, listGlossDecisions, readRowsByKeys, readSentenceAudioForSentences, listSentenceLearningEvents, logGlossDecision, logSentenceLearningEvent, resetSentenceWalkthrough, ensureVocabularyItem, getWordMeaningCheckTarget, getReadingCheckTarget, READER_STRENGTH_CACHE_MS, readSettings, updateSettings, withoutUnseenAiLinks } from '../db/repository';
+import { ensureDefaultBookChapter, getDb, getEpisodeFocus, getSavedWordStatus, getReaderEvidenceLevels, getStrengthKnownExpressions, readRowsByKeys, readSentenceAudioForSentences, listSentenceLearningEvents, logGlossDecision, logSentenceLearningEvent, resetSentenceWalkthrough, ensureVocabularyItem, getWordMeaningCheckTarget, getReadingCheckTarget, READER_STRENGTH_CACHE_MS, readSettings, updateSettings, withoutUnseenAiLinks } from '../db/repository';
 import { registerReportContext } from '../lib/reportContext';
 import type { BookSentence, Sentence, SentenceAudio, StructureDraftChunk, TextDisplayMode } from '../domain/types';
 import { useNativeAudio } from '../hooks/useNativeAudio';
@@ -387,7 +387,6 @@ export function ReaderPage() {
   );
 
   const lessonEvents = useLiveQuery(() => listSentenceLearningEvents(bookId), [bookId]);
-  const glossRecords = useLiveQuery(() => listGlossDecisions(), []);
   const episodeSentences = useMemo(
     () => (data ? data.rows.map((row, index) => ({ id: row.sentence.id, japanese: row.sentence.japanese, translation: row.sentence.translation, position: index + 1 })) : []),
     [data],
@@ -1647,14 +1646,7 @@ export function ReaderPage() {
                       contextWalkthrough={data.contextWalkthroughs[row.sentence.id]}
                       importTarget={row.membership.chapterId ? { bookId, chapterId: row.membership.chapterId } : undefined}
                       events={lessonEvents ?? []}
-                      glossRecords={glossRecords}
-                      particleChecks={data.particleChecksBySentence.get(row.sentence.id)}
-                      knownRatio={(() => {
-                        const content = row.sentence.vocabularySuggestions.filter((suggestion) => suggestion.selectedByDefault);
-                        return content.length === 0 ? undefined : content.filter((suggestion) => data.knownExpressions.has(suggestion.expression)).length / content.length;
-                      })()}
-                      skipCheck={searchParams.get('skipCheck') === '1'}
-                      onGlossDecision={(decision) => void logGlossDecision({ ...decision, bookId })}
+                      englishUnderChunks={searchParams.get('skipCheck') === '1'}
                       onEvent={(event) =>
                         void logSentenceLearningEvent({
                           ...event,
