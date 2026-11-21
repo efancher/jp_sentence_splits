@@ -20,6 +20,16 @@ describe('sentence gloss fill', () => {
     expect(needing.map((item) => item.expression)).toEqual(['実']);
   });
 
+  it('also asks for glosses on gloss-only conjunctions like だから', () => {
+    const conjunction = suggestion('だから', {
+      surface: 'だから', start: 0, end: 3, pos: '接続詞', source: 'morphology', selectedByDefault: false,
+    });
+    const particle = suggestion('は', {
+      surface: 'は', start: 3, end: 4, pos: '助詞/係助詞', source: 'morphology', selectedByDefault: false,
+    });
+    expect(suggestionsNeedingGloss([conjunction, particle]).map((item) => item.expression)).toEqual(['だから']);
+  });
+
   it('applies glosses only where none exist and leaves other suggestions identical', () => {
     const kept = suggestion('緑茶', { english: 'green tea' });
     const bare = suggestion('種類');

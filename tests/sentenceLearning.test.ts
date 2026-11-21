@@ -201,6 +201,12 @@ describe('gloss-only words', () => {
     expect(glossableWords(sentence).map((word) => word.expression)).toEqual(['そっち', '迚も', 'つもり', '紙']);
   });
 
+  it('glosses conjunctions such as だから', () => {
+    const words = glossableWords([morph('だから', 'だから', '接続詞', 'so / therefore'), morph('紙', '紙', '名詞/普通名詞', 'paper', true)]);
+    expect(words.map((word) => word.expression)).toEqual(['だから', '紙']);
+    expect(words[0]!.glossOnly).toBe(true);
+  });
+
   it('drops them from the default list once most of the sentence is known, keeps them under "show all"', () => {
     const fresh = sentenceWordHelp(sentence, new Set());
     expect(fresh.newWords.map((word) => word.expression)).toEqual(['そっち', '迚も', 'つもり', '紙']);

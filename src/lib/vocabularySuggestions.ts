@@ -375,7 +375,8 @@ function computeSelectedByDefault(
  * Words that stay out of the vocabulary picker's defaults (or, for pronouns,
  * never were content) but still need a meaning shown while reading help is
  * high: pronouns (そっち, あなた), degree/discourse adverbs, kana-written
- * formal nouns, numerals and counters (二つ, 三人, 10月). Derived from the stored suggestion alone so it works on old
+ * formal nouns, conjunctions (だから, でも, それから) and numerals and counters
+ * (二つ, 三人, 10月). Derived from the stored suggestion alone so it works on old
  * sentences; never a study item, just a gloss.
  */
 export function isGlossOnlySuggestion(
@@ -393,6 +394,7 @@ export function isGlossOnlySuggestion(
   };
   return (
     suggestion.pos.startsWith('代名詞') ||
+    suggestion.pos.startsWith('接続詞') ||
     isNumeralOrCounterPos(suggestion.pos) ||
     isKanaWrittenFormalNoun(token, suggestion.reading) ||
     (isContentPos(suggestion.pos) && isFunctionAdverb(token))

@@ -2,6 +2,7 @@ import type { VocabularySuggestion } from '../domain/types';
 import { getBookSentencesForGlossing, updateSentenceVocabularySuggestions } from '../db/repository';
 import { runPool } from './assistChunks';
 import { glossWordsViaAssist } from './assistGlosses';
+import { isGlossOnlySuggestion } from './vocabularySuggestions';
 
 /**
  * Just-in-time glosses for the Reader's word help. The tokenizer never gives a
@@ -16,7 +17,8 @@ export function suggestionsNeedingGloss(
 ): VocabularySuggestion[] {
   const seen = new Set<string>();
   return suggestions.filter((item) => {
-    if (!item.selectedByDefault || item.english?.trim() || savedMeanings.get(item.expression)?.trim()) return false;
+    if (item.english?.trim() || savedMeanings.get(item.expression)?.trim()) return false;
+    if (!item.selectedByDefault && !isGlossOnlySuggestion(item)) return false;
     if (seen.has(item.expression)) return false;
     seen.add(item.expression);
     return true;
