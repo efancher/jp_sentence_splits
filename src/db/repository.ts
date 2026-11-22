@@ -340,6 +340,31 @@ export async function updateSentenceVocabularySuggestions(
 }
 
 /**
+ * Several sentences' suggestion lists in one local transaction, then one sync
+ * notification pass. A background fill that saves a sentence per assistant reply
+ * would otherwise queue a push cycle per sentence; saving a group lets the sync
+ * debounce collapse them into one. Returns how many sentences were written.
+ */
+export async function updateSentenceVocabularySuggestionsBatch(
+  updates: ReadonlyArray<{ sentenceId: string; suggestions: VocabularySuggestion[] }>,
+): Promise<number> {
+  if (updates.length === 0) return 0;
+  const db = getDb();
+  const timestamp = nowIso();
+  const written: Sentence[] = [];
+  await db.transaction('rw', db.sentences, async () => {
+    const existing = await db.sentences.bulkGet(updates.map((u) => u.sentenceId));
+    updates.forEach((update, index) => {
+      const row = existing[index];
+      if (row) written.push({ ...row, vocabularySuggestions: update.suggestions, updatedAt: timestamp });
+    });
+    await db.sentences.bulkPut(written);
+  });
+  notifySyncMany(written.map((sentence) => ({ entity: 'sentences' as const, recordId: sentence.id, payload: sentence })));
+  return written.length;
+}
+
+/**
  * Browser-triggered counterpart to the old Python/GitHub-Actions backfill
  * scripts (`scripts/backfill-vocabulary-suggestions.ts` only fills sentences
  * with *no* suggestions at all — see its doc comment). Re-derives

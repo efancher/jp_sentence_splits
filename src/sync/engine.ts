@@ -246,6 +246,16 @@ async function requeueAuthoredChecksOnce(): Promise<void> {
   if (rows.length > 0) syncLog('info', `Queued ${rows.length} analyses with authored checks`, 'REQUEUE_AUTHORED_CHECKS', { count: rows.length });
 }
 
+/** `" (sentences: 3, books: 1)"` — which entities a push cycle carries; empty for an empty queue. Exported for tests. */
+export function describePending(items: readonly SyncQueueItem[]): string {
+  if (items.length === 0) return '';
+  const counts = new Map<string, number>();
+  for (const item of items) counts.set(item.entity, (counts.get(item.entity) ?? 0) + 1);
+  const parts = [...counts].sort((a, b) => b[1] - a[1]).slice(0, 4).map(([entity, n]) => `${entity}: ${n}`);
+  const more = counts.size > 4 ? `, +${counts.size - 4} more` : '';
+  return ` (${parts.join(', ')}${more})`;
+}
+
 /** Returns a short failure summary when any queue item could not be pushed. Exported for tests. */
 export async function pushMutations(): Promise<string | undefined> {
   const supabase = getSupabase();
@@ -267,7 +277,7 @@ export async function pushMutations(): Promise<string | undefined> {
     syncLog('warn', `Collapsed ${collapsed} duplicate queue row(s)`, 'QUEUE_DEDUPE', { collapsed });
   }
   const pending = sortForPush(await listPendingMutations());
-  syncLog('debug', `Pushing ${pending.length} mutations`);
+  syncLog('debug', `Pushing ${pending.length} mutations${describePending(pending)}`);
   setPushPlan(pending.length);
 
   const ctx: PushCtx = { userId, failures: { count: 0 } };

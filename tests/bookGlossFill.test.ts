@@ -90,4 +90,25 @@ describe('book-wide gloss fill', () => {
     expect(glossWordsViaAssist).toHaveBeenCalledTimes(1);
     expect(result.cancelled).toBe(true);
   });
+
+  it('keeps buffered glosses when stopped before a full group', async () => {
+    glossWordsViaAssist.mockImplementation(async (_sentence: string, words: { expression: string }[]) =>
+      words.map((word) => ({ expression: word.expression, meaning: `gloss of ${word.expression}` })),
+    );
+    const result = await fillBookGlosses('b1', { isCancelled: () => glossWordsViaAssist.mock.calls.length >= 1 });
+    expect(result.filled).toBe(1);
+    expect(await countBookSentencesNeedingGloss('b1')).toBe(1);
+  });
+
+  it('writes a group of sentences in one batch and skips ones that no longer exist', async () => {
+    const { updateSentenceVocabularySuggestionsBatch } = await import('../src/db/repository');
+    const db = getDb();
+    const s1 = (await db.sentences.get('s1'))!;
+    const written = await updateSentenceVocabularySuggestionsBatch([
+      { sentenceId: 's1', suggestions: s1.vocabularySuggestions.map((item) => ({ ...item, english: 'kind' })) },
+      { sentenceId: 'gone', suggestions: [] },
+    ]);
+    expect(written).toBe(1);
+    expect((await db.sentences.get('s1'))!.vocabularySuggestions[0]!.english).toBe('kind');
+  });
 });

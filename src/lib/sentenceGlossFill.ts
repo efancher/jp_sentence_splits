@@ -1,5 +1,9 @@
 import type { VocabularySuggestion } from '../domain/types';
-import { getBookSentencesForGlossing, updateSentenceVocabularySuggestions } from '../db/repository';
+import {
+  getBookSentencesForGlossing,
+  updateSentenceVocabularySuggestions,
+  updateSentenceVocabularySuggestionsBatch,
+} from '../db/repository';
 import { runPool } from './assistChunks';
 import { glossWordsViaAssist } from './assistGlosses';
 import { isGlossOnlySuggestion } from './vocabularySuggestions';
@@ -42,17 +46,27 @@ type GlossableSentence = {
   vocabularySuggestions: readonly VocabularySuggestion[];
 };
 
-/** Ask the assistant for the sentence's missing glosses and persist them; true when any were saved. */
-async function glossSentence(sentence: GlossableSentence, savedMeanings: ReadonlyMap<string, string>): Promise<boolean> {
+/** Ask the assistant for the sentence's missing glosses; null when there is nothing to save. */
+async function glossedSuggestions(
+  sentence: GlossableSentence,
+  savedMeanings: ReadonlyMap<string, string>,
+): Promise<VocabularySuggestion[] | null> {
   const needing = suggestionsNeedingGloss(sentence.vocabularySuggestions, savedMeanings);
-  if (needing.length === 0) return false;
+  if (needing.length === 0) return null;
   const glosses = await glossWordsViaAssist(
     sentence.japanese,
     needing.map((item) => ({ expression: item.expression, reading: item.reading, surface: item.surface })),
   );
-  if (glosses.length === 0) return false;
+  if (glosses.length === 0) return null;
   const next = applyGlosses(sentence.vocabularySuggestions, glosses);
-  if (next.every((item, index) => item === sentence.vocabularySuggestions[index])) return false;
+  if (next.every((item, index) => item === sentence.vocabularySuggestions[index])) return null;
+  return next;
+}
+
+/** Ask the assistant for the sentence's missing glosses and persist them; true when any were saved. */
+async function glossSentence(sentence: GlossableSentence, savedMeanings: ReadonlyMap<string, string>): Promise<boolean> {
+  const next = await glossedSuggestions(sentence, savedMeanings);
+  if (!next) return false;
   await updateSentenceVocabularySuggestions(sentence.id, next);
   return true;
 }
@@ -80,6 +94,9 @@ export async function countBookSentencesNeedingGloss(bookId: string): Promise<nu
   const { sentences, savedMeanings } = await getBookSentencesForGlossing(bookId);
   return sentences.filter((sentence) => suggestionsNeedingGloss(sentence.vocabularySuggestions, savedMeanings).length > 0).length;
 }
+
+/** Sentences saved per write: one local transaction and one sync pass per group, not per sentence. */
+export const GLOSS_SAVE_BATCH = 10;
 
 export interface BookGlossResult {
   /** Sentences that had missing glosses at the start. */
@@ -109,21 +126,35 @@ export async function fillBookGlosses(
   const result: BookGlossResult = { total: pending.length, filled: 0, empty: 0, cancelled: false };
   const isCancelled = options.isCancelled ?? (() => false);
   let done = 0;
-  await runPool(
-    pending,
-    options.concurrency ?? 1,
-    async (sentence) => {
-      try {
-        if (await glossSentence(sentence, savedMeanings)) result.filled += 1;
-        else result.empty += 1;
-      } catch {
-        result.empty += 1;
-      }
-      done += 1;
-      options.onProgress?.(done, pending.length);
-    },
-    isCancelled,
-  );
+  let buffer: Array<{ sentenceId: string; suggestions: VocabularySuggestion[] }> = [];
+  const flush = async () => {
+    const batch = buffer;
+    buffer = [];
+    if (batch.length > 0) await updateSentenceVocabularySuggestionsBatch(batch);
+  };
+  try {
+    await runPool(
+      pending,
+      options.concurrency ?? 1,
+      async (sentence) => {
+        try {
+          const next = await glossedSuggestions(sentence, savedMeanings);
+          if (next) {
+            buffer.push({ sentenceId: sentence.id, suggestions: next });
+            result.filled += 1;
+            if (buffer.length >= GLOSS_SAVE_BATCH) await flush();
+          } else result.empty += 1;
+        } catch {
+          result.empty += 1;
+        }
+        done += 1;
+        options.onProgress?.(done, pending.length);
+      },
+      isCancelled,
+    );
+  } finally {
+    await flush();
+  }
   result.cancelled = isCancelled() && done < pending.length;
   return result;
 }
