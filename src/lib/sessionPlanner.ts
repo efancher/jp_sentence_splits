@@ -853,11 +853,13 @@ function buildShadowSteps(
   candidates: ShadowCandidate[],
   budgetMinutes: number,
   perItemMinutes: number,
+  chainMinutes: number = MODE_ACTIVITY_ESTIMATE_MINUTES.chunkChain,
 ): PlannerStepDraft[] {
   const steps: PlannerStepDraft[] = [];
   let remaining = budgetMinutes;
   for (const candidate of candidates) {
-    if (remaining < perItemMinutes) break;
+    const cost = candidate.phrase && candidate.chunkChain ? chainMinutes : perItemMinutes;
+    if (remaining < cost) break;
     steps.push({
       id: draftStepId(),
       bucket: 'shadowing',
@@ -872,7 +874,7 @@ function buildShadowSteps(
             ? `Shadow a phrase: ${candidate.phraseText}`
             : `Shadow a phrase from: ${candidate.label}`
         : `Shadow: ${candidate.label}`,
-      estimatedMinutes: perItemMinutes,
+      estimatedMinutes: cost,
       reason: candidate.phrase
         ? candidate.chunkChain
           ? `${candidate.reason} — build it up from the end, one phrase at a time, rating each step`
@@ -881,7 +883,7 @@ function buildShadowSteps(
       status: 'pending',
       ...(candidate.phrase ? { phrase: true } : {}),
     });
-    remaining -= perItemMinutes;
+    remaining -= cost;
   }
   return steps;
 }
@@ -1053,7 +1055,11 @@ export function buildRecommendedSession(input: SessionPlannerInput): Recommended
       glossing: exploreCeilingMinutes(input.exploreCandidates),
       // Nothing is drafted into the grammar bucket any more (Grammar checks ride in glossing).
       grammar: 0,
-      shadowing: input.shadowCandidates.length * MODE_ACTIVITY_ESTIMATE_MINUTES.shadowing,
+      shadowing: input.shadowCandidates.reduce(
+        (sum, candidate) =>
+          sum + (candidate.phrase && candidate.chunkChain ? MODE_ACTIVITY_ESTIMATE_MINUTES.chunkChain : MODE_ACTIVITY_ESTIMATE_MINUTES.shadowing),
+        0,
+      ),
       review: reviewCeiling,
     },
   });

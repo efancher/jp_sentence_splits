@@ -121,6 +121,10 @@ export const MODE_ACTIVITY_ESTIMATE_MINUTES = {
   // repeat a few times; 1.5 min badly undercounted it and let the bucket
   // balloon whenever spillover minutes had nowhere else to go (2026-08-27).
   shadowing: 3.5,
+  // A chunk chain climbs 3+ rungs (each a listen -> record -> self-rate, with repeats on Close),
+  // so it runs well past one whole-sentence rep; costed as such so the bucket doesn't overfill
+  // (2026-11-22, user: chains take longer than shadowing the full sentence).
+  chunkChain: 7,
   retain: 0.75,
   practice: 1.5,
   // pitch_accent_production (2026-09-24): record -> upload -> align -> score,
