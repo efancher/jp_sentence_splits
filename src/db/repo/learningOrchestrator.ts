@@ -31,6 +31,7 @@ import {
   readCheckReason,
   sentencesDueForReadCheck,
 } from '../../lib/readCheck';
+import { markedSurfacesIn } from '../../lib/markedWords';
 import { withoutResetWalkthroughs } from '../../lib/sentenceLearning';
 import {
   explainWeakWordSentences,
@@ -194,6 +195,7 @@ import { listSentenceLearningEvents } from './sentenceLearningEvents';
 import {
   listSentenceGrammarForPattern,
   chunkChainPlannedForSentence,
+  getActiveMarkedWords,
   suggestPhraseShadowForSentence,
 } from './grammarPatterns';
 import {
@@ -1773,8 +1775,21 @@ async function findShadowCandidates(
   const weakWords = await getWeakWordSentenceSignal(sentenceIdsWithAudio, PLANNER_STRENGTH_CACHE_MS);
   const weakRank = new Map(weakWords.order.map((id, rank) => [id, rank]));
 
+  // Sentences containing a word the learner marked as hard in a chunk chain (lib/markedWords.ts). Only
+  // read when a mark exists: finding them means scanning the sentence text.
+  const markedWords = await getActiveMarkedWords();
+  const markedBySentenceId = new Map<string, string>();
+  if (markedWords.length > 0) {
+    const rows = await db.sentences.bulkGet(sentenceIdsWithAudio);
+    rows.forEach((row, index) => {
+      const hit = row ? markedSurfacesIn(row.japanese, markedWords)[0] : undefined;
+      if (hit) markedBySentenceId.set(sentenceIdsWithAudio[index], hit);
+    });
+  }
+
   const ranked = sentenceIdsWithAudio
     .map((sentenceId) => ({
+      markedSurface: markedBySentenceId.get(sentenceId),
       sentenceId,
       attemptCount: attemptCountBySentenceId.get(sentenceId) ?? 0,
       requested: requestedSentenceIds.has(sentenceId),
@@ -1786,6 +1801,10 @@ async function findShadowCandidates(
     .sort((a, b) => {
       if (a.requested !== b.requested) return a.requested ? -1 : 1;
       if (a.shadowedToday !== b.shadowedToday) return a.shadowedToday ? 1 : -1;
+      // A marked word's sentences lead the rest, rotating through them: one still cooling down falls back.
+      const aMarked = Boolean(a.markedSurface) && !a.coolingDown;
+      const bMarked = Boolean(b.markedSurface) && !b.coolingDown;
+      if (aMarked !== bMarked) return aMarked ? -1 : 1;
       if (a.coolingDown !== b.coolingDown) return a.coolingDown ? 1 : -1;
       // Sentences covering the weakest words come next, in coverage order, ahead of the plain fewest-attempts fallback.
       if (a.weakRank !== b.weakRank) {
@@ -1810,6 +1829,8 @@ async function findShadowCandidates(
         label: candidate.sentence.japanese.slice(0, 24),
         reason: candidate.requested
           ? `You flagged the sound in review — ${shadowAttemptSummary(candidate.attemptCount).toLowerCase()}`
+          : candidate.markedSurface
+          ? `Has a word you marked as hard: ${candidate.markedSurface} — ${shadowAttemptSummary(candidate.attemptCount).toLowerCase()}`
           : weakLabels.length > 0
           ? `Practises words that haven't stuck: ${weakLabels.join('、')} — ${shadowAttemptSummary(candidate.attemptCount).toLowerCase()}`
           : shadowAttemptSummary(candidate.attemptCount),

@@ -1,7 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { getDb, logChunkChainRung, logChunkChainSummary, unlinkedPhraseSuggestions } from '../db/repository';
+import { getActiveMarkedWords, getDb, logChunkChainRung, logChunkChainSummary, setWordMarked, unlinkedPhraseSuggestions } from '../db/repository';
 import { cuttableWords, planChunkChain, rungsFromCutTimes, type ChainRung } from '../lib/chunkChain';
 import {
   COLD_PASS_SHARE,
@@ -12,6 +12,7 @@ import {
   type ChainSession,
 } from '../lib/chunkChainSession';
 import { createId } from '../lib/ids';
+import { markableSurfaces } from '../lib/markedWords';
 import { PHRASE_SHADOW_OUTCOMES, type PhraseShadowOutcome } from '../lib/phraseShadow';
 
 /**
@@ -83,6 +84,52 @@ export function ChunkChainPanel({
     },
     [sentenceId, currentText],
   );
+
+  // Words in this step the learner can mark as hard so phrase shadowing brings them back (lib/markedWords.ts).
+  const markable = useLiveQuery(
+    async () => {
+      if (!currentText) return [];
+      const sentence = await getDb().sentences.get(sentenceId);
+      return markableSurfaces(sentence?.vocabularySuggestions, currentText);
+    },
+    [sentenceId, currentText],
+  );
+  const markedNow = useLiveQuery(async () => new Set((await getActiveMarkedWords()).map((word) => word.surface)), [session, busy]);
+
+  async function toggleMark(surface: string, marked: boolean) {
+    if (!rungs || !session || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const rungNow = rungs[session.rungIndex]!;
+      await setWordMarked({
+        bookId,
+        sentenceId,
+        surface,
+        marked,
+        range: { startMs: rungNow.startMs, endMs: rungNow.endMs },
+        visitId: chainVisit.current,
+      });
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Unable to save that mark.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const markRow = markable?.length ? (
+    <div className="row" style={{ alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+      <span className="muted">Stuck on a word? Mark it to practise it again:</span>
+      {markable.map((surface) => {
+        const marked = markedNow?.has(surface) ?? false;
+        return (
+          <button key={surface} type="button" lang="ja" disabled={busy} aria-pressed={marked} onClick={() => void toggleMark(surface, !marked)} style={{ fontWeight: marked ? 700 : 400 }}>
+            {marked ? `✓ ${surface}` : surface}
+          </button>
+        );
+      })}
+    </div>
+  ) : null;
 
   const active = session !== null && !session.done;
   useEffect(() => {
@@ -334,6 +381,7 @@ export function ChunkChainPanel({
           ? 'Loop it and say it back until it feels easy, then tap Next. This first step is not rated.'
           : 'Loop it and shadow it, then say how it went.'}
       </p>
+      {markRow}
       {first ? (
         <div className="row">
           <button type="button" onClick={() => setSession(advanceFromFirstRung(session))}>Next</button>

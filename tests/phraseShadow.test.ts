@@ -9,6 +9,7 @@ import {
   getSessionPlannerInput,
   logChunkChainSummary,
   logPhraseShadow,
+  setWordMarked,
   setBookSentenceStatus,
   updateSettings,
 } from '../src/db/repository';
@@ -320,6 +321,35 @@ describe('logPhraseShadow and the shadowing pause', () => {
     });
     const aligned = await getSessionPlannerInput(60);
     expect(aligned.shadowCandidates.find((c) => c.sentenceId === sentence.id)?.phraseText).toContain('寝て');
+  });
+
+  it('a marked word pulls its sentences ahead and is the suggested phrase', async () => {
+    await updateSettings({ sentenceShadowingPaused: true });
+    const book = await createBook({ title: 'Marked' });
+    const plain = await shadowReadySentence(book, '雨が降っています。');
+    const target = await shadowReadySentence(book, '猫が寝ています。');
+    const db = getDb();
+    await db.sentences.update(target.sentence.id, {
+      vocabularySuggestions: [
+        { id: 't1', surface: '寝て', start: 2, end: 4, expression: '寝る', reading: 'ねる', pos: '動詞/一般', source: 'morphology', selectedByDefault: true },
+      ],
+    });
+    await db.referenceAlignments.put({
+      id: target.audioId, alignmentVersion: ALIGNMENT_VERSION, computedAt: new Date().toISOString(),
+      result: { durationSeconds: 2, words: words.map((w) => ({ ...w, phones: [] })) },
+    });
+    // The plain sentence has fewer attempts, so it would normally lead.
+    await db.attempts.add({ id: 'att1', sentenceId: target.sentence.id, createdAt: '2026-01-01T00:00:00.000Z' } as never);
+    const before = (await getSessionPlannerInput(60)).shadowCandidates.map((c) => c.sentenceId);
+    expect(before[0]).toBe(plain.sentence.id);
+
+    await setWordMarked({ bookId: book.id, sentenceId: plain.sentence.id, surface: '寝て', marked: true, visitId: 'v1' });
+    const after = (await getSessionPlannerInput(60)).shadowCandidates;
+    expect(after[0]).toMatchObject({ sentenceId: target.sentence.id });
+    expect(after[0].reason).toContain('寝て');
+    expect(after[0].phraseText).toContain('寝て');
+    // The mark credits no word and is not a phrase-shadow attempt.
+    expect(await db.reviews.count()).toBe(0);
   });
 
   it('a phrase step becomes a chunk chain when the cached alignment plans one', async () => {

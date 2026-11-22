@@ -79,6 +79,25 @@ describe('ChunkChainPanel', () => {
     expect(await getDb().reviews.count()).toBe(0);
   });
 
+  it('marks a word as hard from a step, and unmarks it, without crediting anything', async () => {
+    await seed();
+    const user = userEvent.setup();
+    render(<ChunkChainPanel bookId="b1" sentenceId="s1" sentenceAudioId="a1" onRange={vi.fn()} random={() => 1} />);
+    await user.click(await screen.findByRole('button', { name: 'Chunk chain' }));
+    const mark = await screen.findByRole('button', { name: '映画' });
+    expect(mark.getAttribute('aria-pressed')).toBe('false');
+    await user.click(mark);
+    await waitFor(() => expect(screen.getByRole('button', { name: '✓ 映画' }).getAttribute('aria-pressed')).toBe('true'));
+    let events = await getDb().sentenceLearningEvents.toArray();
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ action: 'phrase_shadow', outcome: 'needed_help', target: { key: 'marked-word:映画', label: '映画' } });
+    await user.click(screen.getByRole('button', { name: '✓ 映画' }));
+    await waitFor(async () => expect(await getDb().sentenceLearningEvents.count()).toBe(2));
+    events = await getDb().sentenceLearningEvents.toArray();
+    expect(events.map((event) => event.outcome).sort()).toEqual(['got_it', 'needed_help']);
+    expect(await getDb().reviews.count()).toBe(0);
+  });
+
   it('starts on its own for a daily-plan step, once: leaving it stays left', async () => {
     await seed();
     const user = userEvent.setup();

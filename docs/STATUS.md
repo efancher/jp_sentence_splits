@@ -128,6 +128,20 @@ and possible extensions. This snapshot does not certify a live deployment.
   Shadowing tool starts the chain on open (`chunkChainPlannedForSentence`,
   `ShadowWorkspace` `fromSessionStep`, `ChunkChainPanel` `autoStart`, once per clip;
   Stop chain falls back to the single phrase). Other phrase steps are unchanged.
+  2026-11-22: a chain step is costed `MODE_ACTIVITY_ESTIMATE_MINUTES.chunkChain` (7 min)
+  instead of the whole-sentence 3.5, in both the step drafts and the shadowing bucket
+  ceiling (chains were running well past their estimate). Marked words: in a chain step
+  the learner can mark a content word as hard ("Stuck on a word?"; `ChunkChainPanel`,
+  `src/lib/markedWords.ts`). A mark is a `phrase_shadow` event keyed `marked-word:<surface>`
+  (`needed_help` = marked, `got_it` = unmarked; no table or sync change, no word credit,
+  not a pronunciation attempt). `findShadowCandidates` ranks sentences containing an
+  active marked word ahead of the weak-word/fewest-attempts order (after requested and
+  shadowed-today; a sentence in the phrase cooldown falls back) and
+  `suggestPhraseShadow` picks the marked word before the weakest word. A mark retires
+  after Got it phrase/chain passes over the surface on two different days (any sentence);
+  marking again restarts the count. Scheduling only: nothing grades FSRS. Not
+  browser-verified; covered by `tests/markedWords.test.ts`, `phraseShadow.test.ts`,
+  `chunkChainPanel.test.tsx`, `sessionPlanner.test.ts`.
 - Phrase shadowing (2026-11-03, trial): after marking a span narrower than the clip on
   the Shadow pane, "How did this phrase go?" offers Not yet / Close / Got it, logged
   as a `phrase_shadow` `sentence_learning_events` row (`rangeStartMs`/`rangeEndMs`,

@@ -249,6 +249,20 @@ describe('buildRecommendedSession', () => {
     expect(steps.find((step) => step.sentenceId === 'single')?.label).toBe('Shadow a phrase: 雨です');
   });
 
+  it('a chunk chain step is costed above a whole-sentence shadow', () => {
+    const recentActivity: RecentActivityEvent[] = [{ mode: 'review', timestamp: daysAgo(0) }];
+    const shadowCandidates: ShadowCandidate[] = [
+      { sentenceId: 'chain', bookId: 'book_1', label: 'Chain sentence', reason: 'Ready', phrase: true, chunkChain: true },
+      { sentenceId: 'whole', bookId: 'book_1', label: 'Whole sentence', reason: 'Ready' },
+    ];
+    const steps = buildRecommendedSession(emptyPlannerInput({ recentActivity, shadowCandidates, totalMinutes: 60 })).steps.filter(
+      (step) => step.targetKind === 'shadow',
+    );
+    const chain = steps.find((step) => step.sentenceId === 'chain');
+    const whole = steps.find((step) => step.sentenceId === 'whole');
+    expect(chain?.estimatedMinutes).toBeGreaterThan(whole?.estimatedMinutes ?? Infinity);
+  });
+
   it('quiet mode: no shadow steps even with neglected shadowing, and the explanation says why', () => {
     const recentActivity: RecentActivityEvent[] = [
       { mode: 'review', timestamp: daysAgo(0) },

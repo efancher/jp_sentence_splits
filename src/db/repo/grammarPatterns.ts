@@ -55,6 +55,7 @@ import {
   normalizeGrammarPatternKey,
 } from '../../lib/grammarPatterns';
 import { createId } from '../../lib/ids';
+import { activeMarkedWords, markedSurfacesIn, markedWordKey, type MarkedWord } from '../../lib/markedWords';
 import { isolatedWordSpans } from '../../lib/isolatedWordRange';
 import { nowIso } from '../../lib/normalize';
 import { constructionChecked } from '../../lib/phraseConstruction';
@@ -750,6 +751,39 @@ export async function logChunkChainRung(input: {
   });
 }
 
+/** Words/phrases the learner marked as hard in a chunk chain and has not yet cleared with two Got it days. */
+export async function getActiveMarkedWords(): Promise<MarkedWord[]> {
+  const events = await getDb()
+    .sentenceLearningEvents.filter((event) => event.action === 'phrase_shadow')
+    .toArray();
+  return activeMarkedWords(events);
+}
+
+/** Marks (or unmarks) a word met in a chunk chain. Scheduling input only: no credit, no FSRS (see `lib/markedWords.ts`). */
+export async function setWordMarked(input: {
+  bookId: string;
+  chapterId?: string;
+  sentenceId: string;
+  surface: string;
+  marked: boolean;
+  range?: { startMs: number; endMs: number };
+  visitId: string;
+}): Promise<SentenceLearningEvent> {
+  const settings = await ensureSettings(getDb());
+  return logSentenceLearningEvent({
+    visitId: input.visitId,
+    action: 'phrase_shadow',
+    bookId: input.bookId,
+    chapterId: input.chapterId,
+    sentenceId: input.sentenceId,
+    target: { kind: 'expression', key: markedWordKey(input.surface), label: input.surface },
+    ...(input.range ? { rangeStartMs: Math.round(input.range.startMs), rangeEndMs: Math.round(input.range.endMs) } : {}),
+    outcome: input.marked ? 'needed_help' : 'got_it',
+    assessmentSource: 'self',
+    quietMode: settings.quietMode ?? false,
+  });
+}
+
 /** The sentence's content-word suggestions inside a phrase that no link covers (deduplicated by surface). */
 export function unlinkedPhraseSuggestions(sentence: Sentence | undefined, text: string, links: readonly SentenceVocabulary[]) {
   if (!text || !sentence) return [];
@@ -851,6 +885,18 @@ export async function suggestPhraseShadow(input: {
     const text = phraseTextFromAlignment(alignment.words, range, sentence.japanese);
     return text ? { ...range, text, wordLabel: '' } : null;
   };
+  // A word the learner marked as hard comes before the weakest-word pick (not when they tapped a specific word).
+  if (!input.surfaceForm) {
+    const marked = markedSurfacesIn(sentence.japanese, await getActiveMarkedWords());
+    for (const surface of marked) {
+      const spans = isolatedWordSpans(alignment.words, sentence.japanese, surface);
+      const span = spans?.withParticle ?? spans?.wordOnly;
+      if (!span) continue;
+      const range = snapToWords(expandToPhrase(alignment.words, span, input.clipDurationMs));
+      if (!isPhraseRange(range, input.clipDurationMs)) continue;
+      return { ...range, text: phraseTextFromAlignment(alignment.words, range, sentence.japanese), wordLabel: surface };
+    }
+  }
   const candidates = links.filter((link) => link.surfaceForm && (!input.surfaceForm || link.surfaceForm === input.surfaceForm));
   if (candidates.length === 0) {
     // No linked word (most sentences: nothing was confirmed). Not having flagged a word says nothing
