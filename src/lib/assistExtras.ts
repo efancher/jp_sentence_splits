@@ -17,7 +17,15 @@ import {
 } from './combinedImportPrompt';
 import { EPISODE_PREPARATION_VERSION } from './episodePreparation';
 import { formatGrammarPatternList, type GrammarPatternRef } from './grammarLinkReply';
-import { describeBad, findBadHandles, jsonObject, mergeRepair, stripFences, type BadHandle } from './assistRepair';
+import {
+  describeBad,
+  findBadHandles,
+  jsonObject,
+  mergeRepair,
+  salvageTruncatedWalkthroughs,
+  stripFences,
+  type BadHandle,
+} from './assistRepair';
 
 /** Small pieces keep each call far below the 100k-input-token price step and cheap to retry. */
 export const EXTRA_RANGE_SENTENCES = 10;
@@ -164,6 +172,15 @@ export function buildExtraPrompt(
     ...shown,
     '',
   ].join('\n');
+}
+
+/** Names the likely cause in the retry prompt when a JSON reply stopped before its closing braces. */
+function cutOffHint(task: ExtraTask, reply: string, problem: string): string {
+  const text = stripFences(reply);
+  const unclosed = text.startsWith('{') && !text.endsWith('}');
+  return task.kind === 'walkthroughs' && unclosed
+    ? 'The reply was cut off before the JSON ended — keep each sentence\'s walkthrough compact so every sentence fits.'
+    : problem;
 }
 
 /** Returns an error message when `reply` can't be used for `task`, else null. */
@@ -317,8 +334,15 @@ export async function runExtraTasks(input: {
           backend,
         });
         const problem = validateExtraReply(task, reply);
+        const salvaged = problem && task.kind === 'walkthroughs' ? salvageTruncatedWalkthroughs(reply) : null;
+        if (salvaged) {
+          // Cut off mid-reply: keep the finished sentences; the fix-up below re-asks for the rest.
+          accepted = salvaged;
+          input.onNote?.(`${label}: reply was cut off — kept the sentences that finished`);
+          break;
+        }
         if (problem) {
-          lastError = problem;
+          lastError = cutOffHint(task, reply, problem);
           input.onNote?.(`${label}: reply rejected (${problem}) — attempt ${attempt} of ${MAX_ATTEMPTS_PER_CHUNK}; reply began: ${replyHead(reply)}`);
           continue;
         }
@@ -372,14 +396,22 @@ export async function runExtraTasks(input: {
           buildExtraPrompt(repairTask, input.sentences, describeBad(bad), { grammarPatterns: input.grammarPatterns }),
           `${label}, fix-up ${round + 1}`,
         );
-        const problem = validateExtraReply(repairTask, reply);
+        let problem = validateExtraReply(repairTask, reply);
+        let repairReply = reply;
+        if (problem && task.kind === 'walkthroughs') {
+          const salvaged = salvageTruncatedWalkthroughs(reply);
+          if (salvaged) {
+            repairReply = salvaged;
+            problem = null;
+          }
+        }
         if (problem) {
           input.onNote?.(
             `${label}: fix-up for ${handles.length} sentence${handles.length === 1 ? '' : 's'} rejected (${problem})`,
           );
           continue;
         }
-        accepted = mergeRepair(task.kind, accepted, reply, new Set(handles));
+        accepted = mergeRepair(task.kind, accepted, repairReply, new Set(handles));
         input.onNote?.(`${label}: re-asked for ${handles.length} sentence${handles.length === 1 ? '' : 's'}`);
       } catch (err) {
         if (input.isCancelled()) {

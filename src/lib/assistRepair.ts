@@ -53,6 +53,43 @@ export function jsonObject(reply: string): Record<string, unknown> | null {
   }
 }
 
+/**
+ * A walkthroughs reply the model stopped writing partway through (output limit) can't be parsed at
+ * all. Keeps the sentence entries that were completed, as valid JSON, or null when none finished.
+ */
+export function salvageTruncatedWalkthroughs(reply: string): string | null {
+  const text = stripFences(reply);
+  const start = text.indexOf('{');
+  if (start < 0) return null;
+  let depth = 0;
+  let inString = false;
+  let lastEntryEnd = -1;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i]!;
+    if (inString) {
+      if (ch === '\\') i++;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === '{' || ch === '[') depth++;
+    else if (ch === '}' || ch === ']') {
+      depth--;
+      if (depth === 2) lastEntryEnd = i;
+    }
+  }
+  if (lastEntryEnd < 0) return null;
+  try {
+    const parsed = JSON.parse(`${text.slice(start, lastEntryEnd + 1)}}}`) as { walkthroughs?: unknown };
+    const entries = parsed.walkthroughs;
+    return entries && typeof entries === 'object' && !Array.isArray(entries) && Object.keys(entries).length > 0
+      ? JSON.stringify(parsed)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 export function coveredHandles(task: Pick<RepairTask, 'from' | 'to' | 'handles'>): number[] {
   if (task.handles) return task.handles;
   return Array.from({ length: task.to - task.from + 1 }, (_, i) => task.from + i);
