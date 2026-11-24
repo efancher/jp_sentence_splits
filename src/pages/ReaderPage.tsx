@@ -301,7 +301,8 @@ export function ReaderPage() {
           if (start < 0 || !surface) continue;
           found.push({
             patternId: pattern.id, name: pattern.canonicalName, shortMeaning: pattern.shortMeaning,
-            occurrenceExplanation: link.occurrenceExplanation, surface, start, end: start + surface.length,
+            occurrenceExplanation: link.occurrenceExplanation, structuralTemplate: pattern.structuralTemplate,
+            explanation: pattern.explanation, structuralNotes: pattern.structuralNotes, surface, start, end: start + surface.length,
           });
         }
         patternsBySentence.set(row.sentence.id, found.sort((a, b) => a.start - b.start));
@@ -719,6 +720,7 @@ export function ReaderPage() {
       <PatternFeedbackPanel
         key={`${tappedPattern.visitId}:${pattern.patternId}`}
         pattern={pattern}
+        sentence={{ id: sentence.id, japanese: sentence.japanese }}
         onRecord={(facet, outcome) => recordPatternFeedback(sentence.id, tappedPattern.visitId, pattern, facet, outcome)}
         onClose={() => setTappedPattern(undefined)}
       />

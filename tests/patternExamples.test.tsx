@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 
 import { PatternExamples } from '../src/components/PatternExamples';
 import type { GrammarEncounter } from '../src/db/repository';
-import { formsSeen, lineUpExamples, pickAnotherExample, splitAtSpan } from '../src/lib/grammarExamples';
+import { formsSeen, lineUpExamples, pickAnotherExample, pickOtherExamples, splitAtSpan } from '../src/lib/grammarExamples';
 
 const encounter = (
   id: string,
@@ -76,6 +76,23 @@ describe('pickAnotherExample', () => {
 
   it('gives nothing when the checked sentence is the only one with a span', () => {
     expect(pickAnotherExample([SHORT, encounter('s4', '短い。', {})], checked, new Set(['s4']))).toBeNull();
+  });
+});
+
+describe('pickOtherExamples', () => {
+  const current = { id: 's1', japanese: '窓が開いている。' };
+
+  it('skips the current sentence and copies of its text, puts studied sentences first, and caps the list', () => {
+    const copy = encounter('s1-copy', '窓が開いている。', { surfaceForm: '開いている', start: 2, end: 7 });
+    const ids = (limit: number, studied: string[]) =>
+      pickOtherExamples([SHORT, copy, SAME_FORM, LONG], current, new Set(studied), limit).map((example) => example.item.sentence.id);
+    expect(ids(5, [])).toEqual(['s3', 's2']);
+    expect(ids(5, ['s2'])).toEqual(['s2', 's3']);
+    expect(ids(1, [])).toEqual(['s3']);
+  });
+
+  it('gives an empty list when no other sentence has a span', () => {
+    expect(pickOtherExamples([SHORT, encounter('s4', '短い。', {})], current, new Set(), 3)).toEqual([]);
   });
 });
 

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 
-import { getGrammarCheckExample, getWordMeaningCheckTarget, pickGrammarCheckPatternId, type GrammarCheckExample } from '../db/repository';
+import { getGrammarCheckExample, getGrammarExamples, getWordMeaningCheckTarget, pickGrammarCheckPatternId, updateGrammarPattern, type GrammarCheckExample } from '../db/repository';
 import type { Sentence } from '../domain/types';
+import { explainGrammarPattern, type GrammarExplanationResult } from '../lib/grammarAssist';
 import { gradeDictation, typedAsKana } from '../lib/dictationAnswer';
 import { FOLLOW_UP_CAUSE_LABEL, FOLLOW_UP_LABEL, FOLLOW_UP_PURPOSE, type FollowUpCause, type FollowUpTool } from '../lib/followUpOffer';
 import type { TileDictation } from '../lib/earTiles';
@@ -375,6 +376,12 @@ export interface ReaderPattern {
   shortMeaning: string;
   /** What the construction does in this very sentence, when the link records it. */
   occurrenceExplanation?: string;
+  /** The pattern's shape, e.g. "[verb negative] + よりは + いい". */
+  structuralTemplate?: string;
+  /** Why the construction works: its parts and how they combine. */
+  explanation?: string;
+  /** Part-by-part breakdown, e.g. "わけ = reason, が marks it, ない = does not exist". */
+  structuralNotes?: string;
   surface: string;
   start: number;
   end: number;
@@ -387,15 +394,46 @@ export interface ReaderPattern {
  */
 export function PatternFeedbackPanel({
   pattern,
+  sentence,
   onRecord,
   onClose,
 }: {
   pattern: ReaderPattern;
+  /** The sentence being read, so "other sentences" never repeats it. */
+  sentence: { id: string; japanese: string };
   onRecord: (facet: 'spot' | 'use', outcome: ReaderToolOutcome) => void;
   onClose: () => void;
 }) {
   const [shown, setShown] = useState(false);
   const [given, setGiven] = useState<{ spot?: ReaderToolOutcome; use?: ReaderToolOutcome }>({});
+  const [examples, setExamples] = useState<GrammarCheckExample[] | 'loading' | undefined>();
+  // The stored explanation, or an AI draft the learner may keep. A draft is never saved without their say-so.
+  const [stored, setStored] = useState<{ explanation?: string; structuralNotes?: string }>({});
+  const [draft, setDraft] = useState<
+    { status: 'loading' } | { status: 'error'; reason: string } | { status: 'ready'; data: GrammarExplanationResult } | undefined
+  >();
+  const explanation = stored.explanation ?? pattern.explanation;
+  const structuralNotes = stored.structuralNotes ?? pattern.structuralNotes;
+  const askForDraft = () => {
+    setDraft({ status: 'loading' });
+    void explainGrammarPattern({ sentence: sentence.japanese, patternName: pattern.name }).then(
+      (result) => setDraft(result.ok ? { status: 'ready', data: result.data } : { status: 'error', reason: result.reason }),
+      () => setDraft({ status: 'error', reason: 'Grammar AI is unavailable right now.' }),
+    );
+  };
+  const keepDraft = (data: GrammarExplanationResult) => {
+    void updateGrammarPattern(pattern.patternId, { explanation: data.explanation, structuralNotes: data.structuralNotes }).then(
+      () => {
+        setStored({ explanation: data.explanation, structuralNotes: data.structuralNotes });
+        setDraft(undefined);
+      },
+      () => setDraft({ status: 'error', reason: 'Could not save the explanation.' }),
+    );
+  };
+  const loadExamples = () => {
+    setExamples('loading');
+    void getGrammarExamples(pattern.patternId, sentence).then(setExamples, () => setExamples([]));
+  };
   const record = (facet: 'spot' | 'use', outcome: ReaderToolOutcome) => {
     if (given[facet]) return;
     onRecord(facet, outcome);
@@ -424,10 +462,60 @@ export function PatternFeedbackPanel({
       {row('spot', 'Spotting it', 'saw it as a pattern')}
       {row('use', 'What it does', 'understood it here')}
       {shown ? (
-        <p style={{ margin: 0 }}>
-          <strong className="jp">{pattern.name}</strong>
-          {pattern.occurrenceExplanation || pattern.shortMeaning ? <> — {pattern.occurrenceExplanation || pattern.shortMeaning}</> : null}
-        </p>
+        <>
+          <p style={{ margin: 0 }}>
+            <strong className="jp">{pattern.name}</strong>
+            {pattern.occurrenceExplanation || pattern.shortMeaning ? <> — {pattern.occurrenceExplanation || pattern.shortMeaning}</> : null}
+          </p>
+          {pattern.structuralTemplate ? (
+            <p className="muted jp" style={{ margin: 0 }}>{pattern.structuralTemplate}</p>
+          ) : null}
+          {explanation || structuralNotes ? (
+            <div className="stack" style={{ gap: '0.1rem' }} role="group" aria-label="Why it works">
+              <span className="muted">Why it works</span>
+              {structuralNotes ? <span className="jp">{structuralNotes}</span> : null}
+              {explanation ? <span>{explanation}</span> : null}
+            </div>
+          ) : draft?.status === 'ready' ? (
+            <div className="stack" style={{ gap: '0.25rem' }} role="group" aria-label="Why it works (AI draft)">
+              <span className="muted">Why it works — AI draft, not verified</span>
+              {draft.data.structuralNotes ? <span className="jp">{draft.data.structuralNotes}</span> : null}
+              <span>{draft.data.explanation}</span>
+              <div className="row" style={{ gap: '0.4rem' }}>
+                <button type="button" onClick={() => keepDraft(draft.data)}>Save to this pattern</button>
+                <button type="button" onClick={() => setDraft(undefined)}>Discard</button>
+              </div>
+            </div>
+          ) : draft?.status === 'loading' ? (
+            <p className="muted" style={{ margin: 0 }}>Working out why it works…</p>
+          ) : (
+            <div className="stack" style={{ gap: '0.1rem' }}>
+              <div><button type="button" onClick={askForDraft}>Explain why it works</button></div>
+              {draft?.status === 'error' ? <span className="muted">{draft.reason}</span> : null}
+            </div>
+          )}
+          {examples === undefined ? (
+            <div><button type="button" onClick={loadExamples}>See it in other sentences</button></div>
+          ) : examples === 'loading' ? (
+            <p className="muted" style={{ margin: 0 }}>Looking for other sentences…</p>
+          ) : examples.length === 0 ? (
+            <p className="muted" style={{ margin: 0 }}>No other sentence with this pattern yet.</p>
+          ) : (
+            <div className="stack" style={{ gap: '0.5rem' }} role="group" aria-label="Other sentences with this pattern">
+              {examples.map((example) => (
+                <div key={example.sentenceId} className="stack" style={{ gap: '0.1rem' }}>
+                  <div className="jp">
+                    {example.parts.before}<mark>{example.parts.match}</mark>{example.parts.after}
+                  </div>
+                  {example.translation ? <div className="muted">{example.translation}</div> : null}
+                  {example.occurrenceExplanation ? (
+                    <div className="muted" style={{ fontSize: '0.85rem' }}>{example.occurrenceExplanation}</div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          )}
+        </>
       ) : (
         <div><button type="button" onClick={() => setShown(true)}>Show the pattern</button></div>
       )}

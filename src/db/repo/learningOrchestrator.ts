@@ -19,6 +19,7 @@ import { GRAMMAR_USE_KEY_PREFIX, grammarPatternStrengths } from '../../lib/gramm
 import { dueGrammarChecks, type GrammarCheckSentence } from '../../lib/grammarCheckSteps';
 import {
   pickAnotherExample,
+  pickOtherExamples,
   type ExampleParts,
 } from '../../lib/grammarExamples';
 import {
@@ -501,6 +502,26 @@ export async function getGrammarCheckExample(
     translation: example.item.sentence.translation || undefined,
     occurrenceExplanation: example.item.sentenceGrammar.occurrenceExplanation || undefined,
   };
+}
+
+/**
+ * Up to `limit` other sentences from the learner's books with the pattern, for the reader's "see it in other
+ * sentences" option (`pickOtherExamples`). Teaching only: nothing is logged or credited.
+ */
+export async function getGrammarExamples(
+  grammarPatternId: string,
+  current: { id: string; japanese: string },
+  limit = 3,
+): Promise<GrammarCheckExample[]> {
+  const encounters = await listSentenceGrammarForPattern(grammarPatternId);
+  if (encounters.length === 0) return [];
+  const introduced = await getIntroducedSentenceIds([...new Set(encounters.map((item) => item.sentence.id))]);
+  return pickOtherExamples(encounters, current, introduced, limit).map((example) => ({
+    sentenceId: example.item.sentence.id,
+    parts: example.parts,
+    translation: example.item.sentence.translation || undefined,
+    occurrenceExplanation: example.item.sentenceGrammar.occurrenceExplanation || undefined,
+  }));
 }
 
 /**

@@ -68,3 +68,24 @@ export function pickAnotherExample<T extends { sentenceGrammar: SentenceGrammar;
   );
   return others.find((example) => studiedSentenceIds.has(example.item.sentence.id)) ?? others[0] ?? null;
 }
+
+/**
+ * Up to `limit` other sentences with the pattern for the learner to browse: never the sentence being read (or a copy
+ * of its text), no two with the same text, already-studied sentences first, then the simplest.
+ */
+export function pickOtherExamples<T extends { sentenceGrammar: SentenceGrammar; sentence: { id: string; japanese: string } }>(
+  encounters: readonly T[],
+  current: { id: string; japanese: string },
+  studiedSentenceIds: ReadonlySet<string>,
+  limit: number,
+): LinedUpExample<T>[] {
+  const seen = new Set<string>([current.japanese]);
+  const others = lineUpExamples(encounters.filter((item) => item.sentence.id !== current.id)).filter(({ item }) => {
+    if (seen.has(item.sentence.japanese)) return false;
+    seen.add(item.sentence.japanese);
+    return true;
+  });
+  const studied = others.filter(({ item }) => studiedSentenceIds.has(item.sentence.id));
+  const rest = others.filter(({ item }) => !studiedSentenceIds.has(item.sentence.id));
+  return [...studied, ...rest].slice(0, limit);
+}

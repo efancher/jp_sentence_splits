@@ -314,6 +314,12 @@ and possible extensions. This snapshot does not certify a live deployment.
   not explained on screen when they judge), self-assessed; `buildGrammarEvidence` /
   `grammarStrength` (`src/lib/grammarEvidence.ts`) reuse the word-strength weights. Evidence only,
   not yet read by the planner or Home (next step).
+  Once the pattern is shown (2026-11-24) the panel also gives its template and a "Why it works"
+  block (the pattern's `structuralNotes` + `explanation`); a pattern with neither offers "Explain
+  why it works", an AI draft (`explainGrammarPattern`) saved to the pattern only on "Save to this
+  pattern". "See it in other sentences" lists up to three other sentences with the pattern, studied
+  ones first then simplest, highlighted and translated (`getGrammarExamples`). Teaching only: none
+  of it logs events or credits anything.
 - **Read checks and docked shadowing (2026-11-01).** The reader's 📖 Read check shows the
   sentence plain, reveals help and meaning on request, and logs the learner's own call as a
   `gist_check` event (no `Review`, no FSRS). `sentencesDueForReadCheck` (`src/lib/readCheck.ts`)

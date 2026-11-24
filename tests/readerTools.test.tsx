@@ -13,6 +13,12 @@ import { buildWordEvidence, meaningCheckTargetKey, readingFeedbackTargetKey } fr
 import { ReaderPage } from '../src/pages/ReaderPage';
 import { withAppProviders } from '../src/test/providers';
 
+const explainMock = vi.hoisted(() => vi.fn());
+vi.mock('../src/lib/grammarAssist', async (importActual) => ({
+  ...(await importActual<typeof import('../src/lib/grammarAssist')>()),
+  explainGrammarPattern: explainMock,
+}));
+
 const NOUN = '名詞/普通名詞/一般';
 const KAKU = '助詞/格助詞';
 const pieces: [string, string, boolean?][] = [
@@ -616,6 +622,58 @@ describe('reader study tools', () => {
     await user.click(screen.getByRole('button', { name: '猫' }));
     expect(await screen.findByRole('group', { name: 'Word feedback' })).toBeInTheDocument();
     expect(screen.queryByRole('group', { name: 'Grammar feedback' })).not.toBeInTheDocument();
+  });
+
+  it('explains why a tapped pattern works and, on request, shows it in other sentences with translations', async () => {
+    const db = getDb();
+    await seedMashita(new Date().toISOString());
+    await db.grammarPatterns.update('g-mashita', {
+      structuralTemplate: '[verb stem] + ました',
+      explanation: 'ます marks politeness and まし is its past stem, so the pair reads as polite past.',
+    });
+    const user = userEvent.setup();
+    renderReader();
+    await user.click(await screen.findByRole('button', { name: '食べ' }));
+    const panel = await screen.findByRole('group', { name: 'Grammar feedback' });
+    expect(panel).not.toHaveTextContent('polite past');
+    expect(within(panel).queryByRole('group', { name: 'Why it works' })).not.toBeInTheDocument();
+    expect(within(panel).queryByRole('button', { name: 'See it in other sentences' })).not.toBeInTheDocument();
+
+    await user.click(within(panel).getByRole('button', { name: 'Show the pattern' }));
+    expect(within(panel).getByRole('group', { name: 'Why it works' })).toHaveTextContent('past stem');
+    expect(panel).toHaveTextContent('[verb stem] + ました');
+
+    await user.click(within(panel).getByRole('button', { name: 'See it in other sentences' }));
+    const others = await within(panel).findByRole('group', { name: 'Other sentences with this pattern' });
+    expect(others).toHaveTextContent('犬が来ました。');
+    expect(others).toHaveTextContent('A dog came.');
+    expect(within(others).getByText('来ました').tagName).toBe('MARK');
+    // Browsing is teaching only: nothing is logged or credited.
+    expect(await db.sentenceLearningEvents.count()).toBe(0);
+    expect(await db.reviews.count()).toBe(0);
+  });
+
+  it('offers an AI explanation when a pattern has none, and saves it only when the learner keeps it', async () => {
+    const db = getDb();
+    await seedMashita(new Date().toISOString());
+    explainMock.mockResolvedValue({
+      ok: true,
+      data: { shortMeaning: 'polite past', structuralNotes: 'まし = past stem of ます', explanation: 'ます is the polite ending; まし + た makes it past.' },
+    });
+    const user = userEvent.setup();
+    renderReader();
+    await user.click(await screen.findByRole('button', { name: '食べ' }));
+    const panel = await screen.findByRole('group', { name: 'Grammar feedback' });
+    await user.click(within(panel).getByRole('button', { name: 'Show the pattern' }));
+    await user.click(within(panel).getByRole('button', { name: 'Explain why it works' }));
+    expect(explainMock).toHaveBeenCalledWith({ sentence: '私は猫が魚を食べました。', patternName: '〜ました' });
+    const draft = await within(panel).findByRole('group', { name: 'Why it works (AI draft)' });
+    expect(draft).toHaveTextContent('まし + た makes it past');
+    expect((await db.grammarPatterns.get('g-mashita'))?.explanation).toBeUndefined();
+
+    await user.click(within(draft).getByRole('button', { name: 'Save to this pattern' }));
+    expect(await within(panel).findByRole('group', { name: 'Why it works' })).toHaveTextContent('まし + た makes it past');
+    expect((await db.grammarPatterns.get('g-mashita'))?.explanation).toBe('ます is the polite ending; まし + た makes it past.');
   });
 
   it('closes the tool when another sentence is chosen', async () => {
