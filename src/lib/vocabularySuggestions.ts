@@ -447,6 +447,50 @@ export function suggestionFromToken(
   };
 }
 
+const NOUN_SUFFIX_POS = '接尾辞/名詞的';
+/** Honorific/plural suffixes: grammar-ish, never the start of a fused word. */
+const PERSON_SUFFIXES = new Set(['さん', 'ちゃん', 'くん', '君', '様', 'さま', 'たち', '達', 'ら', '方']);
+
+/**
+ * Stored-suggestion counterpart of `fuseNounSuffixRun`: collapses adjacent
+ * morphology 接尾辞/名詞的 entries (業 + 界) into one noun suggestion so
+ * sentences mined before the fusion existed pick it up. Gloss/accent of the
+ * pieces are dropped (they described a single suffix); the Reader refills
+ * the gloss just-in-time.
+ */
+function fuseStoredNounSuffixRuns(suggestions: VocabularySuggestion[]): VocabularySuggestion[] {
+  const isSuffix = (s: VocabularySuggestion | undefined) =>
+    s?.source === 'morphology' && s.pos === NOUN_SUFFIX_POS;
+  const out: VocabularySuggestion[] = [];
+  for (let i = 0; i < suggestions.length; i += 1) {
+    const first = suggestions[i]!;
+    if (!isSuffix(first) || PERSON_SUFFIXES.has(first.surface)) {
+      out.push(first);
+      continue;
+    }
+    let end = i + 1;
+    while (isSuffix(suggestions[end]) && suggestions[end]!.start === suggestions[end - 1]!.end) end += 1;
+    if (end - i < 2) {
+      out.push(first);
+      continue;
+    }
+    const run = suggestions.slice(i, end);
+    out.push({
+      id: createId('vsug'),
+      surface: run.map((r) => r.surface).join(''),
+      start: first.start,
+      end: run[run.length - 1]!.end,
+      expression: run.map((r) => r.expression).join(''),
+      reading: run.map((r) => r.reading).join(''),
+      pos: '名詞/普通名詞',
+      source: 'morphology',
+      selectedByDefault: false,
+    });
+    i = end - 1;
+  }
+  return out;
+}
+
 /**
  * Re-derives `selectedByDefault` on an already-tokenized sentence's stored
  * `vocabularySuggestions`, without re-tokenizing — every `selectedByDefault`
@@ -471,8 +515,9 @@ export function suggestionFromToken(
  * begin with.
  */
 export function recomputeSuggestionDefaults(
-  suggestions: VocabularySuggestion[],
+  stored: VocabularySuggestion[],
 ): VocabularySuggestion[] {
+  const suggestions = fuseStoredNounSuffixRuns(stored);
   return suggestions.map((suggestion, index) => {
     if (suggestion.source !== 'morphology') return suggestion;
     if (suggestion.pos.includes('+')) {
@@ -558,10 +603,6 @@ function numeralCounterSuggestion(
     selectedByDefault: false,
   };
 }
-
-const NOUN_SUFFIX_POS = '接尾辞/名詞的';
-/** Honorific/plural suffixes: grammar-ish, never the start of a fused word. */
-const PERSON_SUFFIXES = new Set(['さん', 'ちゃん', 'くん', '君', '様', 'さま', 'たち', '達', 'ら', '方']);
 
 /**
  * UniDic splits some ordinary words into bare noun-suffix pieces: 業界 →

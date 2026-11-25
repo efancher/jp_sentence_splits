@@ -399,9 +399,11 @@ export async function refreshVocabularySuggestionDefaults(): Promise<{
     const analysis = await db.analyses.get(sentence.id);
     if (analysis && analysis.vocabularySelections.length > 0) continue;
     const recomputed = recomputeSuggestionDefaults(sentence.vocabularySuggestions);
+    // Fusing suffix runs changes the array length, so compare by id: any
+    // new or flipped entry counts as changed.
+    const before = new Map(sentence.vocabularySuggestions.map((s) => [s.id, s.selectedByDefault]));
     const changed = recomputed.filter(
-      (suggestion, index) =>
-        suggestion.selectedByDefault !== sentence.vocabularySuggestions[index]!.selectedByDefault,
+      (suggestion) => before.get(suggestion.id) !== suggestion.selectedByDefault,
     ).length;
     if (changed === 0) continue;
     await updateSentenceVocabularySuggestions(sentence.id, recomputed);

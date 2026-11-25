@@ -659,6 +659,23 @@ describe('vocabularySuggestions', () => {
     });
   });
 
+  describe('noun-suffix fusion on stored suggestions', () => {
+    it('recomputeSuggestionDefaults fuses stored 業+界 and checks the result', () => {
+      const mk = (id: string, surface: string, start: number, reading: string, pos: string) => ({
+        id, surface, start, end: start + surface.length, expression: surface, reading, pos,
+        source: 'morphology' as const, selectedByDefault: false,
+      });
+      const out = recomputeSuggestionDefaults([
+        mk('a', '映画', 0, 'えいが', '名詞/普通名詞'),
+        mk('b', '業', 2, 'ぎょう', '接尾辞/名詞的'),
+        mk('c', '界', 3, 'かい', '接尾辞/名詞的'),
+        mk('d', 'は', 4, 'は', '助詞/係助詞'),
+      ]);
+      expect(out.map((s) => s.surface)).toEqual(['映画', '業界', 'は']);
+      expect(out[1]).toMatchObject({ start: 2, end: 4, reading: 'ぎょうかい', selectedByDefault: true });
+    });
+  });
+
   describe('numeral+counter fusion', () => {
     it('fuses a digit and an adjacent calendar-month counter into one suggestion', () => {
       const japanese = '10月に会う。';
