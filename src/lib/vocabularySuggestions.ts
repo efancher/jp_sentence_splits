@@ -559,6 +559,41 @@ function numeralCounterSuggestion(
   };
 }
 
+const NOUN_SUFFIX_POS = '接尾辞/名詞的';
+/** Honorific/plural suffixes: grammar-ish, never the start of a fused word. */
+const PERSON_SUFFIXES = new Set(['さん', 'ちゃん', 'くん', '君', '様', 'さま', 'たち', '達', 'ら', '方']);
+
+/**
+ * UniDic splits some ordinary words into bare noun-suffix pieces: 業界 →
+ * 業 + 界. Neither piece is content POS, so the word was never offered by
+ * default (映画業界 showed only 映画). Fuses a run of two or more adjacent
+ * 接尾辞/名詞的 tokens into one noun suggestion; a single suffix (日本人's 人,
+ * 〜化) and honorific/plural runs (さんたち) are left alone.
+ */
+function fuseNounSuffixRun(
+  tokens: MorphologyToken[],
+  index: number,
+  japanese: string,
+): { suggestion: VocabularySuggestion; consumed: number } | null {
+  const isSuffix = (t: MorphologyToken | undefined) => t?.pos?.trim() === NOUN_SUFFIX_POS;
+  const first = tokens[index];
+  if (!first || !isSuffix(first) || PERSON_SUFFIXES.has(first.surface)) return null;
+  let end = index + 1;
+  while (isSuffix(tokens[end]) && tokens[end]!.start === tokens[end - 1]!.end) end += 1;
+  if (end - index < 2) return null;
+  const run = tokens.slice(index, end);
+  const fused: MorphologyToken = {
+    surface: run.map((t) => t.surface).join(''),
+    start: run[0]!.start,
+    end: run[run.length - 1]!.end,
+    lemma: run.map((t) => t.lemma?.trim() || t.surface).join(''),
+    reading: run.map((t) => t.reading?.trim() ?? '').join(''),
+    pos: '名詞/普通名詞',
+  };
+  const suggestion = suggestionFromToken(fused, japanese, tokens[index - 1], tokens[index - 2]);
+  return suggestion ? { suggestion, consumed: run.length } : null;
+}
+
 export function suggestionsFromTokens(
   japanese: string,
   tokens: MorphologyToken[],
@@ -566,6 +601,12 @@ export function suggestionsFromTokens(
   const out: VocabularySuggestion[] = [];
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index]!;
+    const suffixRun = fuseNounSuffixRun(tokens, index, japanese);
+    if (suffixRun) {
+      out.push(suffixRun.suggestion);
+      index += suffixRun.consumed - 1;
+      continue;
+    }
     const nextToken = tokens[index + 1];
     if (nextToken && ALL_DIGITS_RE.test(token.surface)) {
       const fused = numeralCounterSuggestion(token, nextToken, japanese);

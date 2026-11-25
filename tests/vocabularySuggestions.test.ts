@@ -632,6 +632,33 @@ describe('vocabularySuggestions', () => {
     });
   });
 
+  describe('noun-suffix run fusion', () => {
+    it('fuses 業+界 into one default-checked 業界, but leaves さん alone', () => {
+      const japanese = '映画業界と皆さん。';
+      const suggestions = suggestionsFromTokens(japanese, [
+        { surface: '映画', start: 0, end: 2, lemma: '映画', reading: 'えいが', pos: '名詞/普通名詞' },
+        { surface: '業', start: 2, end: 3, lemma: '業', reading: 'ぎょう', pos: '接尾辞/名詞的' },
+        { surface: '界', start: 3, end: 4, lemma: '界', reading: 'かい', pos: '接尾辞/名詞的' },
+        { surface: 'と', start: 4, end: 5, lemma: 'と', reading: 'と', pos: '助詞/格助詞' },
+        { surface: '皆', start: 5, end: 6, lemma: '皆', reading: 'みな', pos: '名詞/普通名詞' },
+        { surface: 'さん', start: 6, end: 8, lemma: 'さん', reading: 'さん', pos: '接尾辞/名詞的' },
+        { surface: '。', start: 8, end: 9, lemma: '。', reading: '', pos: '補助記号/句点' },
+      ]);
+      expect(suggestions.find((s) => s.surface === '業界')).toMatchObject({
+        start: 2,
+        end: 4,
+        expression: '業界',
+        reading: 'ぎょうかい',
+        selectedByDefault: true,
+      });
+      expect(suggestions.some((s) => s.surface === '業')).toBe(false);
+      expect(suggestions.find((s) => s.surface === 'さん')?.selectedByDefault).toBe(false);
+      expect(
+        defaultSelectionsFromSuggestions(suggestions, japanese).map((s) => s.expression),
+      ).toEqual(['映画', '業界', '皆']);
+    });
+  });
+
   describe('numeral+counter fusion', () => {
     it('fuses a digit and an adjacent calendar-month counter into one suggestion', () => {
       const japanese = '10月に会う。';
