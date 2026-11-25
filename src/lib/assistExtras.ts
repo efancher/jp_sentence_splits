@@ -15,7 +15,7 @@ import {
   type CombinedReplySections,
   type ExtraKind,
 } from './combinedImportPrompt';
-import { EPISODE_PREPARATION_VERSION } from './episodePreparation';
+import { EPISODE_PREPARATION_VERSION, extractJson } from './episodePreparation';
 import { formatGrammarPatternList, type GrammarPatternRef } from './grammarLinkReply';
 import {
   describeBad,
@@ -183,6 +183,15 @@ function cutOffHint(task: ExtraTask, reply: string, problem: string): string {
     : problem;
 }
 
+function parseDetail(text: string): string {
+  try {
+    extractJson(text);
+    return 'not a JSON object';
+  } catch (err) {
+    return (err instanceof Error ? err.message : 'parse error').replace(/ Ask the AI.*$/, '');
+  }
+}
+
 /** Returns an error message when `reply` can't be used for `task`, else null. */
 export function validateExtraReply(task: ExtraTask, reply: string): string | null {
   const text = stripFences(reply);
@@ -205,7 +214,9 @@ export function validateExtraReply(task: ExtraTask, reply: string): string | nul
       const object = jsonObject(text);
       const value = object?.walkthroughs;
       if (!value || typeof value !== 'object' || Array.isArray(value)) {
-        return 'The reply was not the expected JSON with a "walkthroughs" object.';
+        return object
+          ? 'The reply was JSON but has no "walkthroughs" object.'
+          : `The reply was not valid JSON (${parseDetail(text)}).`;
       }
       return `S${task.to}` in value
         ? null

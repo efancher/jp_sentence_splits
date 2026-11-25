@@ -48,7 +48,9 @@ describe('validateExtraReply', () => {
   it('flags cut-off or non-JSON walkthroughs', () => {
     expect(validateExtraReply(walk!, '{"walkthroughs": {"S1": {}}}')).toMatch(/S6/);
     expect(validateExtraReply(walk!, '{"walkthroughs": {"S1": {}, "S6": {}}}')).toBeNull();
-    expect(validateExtraReply(walk!, 'sorry')).toMatch(/walkthroughs/);
+    expect(validateExtraReply(walk!, 'sorry')).toMatch(/not valid JSON \(No JSON/);
+    expect(validateExtraReply(walk!, '{"version": 1}')).toMatch(/no "walkthroughs" object/);
+    expect(validateExtraReply(walk!, '{"walkthroughs": {"S1": {"a": [}}')).toMatch(/not valid JSON \(.*JSON/);
   });
 
   it('wants the last sentence header for comprehension', () => {

@@ -75,7 +75,9 @@ export function describeStop(where: string, error: string, saved: string): strin
 /** The start of a rejected reply, one line, for the activity log (the reply itself isn't kept). */
 export function replyHead(reply: string, max = 160): string {
   const flat = reply.replace(/\s+/g, ' ').trim();
-  return flat ? `“${flat.length > max ? `${flat.slice(0, max)}…` : flat}” (${reply.length} chars)` : '(empty)';
+  if (!flat) return '(empty)';
+  const shown = flat.length > max ? `${flat.slice(0, max)}…${flat.slice(-80)}` : flat;
+  return `“${shown}” (${reply.length} chars)`;
 }
 
 export function otherFailures(failures: readonly unknown[]): string {
