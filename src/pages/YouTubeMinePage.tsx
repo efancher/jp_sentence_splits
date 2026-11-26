@@ -734,8 +734,10 @@ export function YouTubeMinePage() {
             path: `clips/${clip.sentenceId}.m4a`,
             mimeType: clip.audio.mimeType,
             durationMs: clip.audio.durationMs,
-            startMs: clip.startMs,
-            endMs: clip.endMs,
+            // The refined cut (forced-alignment snap) when the server moved it, so a later
+            // re-cut from source reproduces this clip rather than the loose caption span.
+            startMs: clip.subtitleStartMs,
+            endMs: clip.subtitleEndMs,
             blob,
           });
         }

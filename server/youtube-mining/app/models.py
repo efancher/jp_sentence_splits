@@ -399,6 +399,17 @@ class ClipAudioInfo(BaseModel):
     durationMs: int
 
 
+class BoundaryRefineInfo(BaseModel):
+    """Outcome of forced-alignment boundary refinement for one clip. `flags`
+    name why a clip deserves a human look (held-sound, stretched, ...)."""
+
+    status: Literal["refined", "unchanged", "skipped"]
+    flags: list[str] = []
+    shiftStartMs: int = 0
+    shiftEndMs: int = 0
+    reason: str | None = None
+
+
 class ClipResponse(BaseModel):
     sentenceId: str
     japanese: str
@@ -413,6 +424,7 @@ class ClipResponse(BaseModel):
     transcriptStatus: TranscriptStatus
     tokens: list[MorphemeToken] | None = None
     audio: ClipAudioInfo
+    boundaryRefine: BoundaryRefineInfo | None = None
 
 
 class CommitRow(BaseModel):

@@ -139,6 +139,17 @@ const clipResponseSchema = z.object({
     mimeType: z.literal('audio/mp4'),
     durationMs: z.number(),
   }),
+  /** Forced-alignment boundary refinement outcome (absent on older servers). */
+  boundaryRefine: z
+    .object({
+      status: z.enum(['refined', 'unchanged', 'skipped']),
+      flags: z.array(z.string()).default([]),
+      shiftStartMs: z.number().default(0),
+      shiftEndMs: z.number().default(0),
+      reason: z.string().nullable().optional(),
+    })
+    .nullable()
+    .optional(),
 });
 
 const commitResponseSchema = z.object({

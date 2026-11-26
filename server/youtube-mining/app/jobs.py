@@ -30,6 +30,7 @@ from pathlib import Path
 
 from app import (
     asr_client,
+    boundary_refine,
     clip,
     config,
     exit_node,
@@ -43,6 +44,7 @@ from app import (
     youtube,
 )
 from app.models import (
+    BoundaryRefineInfo,
     ClipAudioInfo,
     ClipRequest,
     ClipResponse,
@@ -650,8 +652,28 @@ def _clip_range(
 
     if media_duration_ms is None:
         media_duration_ms = clip.probe_duration_ms(job.source_audio_path)
+    refine_info: BoundaryRefineInfo | None = None
+    if config.REFINE_BOUNDARIES:
+        refined = boundary_refine.refine_span(
+            job.source_audio_path,
+            req.japanese,
+            start_ms,
+            end_ms,
+            media_duration_ms=media_duration_ms,
+        )
+        refine_info = BoundaryRefineInfo(
+            status=refined.status,
+            flags=refined.flags,
+            shiftStartMs=refined.shift_start_ms,
+            shiftEndMs=refined.shift_end_ms,
+            reason=refined.reason,
+        )
+        # `start_ms`/`end_ms` stay the *requested* span; only the cut moves.
+        cut_start, cut_end = refined.start_ms, refined.end_ms
+    else:
+        cut_start, cut_end = start_ms, end_ms
     subtitle_start, subtitle_end, adjusted_start, adjusted_end = clip.compute_boundaries(
-        start_ms, end_ms, media_duration_ms=media_duration_ms
+        cut_start, cut_end, media_duration_ms=media_duration_ms
     )
 
     sentence_id = f"sentence-{job.next_sentence_seq:03d}-{uuid.uuid4().hex[:6]}"
@@ -676,6 +698,7 @@ def _clip_range(
         transcriptStatus=req.transcriptStatus,
         tokens=tokens or None,
         audio=ClipAudioInfo(durationMs=duration_ms),
+        boundaryRefine=refine_info,
     )
 
 

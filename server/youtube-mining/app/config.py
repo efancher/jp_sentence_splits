@@ -113,6 +113,10 @@ ASR_CLIP_TIMEOUT_SECONDS = float(
 # than ASR_CLIP_TIMEOUT_SECONDS but nowhere near ASR_TIMEOUT_SECONDS's
 # long-form scale.
 ALIGN_TIMEOUT_SECONDS = float(os.environ.get("MINING_ALIGN_TIMEOUT_SECONDS", "120"))
+# Refine each committed clip's cut points by forced-aligning its text against
+# a padded window (app/boundary_refine.py). Degrades to the original cut when
+# the aligner is unreachable; set to 0 to disable.
+REFINE_BOUNDARIES = os.environ.get("MINING_REFINE_BOUNDARIES", "1") != "0"
 # An ASR segment is flagged low-confidence (→ review UI marks it) when its
 # mean token log-prob is below this or its no-speech probability is above the
 # next one. Whisper's typical clean-speech avg_logprob is ~-0.25 to -0.4.
