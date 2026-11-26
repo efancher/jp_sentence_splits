@@ -50,6 +50,13 @@ describe('known set and unknown lemmas', () => {
     expect([...known].sort()).toEqual([lemmaKey('傘', 'かさ'), lemmaKey('雨', 'あめ')].sort());
   });
 
+  it('counts a repeated line once, so a word met in only one context is not known yet', () => {
+    const repeated = [[tok('雨', 'あめ'), tok('降る', 'ふる')], [tok('降る', 'ふる'), tok('雨', 'あめ')]];
+    expect(buildKnownLemmaSet(repeated, [], 2).size).toBe(0);
+    const varied = [...repeated, [tok('雨', 'あめ'), tok('止む', 'やむ')]];
+    expect([...buildKnownLemmaSet(varied, [], 2)]).toEqual([lemmaKey('雨', 'あめ')]);
+  });
+
   it('reports unknown content lemmas and ignores function words', () => {
     const known = buildKnownLemmaSet(introduced);
     const candidate = [tok('雨', 'あめ'), tok('は', 'は', false), tok('止む', 'やむ'), tok('傘', 'かさ')];

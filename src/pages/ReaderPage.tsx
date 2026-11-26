@@ -48,7 +48,8 @@ import { SentenceWalkthrough, walkthroughChunks } from '../components/SentenceWa
 import { glossesFromWords } from '../lib/chunkGlosses';
 import { mergeChapterConstructionDrafts, mergeChapterWalkthroughs } from '../lib/contextWalkthrough';
 import { WordGlossList, type CompareAids } from '../components/TargetLessonCard';
-import { ensureDefaultBookChapter, getDb, getEpisodeFocus, getSavedWordStatus, getReaderEvidenceLevels, getStrengthKnownExpressions, readRowsByKeys, readSentenceAudioForSentences, listSentenceLearningEvents, logGlossDecision, logSentenceLearningEvent, resetSentenceWalkthrough, ensureVocabularyItem, getWordMeaningCheckTarget, getReadingCheckTarget, READER_STRENGTH_CACHE_MS, readSettings, updateSettings, withoutUnseenAiLinks } from '../db/repository';
+import { ensureDefaultBookChapter, getDb, getEpisodeFocus, getSavedWordStatus, getReaderEvidenceLevels, getStrengthKnownExpressions, readRowsByKeys, readSentenceAudioForSentences, listSentenceLearningEvents, logGlossDecision, logSentenceLearningEvent, resetSentenceWalkthrough, ensureVocabularyItem, getWordMeaningCheckTarget, getReadingCheckTarget, READER_STRENGTH_CACHE_MS, readSettings, updateSettings, withoutUnseenAiLinks, loadOtherWordContexts } from '../db/repository';
+import type { WordContext } from '../lib/wordContexts';
 import { registerReportContext } from '../lib/reportContext';
 import type { BookSentence, Sentence, SentenceAudio, StructureDraftChunk, TextDisplayMode } from '../domain/types';
 import { useNativeAudio } from '../hooks/useNativeAudio';
@@ -171,6 +172,14 @@ export function ReaderPage() {
   const [tappedPattern, setTappedPattern] = useState<{ sentenceId: string; patternId: string; visitId: string } | undefined>();
   /** Per-sentence override of the default word help: show every word, or none. */
   const [wordHelpOverride, setWordHelpOverride] = useState<Map<string, 'all' | 'none'>>(() => new Map());
+  /** Other studied sentences carrying a sentence's listed words, loaded when the learner asks ('loading' while reading). */
+  const [otherContexts, setOtherContexts] = useState<Map<string, 'loading' | Map<string, WordContext[]>>>(() => new Map());
+  function showOtherContexts(sentenceId: string, expressions: readonly string[]) {
+    setOtherContexts((prev) => new Map(prev).set(sentenceId, 'loading'));
+    void loadOtherWordContexts(sentenceId, expressions)
+      .then((found) => setOtherContexts((prev) => new Map(prev).set(sentenceId, found)))
+      .catch(() => setOtherContexts((prev) => { const next = new Map(prev); next.delete(sentenceId); return next; }));
+  }
   const rowRefs = useRef<Array<HTMLDivElement | null>>([]);
   const [chapterMode, setChapterMode] = useState(() => {
     try { return localStorage.getItem(READER_LAYOUT_KEY) !== 'original'; } catch { return true; }
@@ -1556,7 +1565,38 @@ export function ReaderPage() {
                           {override ? (
                             <button type="button" onClick={() => setOverride(undefined)}>Reset</button>
                           ) : null}
+                          {shown.length > 0 && !otherContexts.has(row.sentence.id) ? (
+                            <button type="button" onClick={() => showOtherContexts(row.sentence.id, shown.map((word) => word.expression))}>
+                              More sentences with these words
+                            </button>
+                          ) : null}
                         </span>
+                        {(() => {
+                          const found = otherContexts.get(row.sentence.id);
+                          if (!found) return null;
+                          if (found === 'loading') return <span className="muted" style={{ fontSize: '0.8em' }}>Looking…</span>;
+                          const withContexts = shown.filter((word) => (found.get(word.expression) ?? []).length > 0);
+                          if (withContexts.length === 0) {
+                            return <span className="muted" style={{ fontSize: '0.8em' }}>No other studied sentences use these words yet.</span>;
+                          }
+                          return (
+                            <ul className="muted" aria-label="Other sentences with these words" style={{ margin: 0, paddingLeft: '1.1rem', fontSize: '0.85em' }}>
+                              {withContexts.map((word) => (
+                                <li key={word.expression}>
+                                  <span className="jp">{word.expression}</span>
+                                  <ul style={{ margin: 0, paddingLeft: '1rem' }}>
+                                    {found.get(word.expression)!.map((context) => (
+                                      <li key={context.sentenceId}>
+                                        <span className="jp">{context.japanese}</span>
+                                        {context.translation ? <div>{context.translation}</div> : null}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </li>
+                              ))}
+                            </ul>
+                          );
+                        })()}
                       </div>
                     );
                   })()}

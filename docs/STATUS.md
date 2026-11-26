@@ -86,8 +86,15 @@ and possible extensions. This snapshot does not certify a live deployment.
   the membership table's row order, so same-episode runs can still appear.
   Shaky-words-first (2026-11-19): among sentences with nothing new (strict step 1, and the all-known tier of
   the non-strict order) those carrying known words whose reading strength is below the reader's known line
-  (`loadWeakKnownLemmas`; unseen words don't count) are served first, shakiest first. Never jumps ahead of a
+  (`loadWeakKnownLemmas`) are served first, shakiest first. Never jumps ahead of a
   sentence that adds a new piece.
+  Context diversity (2026-11-26): a word needs `WORD_MIN_EXPOSURES` introduced sentences with different content-word
+  sets (`contextSignature`) to count as known, so a line repeated across episodes (podcast intros) counts once; a
+  known word with no evidence at all (met in sentences only, no vocabulary item or checks) counts as mildly weak
+  (`UNCHECKED_WORD_DEFICIT` 0.3) instead of being left out. Reader word help has "More sentences with these words"
+  (`loadOtherWordContexts`/`pickOtherContexts`, on tap): up to two already-introduced sentences per listed word with a
+  different context, shortest first, with translations; read-only, no evidence or scheduling. The exposure term in
+  `wordStrength` still counts distinct sentence ids, not contexts.
 - "Fresh try" revisits: automatic ones (parked checks, spaced schedule) are capped
   at `EXPLORE_REVISITS_PER_BOOK` per book per plan, counted after sentences in
   suspended episodes are dropped and only while that book has new lessons waiting

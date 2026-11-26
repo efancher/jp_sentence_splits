@@ -92,6 +92,7 @@ export * from './repo/wordReadingStrengths';
 export * from './repo/sentenceLearningEvents';
 export * from './repo/sequentialUnlocks';
 export * from './repo/contextSentences';
+export * from './repo/wordContexts';
 export * from './repo/reviewScheduling';
 export * from './repo/grammarPatterns';
 import {

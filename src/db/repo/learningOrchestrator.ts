@@ -881,16 +881,21 @@ async function loadCuratedGrammar(
 
 /**
  * Known lemmas that still read as shaky: some reading/meaning evidence, strength below the reader's known line.
- * Maps lemma key → deficit. A known word with no evidence yet is unseen, not weak, so it is left out.
+ * Maps lemma key → deficit. A known word with no evidence at all (met in sentences only, never checked or linked
+ * to a vocabulary item) counts as mildly weak (`UNCHECKED_WORD_DEFICIT`, under the deficit of any word that has
+ * been checked and missed), so it still earns a revisit in a new sentence.
  * Used to serve all-known sentences carrying such words first (`orderByIPlusOne`).
  */
+const UNCHECKED_WORD_DEFICIT = 0.3;
+
 async function loadWeakKnownLemmas(known: ReadonlySet<string>): Promise<Map<string, number>> {
   const { strengthByWord, vocabByLemma } = await loadWordReadingStrengths(READER_STRENGTH_CACHE_MS);
   const weak = new Map<string, number>();
   for (const key of known) {
     const item = vocabByLemma.get(key);
     const strength = item ? strengthByWord.get(item.id) : undefined;
-    if (strength !== undefined && strength < READER_KNOWN_STRENGTH) weak.set(key, READER_KNOWN_STRENGTH - strength);
+    if (strength === undefined) weak.set(key, UNCHECKED_WORD_DEFICIT);
+    else if (strength < READER_KNOWN_STRENGTH) weak.set(key, READER_KNOWN_STRENGTH - strength);
   }
   return weak;
 }

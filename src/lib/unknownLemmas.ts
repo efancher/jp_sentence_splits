@@ -32,10 +32,19 @@ export function sentenceContentLemmas(suggestions: readonly LemmaSource[] | unde
 }
 
 /**
+ * A sentence's "context": its sorted content lemmas. Sentences with the same set (a podcast intro repeated in every
+ * episode, the same line imported twice) are one context for exposure counting: meeting a word in the same line
+ * again teaches nothing about the word in a new setting.
+ */
+export function contextSignature(suggestions: readonly LemmaSource[] | undefined): string {
+  return sentenceContentLemmas(suggestions).sort().join('\n');
+}
+
+/**
  * Lemmas the learner has met: the content words of every introduced sentence
  * (`getIntroducedSentenceIds`), plus any extra keys the caller already trusts
- * (e.g. confirmed vocabulary items). With `minExposures` above 1 a lemma met in fewer introduced sentences stays
- * unknown unless it is an extra key.
+ * (e.g. confirmed vocabulary items). With `minExposures` above 1 a lemma must be met in that many distinct
+ * contexts (`contextSignature`) to count; repeats of one line stay unknown unless it is an extra key.
  */
 export function buildKnownLemmaSet(
   introducedSentences: Iterable<readonly LemmaSource[] | undefined>,
@@ -43,11 +52,16 @@ export function buildKnownLemmaSet(
   minExposures: number = 1,
 ): Set<string> {
   const known = new Set<string>(extraKnownKeys);
-  const sightings = new Map<string, number>();
+  const contexts = new Map<string, Set<string>>();
   for (const suggestions of introducedSentences) {
-    for (const key of sentenceContentLemmas(suggestions)) sightings.set(key, (sightings.get(key) ?? 0) + 1);
+    const signature = contextSignature(suggestions);
+    for (const key of sentenceContentLemmas(suggestions)) {
+      const seen = contexts.get(key);
+      if (seen) seen.add(signature);
+      else contexts.set(key, new Set([signature]));
+    }
   }
-  for (const [key, count] of sightings) if (count >= minExposures) known.add(key);
+  for (const [key, seen] of contexts) if (seen.size >= minExposures) known.add(key);
   return known;
 }
 

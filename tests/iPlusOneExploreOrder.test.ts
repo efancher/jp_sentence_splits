@@ -42,12 +42,12 @@ async function lessonOrder(): Promise<string[]> {
   return (await lessonSteps()).map((step) => step.sentenceId!);
 }
 
-/** Two finished sentences (so 猫 and 犬 are known: a word needs two sightings) then three new ones, in reading order hard -> i+1 -> all-known. */
+/** Two finished sentences (so 猫 and 犬 are known: a word needs two sightings in different sentences) then three new ones, in reading order hard -> i+1 -> all-known. */
 async function seed(): Promise<void> {
   const book = await createBook({ title: 'i+1 Book' });
   const rows = [
     sentenceOf('done', ['猫', '犬']),
-    sentenceOf('done2', ['猫', '犬']),
+    sentenceOf('done2', ['猫', '犬', '鳥']),
     sentenceOf('hard', ['雨', '傘', '風', '雲']),
     sentenceOf('i1', ['猫', '空']),
     sentenceOf('easy', ['猫', '犬']),
@@ -202,7 +202,7 @@ describe('walkthrough supply: i+1 ordering (settings.iPlusOneOrdering)', () => {
     const book = await createBook({ title: 'Ready Book' });
     const rows = [
       sentenceOf('done', ['猫', '犬']),
-      sentenceOf('done2', ['猫', '犬']),
+      sentenceOf('done2', ['猫', '犬', '鳥']),
       sentenceOf('hard', ['雨', '傘', '風', '雲']),
       sentenceOf('i1', ['猫', '空']),
       sentenceOf('easy', ['猫', '犬']),
@@ -223,7 +223,7 @@ describe('walkthrough supply: i+1 ordering (settings.iPlusOneOrdering)', () => {
     const book = await createBook({ title: 'Grammar Book' });
     const rows = [
       sentenceOf('done', ['猫', '犬']),
-      sentenceOf('done2', ['猫', '犬']),
+      sentenceOf('done2', ['猫', '犬', '鳥']),
       sentenceOf('x', ['猫', '空']),
       sentenceOf('y', ['猫', '雲']),
       sentenceOf('z', ['猫', '犬']),
@@ -278,7 +278,7 @@ describe('walkthrough supply: strict i+1 (settings.iPlusOneStrict)', () => {
     const book = await createBook({ title: 'Strict' });
     const rows = [
       sentenceOf('done', ['猫', '犬']),
-      sentenceOf('done2', ['猫', '犬']),
+      sentenceOf('done2', ['猫', '犬', '鳥']),
       sentenceOf('sea', ['猫', '海']),
       sentenceOf('sky-1', ['猫', '空']),
       sentenceOf('rain', ['犬', '雨']),
@@ -298,7 +298,7 @@ describe('walkthrough supply: strict i+1 (settings.iPlusOneStrict)', () => {
     const book = await createBook({ title: 'Top-up' });
     const rows = [
       sentenceOf('done', ['猫', '犬']),
-      sentenceOf('done2', ['猫', '犬']),
+      sentenceOf('done2', ['猫', '犬', '鳥']),
       sentenceOf('sky', ['猫', '空']),
       ...Array.from({ length: 30 }, (_, i) => sentenceOf(`sea-${i}`, ['猫', '海', `新${i}`])),
       sentenceOf('sky-sea', ['空', '海']),
