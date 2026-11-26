@@ -1545,8 +1545,8 @@ export function ReaderPage() {
                             : override === 'none'
                               ? 'Word help hidden. '
                               : help.newWords.length > 0
-                                ? `${help.unknownCount} of ${help.total} words are new to you. `
-                                : 'You know these words. '}
+                                ? `${help.unknownCount} of ${help.total} words you don't know well yet. `
+                                : 'You know these words well. '}
                           {override !== 'all' && help.allWords.length > shown.length ? (
                             <button type="button" onClick={() => setOverride('all')}>Show all words</button>
                           ) : null}{' '}
