@@ -118,9 +118,14 @@ export function detectableSegments(entry: ReferencePattern): string[][] {
       alternatives.push(segments);
     }
   }
-  // Short entries measured as precise enough (see SHORT_LITERAL_FORMS) are detected by their fixed text anyway.
-  const shortForms = alternatives.length === 0 && entry.id ? SHORT_LITERAL_FORMS[entry.id] : undefined;
-  if (shortForms) return shortForms.map((form) => [form]);
+  // Short forms measured as precise enough (see SHORT_LITERAL_FORMS) are detected by their fixed text anyway, even
+  // when another alternative of the same entry (けれども next to けど) is already long enough.
+  const shortForms = entry.id ? SHORT_LITERAL_FORMS[entry.id] : undefined;
+  if (shortForms) {
+    for (const form of shortForms) {
+      if (!alternatives.some((segments) => segments.join('〜') === form)) alternatives.push([form]);
+    }
+  }
   return alternatives;
 }
 

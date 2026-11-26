@@ -162,4 +162,12 @@ describe('buildGrammarDetector', () => {
     // Unmeasured particle-sized entries stay undetected.
     expect(short('日本とは違う')).toEqual([]);
   });
+
+  it('detects 〜けど / 〜けれど even though only けれども is long enough to spell out', () => {
+    const detect = buildGrammarDetector([{ id: 'kedo-keredomo', pattern: '〜けど / 〜けれども' }]);
+    expect(detect('いるけどね、まだ全然人たくさんいますけどね。')).toEqual(['kedo-keredomo']);
+    expect(detect('高いけれど買う')).toEqual(['kedo-keredomo']);
+    expect(detect('高いけれども買う')).toEqual(['kedo-keredomo']);
+    expect(detect('高いから買わない')).toEqual([]);
+  });
 });

@@ -35,6 +35,8 @@ export const SHORT_LITERAL_FORMS: Readonly<Record<string, readonly string[]>> = 
   shidai: ['次第'],
   'baai-wa': ['場合'],
   'muki-muke': ['向き', '向け'],
+  // 〜けど is a clause-final conjunctive particle; けれど (3 characters) is not spelled out in the entry's text.
+  'kedo-keredomo': ['けど', 'けれど'],
 };
 
 export const DETECTION_GUARDS: Readonly<Record<string, DetectionGuard>> = {
