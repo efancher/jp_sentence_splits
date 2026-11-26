@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import { setSentenceAudioTrimRange } from '../db/repository';
+import { reportAudioAlignmentIssue, setSentenceAudioTrimRange } from '../db/repository';
 import type { SentenceAudio } from '../domain/types';
 import { useJapaneseSpeech } from '../hooks/useJapaneseSpeech';
 import { useNativeAudio } from '../hooks/useNativeAudio';
@@ -21,6 +21,8 @@ interface NativeAudioButtonProps {
   iconOnly?: boolean;
   /** Show a "Loop" toggle; when on, playback repeats until stopped. */
   loopable?: boolean;
+  /** Hide the "Report" button that files this clip as misaligned with its text. */
+  hideReport?: boolean;
 }
 
 export function NativeAudioButton({
@@ -31,6 +33,7 @@ export function NativeAudioButton({
   hideAdjust = false,
   iconOnly = false,
   loopable = false,
+  hideReport = false,
 }: NativeAudioButtonProps) {
   const native = useNativeAudio();
   const speech = useJapaneseSpeech();
@@ -38,6 +41,7 @@ export function NativeAudioButton({
   const [editing, setEditing] = useState(false);
   const [loop, setLoop] = useState(false);
   const sourceUrl = useClipSourceUrl(audio);
+  const [reported, setReported] = useState<'idle' | 'filed' | 'already'>('idle');
 
   const hasOverride = audio.trimStartMs != null && audio.trimEndMs != null;
   const editRange: TimeRangeMs = hasOverride
@@ -89,6 +93,32 @@ export function NativeAudioButton({
         ) : canAdjust ? (
           <button type="button" aria-expanded={editing} onClick={() => setEditing((open) => !open)}>
             {editing ? 'Close' : hasOverride ? 'Adjusted' : 'Adjust'}
+          </button>
+        ) : null}
+        {!hideReport && audio.sentenceId ? (
+          <button
+            type="button"
+            className="muted"
+            disabled={reported !== 'idle'}
+            title="Flag this clip: the audio starts/ends off, includes another sentence, or doesn't match the text. Reviewed on the Issues page."
+            onClick={() => {
+              void reportAudioAlignmentIssue({
+                sentenceId: audio.sentenceId,
+                diagnostics: {
+                  audioId: audio.id,
+                  sourceTitle: audio.sourceTitle,
+                  sourceUrl: audio.sourceUrl,
+                  sourceStartMs: audio.startMs,
+                  sourceEndMs: audio.endMs,
+                  durationMs: audio.durationMs,
+                  trimStartMs: audio.trimStartMs,
+                  trimEndMs: audio.trimEndMs,
+                  playbackRate,
+                },
+              }).then((filed) => setReported(filed ? 'filed' : 'already'));
+            }}
+          >
+            {reported === 'filed' ? 'Reported ✓' : reported === 'already' ? 'Already reported' : 'Misaligned?'}
           </button>
         ) : null}
       </div>

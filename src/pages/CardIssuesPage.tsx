@@ -77,8 +77,50 @@ function ReadingChecksSection() {
   );
 }
 
+async function loadAudioAlignmentReports() {
+  const db = getDb();
+  const reports = (await listChunkIssueReports()).filter(
+    (report) => report.source === 'audio_alignment' && report.status === 'open',
+  );
+  const out = [];
+  for (const report of reports) {
+    const sentence = await db.sentences.get(report.sentenceId);
+    const audio = await db.sentenceAudio.where('sentenceId').equals(report.sentenceId).first();
+    const membership = await db.bookSentences.where('sentenceId').equals(report.sentenceId).first();
+    out.push({ report, sentence, audio, bookId: membership?.bookId });
+  }
+  return out;
+}
+
+function AudioAlignmentSection() {
+  const items = useLiveQuery(() => loadAudioAlignmentReports(), []);
+  if (!items || items.length === 0) return null;
+  return (
+    <section className="panel stack">
+      <h2 style={{ margin: 0 }}>Misaligned audio ({items.length})</h2>
+      <p className="muted" style={{ margin: 0 }}>
+        Clips you flagged as not matching their text. Play, use Adjust to fix the edges (or re-cut from
+        source), then mark resolved. &ldquo;Not an issue&rdquo; dismisses the flag.
+      </p>
+      {items.map(({ report, sentence, audio, bookId }) => (
+        <div key={report.id} className="list-card stack">
+          <p lang="ja" style={{ margin: 0 }}>{sentence?.japanese ?? '(sentence not found)'}</p>
+          {audio ? <NativeAudioButton audio={audio} hideReport /> : <span className="muted">No native audio for this sentence.</span>}
+          <div className="row">
+            {bookId ? <Link to={`/books/${bookId}/analyze/${report.sentenceId}`}>Open in Analyze</Link> : null}
+            <button type="button" onClick={() => void settleChunkIssueReports([report.id], 'dismissed')}>Not an issue</button>
+            <button type="button" onClick={() => void settleChunkIssueReports([report.id], 'resolved')}>Mark resolved</button>
+          </div>
+        </div>
+      ))}
+    </section>
+  );
+}
+
 async function loadChunkIssueGroups(): Promise<ChunkIssueGroup[]> {
-  const reports = (await listChunkIssueReports()).filter((report) => !isOpenReadingFlag(report));
+  const reports = (await listChunkIssueReports()).filter(
+    (report) => !isOpenReadingFlag(report) && report.source !== 'audio_alignment',
+  );
   const groups = new Map<string, ChunkIssueGroup>();
   for (const report of reports) {
     const key = `${report.status}::${chunkIssueKey(report)}`;
@@ -190,6 +232,7 @@ export function CardIssuesPage() {
   return (
     <div className="stack">
       <ReadingChecksSection />
+      <AudioAlignmentSection />
       <ChunkIssuesSection />
       <section className="panel stack">
         <div className="row" style={{ justifyContent: 'space-between' }}>

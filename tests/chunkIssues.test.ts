@@ -6,6 +6,7 @@ import {
   applyReadingFlagChoice,
   listChunkIssueReports,
   listOpenMeaningCheckIssues,
+  reportAudioAlignmentIssue,
   reportChunkIssues,
   settleChunkIssueReports,
 } from '../src/db/repository';
@@ -68,5 +69,22 @@ describe('reportChunkIssues dismissal', () => {
     const [report] = await listChunkIssueReports();
     await settleChunkIssueReports([report!.id], 'resolved');
     expect(await reportChunkIssues('particle_checks', [issue])).toBe(1);
+  });
+});
+
+describe('reportAudioAlignmentIssue', () => {
+  beforeEach(() => {
+    resetDbForTests(`audio-alignment-issues-${createId('db')}`);
+  });
+
+  it('files one open report per sentence with diagnostics, and can be settled', async () => {
+    const input = { sentenceId: 's1', diagnostics: { audioId: 'a1', durationMs: 2400 } };
+    expect(await reportAudioAlignmentIssue(input)).toBe(true);
+    expect(await reportAudioAlignmentIssue(input)).toBe(false);
+    const [report] = await listChunkIssueReports();
+    expect(report).toMatchObject({ source: 'audio_alignment', sentenceId: 's1', status: 'open' });
+    expect(JSON.parse(report!.chunks[0]!)).toEqual(input.diagnostics);
+    await settleChunkIssueReports([report!.id], 'resolved');
+    expect(await reportAudioAlignmentIssue(input)).toBe(true);
   });
 });

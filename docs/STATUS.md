@@ -655,6 +655,20 @@ repair tooling, research materials and future roadmap ideas remain available.
   possible follow-ups; verify their current state before acting. Older-server
   extras recovery needs the updated backend on a fresh device. The 2026-09-13
   sentence-realign deployment handoff remains unverified in this audit.
+- **Clip boundary refinement (2026-11-26):** the mining commit stage
+  (`app/boundary_refine.py`, `MINING_REFINE_BOUNDARIES`, default on) force-aligns
+  each sentence's text against a window ±1 s around its cut and snaps the cut to
+  the first/last aligned speech word. It keeps the original cut when the aligner
+  is down or the alignment looks untrustworthy (stretched/compressed text,
+  speech running off the window, huge shift) and reports flags in
+  `boundaryRefine`. Thresholds are heuristics not yet tuned against real
+  fast-speech/held-sound clips; the committed audio span now records the refined
+  cut. Not applied to `/reclip` or `/source-audio/clip` (no sentence text).
+  Every `NativeAudioButton` has a "Misaligned?" button that files a
+  `chunk_issue_reports` row (`source: audio_alignment`, diagnostics JSON in
+  `chunks[0]`); the Issues page lists them with play/resolve/dismiss. Migration
+  `20261126000000` widens the source check and must be applied to deployed
+  Supabase.
 - **Further learning work:** learned practice routing above FSRS is research
   only. The roadmap retains calibration/retention controls, pronunciation
   refinements, labelling improvements, free composition and all other possible

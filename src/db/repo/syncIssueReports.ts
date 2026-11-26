@@ -48,6 +48,37 @@ export async function reportChunkIssues(
   return filed;
 }
 
+/**
+ * File a learner flag that a sentence's audio doesn't match its text (clip
+ * starts/ends a few morae off, includes a neighbouring sentence, held filler
+ * sound…). One open report per sentence: re-flagging refreshes nothing and
+ * returns false. `diagnostics` is stored as the report's single `chunks`
+ * entry (see ChunkIssueReport.source).
+ */
+export async function reportAudioAlignmentIssue(input: {
+  sentenceId: string;
+  note?: string;
+  diagnostics: Record<string, unknown>;
+}): Promise<boolean> {
+  const db = getDb();
+  const existing = await db.chunkIssueReports.where('sentenceId').equals(input.sentenceId).toArray();
+  if (existing.some((r) => r.source === 'audio_alignment' && r.status === 'open')) return false;
+  const timestamp = nowIso();
+  const report: ChunkIssueReport = {
+    id: createId('chunk_issue'),
+    source: 'audio_alignment',
+    sentenceId: input.sentenceId,
+    chunks: [JSON.stringify(input.diagnostics)],
+    note: input.note?.trim() || 'Audio does not line up with the sentence text',
+    status: 'open',
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+  await db.chunkIssueReports.put(report);
+  notifySync('chunk_issue_reports', report.id, report);
+  return true;
+}
+
 export async function listChunkIssueReports(): Promise<ChunkIssueReport[]> {
   const all = await getDb().chunkIssueReports.toArray();
   return all.sort((a, b) => b.createdAt.localeCompare(a.createdAt));

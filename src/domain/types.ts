@@ -1484,8 +1484,13 @@ export type ChunkIssueStatus = 'open' | 'resolved' | 'dismissed';
  */
 export interface ChunkIssueReport {
   id: string;
-  /** Which authoring prompt raised it; meaning-check issues carry `chunks: []`. */
-  source: 'particle_checks' | 'meaning_checks';
+  /**
+   * Which authoring prompt raised it; meaning-check issues carry `chunks: []`.
+   * `audio_alignment` is a learner flag ("this clip's audio doesn't match the
+   * sentence") raised from any audio button; `chunks[0]` then holds a JSON
+   * diagnostics snapshot (clip trim/duration/source span) instead of chunks.
+   */
+  source: 'particle_checks' | 'meaning_checks' | 'audio_alignment';
   sentenceId: string;
   chunks: string[];
   note: string;
