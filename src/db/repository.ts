@@ -7,6 +7,7 @@ import type {
   BookChapter,
   BookSentence,
   ImportBatch,
+  MiningImport,
   PlannerSession,
   PlannerSessionStep,
   Sentence,
@@ -2461,6 +2462,116 @@ export async function mergeBookIntoChapter(options: {
     collisionCount: collisions.length,
     reusedChapter: plans.every((plan) => plan.reused),
   };
+}
+
+/**
+ * Move one episode (chapter) from a book into another book, e.g. a podcast
+ * episode imported into the wrong series. Study progress lives on study_items
+ * keyed by sentence, so repointing the memberships carries it across. The
+ * chapter lands as a new chapter at the end of the target (title, source id,
+ * date and shelved state kept); sentences the target already holds are not
+ * duplicated (the target's copy wins and the source membership is dropped).
+ * Mining-import tracking and AI extras that name the chapter are repointed.
+ */
+export async function moveChapterToBook(options: {
+  sourceBookId: string;
+  chapterId: string;
+  targetBookId: string;
+}): Promise<{ chapterId: string; movedCount: number; collisionCount: number }> {
+  const db = getDb();
+  const { sourceBookId, chapterId, targetBookId } = options;
+  if (sourceBookId === targetBookId) throw new Error('Source and target book are the same.');
+  const timestamp = nowIso();
+
+  let updatedSource: Book | undefined;
+  let updatedTarget: Book | undefined;
+  let moved: BookSentence[] = [];
+  let collisions: BookSentence[] = [];
+  let repointedExtras: SentenceExtras[] = [];
+  let repointedImports: MiningImport[] = [];
+  let newChapterId = '';
+
+  await db.transaction(
+    'rw',
+    [db.books, db.bookSentences, db.sentenceExtras, db.miningImports],
+    async () => {
+      const [source, target] = await Promise.all([db.books.get(sourceBookId), db.books.get(targetBookId)]);
+      if (!source) throw new Error('Source book not found');
+      if (!target) throw new Error('Target book not found');
+      const chapter = (source.chapters ?? []).find((item) => item.id === chapterId);
+      if (!chapter) throw new Error('Chapter not found in the source book');
+
+      const [sourceMemberships, targetMemberships] = await Promise.all([
+        db.bookSentences.where('bookId').equals(sourceBookId).sortBy('position'),
+        db.bookSentences.where('bookId').equals(targetBookId).sortBy('position'),
+      ]);
+      const targetBySentenceId = new Map(targetMemberships.map((item) => [item.sentenceId, item]));
+      const inChapter = sourceMemberships.filter((item) => item.chapterId === chapterId);
+      const toMove = inChapter.filter((item) => !targetBySentenceId.has(item.sentenceId));
+      collisions = inChapter.filter((item) => targetBySentenceId.has(item.sentenceId));
+      const maxTargetPosition = targetMemberships.reduce((max, item) => Math.max(max, item.position), -1);
+
+      newChapterId = createId('chapter');
+      const targetChapters = target.chapters ?? [];
+      const newChapter: BookChapter = { ...chapter, id: newChapterId, position: targetChapters.length };
+
+      moved = toMove.map((item, index) => ({
+        ...item,
+        bookId: targetBookId,
+        chapterId: newChapterId,
+        position: maxTargetPosition + 1 + index,
+        addedAt: timestamp,
+      }));
+      if (moved.length) await db.bookSentences.bulkPut(moved);
+      if (collisions.length) await db.bookSentences.bulkDelete(collisions.map((item) => item.id));
+
+      const chapterSentenceIds = new Set(inChapter.map((item) => item.sentenceId));
+      const sourceExtras = await db.sentenceExtras.where('bookId').equals(sourceBookId).toArray();
+      repointedExtras = sourceExtras
+        .filter((row) => row.chapterId === chapterId && chapterSentenceIds.has(row.id))
+        .map((row) => ({ ...row, bookId: targetBookId, chapterId: newChapterId, updatedAt: timestamp }));
+      if (repointedExtras.length) await db.sentenceExtras.bulkPut(repointedExtras);
+
+      const imports = await db.miningImports.toArray();
+      repointedImports = imports
+        .filter((row) => row.bookId === sourceBookId && row.chapterId === chapterId)
+        .map((row) => ({
+          ...row,
+          bookId: targetBookId,
+          chapterId: newChapterId,
+          targetBookId: row.targetBookId === sourceBookId ? targetBookId : row.targetBookId,
+          updatedAt: timestamp,
+        }));
+      if (repointedImports.length) await db.miningImports.bulkPut(repointedImports);
+
+      updatedTarget = { ...target, chapters: [...targetChapters, newChapter], updatedAt: timestamp };
+      updatedSource = {
+        ...source,
+        chapters: (source.chapters ?? [])
+          .filter((item) => item.id !== chapterId)
+          .map((item, position) => ({ ...item, position })),
+        collapsedChapterIds: (source.collapsedChapterIds ?? []).filter((id) => id !== chapterId),
+        updatedAt: timestamp,
+      };
+      await db.books.bulkPut([updatedSource, updatedTarget]);
+    },
+  );
+
+  notifySyncMany([
+    ...moved.map((item) => ({ entity: 'book_sentences' as const, recordId: item.id, payload: item })),
+    ...collisions.map((item) => ({
+      entity: 'book_sentences' as const,
+      recordId: item.id,
+      payload: { id: item.id },
+      operation: 'delete' as const,
+    })),
+  ]);
+  for (const row of repointedExtras) notifySync('sentence_extras', row.id, row);
+  for (const row of repointedImports) notifySync('mining_imports', row.id, row);
+  if (updatedSource) notifySync('books', sourceBookId, updatedSource);
+  if (updatedTarget) notifySync('books', targetBookId, updatedTarget);
+
+  return { chapterId: newChapterId, movedCount: moved.length, collisionCount: collisions.length };
 }
 
 export interface MergeChapterPlan {

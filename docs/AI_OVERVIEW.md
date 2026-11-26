@@ -1157,7 +1157,11 @@ Targets are constants; no settings UI.
   book (e.g. a standalone `.shadowing.zip` package upload, which has no
   series identity to key off, unlike the podcast-feed-picker import path);
   preserves per-sentence study progress, keeps the target's copy on any
-  sentence collision, and deletes the emptied source book afterward.
+  sentence collision, and deletes the emptied source book afterward. Each
+  chapter row's "Move to book…" (`moveChapterToBook`) moves a single episode
+  into another book (e.g. one imported into the wrong podcast): it lands as a
+  new last chapter there with its title/source id/date kept, source book stays,
+  and its mining-import row and AI extras are repointed.
   **Two shelving states, distinct:** *Archive* (`Book.archived`) tidies a
   finished book off the library list and out of session-planner rotation but
   leaves its review cards flowing for long-term retention; *Suspend studying*

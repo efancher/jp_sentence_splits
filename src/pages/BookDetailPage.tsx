@@ -51,6 +51,7 @@ import {
   getDb,
   mergeBookIntoChapter,
   moveBookSentence,
+  moveChapterToBook,
   previewBookOrderFromPaste,
   readSettings,
   removeSentencesFromBook,
@@ -324,6 +325,8 @@ export function BookDetailPage() {
   const [mergeTargetBookId, setMergeTargetBookId] = useState('');
   const [mergeChapterTitle, setMergeChapterTitle] = useState('');
   const [merging, setMerging] = useState(false);
+  const [movingChapterId, setMovingChapterId] = useState<string | null>(null);
+  const [moveChapterTargetId, setMoveChapterTargetId] = useState('');
   const [selectedChapterId, setSelectedChapterId] = useState('');
   const [editingChapterId, setEditingChapterId] = useState<string | null>(
     null,
@@ -1682,6 +1685,17 @@ export function BookDetailPage() {
                       </button>
                       <button
                         type="button"
+                        onClick={() => {
+                          setMoveChapterTargetId('');
+                          setMovingChapterId(
+                            movingChapterId === chapter.id ? null : chapter.id,
+                          );
+                        }}
+                      >
+                        Move to book…
+                      </button>
+                      <button
+                        type="button"
                         className="danger"
                         onClick={() => {
                           if (
@@ -1696,6 +1710,56 @@ export function BookDetailPage() {
                         Delete
                       </button>
                     </div>
+                    {movingChapterId === chapter.id ? (
+                      <div className="row" style={{ flexBasis: '100%' }}>
+                        <select
+                          aria-label="Move episode to book"
+                          value={moveChapterTargetId}
+                          onChange={(event) => setMoveChapterTargetId(event.target.value)}
+                        >
+                          <option value="">Choose a book…</option>
+                          {data.otherBooks.map((book) => (
+                            <option key={book.id} value={book.id}>
+                              {book.title}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          className="primary"
+                          disabled={!moveChapterTargetId}
+                          onClick={async () => {
+                            const targetTitle = data.otherBooks.find(
+                              (book) => book.id === moveChapterTargetId,
+                            )?.title;
+                            try {
+                              const result = await moveChapterToBook({
+                                sourceBookId: bookId,
+                                chapterId: chapter.id,
+                                targetBookId: moveChapterTargetId,
+                              });
+                              setMovingChapterId(null);
+                              setSnack({
+                                message: `Moved “${chapter.title}” (${result.movedCount} sentence(s)) to "${targetTitle}".${
+                                  result.collisionCount
+                                    ? ` ${result.collisionCount} already there; kept the existing copy.`
+                                    : ''
+                                }`,
+                              });
+                            } catch (error) {
+                              setSnack({
+                                message: error instanceof Error ? error.message : String(error),
+                              });
+                            }
+                          }}
+                        >
+                          Move
+                        </button>
+                        <button type="button" onClick={() => setMovingChapterId(null)}>
+                          Cancel
+                        </button>
+                      </div>
+                    ) : null}
                   </>
                 )}
               </div>
