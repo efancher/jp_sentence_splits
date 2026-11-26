@@ -469,6 +469,130 @@ export async function commitMiningJob(
   return out;
 }
 
+const clipBatchStatusSchema = z.object({
+  status: z.enum(['running', 'done', 'failed']),
+  total: z.number(),
+  done: z.number(),
+  error: z.string().nullable().optional(),
+  sentences: z.array(clipResponseSchema).nullable().optional(),
+});
+
+export type MiningClipBatchStatus = z.infer<typeof clipBatchStatusSchema>;
+
+const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/** Run `fn`, retrying transient failures (a phone that slept drops its in-flight fetches). */
+async function withRetries<T>(
+  fn: () => Promise<T>,
+  attempts: number,
+  sleep: (ms: number) => Promise<void>,
+): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err;
+      if (attempt < attempts - 1) await sleep(1000 * (attempt + 1));
+    }
+  }
+  throw lastError;
+}
+
+export interface ClipBatchOptions {
+  generateKana?: boolean;
+  /** Fires with the clip-cutting progress, then the audio-download progress. */
+  onProgress?: (phase: 'clipping' | 'downloading', done: number, total: number) => void;
+  /** Clips downloaded at once. */
+  downloadConcurrency?: number;
+  pollIntervalMs?: number;
+  sleep?: (ms: number) => Promise<void>;
+}
+
+/**
+ * Clip every reviewed row on the server in the background
+ * (`POST /jobs/{id}/clip-batch`), poll until it finishes, then download the
+ * clips a few at a time. Unlike {@link commitMiningJob} the cutting does not
+ * depend on this page staying awake: a phone that sleeps mid-way only pauses
+ * the polling, and running this again with the same rows resumes the server's
+ * batch (finished clips are not re-cut). Poll and download failures retry.
+ */
+export async function clipMiningBatch(
+  jobId: string,
+  rows: CommitRowInput[],
+  options: ClipBatchOptions = {},
+): Promise<{ clip: MiningClipResult; blob: Blob }[]> {
+  const sleep = options.sleep ?? defaultSleep;
+  const pollMs = options.pollIntervalMs ?? 1500;
+  const body = JSON.stringify({ rows, generateKana: options.generateKana ?? true });
+  const readStatus = async (response: Response): Promise<MiningClipBatchStatus> => {
+    if (!response.ok) {
+      throw new Error(`Failed to clip sentences: ${await readErrorDetail(response)}`);
+    }
+    return clipBatchStatusSchema.parse(await response.json());
+  };
+  const start = () =>
+    fetch(`${API_BASE}/jobs/${jobId}/clip-batch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+    }).then(readStatus);
+
+  let status = await withRetries(start, 4, sleep);
+  let failedPolls = 0;
+  while (status.status === 'running') {
+    options.onProgress?.('clipping', status.done, status.total);
+    await sleep(pollMs);
+    try {
+      status = await fetch(`${API_BASE}/jobs/${jobId}/clip-batch`).then(readStatus);
+      failedPolls = 0;
+    } catch (err) {
+      // Offline or the phone just woke up: keep waiting, the server is still cutting.
+      failedPolls += 1;
+      if (failedPolls >= 20) throw err;
+      await sleep(pollMs * 2);
+    }
+  }
+  if (status.status === 'failed') {
+    // The server batch keeps what it finished; one restart resumes it (e.g. after a transient ffmpeg error).
+    status = await withRetries(start, 1, sleep);
+    while (status.status === 'running') {
+      options.onProgress?.('clipping', status.done, status.total);
+      await sleep(pollMs);
+      status = await withRetries(
+        () => fetch(`${API_BASE}/jobs/${jobId}/clip-batch`).then(readStatus),
+        4,
+        sleep,
+      );
+    }
+    if (status.status === 'failed') {
+      throw new Error(`Failed to clip sentences: ${status.error ?? 'unknown error'}`);
+    }
+  }
+  const clips = status.sentences ?? [];
+  options.onProgress?.('clipping', clips.length, clips.length);
+
+  const blobs: Blob[] = new Array(clips.length);
+  let next = 0;
+  let downloaded = 0;
+  const worker = async () => {
+    while (next < clips.length) {
+      const index = next;
+      next += 1;
+      blobs[index] = await withRetries(
+        () => fetchMiningClipAudio(jobId, clips[index]!.sentenceId),
+        4,
+        sleep,
+      );
+      downloaded += 1;
+      options.onProgress?.('downloading', downloaded, clips.length);
+    }
+  };
+  const concurrency = Math.max(1, Math.min(options.downloadConcurrency ?? 4, clips.length || 1));
+  await Promise.all(Array.from({ length: concurrency }, worker));
+  return clips.map((clip, index) => ({ clip, blob: blobs[index]! }));
+}
+
 export async function fetchMiningClipAudio(
   jobId: string,
   sentenceId: string,

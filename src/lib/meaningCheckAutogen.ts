@@ -170,6 +170,7 @@ export interface ReadingCheckOutcome {
 export async function checkSentenceReading(
   sentenceId: string,
   llmReading: string,
+  options: { remoteAlignments?: boolean } = {},
 ): Promise<ReadingCheckOutcome> {
   const outcome: ReadingCheckOutcome = { fixed: 0, flagged: [] };
   const db = getDb();
@@ -178,11 +179,17 @@ export async function checkSentenceReading(
   if (!sentence || !inline) return outcome;
 
   const llm = llmSpanReadings(inline, llmReading);
-  const audioRows = await db.sentenceAudio.where('sentenceId').equals(sentenceId).toArray();
-  const alignments = await loadAlignmentsBulk(audioRows.map((row) => row.id));
-  const firstAligned = audioRows.find((row) => alignments.has(row.id));
+  // Ids only: the rows carry audio blobs this check never reads.
+  const audioIds = (await db.sentenceAudio
+    .where('sentenceId')
+    .equals(sentenceId)
+    .primaryKeys()) as string[];
+  const alignments = await loadAlignmentsBulk(audioIds, {
+    remote: options.remoteAlignments !== false,
+  });
+  const firstAligned = audioIds.find((id) => alignments.has(id));
   const audio = firstAligned
-    ? audioSpanReadings(inline, alignments.get(firstAligned.id)!.words)
+    ? audioSpanReadings(inline, alignments.get(firstAligned)!.words)
     : new Map<number, string>();
 
   const fixes: SpanReadings = new Map();

@@ -519,6 +519,77 @@ def test_commit_endpoint_clips_every_row_inline(client: TestClient) -> None:
     assert audio.status_code == 200
 
 
+def _wait_clip_batch(client: TestClient, job_id: str, timeout_s: float = 5.0) -> dict:
+    deadline = time.time() + timeout_s
+    while time.time() < deadline:
+        body = client.get(f"/jobs/{job_id}/clip-batch").json()
+        if body["status"] != "running":
+            return body
+        time.sleep(0.02)
+    raise AssertionError("clip batch did not finish")
+
+
+def test_clip_batch_runs_in_background_and_is_idempotent(client: TestClient) -> None:
+    create = client.post("/jobs", json={"url": "https://www.youtube.com/watch?v=vid12345678"})
+    job_id = create.json()["jobId"]
+    _wait_until_ready(client, job_id)
+    assert client.get(f"/jobs/{job_id}/clip-batch").status_code == 404
+
+    payload = {
+        "generateKana": False,
+        "rows": [
+            {"japanese": "こんにちは。", "english": "Hello.", "startMs": 0, "endMs": 1000},
+            {"japanese": "元気ですか。", "startMs": 1000, "endMs": 2000},
+        ],
+    }
+    first = client.post(f"/jobs/{job_id}/clip-batch", json=payload)
+    assert first.status_code == 200
+    done = _wait_clip_batch(client, job_id)
+    assert done["status"] == "done"
+    assert (done["done"], done["total"]) == (2, 2)
+    sentences = done["sentences"]
+    assert [s["japanese"] for s in sentences] == ["こんにちは。", "元気ですか。"]
+    audio = client.get(f"/jobs/{job_id}/clips/{sentences[1]['sentenceId']}/audio")
+    assert audio.status_code == 200 and audio.content == b"fake-clip"
+
+    # Same rows again: returns the finished batch, no re-cut (same sentence ids).
+    again = client.post(f"/jobs/{job_id}/clip-batch", json=payload).json()
+    assert again["status"] == "done"
+    assert [s["sentenceId"] for s in again["sentences"]] == [s["sentenceId"] for s in sentences]
+
+
+def test_clip_batch_resumes_after_failure(client: TestClient, monkeypatch) -> None:
+    create = client.post("/jobs", json={"url": "https://www.youtube.com/watch?v=vid12345678"})
+    job_id = create.json()["jobId"]
+    _wait_until_ready(client, job_id)
+    payload = {
+        "generateKana": False,
+        "rows": [
+            {"japanese": "こんにちは。", "startMs": 0, "endMs": 1000},
+            {"japanese": "元気ですか。", "startMs": 1000, "endMs": 2000},
+        ],
+    }
+    real = jobs._clip_range
+    calls = {"n": 0}
+
+    def flaky(*args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            raise RuntimeError("ffmpeg hiccup")
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(jobs, "_clip_range", flaky)
+    client.post(f"/jobs/{job_id}/clip-batch", json=payload)
+    failed = _wait_clip_batch(client, job_id)
+    assert failed["status"] == "failed" and failed["done"] == 1
+    assert "ffmpeg hiccup" in failed["error"]
+
+    client.post(f"/jobs/{job_id}/clip-batch", json=payload)
+    done = _wait_clip_batch(client, job_id)
+    assert done["status"] == "done" and len(done["sentences"]) == 2
+    assert calls["n"] == 3  # the finished row was not cut again
+
+
 def test_asr_failure_without_captions_reports_clear_error(
     client: TestClient, monkeypatch
 ) -> None:

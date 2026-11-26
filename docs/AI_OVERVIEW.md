@@ -932,6 +932,12 @@ Targets are constants; no settings UI.
   `deploy/youtube-mining-api.service`, `app/notify.py`); best-effort, no-op
   when unset. A user-cancelled run whose process dies before writing
   `cancelled` may also send an "interrupted" ping.
+- **Quick import clipping (2026-11-26):** once the review is confirmed,
+  `clipMiningBatch` (`src/lib/miningApi.ts`) starts a server-side clip batch
+  (`POST /jobs/{id}/clip-batch`, idempotent and resumable), polls
+  `GET /jobs/{id}/clip-batch`, and downloads each clip from
+  `/jobs/{id}/clips/{sentenceId}/audio`, so the phone may sleep while the box
+  cuts audio. `src/lib/stageTimer.ts` records per-stage timings shown on the idle screen.
 - **Quick import** (`QuickMinePage.tsx`, route `/import/quick`) — one-page
   alternative to the 4-step wizard above, for "just import it": same
   idle-screen URL/podcast-feed picker and job creation/polling, but instead

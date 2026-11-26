@@ -441,6 +441,18 @@ class CommitJobResponse(BaseModel):
     sentences: list[CommitSentence]
 
 
+class ClipBatchStatus(BaseModel):
+    """Progress of a background clip batch (`POST/GET /jobs/{id}/clip-batch`).
+    `sentences` is set once `status` is done; each clip's audio is fetched
+    separately from `GET /jobs/{id}/clips/{sentenceId}/audio`."""
+
+    status: Literal["running", "done", "failed"]
+    total: int
+    done: int
+    error: str | None = None
+    sentences: list[ClipResponse] | None = None
+
+
 AssistBackend = Literal["auto", "codex", "claude", "opencode"]
 
 

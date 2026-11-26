@@ -553,6 +553,16 @@ repair tooling, research materials and future roadmap ideas remain available.
   sends the column only when true, so push works before the migration is applied.
   `diagnose:grammar-links` is a read-only dry run on a book's walked-through
   sentences. Not yet run through the real panel or against a live box run.
+- **Quick import survives a sleeping phone (2026-11-26, local checks only):** after
+  the review is confirmed the box cuts every sentence clip in a background,
+  resumable batch (`POST/GET /jobs/{id}/clip-batch`, `clip_batch.py`, progress in
+  the job checkpoint dir); the page polls it (tolerating network drops), then
+  downloads the clips with retries. Only the local Dexie commit and extras save
+  still need the phone, and they are short. Speedups: indexed sentence lookups
+  instead of reading the whole library, no per-sentence cloud alignment fetch or
+  audio-blob read in the extras reading check, parallel reference-audio upload.
+  The idle screen shows "Last import took: …" per-stage timings. Needs the mining
+  service restarted to expose the new endpoints. Fully server-side add-to-book is not done.
 - **Parallel assistant calls (2026-10-28, local checks only):** Quick import and
   book extras have an "Agents" 1–5 selector (default 1); the box clamps it to
   `MINING_ASSIST_MAX_CONCURRENCY` (default 3, set in the service unit). Batches

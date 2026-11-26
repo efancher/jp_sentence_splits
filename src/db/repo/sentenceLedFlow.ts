@@ -919,7 +919,10 @@ export async function getDailyPracticeCounts(
  * this never falls through to the tailnet MFA service — that needs the audio
  * blob and would mean aligning dozens of clips just to size a game's pool.
  */
-export async function loadAlignmentsBulk(audioIds: string[]): Promise<Map<string, AlignmentResult>> {
+export async function loadAlignmentsBulk(
+  audioIds: string[],
+  options: { remote?: boolean } = {},
+): Promise<Map<string, AlignmentResult>> {
   const db = getDb();
   const found = new Map<string, AlignmentResult>();
   if (audioIds.length === 0) return found;
@@ -930,7 +933,7 @@ export async function loadAlignmentsBulk(audioIds: string[]): Promise<Map<string
     if (row && row.alignmentVersion === ALIGNMENT_VERSION) found.set(id, row.result);
     else missing.push(id);
   });
-  if (missing.length === 0) return found;
+  if (missing.length === 0 || options.remote === false) return found;
   try {
     const { fetchRemoteAlignments } = await import('../../sync/alignmentRemote');
     const remote = await fetchRemoteAlignments(missing);

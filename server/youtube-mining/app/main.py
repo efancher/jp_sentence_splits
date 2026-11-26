@@ -20,6 +20,7 @@ from app import (
     assist,
     assist_run,
     clip,
+    clip_batch,
     config,
     difficulty,
     jobs,
@@ -46,6 +47,7 @@ from app.models import (
     AssistRunRequest,
     AssistRunStatusResponse,
     AssistStatusResponse,
+    ClipBatchStatus,
     ClipRequest,
     ClipResponse,
     CommitJobRequest,
@@ -476,6 +478,32 @@ async def commit_job(job_id: str, req: CommitJobRequest):
     return CommitJobResponse(sentences=sentences)
 
 
+@app.post("/jobs/{job_id}/clip-batch", response_model=ClipBatchStatus)
+async def start_clip_batch(job_id: str, req: CommitJobRequest):
+    """Clip every reviewed row in a background thread, so the browser need not
+    stay open. Idempotent for the same rows: re-posting resumes or returns it."""
+    try:
+        job = jobs.get_job(job_id)
+    except jobs.JobNotFoundError:
+        raise HTTPException(status_code=404, detail="Job not found")
+    try:
+        return await asyncio.to_thread(clip_batch.start, job, req)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+
+
+@app.get("/jobs/{job_id}/clip-batch", response_model=ClipBatchStatus)
+async def get_clip_batch(job_id: str):
+    try:
+        job = jobs.get_job(job_id)
+    except jobs.JobNotFoundError:
+        raise HTTPException(status_code=404, detail="Job not found")
+    batch = clip_batch.status(job)
+    if batch is None:
+        raise HTTPException(status_code=404, detail="No clip batch for this job")
+    return batch
+
+
 @app.get("/jobs/{job_id}/clips/{sentence_id}/audio")
 async def get_clip_audio(job_id: str, sentence_id: str):
     try:
@@ -489,6 +517,7 @@ async def get_clip_audio(job_id: str, sentence_id: str):
 @app.delete("/jobs/{job_id}")
 async def delete_job(job_id: str):
     jobs.delete_job(job_id)
+    clip_batch.forget(job_id)
     return {"status": "deleted"}
 
 

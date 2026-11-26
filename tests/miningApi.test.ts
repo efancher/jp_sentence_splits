@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   applyJobSegments,
   clipFromSource,
+  clipMiningBatch,
   clipMiningRange,
   commitMiningJob,
   createMiningJob,
@@ -558,5 +559,68 @@ describe('deleteMiningJob', () => {
       }),
     );
     await expect(deleteMiningJob('job1')).resolves.toBeUndefined();
+  });
+});
+
+describe('clipMiningBatch', () => {
+  const clip = (id: string) => ({
+    sentenceId: id,
+    japanese: 'ねこ。',
+    reading: null,
+    english: null,
+    startMs: 0,
+    endMs: 900,
+    subtitleStartMs: 0,
+    subtitleEndMs: 900,
+    adjustedStartMs: 0,
+    adjustedEndMs: 900,
+    transcriptStatus: 'manually-corrected',
+    tokens: null,
+    audio: { mimeType: 'audio/mp4', durationMs: 800 },
+  });
+  const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200 });
+  const noSleep = async () => undefined;
+
+  it('polls through network errors, then downloads every clip with retries', async () => {
+    let polls = 0;
+    let audioCalls = 0;
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith('/clip-batch')) {
+        if (init?.method === 'POST') return json({ status: 'running', total: 2, done: 0 });
+        polls += 1;
+        if (polls === 1) throw new TypeError('Load failed'); // phone just woke up
+        if (polls === 2) return json({ status: 'running', total: 2, done: 1 });
+        return json({ status: 'done', total: 2, done: 2, sentences: [clip('a'), clip('b')] });
+      }
+      audioCalls += 1;
+      if (audioCalls === 1) throw new TypeError('Load failed');
+      return new Response(url.includes('/a/') ? 'bytes-a' : 'bytes-b', { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const progress: string[] = [];
+    const out = await clipMiningBatch('job1', [{ japanese: 'ねこ。', startMs: 0, endMs: 900 }], {
+      sleep: noSleep,
+      onProgress: (phase, done, total) => progress.push(`${phase} ${done}/${total}`),
+    });
+    expect(out.map((item) => item.clip.sentenceId)).toEqual(['a', 'b']);
+    expect(await out[0]!.blob.text()).toBe('bytes-a');
+    expect(await out[1]!.blob.text()).toBe('bytes-b');
+    expect(progress).toContain('clipping 1/2');
+    expect(progress).toContain('downloading 2/2');
+  });
+
+  it('restarts a failed batch once and reports a second failure', async () => {
+    let posts = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        if (init?.method === 'POST') posts += 1;
+        return json({ status: 'failed', total: 1, done: 0, error: 'ffmpeg exploded' });
+      }),
+    );
+    await expect(
+      clipMiningBatch('job1', [{ japanese: 'ねこ。', startMs: 0, endMs: 900 }], { sleep: noSleep }),
+    ).rejects.toThrow('ffmpeg exploded');
+    expect(posts).toBe(2);
   });
 });

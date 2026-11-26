@@ -2994,11 +2994,14 @@ async function applySentenceAudioForPreview(
   preview: ShadowingImportPreview,
 ): Promise<void> {
   const db = getDb();
+  // Only this import's sentences matter: an indexed lookup, not the whole library.
   const sentenceByKey = new Map(
-    (await db.sentences.toArray()).map((sentence) => [
-      sentence.normalizedKey,
-      sentence,
-    ]),
+    (
+      await db.sentences
+        .where('normalizedKey')
+        .anyOf([...new Set(preview.audioDrafts.map((audio) => audio.normalizedKey))])
+        .toArray()
+    ).map((sentence) => [sentence.normalizedKey, sentence]),
   );
   const importedAt = nowIso();
   const audioRecords = preview.audioDrafts
@@ -3050,17 +3053,22 @@ async function applySentenceAudioForPreview(
       const userId = (await supabase?.auth.getSession())?.data.session?.user
         ?.id;
       if (!userId) return;
-      for (const audio of audioRecords) {
-        // Isolate each clip's upload — one failure (network blip, transient
-        // storage error) must not silently strand every clip after it in a
-        // long import with no error surfaced anywhere (2026-09-27: ~half a
-        // podcast episode's clips never reached Storage this way).
-        try {
-          await uploadReferenceAudio({ audio, bookId, ownerId: userId });
-        } catch (err) {
-          syncLog('warn', err instanceof Error ? err.message : String(err), 'AUDIO_UPLOAD_SKIP');
+      // Small worker pool: serial uploads of a long episode took minutes.
+      const queue = [...audioRecords];
+      const worker = async () => {
+        for (let audio = queue.shift(); audio; audio = queue.shift()) {
+          // Isolate each clip's upload — one failure (network blip, transient
+          // storage error) must not silently strand every clip after it in a
+          // long import with no error surfaced anywhere (2026-09-27: ~half a
+          // podcast episode's clips never reached Storage this way).
+          try {
+            await uploadReferenceAudio({ audio, bookId, ownerId: userId });
+          } catch (err) {
+            syncLog('warn', err instanceof Error ? err.message : String(err), 'AUDIO_UPLOAD_SKIP');
+          }
         }
-      }
+      };
+      await Promise.all(Array.from({ length: 3 }, worker));
     } catch {
       // Local import must succeed even if optional audio upload fails.
     }

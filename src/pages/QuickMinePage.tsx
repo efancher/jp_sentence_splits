@@ -10,6 +10,7 @@ import { SpanAudioButton } from '../components/SpanAudioButton';
 import {
   beginMiningImport,
   commitSeriesEpisodeImport,
+  commitShadowingPackageImport,
   getDb,
   getMiningImportForJob,
   getSeriesImportedSourceIds,
@@ -20,7 +21,7 @@ import { canonicalSourceId, hashString } from '../lib/ids';
 import { displayJapanese, normalizeSentenceKey } from '../lib/normalize';
 import {
   cancelAssistRun,
-  commitMiningJob,
+  clipMiningBatch,
   createMiningJob,
   deleteAssistRun,
   deleteMiningJob,
@@ -55,6 +56,7 @@ import { parseAiCombinedReply } from '../lib/miningQuickImport';
 import { formatWizardTimestamp, type WizardTranscriptSeg } from '../lib/miningTranscript';
 import { applyCorrectionsToTranscript, type AppliedCorrection } from '../lib/assistCorrection';
 import { downloadTextFile } from '../lib/particleChecks';
+import { createStageTimer, readLastTimings, type StageTimer } from '../lib/stageTimer';
 import { applyQuickImportExtras, hasQuickImportExtras, writeImportExtrasNotice } from '../lib/quickImportExtras';
 import { extractYouTubeId } from '../lib/youtubeUrl';
 import {
@@ -315,6 +317,7 @@ export function QuickMinePage() {
   const [queue, setQueue] = useState<QueuedEpisode[]>(() => readPersistedQueue()?.queue ?? []);
   const [queueTotal, setQueueTotal] = useState(() => readPersistedQueue()?.queueTotal ?? 0);
   const queueRef = useRef<QueuedEpisode[]>([]);
+  const timerRef = useRef<StageTimer | null>(null);
   queueRef.current = queue;
   const prefetchingRef = useRef<string | null>(null);
 
@@ -985,12 +988,23 @@ export function QuickMinePage() {
     }
   }
 
+  /** Time a commit; the wait before it is the user reading the preview. */
+  async function timedCommit<T>(commit: () => Promise<T>): Promise<T> {
+    timerRef.current?.mark('your review');
+    const result = await commit();
+    timerRef.current?.mark('save to book');
+    return result;
+  }
+
   const buildPreview = () =>
     runApply(
       `Clipping ${rows.length} sentences from the source (up to a minute for a long video)…`,
       async () => {
         if (!source) throw new Error('Source metadata is missing.');
-        const clipped = await commitMiningJob(
+        const timings = createStageTimer('quick-import');
+        timerRef.current = timings;
+        // Cut on the server (it keeps going if this phone sleeps), then fetch the clips a few at a time.
+        const clipped = await clipMiningBatch(
           jobId!,
           rows.map((row) => ({
             japanese: row.japanese,
@@ -999,10 +1013,15 @@ export function QuickMinePage() {
             endMs: row.endMs,
           })),
           {
-            onProgress: (done, total) =>
-              setBusyNote(`Clipping sentences from the source… ${done}/${total}`),
+            onProgress: (phase, done, total) =>
+              setBusyNote(
+                phase === 'clipping'
+                  ? `The server is cutting sentences from the source… ${done}/${total}. You can lock your phone; it keeps going.`
+                  : `Downloading clips… ${done}/${total}`,
+              ),
           },
         );
+        timings.mark('clip + download');
         const sentences: ShadowingSentenceInput[] = [];
         const audio: ShadowingAudioDraft[] = [];
         const clipIdByHandle = new Map<number, string>();
@@ -1033,7 +1052,11 @@ export function QuickMinePage() {
             blob,
           });
         }
-        const existing = await getDb().sentences.toArray();
+        // Only the imported sentences matter for matching (indexed lookup, not the whole library).
+        const importKeys = [
+          ...new Set(clipped.map(({ clip }) => normalizeSentenceKey(displayJapanese(clip.japanese)))),
+        ];
+        const existing = await getDb().sentences.where('normalizedKey').anyOf(importKeys).toArray();
         const builtPreview = buildShadowingPreview(
           {
             id: source.id,
@@ -1059,6 +1082,7 @@ export function QuickMinePage() {
           const item = builtPreview.drafts.find((candidate) => candidate.draft.normalizedKey === key);
           if (item?.proposedId) idByHandle.set(handle, item.proposedId);
         });
+        timings.mark('preview');
         setSentenceIdByHandle(idByHandle);
         setPreview(builtPreview);
         setStage('commit');
@@ -1128,6 +1152,11 @@ export function QuickMinePage() {
           separate translate pass), use the full{' '}
           <a href="#/import/youtube">import wizard</a> instead.
         </p>
+        {stage === 'idle' && readLastTimings() ? (
+          <p className="muted" style={{ margin: 0, fontSize: '0.8rem' }}>
+            Last import took: {readLastTimings()}
+          </p>
+        ) : null}
         {resuming && stage === 'idle' ? (
           <MiningReconnectNotice error={resumeError} onStop={() => stopResumeRef.current()} />
         ) : null}
@@ -1737,18 +1766,20 @@ export function QuickMinePage() {
               ? {
                   commitLabel: `Add as a new chapter of “${targetBook.title}”`,
                   onCommit: (p: ShadowingImportPreview) =>
+                    timedCommit(() =>
                     commitSeriesEpisodeImport({
                       targetBookId: targetBook.id,
                       episodeTitle: source.title,
                       sourceId: podcastEpisodeSourceUrl || source.url,
                       sourceDate: podcastEpisodeDate ?? new Date().toISOString(),
                       preview: p,
-                    }),
+                    })),
                 }
               : source?.type === 'podcast' && podcastFeedUrl.trim()
               ? {
                   commitLabel: 'Add as a new chapter',
                   onCommit: (p: ShadowingImportPreview) =>
+                    timedCommit(() =>
                     commitSeriesEpisodeImport({
                       seriesId: `podcast-series-${hashString(podcastFeedUrl.trim())}`,
                       seriesTitle: podcastFeed?.title || resumedSeriesTitle || source.title,
@@ -1757,9 +1788,9 @@ export function QuickMinePage() {
                       sourceId: podcastEpisodeSourceUrl || source.url,
                       sourceDate: podcastEpisodeDate ?? new Date().toISOString(),
                       preview: p,
-                    }),
+                    })),
                 }
-              : {})}
+              : { onCommit: (p: ShadowingImportPreview) => timedCommit(() => commitShadowingPackageImport(p)) })}
             onImported={async (result) => {
               if (jobId) {
                 void updateMiningImportForJob(jobId, {
@@ -1783,7 +1814,9 @@ export function QuickMinePage() {
                 }
                 // Landing page shows this once; otherwise a dropped chunking/walkthrough part goes unnoticed.
                 if (notice) writeImportExtrasNotice(result.bookId, notice);
+                timerRef.current?.mark('extras');
               }
+              timerRef.current?.save();
               if (jobId) {
                 void deleteAssistRun(jobId);
                 void deleteMiningJob(jobId);

@@ -109,7 +109,10 @@ export async function applyQuickImportExtras(
       }
       const reading = readings[index];
       if (!reading) continue;
-      const outcome = await checkSentenceReading(sentenceId, reading);
+      const outcome = await checkSentenceReading(sentenceId, reading, {
+        // Just-imported clips have no cached alignment; skip the per-sentence cloud lookup.
+        remoteAlignments: false,
+      });
       result.readingsFixed += outcome.fixed;
       for (const flag of outcome.flagged) flags.push({ sentenceId, chunks: [], note: `Reading check — ${flag}` });
     }
