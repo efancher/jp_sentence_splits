@@ -493,6 +493,15 @@ Pruned the unused SVG puzzle-path renderer and unused sync barrel. The active
 chunk strip uses clause-tinted blocks. Older word/grammar flows, migration and
 repair tooling, research materials and future roadmap ideas remain available.
 
+Slow pages report themselves (2026-11-27): a page that stays on "Loading…" for 30 s or
+hits the 60 s give-up files the same sync-issue page report as the banner's "Report slow
+page" button (`src/lib/autoSlowReport.ts`), at most once per path per 6 h and 3 a day,
+and not while the app is backgrounded. Book detail's loaders now record per-read step
+timings (`BookDetail.load`, `.sentenceStudyItems`, `.introducedCount`) in the report's
+`stepRuns`. Cause of the iPhone Book detail 60 s+ loads (reports of 2026-11-21 and
+2026-11-27) is not yet established: row counts are small, so suspect live-query re-runs
+queued behind writes; read `stepRuns` from the next auto-report.
+
 ## Open limitations and follow-ups
 
 - **Aligner digit expansion (2026-11-08):** `shadowing-analysis-api` now reads every

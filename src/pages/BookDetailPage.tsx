@@ -69,6 +69,7 @@ import {
   sortBookChaptersByEpisodeNumber,
   countIntroducedBookSentences,
 } from '../db/repository';
+import { stepTimer } from '../lib/pageTiming';
 import { suggestMergedJapanese, suggestMergedTranslation } from '../lib/mergeSentences';
 import {
   getAlignmentBackfillJob,
@@ -451,30 +452,34 @@ export function BookDetailPage() {
 
   async function loadBookDetail() {
     const db = getDb();
-    const book = await db.books.get(bookId);
-    if (!book) return null;
-    const memberships = await db.bookSentences
-      .where('bookId')
-      .equals(bookId)
-      .sortBy('position');
-    const sentences = await db.sentences.bulkGet(
-      memberships.map((item) => item.sentenceId),
-    );
-    const analyses = await db.analyses.bulkGet(
-      memberships.map((item) => item.sentenceId),
-    );
-    const otherBooks = await db.books
-      .filter((item) => !item.archived && item.id !== bookId)
-      .toArray();
-    return {
-      book,
-      otherBooks,
-      rows: memberships.map((membership, index) => ({
-        membership,
-        sentence: sentences[index],
-        analysis: analyses[index],
-      })),
-    };
+    const timer = stepTimer('BookDetail.load');
+    try {
+      const book = await timer.track('book', db.books.get(bookId));
+      if (!book) return null;
+      const memberships = await timer.track(
+        'memberships',
+        db.bookSentences.where('bookId').equals(bookId).sortBy('position'),
+      );
+      timer.count('memberships', memberships.length);
+      const ids = memberships.map((item) => item.sentenceId);
+      // Concurrent reads: `track` times each by itself, so a stalled one is named.
+      const [sentences, analyses, otherBooks] = await Promise.all([
+        timer.track('sentences.bulkGet', db.sentences.bulkGet(ids)),
+        timer.track('analyses.bulkGet', db.analyses.bulkGet(ids)),
+        timer.track('otherBooks', db.books.filter((item) => !item.archived && item.id !== bookId).toArray()),
+      ]);
+      return {
+        book,
+        otherBooks,
+        rows: memberships.map((membership, index) => ({
+          membership,
+          sentence: sentences[index],
+          analysis: analyses[index],
+        })),
+      };
+    } finally {
+      timer.done();
+    }
   }
 
   const sensors = useSensors(
@@ -509,7 +514,16 @@ export function BookDetailPage() {
 
   const settings = useLiveQuery(() => readSettings(), []);
   const sentenceStudyItems = useLiveQuery(
-    () => getDb().studyItems.where('subjectType').equals('sentence').toArray(),
+    async () => {
+      const timer = stepTimer('BookDetail.sentenceStudyItems');
+      try {
+        const items = await timer.track('studyItems', getDb().studyItems.where('subjectType').equals('sentence').toArray());
+        timer.count('items', items.length);
+        return items;
+      } finally {
+        timer.done();
+      }
+    },
     [],
   );
   const graduatedSentenceIds = useMemo(() => {
@@ -521,7 +535,12 @@ export function BookDetailPage() {
   // carrying a card).
   const introducedCount = useLiveQuery(async () => {
     if (ids.length === 0) return null;
-    return countIntroducedBookSentences(bookId);
+    const timer = stepTimer('BookDetail.introducedCount');
+    try {
+      return await timer.track('count', countIntroducedBookSentences(bookId));
+    } finally {
+      timer.done();
+    }
   }, [ids, bookId]);
 
   // TEMPORARY diagnostics: time suspend/resume clicks (write, then each live

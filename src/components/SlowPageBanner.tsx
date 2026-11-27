@@ -1,7 +1,8 @@
-import { useState, useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { useLocation } from 'react-router-dom';
 
 import { reportSyncIssue } from '../db/repository';
+import { maybeAutoReport } from '../lib/autoSlowReport';
 import { buildPageSnapshot } from '../lib/pageSnapshot';
 import {
   getPageTimings,
@@ -22,6 +23,27 @@ export function SlowPageBanner() {
   const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
 
   const latest: PageTiming | undefined = timings[timings.length - 1];
+  const [autoSent, setAutoSent] = useState<string | null>(null);
+
+  // Very slow loads (30s+, or the 60s give-up) are reported without a tap.
+  useEffect(() => {
+    if (!latest) return;
+    void maybeAutoReport(
+      latest,
+      async (note) => {
+        await reportSyncIssue({
+          note,
+          diagnosticsSnapshot: await buildPageSnapshot(latest.path, '', ''),
+          conflictEntity: 'page_report',
+          conflictRecordId: latest.path,
+        });
+      },
+      { visible: document.visibilityState === 'visible' },
+    ).then((sent) => {
+      if (sent) setAutoSent(latest.at);
+    });
+  }, [latest]);
+
   if (!latest || latest.ms < SLOW_PAGE_MS) return null;
   if (latest.path !== location.pathname || dismissed === latest.at) return null;
 
@@ -45,11 +67,11 @@ export function SlowPageBanner() {
   return (
     <div className="panel row" role="status" style={{ gap: '0.5rem', flexWrap: 'wrap' }}>
       <span className="muted">
-        {state === 'sent'
-          ? '✓ Slow page reported'
+        {state === 'sent' || autoSent === latest.at
+          ? autoSent === latest.at ? '✓ Slow page reported automatically' : '✓ Slow page reported'
           : `This page took ${seconds}s to load${latest.syncRunning ? ' (sync was running)' : ''}.`}
       </span>
-      {state === 'sent' ? null : (
+      {state === 'sent' || autoSent === latest.at ? null : (
         <button type="button" disabled={state === 'sending'} onClick={() => void send()}>
           {state === 'sending' ? 'Saving…' : state === 'error' ? 'Retry report' : 'Report slow page'}
         </button>
