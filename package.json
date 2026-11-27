@@ -88,6 +88,7 @@
     "build:word-frequency": "tsx scripts/build-word-frequency.ts",
     "retire:extra-dictation-tiles": "tsx scripts/retire-extra-dictation-tiles.ts",
     "unintroduce:sentences": "tsx scripts/unintroduce-sentences.ts",
+    "diagnose:struggling-words": "tsx scripts/diagnose-struggling-words.ts",
     "diagnose:conjugation-cards": "tsx scripts/diagnose-conjugation-cards.ts",
     "diagnose:grammar-links": "tsx scripts/diagnose-grammar-links.ts",
     "diagnose:grammar-detection": "tsx scripts/diagnose-grammar-detection.ts",
