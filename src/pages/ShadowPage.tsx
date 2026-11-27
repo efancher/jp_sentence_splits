@@ -974,6 +974,11 @@ export function ShadowWorkspace({
           )}
         </div>
       ) : null}
+      {isLoopingReps && !hideTranscript && !showMeaningInstead && sentence.translation ? (
+        <div className="muted" data-testid="shadow-loop-translation" aria-label="Sentence translation">
+          {sentence.translation}
+        </div>
+      ) : null}
       {referenceAudio && isLoopingReps && shadowing.shadowActive ? (
         <LiveShadowWaveform
           referenceBlob={referenceAudio.blob}
