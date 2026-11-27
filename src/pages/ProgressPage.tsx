@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import {
@@ -21,6 +21,8 @@ import {
   getStepUsefulness,
   getGrammarStrengthReport,
   getReviewTroubleReport,
+  getIPlusOneStatus,
+  type IPlusOneStatusReport,
 } from '../db/repository';
 import { EPISODE_STAGE_LABELS, EPISODE_STAGE_ORDER } from '../lib/episodeProgress';
 import type { ErrorCategory } from '../lib/errorMix';
@@ -31,6 +33,69 @@ import { buildVelocityReport } from '../lib/velocity';
 import { listGlossDecisions } from '../db/repository';
 import { SHADOW_POOL_BOOK_LIMIT } from '../lib/sessionPlannerConfig';
 import type { StuckReason } from '../lib/stuckSentences';
+
+/**
+ * Where the learner stands on the i+1 path: sentences with nothing new, the next sentence that brings new words and
+ * how many sentences those words would open. Computed when opened (it scores every sentence), not live.
+ */
+function IPlusOnePanel() {
+  const [open, setOpen] = useState(false);
+  const [status, setStatus] = useState<IPlusOneStatusReport | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    void getIPlusOneStatus().then((result) => {
+      if (!cancelled) setStatus(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+  return (
+    <details className="panel stack" aria-label="i+1 status" onToggle={(event) => setOpen(event.currentTarget.open)}>
+      <summary>
+        <strong>i+1: what's next</strong>
+        {status ? <span className="muted"> · {status.readyNow} with nothing new</span> : null}
+      </summary>
+      {open && !status ? <p className="muted">Scoring sentences…</p> : null}
+      {status ? (
+        <>
+          <StatRow
+            label="Sentences with nothing new"
+            value={String(status.readyNow)}
+            hint={`${status.beforeNext} of them come before the next sentence that brings new words.`}
+          />
+          <StatRow label="One or two new pieces away" value={String(status.nearlyReady)} />
+          <StatRow label="Three or more away" value={String(status.further)} />
+          {status.next.length === 0 ? (
+            <p className="muted">No waiting sentence has new words — everything left is already within reach.</p>
+          ) : (
+            <>
+              <h4 style={{ margin: 0 }}>Next sentences with new words</h4>
+              {status.next.map((step, index) => (
+                <article key={step.sentenceId} className="list-card stack">
+                  {step.bookId ? (
+                    <Link to={`/books/${step.bookId}/analyze/${step.sentenceId}`} lang="ja">
+                      {step.japanese}
+                    </Link>
+                  ) : (
+                    <span lang="ja">{step.japanese}</span>
+                  )}
+                  <span className="muted">{step.translation}</span>
+                  <span className="muted" style={{ fontSize: '0.85rem' }}>
+                    New here: {step.newPieces.join(', ')} · unlocks {step.unlocks} more{' '}
+                    {step.unlocks === 1 ? 'sentence' : 'sentences'}
+                    {index > 0 ? ' (after the steps above)' : ''}
+                  </span>
+                </article>
+              ))}
+            </>
+          )}
+        </>
+      ) : null}
+    </details>
+  );
+}
 
 /**
  * "How am I doing" progress screen (docs/ROADMAP.md — "Retention /
@@ -225,6 +290,8 @@ export function ProgressPage() {
           </p>
         )}
       </section>
+
+      <IPlusOnePanel />
 
       {lessonReport?.hasData ? (
         <section className="panel stack" aria-label="Sentence lessons">

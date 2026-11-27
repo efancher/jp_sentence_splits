@@ -66,7 +66,7 @@ and possible extensions. This snapshot does not certify a live deployment.
   stays out of the one-new-piece pool while N4 is unmet. Vocabulary still leads
   ranking. The "new here" line names new patterns too, and a sentence-led book
   page has a "Ready to pick up" panel (`getBookReadyToPickUp`, computed when
-  opened) listing the book's next sentences within two new pieces. Measure with `npm run diagnose:i-plus-one`.
+  opened) listing the book's next sentences within two new pieces. The Progress page has an "i+1: what's next" panel (`getIPlusOneStatus` → `summariseIPlusOne`, `src/lib/iPlusOneStatus.ts`, scored when opened): sentences with nothing new, how many the planner serves before the next new-word sentence, and the next three new-word sentences with a running count of sentences each would unlock. Measure with `npm run diagnose:i-plus-one`.
 - Strict i+1 (2026-11-16, on by default with i+1 order; `settings.iPlusOneStrict`,
   synced across devices; Settings → "Strict: one new word or pattern at a time"):
   `orderByStrictIPlusOne` replays the queue as if studied in order. Every new

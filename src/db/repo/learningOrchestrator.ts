@@ -52,6 +52,7 @@ import {
   orderByStrictIPlusOne,
   type IPlusOneItem,
 } from '../../lib/iPlusOne';
+import { summariseIPlusOne, type IPlusOneNextStep, type IPlusOneStatus, type IPlusOneStatusEntry } from '../../lib/iPlusOneStatus';
 import {
   isIPlusOneOrdering,
   isStrictIPlusOne,
@@ -62,6 +63,7 @@ import {
   buildKnownLemmaSet,
   lemmaKey,
   partlyMetLemmas,
+  scoreSentence,
   unknownLemmasForSentence,
   WORD_MIN_EXPOSURES,
 } from '../../lib/unknownLemmas';
@@ -794,6 +796,8 @@ interface IPlusOneContext {
   rank: Map<string, number>;
   /** Display forms of the content words in the sentence the learner has not met yet. */
   newWords: Map<string, string[]>;
+  /** Not-yet-introduced sentences the i+1 score can judge (tokenized, with content words). */
+  scorable: Set<string>;
 }
 
 /**
@@ -948,8 +952,10 @@ async function loadIPlusOneContext({ stretchEvery, strict = false, planned }: IP
     Math.max(0, ...(episodesOf.get(sentenceId) ?? []).map((episode) => startedByEpisode.get(episode) ?? 0));
   const items: IPlusOneItem[] = [];
   const newWords = new Map<string, string[]>();
+  const scorable = new Set<string>();
   rows.forEach((row, index) => {
     if (!row || introduced.has(sentenceIds[index]!) || plannedIds.has(row.id)) return;
+    if (scoreSentence(row.vocabularySuggestions, known).scorable) scorable.add(row.id);
     const entryIds = grammar.entriesBySentence.get(row.id);
     items.push({
       sentenceId: row.id,
@@ -970,7 +976,7 @@ async function loadIPlusOneContext({ stretchEvery, strict = false, planned }: IP
         reinforce,
         weak,
       });
-  return { rank: new Map(order.map((id, index) => [id, index])), newWords };
+  return { rank: new Map(order.map((id, index) => [id, index])), newWords, scorable };
 }
 
 export interface ReadyToPickUp {
@@ -1012,6 +1018,49 @@ export async function getBookReadyToPickUp(
       : [],
   );
   return { total: unique.length, items };
+}
+
+export interface IPlusOneStatusStep extends IPlusOneNextStep {
+  bookId: string | undefined;
+  japanese: string;
+  translation: string;
+}
+
+export interface IPlusOneStatusReport extends Omit<IPlusOneStatus, 'next'> {
+  next: IPlusOneStatusStep[];
+}
+
+/**
+ * The learner's i+1 position across every active book: how many waiting sentences have nothing new, which
+ * sentence brings the next new words, and how many sentences learning them would open up. Shelved (suspended)
+ * book sentences are left out, like the planner. Scores every sentence, so call it on demand, not live.
+ */
+export async function getIPlusOneStatus(): Promise<IPlusOneStatusReport> {
+  const strict = isStrictIPlusOne(await readSettings(getDb()));
+  const [context, memberships, suspended] = await Promise.all([
+    loadIPlusOneContext({ stretchEvery: 0, strict }),
+    readAllBookSentencesForPass(),
+    loadSuspendedBookIndex(),
+  ]);
+  const bookOf = new Map<string, string>();
+  for (const row of memberships) {
+    if (suspended && membershipIsShelved(row, suspended)) continue;
+    if (!bookOf.has(row.sentenceId)) bookOf.set(row.sentenceId, row.bookId);
+  }
+  const entries: IPlusOneStatusEntry[] = [];
+  for (const [sentenceId, rank] of context.rank) {
+    if (!bookOf.has(sentenceId) || !context.scorable.has(sentenceId)) continue;
+    entries.push({ sentenceId, rank, newPieces: context.newWords.get(sentenceId) ?? [] });
+  }
+  const summary = summariseIPlusOne(entries);
+  const rows = await getDb().sentences.bulkGet(summary.next.map((step) => step.sentenceId));
+  const next = summary.next.flatMap((step, index) => {
+    const row = rows[index];
+    return row
+      ? [{ ...step, bookId: bookOf.get(step.sentenceId), japanese: row.japanese, translation: row.translation }]
+      : [];
+  });
+  return { ...summary, next };
 }
 
 /**
