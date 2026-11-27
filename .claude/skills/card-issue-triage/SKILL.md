@@ -26,6 +26,20 @@ and `blobSizeBytes` against `storedDurationMs` (a shorter local copy than the
 cloud row means a partial download), and check `trimStartMs`/`trimEndMs`.
 Older reports have none.
 
+Page-level reports (`kind: "page_report"`) carry `context`, filled by whatever
+was mounted. From Quick import or the import wizard, `context.miningImport` has
+the page state (`resuming`, `resumeError`, `savedJobId`, `resume.attempts`) and
+`connection`: the last 40 mining-service requests (`ms`, `outcome`
+`ok|http_error|timeout|network_error`, `error`) plus page lifecycle events
+(`visibility:*`, `online`/`offline`, `pageshow:bfcache`). Read it against the
+box's `journalctl --user -u youtube-mining-api`: a `network_error` in a few ms
+with no matching server log line means the device never reached the tailnet
+(Tailscale off/suspended, DNS); a `timeout` means the request hung; an
+`http_error`, or a server line with no client success, points at the service.
+The `/health` probe after the first failed reconnect tells you whether the
+service was reachable at all. Check `buildId` to confirm the device ran the
+current build.
+
 ## 2. Investigate each report's actual data
 
 Don't take the reporter's note at face value — check the underlying row. The

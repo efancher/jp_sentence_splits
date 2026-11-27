@@ -31,6 +31,7 @@ import {
   getMiningJob,
   MiningJobGoneError,
   listMiningJobs,
+  probeMiningHealth,
   startAssistRun,
   type AssistRunStatus,
   type MiningJobStatus,
@@ -41,6 +42,7 @@ import {
   type PodcastFeed,
   runAssist,
 } from '../lib/miningApi';
+import { createResumeTracker, useMiningReportContext } from '../lib/useMiningReportContext';
 import { ASSIST_CONCURRENCY_KEY, readStoredConcurrency, type AssistBackend } from '../lib/assistRun';
 import {
   COMBINED_PROMPT_FILENAME,
@@ -229,6 +231,7 @@ export function QuickMinePage() {
   const [resuming, setResuming] = useState(true);
   const [resumeError, setResumeError] = useState('');
   const stopResumeRef = useRef<() => void>(() => setResuming(false));
+  const resumeTrackerRef = useRef(createResumeTracker(probeMiningHealth));
   const [resumable, setResumable] = useState<MiningJobSummary[]>([]);
   const [minedVideos, setMinedVideos] = useState<Map<string, { title: string; createdAt: string }>>(
     new Map(),
@@ -359,6 +362,7 @@ export function QuickMinePage() {
     let cancelled = false;
     let retryTimer: ReturnType<typeof setTimeout> | undefined;
     const attempt = () => {
+      resumeTrackerRef.current.noteAttempt();
       void getMiningJob(savedJobId).then(
         (job) => {
           if (cancelled) return;
@@ -382,6 +386,7 @@ export function QuickMinePage() {
           if (cancelled) return;
           if (!(err instanceof MiningJobGoneError)) {
             // Poor connectivity, not a missing job: keep the pointer and retry.
+            resumeTrackerRef.current.noteFailure();
             setResumeError(err instanceof Error ? err.message : 'network error');
             retryTimer = setTimeout(attempt, 4000);
             return;
@@ -406,6 +411,12 @@ export function QuickMinePage() {
     return stop;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useMiningReportContext(
+    'quick-import',
+    { resuming, resumeError, stage, jobId, error, progress, queueLength: queue.length },
+    () => ({ savedJobId: readActiveJob(), resume: resumeTrackerRef.current.snapshot() }),
+  );
 
   useEffect(() => {
     if (stage !== 'idle') return;

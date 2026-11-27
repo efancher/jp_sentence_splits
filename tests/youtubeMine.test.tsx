@@ -61,6 +61,7 @@ vi.mock('../src/lib/miningApi', () => {
 
   return {
     MiningJobGoneError: class MiningJobGoneError extends Error {},
+    probeMiningHealth: vi.fn(async () => false),
     createMiningJob: vi.fn(async () => 'job-1'),
     getMiningJob: vi.fn(async () => ({
       jobId: 'job-1',
@@ -356,6 +357,19 @@ describe('YouTube mining wizard', () => {
     expect(
       await screen.findByText(/Can't reach the mining service \(Load failed\)/),
     ).toBeInTheDocument();
+    // "Report issue" gets the page state and the connection log.
+    const { probeMiningHealth } = await import('../src/lib/miningApi');
+    expect(probeMiningHealth).toHaveBeenCalledTimes(1);
+    const { collectReportContext } = await import('../src/lib/reportContext');
+    const report = collectReportContext().miningImport as Record<string, unknown>;
+    expect(report).toMatchObject({
+      page: 'import-wizard',
+      resuming: true,
+      resumeError: 'Load failed',
+      savedJobId: 'job-unreachable',
+      resume: { attempts: 1, failures: 1 },
+    });
+    expect(report.connection).toHaveProperty('recentRequests');
     await user.click(screen.getByRole('button', { name: 'Stop waiting' }));
     expect(
       await screen.findByPlaceholderText('https://www.youtube.com/watch?v=…'),

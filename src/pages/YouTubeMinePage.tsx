@@ -30,6 +30,7 @@ import {
   fetchPodcastFeed,
   getMiningJob,
   MiningJobGoneError,
+  probeMiningHealth,
   listMiningJobs,
   translateJob,
   type MiningCue,
@@ -40,6 +41,7 @@ import {
   type PodcastEpisode,
   type PodcastFeed,
 } from '../lib/miningApi';
+import { createResumeTracker, useMiningReportContext } from '../lib/useMiningReportContext';
 import type { WizardTranscriptSeg } from '../lib/miningTranscript';
 import {
   buildMiningRealignGroups,
@@ -209,6 +211,7 @@ export function YouTubeMinePage() {
   const [resuming, setResuming] = useState(true);
   const [resumeError, setResumeError] = useState('');
   const stopResumeRef = useRef<() => void>(() => setResuming(false));
+  const resumeTrackerRef = useRef(createResumeTracker(probeMiningHealth));
   const [resumable, setResumable] = useState<MiningJobSummary[]>([]);
   // videoId -> the book it was already imported as, so the idle screen can
   // warn before you re-mine something (re-mining is still allowed — it's how
@@ -270,6 +273,7 @@ export function YouTubeMinePage() {
     let cancelled = false;
     let retryTimer: ReturnType<typeof setTimeout> | undefined;
     const attempt = () => {
+      resumeTrackerRef.current.noteAttempt();
       void getMiningJob(savedJobId).then(
         (job) => {
           if (cancelled) return;
@@ -289,6 +293,7 @@ export function YouTubeMinePage() {
           if (cancelled) return;
           if (!(err instanceof MiningJobGoneError)) {
             // Poor connectivity, not a missing job: keep the pointer and retry.
+            resumeTrackerRef.current.noteFailure();
             setResumeError(err instanceof Error ? err.message : 'network error');
             retryTimer = setTimeout(attempt, 4000);
             return;
@@ -311,6 +316,12 @@ export function YouTubeMinePage() {
     return stop;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useMiningReportContext(
+    'import-wizard',
+    { resuming, resumeError, stage, jobId, error, progress },
+    () => ({ savedJobId: readActiveJob(), resume: resumeTrackerRef.current.snapshot() }),
+  );
 
   // Offer to resume any import the service still holds — including one whose
   // transcription was kicked off on another device (the server checkpoints

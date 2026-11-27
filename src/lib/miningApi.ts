@@ -4,6 +4,7 @@ import { YOUTUBE_MINING_API_BASE } from '../appConfig';
 import type { AssistBackend } from './assistRun';
 import type { CombinedPromptOptions } from './combinedImportPrompt';
 import type { GrammarPatternRef } from './grammarLinkReply';
+import { miningFetch } from './miningDiagnostics';
 import type { WizardTranscriptSeg } from './miningTranscript';
 
 /**
@@ -27,12 +28,26 @@ async function fetchPoll(url: string): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), POLL_TIMEOUT_MS);
   try {
-    return await fetch(url, { signal: controller.signal });
+    return await miningFetch(url, { signal: controller.signal });
   } catch (err) {
     if (controller.signal.aborted) throw new Error('The mining service did not respond in time.');
     throw err;
   } finally {
     clearTimeout(timer);
+  }
+}
+
+/**
+ * Diagnostic probe of the service's `/health` endpoint (recorded in the
+ * mining diagnostics log like every other request). Never throws. Tells a
+ * report whether the service is reachable at all when a job poll fails.
+ */
+export async function probeMiningHealth(): Promise<boolean> {
+  try {
+    const response = await fetchPoll(`${API_BASE}/health`);
+    return response.ok;
+  } catch {
+    return false;
   }
 }
 
@@ -205,7 +220,7 @@ export async function createMiningJob(
   url: string,
   options: { title?: string; sourceType?: 'youtube' | 'podcast' } = {},
 ): Promise<string> {
-  const response = await fetch(`${API_BASE}/jobs`, {
+  const response = await miningFetch(`${API_BASE}/jobs`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -246,7 +261,7 @@ export type PodcastFeed = z.infer<typeof podcastFeedSchema>;
  * CORS.
  */
 export async function fetchPodcastFeed(url: string): Promise<PodcastFeed> {
-  const response = await fetch(`${API_BASE}/podcast-feed`, {
+  const response = await miningFetch(`${API_BASE}/podcast-feed`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ url }),
@@ -298,7 +313,7 @@ export async function importNhkEasyArticle(
   descriptionHtml: string,
   audioUrl?: string,
 ): Promise<NhkEasyImportResult> {
-  const response = await fetch(`${API_BASE}/nhk-easy/import`, {
+  const response = await miningFetch(`${API_BASE}/nhk-easy/import`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ title, descriptionHtml, audioUrl: audioUrl ?? null }),
@@ -370,7 +385,7 @@ export async function applyJobSegments(
   segments: MiningSegmentInput[],
   options: { merge?: boolean; split?: boolean } = {},
 ): Promise<MiningJobStatus> {
-  const response = await fetch(`${API_BASE}/jobs/${jobId}/segment`, {
+  const response = await miningFetch(`${API_BASE}/jobs/${jobId}/segment`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -391,7 +406,7 @@ export async function applyJobSegments(
  * populated. Re-runnable.
  */
 export async function translateJob(jobId: string): Promise<MiningJobStatus> {
-  const response = await fetch(`${API_BASE}/jobs/${jobId}/translate`, {
+  const response = await miningFetch(`${API_BASE}/jobs/${jobId}/translate`, {
     method: 'POST',
   });
   if (!response.ok) {
@@ -409,7 +424,7 @@ export async function clipMiningRange(
   jobId: string,
   options: ClipCueOptions,
 ): Promise<MiningClipResult> {
-  const response = await fetch(`${API_BASE}/jobs/${jobId}/clip`, {
+  const response = await miningFetch(`${API_BASE}/jobs/${jobId}/clip`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -463,7 +478,7 @@ export async function commitMiningJob(
   const out: { clip: MiningClipResult; blob: Blob }[] = [];
   for (let start = 0; start < rows.length; start += chunkSize) {
     const batch = rows.slice(start, start + chunkSize);
-    const response = await fetch(`${API_BASE}/jobs/${jobId}/commit`, {
+    const response = await miningFetch(`${API_BASE}/jobs/${jobId}/commit`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ rows: batch, generateKana: options.generateKana ?? true }),
@@ -543,7 +558,7 @@ export async function clipMiningBatch(
     return clipBatchStatusSchema.parse(await response.json());
   };
   const start = () =>
-    fetch(`${API_BASE}/jobs/${jobId}/clip-batch`, {
+    miningFetch(`${API_BASE}/jobs/${jobId}/clip-batch`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body,
@@ -555,7 +570,7 @@ export async function clipMiningBatch(
     options.onProgress?.('clipping', status.done, status.total);
     await sleep(pollMs);
     try {
-      status = await fetch(`${API_BASE}/jobs/${jobId}/clip-batch`).then(readStatus);
+      status = await miningFetch(`${API_BASE}/jobs/${jobId}/clip-batch`).then(readStatus);
       failedPolls = 0;
     } catch (err) {
       // Offline or the phone just woke up: keep waiting, the server is still cutting.
@@ -571,7 +586,7 @@ export async function clipMiningBatch(
       options.onProgress?.('clipping', status.done, status.total);
       await sleep(pollMs);
       status = await withRetries(
-        () => fetch(`${API_BASE}/jobs/${jobId}/clip-batch`).then(readStatus),
+        () => miningFetch(`${API_BASE}/jobs/${jobId}/clip-batch`).then(readStatus),
         4,
         sleep,
       );
@@ -608,7 +623,7 @@ export async function fetchMiningClipAudio(
   jobId: string,
   sentenceId: string,
 ): Promise<Blob> {
-  const response = await fetch(
+  const response = await miningFetch(
     `${API_BASE}/jobs/${jobId}/clips/${sentenceId}/audio`,
   );
   if (!response.ok) {
@@ -629,7 +644,7 @@ export async function fetchJobAudioRange(
   endMs: number,
 ): Promise<Blob> {
   const query = `?startMs=${Math.round(startMs)}&endMs=${Math.round(endMs)}`;
-  const response = await fetch(`${API_BASE}/jobs/${jobId}/audio${query}`);
+  const response = await miningFetch(`${API_BASE}/jobs/${jobId}/audio${query}`);
   if (!response.ok) {
     throw new Error(`Failed to fetch job audio: ${await readErrorDetail(response)}`);
   }
@@ -668,7 +683,7 @@ export async function fetchJobWaveform(
   endMs: number,
 ): Promise<SpanWaveform> {
   const query = `?startMs=${Math.round(startMs)}&endMs=${Math.round(endMs)}`;
-  const response = await fetch(`${API_BASE}/jobs/${jobId}/waveform${query}`);
+  const response = await miningFetch(`${API_BASE}/jobs/${jobId}/waveform${query}`);
   if (!response.ok) {
     throw new Error(`Failed to fetch waveform: ${await readErrorDetail(response)}`);
   }
@@ -687,7 +702,7 @@ export async function resegmentSentences(
   sentences: ResegmentSentenceInput[],
   options: { merge?: boolean; split?: boolean; generateKana?: boolean } = {},
 ): Promise<ResegmentedCue[]> {
-  const response = await fetch(`${API_BASE}/resegment`, {
+  const response = await miningFetch(`${API_BASE}/resegment`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -712,7 +727,7 @@ export async function resegmentSentences(
 export async function fetchTranscriptDifficulty(
   segments: { text: string; startMs: number; endMs: number; isAuto?: boolean; lowConfidence?: boolean }[],
 ): Promise<DifficultyScore> {
-  const response = await fetch(`${API_BASE}/difficulty`, {
+  const response = await miningFetch(`${API_BASE}/difficulty`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ segments }),
@@ -761,7 +776,7 @@ export async function reclipResegmentedAudio(
   options: { trimSilence?: boolean } = {},
 ): Promise<{ blob: Blob; durationMs: number }[]> {
   const clipsBase64 = await Promise.all(parentClips.map(blobToBase64));
-  const response = await fetch(`${API_BASE}/reclip`, {
+  const response = await miningFetch(`${API_BASE}/reclip`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ clipsBase64, cuts, trimSilence: options.trimSilence ?? false }),
@@ -789,7 +804,7 @@ export async function clipFromSource(
   url: string,
   cuts: { startMs: number; endMs: number }[],
 ): Promise<{ blob: Blob; durationMs: number }[]> {
-  const response = await fetch(`${API_BASE}/source-audio/clip`, {
+  const response = await miningFetch(`${API_BASE}/source-audio/clip`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ url, cuts }),
@@ -817,7 +832,7 @@ export async function fetchSourceAudioRange(
   startMs: number,
   endMs: number,
 ): Promise<Blob> {
-  const response = await fetch(`${API_BASE}/source-audio/range`, {
+  const response = await miningFetch(`${API_BASE}/source-audio/range`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -842,7 +857,7 @@ export async function fetchSourceWaveform(
   startMs: number,
   endMs: number,
 ): Promise<SpanWaveform> {
-  const response = await fetch(`${API_BASE}/source-audio/waveform`, {
+  const response = await miningFetch(`${API_BASE}/source-audio/waveform`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -860,7 +875,7 @@ export async function fetchSourceWaveform(
 /** Best-effort cleanup — the server also sweeps abandoned jobs on a timer. */
 export async function deleteMiningJob(jobId: string): Promise<void> {
   try {
-    await fetch(`${API_BASE}/jobs/${jobId}`, { method: 'DELETE' });
+    await miningFetch(`${API_BASE}/jobs/${jobId}`, { method: 'DELETE' });
   } catch {
     // best-effort only
   }
@@ -890,7 +905,7 @@ export async function runAssist(
   prompt: string,
   options: { isCancelled?: () => boolean } = {},
 ): Promise<{ reply: string; backend: string | null }> {
-  const created = await fetch(`${API_BASE}/assist`, {
+  const created = await miningFetch(`${API_BASE}/assist`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ prompt }),
@@ -973,7 +988,7 @@ export async function startAssistRun(input: {
   backend?: AssistBackend;
   concurrency?: number;
 }): Promise<AssistRunStatus> {
-  const response = await fetch(`${API_BASE}/assist-runs`, {
+  const response = await miningFetch(`${API_BASE}/assist-runs`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
@@ -992,7 +1007,7 @@ export async function startBookExtrasRun(input: {
   backend?: AssistBackend;
   concurrency?: number;
 }): Promise<AssistRunStatus> {
-  const response = await fetch(`${API_BASE}/assist-runs`, {
+  const response = await miningFetch(`${API_BASE}/assist-runs`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
@@ -1010,13 +1025,13 @@ export async function getAssistRun(runId: string): Promise<AssistRunStatus | nul
 }
 
 export async function cancelAssistRun(runId: string): Promise<void> {
-  await fetch(`${API_BASE}/assist-runs/${encodeURIComponent(runId)}/cancel`, { method: 'POST' });
+  await miningFetch(`${API_BASE}/assist-runs/${encodeURIComponent(runId)}/cancel`, { method: 'POST' });
 }
 
 /** Forget a run's saved parts (best effort) — used once its result is imported or the user starts over. */
 export async function deleteAssistRun(runId: string): Promise<void> {
   try {
-    await fetch(`${API_BASE}/assist-runs/${encodeURIComponent(runId)}`, { method: 'DELETE' });
+    await miningFetch(`${API_BASE}/assist-runs/${encodeURIComponent(runId)}`, { method: 'DELETE' });
   } catch {
     // best-effort only
   }
