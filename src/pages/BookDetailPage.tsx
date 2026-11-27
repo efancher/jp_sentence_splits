@@ -20,6 +20,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
 import { Snackbar } from '../components/Snackbar';
 import { VocabChips } from '../components/VocabChips';
+import { BookClipBoundaryRefine } from '../components/BookClipBoundaryRefine';
 import { BookSharingPanel } from '../components/BookSharingPanel';
 import { ReadyToPickUpPanel } from '../components/ReadyToPickUpPanel';
 import { SequentialStudyPanel } from '../components/SequentialStudyPanel';
@@ -799,6 +800,7 @@ export function BookDetailPage() {
             ) : null}
           </div>
         </section>
+        <BookClipBoundaryRefine bookId={bookId} />
         <section className="panel stack">
           <BookSharingPanel bookId={bookId} />
         </section>

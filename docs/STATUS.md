@@ -668,7 +668,13 @@ repair tooling, research materials and future roadmap ideas remain available.
   `chunk_issue_reports` row (`source: audio_alignment`, diagnostics JSON in
   `chunks[0]`); the Issues page lists them with play/resolve/dismiss. Migration
   `20261126000000` widens the source check and must be applied to deployed
-  Supabase.
+  Supabase. Existing clips: the book page's "Clip boundaries" panel runs
+  `scripts/refine-reference-clip-boundaries.ts` on the box
+  (`/boundary-backfill/jobs`; `/source-audio/clip` accepts optional per-cut
+  `japanese` to refine). "Preview" only lists per-clip shifts/flags; "Re-cut
+  clips" replaces clips that move >=150 ms and carry no flags with new
+  `audio_refine_*` rows (old rows soft-deleted; alignment must be re-run).
+  Not yet run against real data.
 - **Further learning work:** learned practice routing above FSRS is research
   only. The roadmap retains calibration/retention controls, pronunciation
   refinements, labelling improvements, free composition and all other possible

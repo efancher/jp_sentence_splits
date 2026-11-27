@@ -315,6 +315,9 @@ class ReclipCut(BaseModel):
     # Milliseconds relative to the concatenation of this group's clips.
     startMs: int = Field(ge=0)
     endMs: int = Field(ge=1)
+    # /source-audio/clip only: the sentence text. When present (and boundary
+    # refinement is enabled) the cut is forced-aligned against it first.
+    japanese: str | None = None
 
 
 class ReclipRequest(BaseModel):
@@ -327,10 +330,26 @@ class ReclipRequest(BaseModel):
     trimSilence: bool = False
 
 
+class BoundaryRefineInfo(BaseModel):
+    """Outcome of forced-alignment boundary refinement for one clip. `flags`
+    name why a clip deserves a human look (held-sound, stretched, ...)."""
+
+    status: Literal["refined", "unchanged", "skipped"]
+    flags: list[str] = []
+    shiftStartMs: int = 0
+    shiftEndMs: int = 0
+    reason: str | None = None
+
+
 class ReclipClip(BaseModel):
     audioBase64: str
     mimeType: Literal["audio/mp4"] = "audio/mp4"
     durationMs: int
+    # Set when the cut asked for refinement: the (unpadded) speech span that
+    # was actually cut, and the refinement outcome.
+    cutStartMs: int | None = None
+    cutEndMs: int | None = None
+    boundaryRefine: BoundaryRefineInfo | None = None
 
 
 class ReclipResponse(BaseModel):
@@ -397,17 +416,6 @@ class WaveformResponse(BaseModel):
 class ClipAudioInfo(BaseModel):
     mimeType: Literal["audio/mp4"] = "audio/mp4"
     durationMs: int
-
-
-class BoundaryRefineInfo(BaseModel):
-    """Outcome of forced-alignment boundary refinement for one clip. `flags`
-    name why a clip deserves a human look (held-sound, stretched, ...)."""
-
-    status: Literal["refined", "unchanged", "skipped"]
-    flags: list[str] = []
-    shiftStartMs: int = 0
-    shiftEndMs: int = 0
-    reason: str | None = None
 
 
 class ClipResponse(BaseModel):
@@ -575,6 +583,14 @@ class AlignmentBackfillRequest(BaseModel):
     optionally scoped to one book (see app/alignment_backfill.py)."""
 
     bookId: str | None = None
+
+
+class BoundaryBackfillRequest(BaseModel):
+    """Trigger scripts/refine-reference-clip-boundaries.ts for one book
+    (see app/boundary_backfill.py). Without `apply` it only reports."""
+
+    bookId: str = Field(min_length=1)
+    apply: bool = False
 
 
 class AlignmentBackfillJobResponse(BaseModel):

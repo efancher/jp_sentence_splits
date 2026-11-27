@@ -19,6 +19,8 @@ from app import (
     alignment_backfill,
     assist,
     assist_run,
+    boundary_backfill,
+    boundary_refine,
     clip,
     clip_batch,
     config,
@@ -47,6 +49,8 @@ from app.models import (
     AssistRunRequest,
     AssistRunStatusResponse,
     AssistStatusResponse,
+    BoundaryBackfillRequest,
+    BoundaryRefineInfo,
     ClipBatchStatus,
     ClipRequest,
     ClipResponse,
@@ -228,6 +232,30 @@ async def get_alignment_backfill_job(job_id: str):
     try:
         job = alignment_backfill.get(job_id)
     except alignment_backfill.JobNotFoundError:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return AlignmentBackfillStatusResponse(
+        status=job.status,
+        message=job.message,
+        log=job.log,
+        startedAt=job.started_at,
+    )
+
+
+@app.post("/boundary-backfill/jobs", response_model=AlignmentBackfillJobResponse)
+async def create_boundary_backfill_job(req: BoundaryBackfillRequest):
+    """Re-cut a book's existing reference clips with forced-alignment boundary
+    refinement (preview-only unless `apply`) — see app/boundary_backfill.py."""
+    job = boundary_backfill.start(req.bookId, apply=req.apply)
+    return AlignmentBackfillJobResponse(jobId=job.id)
+
+
+@app.get(
+    "/boundary-backfill/jobs/{job_id}", response_model=AlignmentBackfillStatusResponse
+)
+async def get_boundary_backfill_job(job_id: str):
+    try:
+        job = boundary_backfill.get(job_id)
+    except boundary_backfill.JobNotFoundError:
         raise HTTPException(status_code=404, detail="Job not found")
     return AlignmentBackfillStatusResponse(
         status=job.status,
@@ -591,8 +619,22 @@ def _source_clip_sync(req: SourceClipRequest) -> ReclipResponse:
     clips: list[ReclipClip] = []
     with tempfile.TemporaryDirectory(prefix="source-clip-") as tmp:
         for i, cut in enumerate(req.cuts):
+            cut_start, cut_end = cut.startMs, cut.endMs
+            refine_info: BoundaryRefineInfo | None = None
+            if cut.japanese and config.REFINE_BOUNDARIES:
+                refined = boundary_refine.refine_span(
+                    cached, cut.japanese, cut_start, cut_end, media_duration_ms=media_ms
+                )
+                refine_info = BoundaryRefineInfo(
+                    status=refined.status,
+                    flags=refined.flags,
+                    shiftStartMs=refined.shift_start_ms,
+                    shiftEndMs=refined.shift_end_ms,
+                    reason=refined.reason,
+                )
+                cut_start, cut_end = refined.start_ms, refined.end_ms
             _, _, adj_start, adj_end = clip.compute_boundaries(
-                cut.startMs, cut.endMs, media_duration_ms=media_ms
+                cut_start, cut_end, media_duration_ms=media_ms
             )
             out = Path(tmp) / f"cut-{i}.m4a"
             duration = clip.clip_audio(
@@ -602,6 +644,9 @@ def _source_clip_sync(req: SourceClipRequest) -> ReclipResponse:
                 ReclipClip(
                     audioBase64=base64.b64encode(out.read_bytes()).decode("ascii"),
                     durationMs=duration,
+                    cutStartMs=cut_start if refine_info else None,
+                    cutEndMs=cut_end if refine_info else None,
+                    boundaryRefine=refine_info,
                 )
             )
     return ReclipResponse(clips=clips)
