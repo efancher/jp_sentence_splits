@@ -7,7 +7,11 @@
  *
  * Dry-run by default; --apply required to write. Idempotent: reset sentences no longer read as introduced.
  *
- * Usage: npm run unintroduce:sentences -- --words 略語,習慣,趣味 [--apply]
+ * Select sentences by text (--words, substring match, any word) and/or by id (--ids); both may be given.
+ * Word strength/evidence is keyed by word, not sentence, so it is left alone: resetting only lowers how many
+ * introduced sentences a word has been seen in, which is what i+1 ordering reads.
+ *
+ * Usage: npm run unintroduce:sentences -- --words 略語,習慣,趣味 [--ids sent_a,sent_b] [--apply]
  */
 import type { SentenceLearningAction } from '../src/domain/types';
 import { createId } from '../src/lib/ids';
@@ -15,21 +19,23 @@ import { planUnintroduce } from '../src/lib/sentenceUnintroduce';
 import { fetchAll, insertBatched, parseApplyFlag, requireAuthedUser } from './lib/scriptHelpers';
 import { createScriptSupabaseClient } from './lib/scriptSupabaseClient';
 
-function parseWords(argv: string[]): string[] {
-  const index = argv.indexOf('--words');
+function parseList(argv: string[], flag: string): string[] {
+  const index = argv.indexOf(flag);
   const value = index >= 0 ? argv[index + 1] : undefined;
-  const words = (value ?? '')
+  return (value ?? '')
     .split(',')
-    .map((word) => word.trim())
+    .map((item) => item.trim())
     .filter(Boolean);
-  if (words.length === 0) throw new Error('Pass --words word1,word2 (substrings of the sentence text).');
-  return words;
 }
 
 async function main() {
   const argv = process.argv.slice(2);
   const apply = parseApplyFlag(argv);
-  const words = parseWords(argv);
+  const words = parseList(argv, '--words');
+  const wantedIds = new Set(parseList(argv, '--ids'));
+  if (words.length === 0 && wantedIds.size === 0) {
+    throw new Error('Pass --words word1,word2 (substrings of the sentence text) and/or --ids sent_a,sent_b.');
+  }
   const supabase = await createScriptSupabaseClient();
   const user = await requireAuthedUser(supabase);
 
@@ -37,8 +43,10 @@ async function main() {
     id: String(r.id),
     japanese: String(r.japanese),
   }));
-  const matched = sentences.filter((s) => words.some((word) => s.japanese.includes(word)));
-  console.log(`${matched.length} sentence(s) contain ${words.join(' / ')}.`);
+  const matched = sentences.filter(
+    (s) => wantedIds.has(s.id) || words.some((word) => s.japanese.includes(word)),
+  );
+  console.log(`${matched.length} sentence(s) match (words: ${words.join(' / ') || '-'}; ids: ${wantedIds.size}).`);
 
   const [events, items, memberships] = await Promise.all([
     fetchAll(supabase, 'sentence_learning_events', 'id, sentence_id, action, timestamp', user.id, (r) => ({
