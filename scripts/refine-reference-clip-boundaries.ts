@@ -62,6 +62,7 @@ async function main() {
   const minShift = Number(arg(argv, '--min-shift') ?? 150);
   const includeFlagged = argv.includes('--include-flagged');
   const limit = Number(arg(argv, '--limit') ?? Infinity);
+  const stride = Math.max(1, Math.floor(Number(arg(argv, '--stride') ?? 1)) || 1);
 
   const supabase = await createScriptSupabaseClient();
   const user = await requireAuthedUser(supabase);
@@ -74,7 +75,7 @@ async function main() {
     (r) => r,
   );
   const live = audioAll.filter((a) => !a.deleted_at && a.book_id === bookId);
-  const candidates = live
+  const eligible = live
     .filter(
       (a) =>
         a.source_url &&
@@ -83,16 +84,20 @@ async function main() {
         a.source_end_ms != null &&
         Number(a.source_end_ms) > Number(a.source_start_ms),
     )
-    .sort((a, b) => Number(a.source_start_ms) - Number(b.source_start_ms))
+    .sort((a, b) => Number(a.source_start_ms) - Number(b.source_start_ms));
+  // --stride N keeps every Nth clip (a spread sample across the whole book,
+  // since clips are otherwise taken in source order, i.e. episode intros first).
+  const candidates = eligible
+    .filter((_, i) => i % stride === 0)
     .slice(0, Number.isFinite(limit) ? limit : undefined);
-  const noSource = live.length - candidates.length;
+  const noSource = live.length - eligible.length;
 
   const sentences = await fetchAll(supabase, 'sentences', 'id, japanese, deleted_at', user.id, (r) => r);
   const japaneseById = new Map(sentences.map((s) => [String(s.id), String(s.japanese ?? '')]));
 
   console.log(
     `${candidates.length} clip(s) with a known source span` +
-      (noSource > 0 && !Number.isFinite(limit) ? `, ${noSource} skipped (no source URL/span)` : '') +
+      (noSource > 0 ? `, ${noSource} without a source URL/span (cannot be refined)` : '') +
       `; min shift ${minShift} ms${includeFlagged ? ', flagged clips included' : ''}.`,
   );
 
@@ -126,7 +131,11 @@ async function main() {
       continue;
     }
     if (info.status !== 'refined') {
-      console.log(`${label}  unchanged (${info.status}: ${info.reason ?? info.flags.join(',')})`);
+      const why = [info.reason, info.flags.length ? `[${info.flags.join(',')}]` : '']
+        .filter(Boolean)
+        .join(' ');
+      const moved = info.status === 'unchanged' ? '' : ` start ${signed(info.shiftStartMs)} ms, end ${signed(info.shiftEndMs)} ms`;
+      console.log(`${label}  unchanged (${info.status}: ${why}${moved})`);
       counts.unchanged += 1;
       continue;
     }
